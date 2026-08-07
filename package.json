@@ -1,0 +1,21 @@
+{
+  "name": "honeymoonbridge",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A two-player contract bridge variant, playable in a phone browser.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

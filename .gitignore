@@ -1,0 +1,18 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# vite-plugin-pwa's dev-mode service worker output
+dev-dist/
+
+# Local env / editor
+.env
+.env.local
+*.local
+.vscode/
+.idea/
+.DS_Store
+
+# Cloudflare
+.wrangler/

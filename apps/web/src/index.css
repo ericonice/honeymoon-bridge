@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@theme {
+  --color-felt: #064e3b;
+  --color-felt-dark: #033024;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-felt-dark);
+  /* No page-level scrolling anywhere: the app is a fixed frame and each region
+     scrolls on its own. Rubber-banding the whole board feels broken on iOS. */
+  overscroll-behavior: none;
+  overflow: hidden;
+}
+
+/* Kill the grey flash and the double-tap-to-zoom delay on every tap target. */
+button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
