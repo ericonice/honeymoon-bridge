@@ -1,0 +1,216 @@
+import { opponentOf } from "@hb/engine";
+import { useEffect, useState } from "react";
+import { useNetworkSession } from "../game/networkSession.js";
+import type { NetworkGame } from "../game/networkSession.js";
+import { inviteLink } from "../game/serverUrl.js";
+import { GameBoard } from "./GameBoard.js";
+
+export interface TableGameProps {
+  readonly code: string;
+  readonly devTools: boolean;
+  readonly peeking: boolean;
+  onLeave(): void;
+  /**
+   * Hands the app a way to give up this seat.
+   *
+   * Leaving can be started from Settings, which is rendered outside this
+   * screen, so the app needs to be able to reach the socket. Every exit then
+   * goes through one path and the other player is always told.
+   */
+  registerLeave(leave: (() => void) | null): void;
+  onShowSettings(): void;
+}
+
+/** Seconds left on a grace period, ticking. */
+function useCountdown(until: number | null): number | null {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (until === null) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [until]);
+
+  return until === null ? null : Math.max(0, Math.ceil((until - now) / 1000));
+}
+
+function Waiting({
+  code,
+  game,
+  onLeave,
+}: {
+  readonly code: string;
+  readonly game: NetworkGame;
+  onLeave(): void;
+}): React.JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const link = inviteLink(code);
+
+  return (
+    <div className="flex flex-1 flex-col justify-between px-6 py-8">
+      <div>
+        <h1 className="text-2xl font-semibold">Waiting for a second player</h1>
+        <p className="mt-1 text-sm text-white/55">
+          {game.connection === "open"
+            ? "Send them this link. The game starts when they open it."
+            : "Reconnecting…"}
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div className="rounded-xl border border-white/20 px-4 py-4">
+          <p className="text-xs tracking-widest text-white/45 uppercase">Table code</p>
+          <p className="mt-1 font-mono text-3xl tracking-[0.3em]">{code}</p>
+        </div>
+        <button
+          type="button"
+          className="rounded-xl bg-white px-4 py-4 text-base font-semibold text-stone-900"
+          onClick={() => {
+            void navigator.clipboard.writeText(link).then(() => {
+              setCopied(true);
+            });
+          }}
+        >
+          {copied ? "Link copied" : "Copy invite link"}
+        </button>
+      </div>
+
+      <button
+        type="button"
+        className="self-start text-sm text-white/50 underline underline-offset-4"
+        onClick={onLeave}
+      >
+        Leave table
+      </button>
+    </div>
+  );
+}
+
+/**
+ * A banner for the states a networked game has and a local one cannot.
+ *
+ * §2.2 asks for an explicit "waiting for X to reconnect" with a visible
+ * countdown rather than a frozen table, because both players *will* drop during
+ * a normal session — iOS closes the socket every time the phone locks.
+ */
+function Interruption({ game }: { readonly game: NetworkGame }): React.JSX.Element | null {
+  const seconds = useCountdown(game.table?.waitingUntil ?? null);
+
+  if (game.connection !== "open") {
+    return (
+      <p className="bg-amber-500/25 px-4 py-1.5 text-center text-xs text-amber-100">
+        Reconnecting…
+      </p>
+    );
+  }
+
+  const seat = game.seat;
+  const them = seat === null ? null : (game.table?.seats[opponentOf(seat)] ?? null);
+  if (them === null || them.connected) {
+    return null;
+  }
+
+  return (
+    <p className="bg-amber-500/25 px-4 py-1.5 text-center text-xs text-amber-100">
+      Waiting for {them.nickname} to reconnect
+      {seconds === null ? "" : ` · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`}
+    </p>
+  );
+}
+
+function Message({
+  detail,
+  onLeave,
+  title,
+}: {
+  readonly detail: string;
+  readonly title: string;
+  onLeave(): void;
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
+      <div>
+        <h1 className="text-2xl font-semibold">{title}</h1>
+        <p className="mt-1 text-sm text-white/55">{detail}</p>
+      </div>
+      <button
+        type="button"
+        className="rounded-xl bg-white px-6 py-3 text-base font-semibold text-stone-900"
+        onClick={onLeave}
+      >
+        Back
+      </button>
+    </div>
+  );
+}
+
+export function TableGame({
+  code,
+  devTools,
+  onLeave,
+  onShowSettings,
+  peeking,
+  registerLeave,
+}: TableGameProps): React.JSX.Element {
+  const game = useNetworkSession(code);
+  const { leave } = game;
+
+  useEffect(() => {
+    registerLeave(leave);
+    return () => {
+      registerLeave(null);
+    };
+  }, [leave, registerLeave]);
+
+  if (game.error !== null && game.session === null) {
+    return <Message title={game.error} detail="" onLeave={onLeave} />;
+  }
+
+  // Nothing heard from the server yet. Deliberately not the waiting screen:
+  // that one shows the table code in large type, and flashing a code at
+  // somebody who is joining an existing table tells them nothing they need.
+  if (game.table === null) {
+    return (
+      <div className="flex flex-1 items-center justify-center px-6">
+        <p className="text-sm text-white/55">Connecting…</p>
+      </div>
+    );
+  }
+
+  // A seat that has been emptied after the game began is somebody who left, as
+  // distinct from somebody whose socket dropped — they keep their seat.
+  const seat = game.seat;
+  const theyLeft =
+    seat !== null && game.session !== null && game.table.seats[opponentOf(seat)] === null;
+  if (theyLeft) {
+    return (
+      <Message
+        title="They left the table"
+        detail="The rubber ends here — there is nowhere to keep it."
+        onLeave={onLeave}
+      />
+    );
+  }
+
+  if (game.session === null) {
+    return <Waiting code={code} game={game} onLeave={onLeave} />;
+  }
+
+  return (
+    <>
+      <Interruption game={game} />
+      <GameBoard
+        devTools={devTools}
+        peeking={peeking}
+        session={game.session}
+        onShowSettings={onShowSettings}
+      />
+    </>
+  );
+}

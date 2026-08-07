@@ -2,6 +2,8 @@ export interface SettingsOverlayProps {
   readonly devTools: boolean;
   /** Development builds only; the row is compiled out of anything that ships. */
   readonly peeking: boolean;
+  /** Null when there is no game to leave. */
+  readonly onLeaveGame: (() => void) | null;
   onClose(): void;
   onDevToolsChange(enabled: boolean): void;
   onPeekingChange(enabled: boolean): void;
@@ -55,6 +57,7 @@ export function SettingsOverlay({
   devTools,
   onClose,
   onDevToolsChange,
+  onLeaveGame,
   onPeekingChange,
   peeking,
 }: SettingsOverlayProps): React.JSX.Element {
@@ -86,6 +89,21 @@ export function SettingsOverlay({
             />
           </div>
         ) : null}
+
+        {onLeaveGame === null ? null : (
+          <div className="w-full max-w-sm pt-2">
+            <button
+              type="button"
+              className="w-full rounded-xl border border-white/25 px-4 py-3 text-base text-white"
+              onClick={onLeaveGame}
+            >
+              Leave game
+            </button>
+            <p className="mt-1 text-xs text-white/40">
+              The rubber is lost — there is nowhere to keep it yet.
+            </p>
+          </div>
+        )}
 
         {/* From a phone there is otherwise no way to tell a fresh deployment
             from a service worker still serving the last one. */}

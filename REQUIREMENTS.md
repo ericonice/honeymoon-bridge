@@ -266,10 +266,23 @@ that were never dealt as though they were still out there, so it is too cautious
 
 - Two players on two devices, **both live and connected**. Not asynchronous or
   correspondence play.
-- **Table creation:** one player creates a table and receives a short invite link. They send
-  it however they like. The second player opens it and is seated. No public lobby, no
-  matchmaking, no discovery. (A "quick match" queue is a possible later addition; out of
-  scope for v1.)
+- **Table creation, two ways.**
+  - **An invite**, which is the way to reach *one particular person*: a player creates a table,
+    gets a short link, and sends it however they like. The second player opens it and is seated.
+  - **A queue**, which is the way to reach *anybody at all*: both players ask for a game and are
+    put together. This was originally deferred — the section read "no public lobby, no
+    matchmaking, no discovery", with a quick match queue named as a possible later addition — and
+    it is now built. Invites did not go away; they answer a different question.
+
+  The queue is a single Durable Object that holds **no state of its own**: who is waiting is
+  whoever currently has a socket open to it. Leaving therefore needs no message and no timeout,
+  and a place in the queue cannot outlive the person standing in it. It will not pair a token with
+  itself, which is what two tabs on one device would otherwise do.
+
+  There is still **no discovery**: nothing lists tables, nothing lists players, and a code is only
+  useful to somebody who was sent it. The queue is the one place two strangers can meet, and it
+  is open to anyone who knows the site's address — accepted deliberately, on the grounds that
+  there is no chat, nothing to steal, and no account to compromise.
 - **Identity:** anonymous. A nickname plus an opaque token persisted in `localStorage`,
   which is what reclaims the player's seat on reconnect. No accounts, no passwords, no email.
   Accepted trade-off: a rubber is bound to the device that started it — clearing browser data
@@ -441,7 +454,7 @@ device, and there is no Safari on Windows to substitute:
 - Defensive carding signals, for the same reason.
 - Claiming, conceding, undo.
 - Accounts, authentication, cross-device seat recovery.
-- Public lobby, matchmaking, spectators.
+- Spectators.
 - Ratings, standings, game history, hand records.
 - Turn clocks.
 - Player-selectable robot difficulty.

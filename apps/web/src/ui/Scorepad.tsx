@@ -1,21 +1,22 @@
 import { totalScore } from "@hb/engine";
 import type { Pair, PlayerId, PlayerView, RubberState } from "@hb/engine";
-import type { DealRecord } from "../game/useGameSession.js";
+import type { DealRecord } from "../game/session.js";
 import { ContractText } from "./CardText.js";
 
 export interface ScorepadProps {
   readonly history: readonly DealRecord[];
+  readonly opponentName: string;
   readonly rubber: RubberState;
   readonly view: PlayerView;
 }
 
 const CELL = "w-14 text-right tabular-nums";
 
-function Columns(): React.JSX.Element {
+function Columns({ opponentName }: { readonly opponentName: string }): React.JSX.Element {
   return (
     <div className="flex justify-end gap-2 text-xs text-white/45">
       <span className={CELL}>You</span>
-      <span className={CELL}>Opponent</span>
+      <span className={`${CELL} truncate`}>{opponentName}</span>
     </div>
   );
 }
@@ -99,12 +100,20 @@ function DealLine({
 }
 
 /** Drawn under the deal that won a game, the way a line is ruled across a paper scorepad. */
-function GameLine({ by, view }: { readonly by: PlayerId; readonly view: PlayerView }): React.JSX.Element {
+function GameLine({
+  by,
+  opponentName,
+  view,
+}: {
+  readonly by: PlayerId;
+  readonly opponentName: string;
+  readonly view: PlayerView;
+}): React.JSX.Element {
   return (
     <div className="my-1 flex items-center gap-2">
       <span className="h-px flex-1 bg-amber-300/60" />
       <span className="text-xs text-amber-200/80">
-        Game to {by === view.me ? "you" : "opponent"}
+        Game to {by === view.me ? "you" : opponentName}
       </span>
       <span className="h-px flex-1 bg-amber-300/60" />
     </div>
@@ -137,11 +146,16 @@ function Summary({
   );
 }
 
-export function Scorepad({ history, rubber, view }: ScorepadProps): React.JSX.Element {
+export function Scorepad({
+  history,
+  opponentName,
+  rubber,
+  view,
+}: ScorepadProps): React.JSX.Element {
   return (
     <div className="w-full max-w-sm text-sm">
       <p className="pb-1 text-xs tracking-wide text-white/45 uppercase">The rubber</p>
-      <Columns />
+      <Columns opponentName={opponentName} />
 
       {history.length === 0 ? (
         <p className="py-2 text-white/40">No deals yet.</p>
@@ -149,7 +163,9 @@ export function Scorepad({ history, rubber, view }: ScorepadProps): React.JSX.El
         history.map((record, index) => (
           <div key={index}>
             <DealLine index={index + 1} record={record} view={view} />
-            {record.wonGameBy === null ? null : <GameLine by={record.wonGameBy} view={view} />}
+            {record.wonGameBy === null ? null : (
+              <GameLine by={record.wonGameBy} opponentName={opponentName} view={view} />
+            )}
           </div>
         ))
       )}

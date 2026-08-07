@@ -2,8 +2,10 @@ import {
   applyAction,
   applyDealScore,
   createRng,
+  dealScoreFor,
   newRubber,
   opponentOf,
+  recordFor,
   startDeal,
   totalScore,
   vulnerability,
@@ -12,7 +14,6 @@ import type { DealScore, DealState, PlayerId } from "@hb/engine";
 import { describe, expect, it } from "vitest";
 import { createRandomBot } from "../src/bot/randomBot.js";
 import { botActionFor } from "../src/game/botTurn.js";
-import { dealScoreFor, recordFor } from "../src/game/useGameSession.js";
 
 /** A made contract worth `below` below the line, which is all the scorepad needs here. */
 function madeFor(player: PlayerId, below: number): DealScore {
@@ -145,3 +146,4 @@ describe("scoring a deal into a rubber", () => {
     }
   });
 });
+

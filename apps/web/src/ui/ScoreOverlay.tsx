@@ -1,16 +1,17 @@
 import type { Pair, PlayerView, RubberState } from "@hb/engine";
-import type { DealRecord } from "../game/useGameSession.js";
+import type { DealRecord } from "../game/session.js";
 import { Scorepad } from "./Scorepad.js";
 
 export interface ScoreOverlayProps {
   readonly history: readonly DealRecord[];
+  readonly opponentName: string;
   readonly rubber: RubberState;
   readonly view: PlayerView;
   readonly vulnerable: Pair<boolean>;
   onClose(): void;
 }
 
-function vulnerabilityLine(view: PlayerView, vulnerable: Pair<boolean>): string {
+function vulnerabilityLine(view: PlayerView, vulnerable: Pair<boolean>, opponentName: string): string {
   const mine = vulnerable[view.me];
   const theirs = vulnerable[view.opponent];
 
@@ -21,7 +22,7 @@ function vulnerabilityLine(view: PlayerView, vulnerable: Pair<boolean>): string 
     return "You are vulnerable";
   }
   if (theirs) {
-    return "Opponent is vulnerable";
+    return `${opponentName} is vulnerable`;
   }
   return "Neither side vulnerable";
 }
@@ -38,6 +39,7 @@ function vulnerabilityLine(view: PlayerView, vulnerable: Pair<boolean>): string 
 export function ScoreOverlay({
   history,
   onClose,
+  opponentName,
   rubber,
   view,
   vulnerable,
@@ -45,9 +47,9 @@ export function ScoreOverlay({
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-felt-dark/97">
       <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-5 py-6">
-        <Scorepad history={history} rubber={rubber} view={view} />
+        <Scorepad history={history} opponentName={opponentName} rubber={rubber} view={view} />
         <p className="w-full max-w-sm pt-3 text-xs text-white/50">
-          {vulnerabilityLine(view, vulnerable)}
+          {vulnerabilityLine(view, vulnerable, opponentName)}
         </p>
       </div>
       <div className="px-5 pb-5">

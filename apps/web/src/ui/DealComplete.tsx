@@ -1,15 +1,18 @@
 import { opponentOf, overtrickPoints, totalScore, undertrickPoints } from "@hb/engine";
 import type { DealScore, Pair, PlayerId, PlayerView, RubberState } from "@hb/engine";
-import type { DealRecord } from "../game/useGameSession.js";
+import type { DealRecord } from "../game/session.js";
 import { ContractText } from "./CardText.js";
 import { Scorepad } from "./Scorepad.js";
 
 export interface DealCompleteProps {
   readonly history: readonly DealRecord[];
+  readonly opponentName: string;
   readonly rubber: RubberState;
   readonly score: DealScore | null;
   readonly view: PlayerView;
   readonly vulnerable: Pair<boolean>;
+  /** True once you have asked to move on and the other player has not. */
+  readonly waitingToContinue: boolean;
   onNextDeal(): void;
 }
 
@@ -100,11 +103,11 @@ function Row({
   );
 }
 
-function Columns(): React.JSX.Element {
+function Columns({ opponentName }: { readonly opponentName: string }): React.JSX.Element {
   return (
     <div className="flex justify-end gap-3 pb-1 text-xs text-white/45">
       <span className="w-16 text-right">You</span>
-      <span className="w-16 text-right">Opponent</span>
+      <span className="w-16 text-right">{opponentName}</span>
     </div>
   );
 }
@@ -112,18 +115,25 @@ function Columns(): React.JSX.Element {
 export function DealComplete({
   history,
   onNextDeal,
+  opponentName,
   rubber,
   score,
   view,
   vulnerable,
+  waitingToContinue,
 }: DealCompleteProps): React.JSX.Element {
   const button = (
     <button
       type="button"
-      className="w-full max-w-sm rounded-xl bg-white px-4 py-4 text-lg font-semibold text-stone-900"
+      className="w-full max-w-sm rounded-xl bg-white px-4 py-4 text-lg font-semibold text-stone-900 disabled:bg-white/10 disabled:text-white/60"
+      disabled={waitingToContinue}
       onClick={onNextDeal}
     >
-      {rubber.complete ? "New rubber" : "Next deal"}
+      {waitingToContinue
+        ? `Waiting for ${opponentName}…`
+        : rubber.complete
+          ? "New rubber"
+          : "Next deal"}
     </button>
   );
 
@@ -134,13 +144,13 @@ export function DealComplete({
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4">
         <div className="text-center">
-          <h2 className="text-2xl font-semibold">{won ? "You win the rubber" : "Opponent wins the rubber"}</h2>
+          <h2 className="text-2xl font-semibold">{won ? "You win the rubber" : `${opponentName} wins the rubber`}</h2>
           <p className="mt-1 text-sm text-white/60">
             {rubber.gamesWon[view.me]} games to {rubber.gamesWon[view.opponent]}
           </p>
         </div>
         <div className="w-full max-w-sm text-sm">
-          <Columns />
+          <Columns opponentName={opponentName} />
           <Row label="Below the line" values={rubber.belowLineTotal} view={view} />
           <Row label="Above the line" values={rubber.aboveLine} view={view} />
           <Row emphasis label="Final score" values={totals} view={view} />
@@ -158,7 +168,7 @@ export function DealComplete({
           Neither of you bid, so the deal is thrown in and redealt with the same player drawing
           first. Nothing is scored.
         </p>
-        <Scorepad history={history} rubber={rubber} view={view} />
+        <Scorepad history={history} opponentName={opponentName} rubber={rubber} view={view} />
         {button}
       </div>
     );
@@ -183,21 +193,21 @@ export function DealComplete({
               ? " · both vulnerable"
               : vulnerable[view.me]
                 ? " · you were vulnerable"
-                : " · opponent was vulnerable"
+                : ` · ${opponentName} was vulnerable`
             : ""}
         </p>
       </div>
 
       <div className="w-full max-w-sm text-sm">
         <p className="pb-1 text-xs tracking-wide text-white/45 uppercase">This deal</p>
-        <Columns />
+        <Columns opponentName={opponentName} />
         {rows.map((row) => (
           <Row key={row.key} label={row.label} values={row.values} view={view} />
         ))}
         <Row emphasis label="Deal total" values={dealTotals} view={view} />
       </div>
 
-      <Scorepad history={history} rubber={rubber} view={view} />
+      <Scorepad history={history} opponentName={opponentName} rubber={rubber} view={view} />
 
       {button}
     </div>

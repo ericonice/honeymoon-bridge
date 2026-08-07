@@ -74,7 +74,9 @@ export function createHeuristicBot(rng: Rng): Bot {
   const fallback = createRandomBot(rng);
 
   return {
-    name: "Heuristic bidding",
+    // Shown to the player wherever the other seat is named, so it reads as an
+    // opponent rather than as an implementation.
+    name: "Computer",
 
     chooseCall(view: PlayerView): Call {
       const bid = bestAffordableBid(view);

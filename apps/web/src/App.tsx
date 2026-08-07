@@ -1,90 +1,48 @@
-import { legalActionsForView } from "@hb/engine";
-import type { Call, Card, PlayerView } from "@hb/engine";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { readDevTools, writeDevTools } from "./game/devTools.js";
-import { useGameSession } from "./game/useGameSession.js";
-import type { GameSession } from "./game/useGameSession.js";
-import { AuctionPhase } from "./ui/AuctionPhase.js";
-import { DealComplete } from "./ui/DealComplete.js";
-import { DrawPhase } from "./ui/DrawPhase.js";
-import { Hand } from "./ui/Hand.js";
-import { OpponentPeek } from "./ui/OpponentPeek.js";
-import { PlayPhase } from "./ui/PlayPhase.js";
-import { ScoreOverlay } from "./ui/ScoreOverlay.js";
+import { codeFromLocation, setLocationCode } from "./game/serverUrl.js";
+import { Home } from "./ui/Home.js";
+import { RobotGame } from "./ui/RobotGame.js";
+import { Searching } from "./ui/Searching.js";
 import { SettingsOverlay } from "./ui/SettingsOverlay.js";
-import { TopBar } from "./ui/TopBar.js";
+import { TableGame } from "./ui/TableGame.js";
 
-/** The cards the follow-suit rule allows right now, or null outside the play phase. */
-function playableCards(view: PlayerView): Card[] | null {
-  if (view.phase !== "play" || view.toAct !== view.me) {
-    return null;
-  }
-  return legalActionsForView(view).flatMap((action) =>
-    action.type === "play" ? [action.card] : [],
-  );
-}
-
-function CurrentPhase({
-  peeking,
-  session,
-}: {
-  readonly peeking: boolean;
-  readonly session: GameSession;
-}): React.JSX.Element {
-  const { history, lastDraw, lastTrick, nextDeal, rubber, score, view, vulnerable } = session;
-
-  switch (view.phase) {
-    case "draw": {
-      return (
-        <DrawPhase
-          lastDraw={lastDraw}
-          lastOwnDraw={session.lastOwnDraw}
-          peekLastDraw={peeking ? session.opponentLastDraw : null}
-          peekPending={peeking ? session.opponentPending : null}
-          view={view}
-          onDecide={(keep) => {
-            session.act({ type: "draw-decide", keep });
-          }}
-        />
-      );
-    }
-    case "auction": {
-      return (
-        <AuctionPhase
-          view={view}
-          onCall={(call: Call) => {
-            session.act({ type: "call", call });
-          }}
-        />
-      );
-    }
-    case "play": {
-      return <PlayPhase lastTrick={lastTrick} view={view} />;
-    }
-    default: {
-      return (
-        <DealComplete
-          history={history}
-          rubber={rubber}
-          score={score}
-          view={view}
-          vulnerable={vulnerable}
-          onNextDeal={nextDeal}
-        />
-      );
-    }
-  }
-}
+/**
+ * Which screen is up.
+ *
+ * A table lives in the URL hash rather than in a route, so an invite link is a
+ * plain link that needs no server-side rewrite to work — and opening one goes
+ * straight to the table instead of past a menu.
+ */
+type Screen = "home" | "robot" | "searching" | { readonly code: string };
 
 export function App(): React.JSX.Element {
-  const session = useGameSession();
-  const { view } = session;
-  const playable = playableCards(view);
-  const [showingScore, setShowingScore] = useState(false);
+  const [screen, setScreen] = useState<Screen>(() => {
+    const code = codeFromLocation();
+    return code === null ? "home" : { code };
+  });
   const [showingSettings, setShowingSettings] = useState(false);
   const [peeking, setPeeking] = useState(false);
   // Read once, then owned here so Settings can change it without a reload.
   const [devTools, setDevTools] = useState(readDevTools);
+  // Set by the table screen while one is open. Leaving can be started from
+  // Settings, which lives out here, so the exit has to be reachable from here.
+  const leaveTable = useRef<(() => void) | null>(null);
+
+  const showSettings = (): void => {
+    setShowingSettings(true);
+  };
+
+  const goHome = (): void => {
+    // Give up the seat first, so the other player is told rather than left
+    // watching a countdown for somebody who is not coming back.
+    leaveTable.current?.();
+    leaveTable.current = null;
+    // Clears the table out of the URL too, or a refresh would rejoin it.
+    setLocationCode(null);
+    setScreen("home");
+    setShowingSettings(false);
+  };
 
   return (
     // A fixed full-height frame, sized in dvh so the layout does not jump as
@@ -104,63 +62,47 @@ export function App(): React.JSX.Element {
         paddingLeft: "env(safe-area-inset-left)",
       }}
     >
-      <TopBar
-        view={view}
-        vulnerable={session.vulnerable}
-        // The score screen already shows the scorepad in full.
-        onShowScore={
-          view.phase === "complete"
-            ? null
-            : () => {
-                setShowingScore(true);
-              }
-        }
-        onSkipPhase={devTools && view.phase !== "complete" ? session.skipPhase : null}
-        onShowSettings={() => {
-          setShowingSettings(true);
-        }}
-      />
-
-      {import.meta.env.DEV && peeking && session.opponentHand !== null ? (
-        <OpponentPeek cards={session.opponentHand} />
-      ) : null}
-
-      <main className="flex min-h-0 flex-1 flex-col">
-        <CurrentPhase peeking={peeking} session={session} />
-      </main>
-
-      {view.phase === "complete" ? null : (
-        <footer className="border-t border-white/10 pt-1">
-          <Hand
-            cards={view.hand}
-            highlight={session.justTaken}
-            playable={playable}
-            onPlay={
-              playable === null
-                ? null
-                : (card: Card) => {
-                    session.act({ type: "play", card });
-                  }
-            }
-          />
-        </footer>
-      )}
-
-      {showingScore ? (
-        <ScoreOverlay
-          history={session.history}
-          rubber={session.rubber}
-          view={view}
-          vulnerable={session.vulnerable}
-          onClose={() => {
-            setShowingScore(false);
+      {screen === "home" ? (
+        <Home
+          onFindOpponent={() => {
+            setScreen("searching");
+          }}
+          onJoinTable={(code) => {
+            setLocationCode(code);
+            setScreen({ code });
+          }}
+          onPlayComputer={() => {
+            setScreen("robot");
+          }}
+          onShowSettings={showSettings}
+        />
+      ) : screen === "searching" ? (
+        <Searching
+          onCancel={goHome}
+          onMatched={(code) => {
+            setLocationCode(code);
+            setScreen({ code });
           }}
         />
-      ) : null}
+      ) : screen === "robot" ? (
+        <RobotGame devTools={devTools} peeking={peeking} onShowSettings={showSettings} />
+      ) : (
+        <TableGame
+          code={screen.code}
+          devTools={devTools}
+          peeking={peeking}
+          registerLeave={(leave) => {
+            leaveTable.current = leave;
+          }}
+          onLeave={goHome}
+          onShowSettings={showSettings}
+        />
+      )}
 
       {showingSettings ? (
         <SettingsOverlay
           devTools={devTools}
+          peeking={peeking}
           onClose={() => {
             setShowingSettings(false);
           }}
@@ -168,8 +110,10 @@ export function App(): React.JSX.Element {
             writeDevTools(enabled);
             setDevTools(enabled);
           }}
-          peeking={peeking}
           onPeekingChange={setPeeking}
+          // Abandoning a rubber loses it — there is nowhere to keep it — so this
+          // is only offered while there is one to abandon.
+          onLeaveGame={screen === "home" ? null : goHome}
         />
       ) : null}
     </div>

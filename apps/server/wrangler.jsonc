@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "honeymoon-bridge-server",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "durable_objects": {
+    "bindings": [
+      { "name": "LOBBY", "class_name": "Lobby" },
+      { "name": "TABLES", "class_name": "Table" }
+    ]
+  },
+  "migrations": [
+    {
+      // SQLite-backed, which is the only kind the Workers free plan offers and
+      // what this design wants regardless — see REQUIREMENTS §3.4.
+      "tag": "v1",
+      "new_sqlite_classes": ["Table"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["Lobby"]
+    }
+  ],
+  "observability": { "enabled": true }
+}

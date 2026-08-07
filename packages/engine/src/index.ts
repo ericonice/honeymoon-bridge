@@ -4,5 +4,6 @@ export * from "./deal.js";
 export * from "./rng.js";
 export * from "./rubber.js";
 export * from "./scoring.js";
+export * from "./table.js";
 export * from "./types.js";
 export * from "./view.js";

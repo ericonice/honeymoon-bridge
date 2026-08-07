@@ -3,10 +3,12 @@ import type { Call, Level, PlayerView, Strain } from "@hb/engine";
 import { useEffect, useState } from "react";
 import { callLabel, strainIsRed, strainSymbol } from "../game/labels.js";
 import { CallText } from "./CardText.js";
+import { SeatLabel } from "./SeatLabel.js";
 
 const LEVELS: readonly Level[] = [1, 2, 3, 4, 5, 6, 7];
 
 export interface AuctionPhaseProps {
+  readonly opponentName: string;
   readonly view: PlayerView;
   onCall(call: Call): void;
 }
@@ -36,12 +38,18 @@ function toneFor(selected: boolean): string {
  * The auction so far, in two columns. Calls strictly alternate, so each one
  * belongs to a fixed column and the rows line up without any bookkeeping.
  */
-function History({ view }: { readonly view: PlayerView }): React.JSX.Element {
+function History({
+  opponentName,
+  view,
+}: {
+  readonly opponentName: string;
+  readonly view: PlayerView;
+}): React.JSX.Element {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
       <div className="grid grid-cols-2 gap-x-6 text-sm">
         <p className="pb-1 text-xs text-white/45">You</p>
-        <p className="pb-1 text-xs text-white/45">Opponent</p>
+        <p className="pb-1 text-xs text-white/45">{opponentName}</p>
         {view.auction.map((entry, index) => (
           // The auction is append-only, so the index is a stable identity.
           <p key={index} className={entry.by === view.me ? "col-start-1" : "col-start-2"}>
@@ -54,7 +62,11 @@ function History({ view }: { readonly view: PlayerView }): React.JSX.Element {
   );
 }
 
-export function AuctionPhase({ onCall, view }: AuctionPhaseProps): React.JSX.Element {
+export function AuctionPhase({
+  onCall,
+  opponentName,
+  view,
+}: AuctionPhaseProps): React.JSX.Element {
   const [level, setLevel] = useState<Level | null>(null);
   const [chosen, setChosen] = useState<Call | null>(null);
 
@@ -84,7 +96,14 @@ export function AuctionPhase({ onCall, view }: AuctionPhaseProps): React.JSX.Ele
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <History view={view} />
+      {/* The auction has no cards on the table for a label to sit beside, so
+          the two seats go above the record of what each of them has said. */}
+      <div className="flex items-center justify-between px-4 pt-2">
+        <SeatLabel active={!myTurn} name={opponentName} />
+        <SeatLabel active={myTurn} name="You" />
+      </div>
+
+      <History opponentName={opponentName} view={view} />
 
       <div className="flex flex-col gap-1.5 px-3">
         <div className="grid grid-cols-7 gap-1.5">
@@ -162,7 +181,8 @@ export function AuctionPhase({ onCall, view }: AuctionPhaseProps): React.JSX.Ele
           }}
         >
           {!myTurn ? (
-            "Opponent is bidding…"
+            // The seat labels say whose turn it is; this says what to do.
+            "Their bid"
           ) : chosen === null ? (
             "Choose a call"
           ) : (

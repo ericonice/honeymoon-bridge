@@ -2,6 +2,7 @@ import type { Pair, PlayerView } from "@hb/engine";
 import { ContractText } from "./CardText.js";
 
 export interface TopBarProps {
+  readonly opponentName: string;
   /** Dev-only shortcut past the phase in progress. Null when it is not on offer. */
   readonly onSkipPhase: (() => void) | null;
   /** Opens the rubber scorepad. Null on the screen that already shows it. */
@@ -19,9 +20,11 @@ export interface TopBarProps {
  * make — not revealed at scoring time.
  */
 function Vulnerability({
+  opponentName,
   vulnerable,
   view,
 }: {
+  readonly opponentName: string;
   readonly vulnerable: Pair<boolean>;
   readonly view: PlayerView;
 }): React.JSX.Element | null {
@@ -31,7 +34,7 @@ function Vulnerability({
     return null;
   }
 
-  const label = mine && theirs ? "Both vul" : mine ? "You vul" : "Opp vul";
+  const label = mine && theirs ? "Both vul" : mine ? "You vul" : `${opponentName} vul`;
   return (
     <span className="rounded bg-red-500/25 px-1.5 py-0.5 text-xs font-medium text-red-200">
       {label}
@@ -39,7 +42,13 @@ function Vulnerability({
   );
 }
 
-function Headline({ view }: { readonly view: PlayerView }): React.JSX.Element {
+function Headline({
+  opponentName,
+  view,
+}: {
+  readonly opponentName: string;
+  readonly view: PlayerView;
+}): React.JSX.Element {
   switch (view.phase) {
     case "draw": {
       return <>Draw</>;
@@ -55,7 +64,7 @@ function Headline({ view }: { readonly view: PlayerView }): React.JSX.Element {
       return (
         <>
           <ContractText contract={contract} on="dark" />{" "}
-          {contract.declarer === view.me ? "by you" : "by opponent"}
+          {contract.declarer === view.me ? "by you" : `by ${opponentName}`}
         </>
       );
     }
@@ -81,6 +90,7 @@ export function TopBar({
   onShowScore,
   onShowSettings,
   onSkipPhase,
+  opponentName,
   view,
   vulnerable,
 }: TopBarProps): React.JSX.Element {
@@ -89,10 +99,12 @@ export function TopBar({
   return (
     <header className="flex items-baseline justify-between gap-2 border-b border-white/10 px-4 py-2">
       <h1 className="text-base font-semibold text-white">
-        <Headline view={view} />
+        <Headline opponentName={opponentName} view={view} />
       </h1>
       <span className="flex-1" />
-      {view.phase === "draw" ? null : <Vulnerability vulnerable={vulnerable} view={view} />}
+      {view.phase === "draw" ? null : (
+        <Vulnerability opponentName={opponentName} vulnerable={vulnerable} view={view} />
+      )}
       {right === null ? null : <p className="text-sm tabular-nums text-white/60">{right}</p>}
       {onShowScore === null ? null : (
         <button

@@ -4,10 +4,12 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { TRICK_TIMING } from "../game/timing.js";
 import { CardFace, CardSlot } from "./CardFace.js";
+import { SeatLabel } from "./SeatLabel.js";
 
 export interface PlayPhaseProps {
   /** The trick that has just resolved, still lying on the table. */
   readonly lastTrick: CompletedTrick | null;
+  readonly opponentName: string;
   readonly view: PlayerView;
 }
 
@@ -79,15 +81,27 @@ function Slot({
   );
 }
 
-function caption(view: PlayerView, trick: TableTrick | null): string {
-  if (trick !== null && trick.winner !== null) {
-    const who = trick.winner === view.me ? "You" : "Opponent";
-    return `${who} won trick ${view.completedTricks.length}`;
+/** What just happened, or null if nothing has yet. */
+function resultLine(view: PlayerView, trick: TableTrick | null, opponentName: string): string | null {
+  if (trick === null || trick.winner === null) {
+    return null;
   }
+  const who = trick.winner === view.me ? "You" : opponentName;
+  return `${who} won trick ${view.completedTricks.length}`;
+}
+
+/**
+ * What you have to do, when it is your move.
+ *
+ * No longer says *whose* turn it is — the seat labels carry that now. This is
+ * only for the part a name cannot tell you: whether you are leading or have to
+ * follow a suit.
+ */
+function instruction(view: PlayerView): string | null {
   if (view.toAct !== view.me) {
-    return "Opponent is playing…";
+    return null;
   }
-  return view.currentTrick.length === 0 ? "Your lead" : "Your turn — follow suit";
+  return view.currentTrick.length === 0 ? "Your lead" : "Follow suit";
 }
 
 /**
@@ -101,10 +115,12 @@ function caption(view: PlayerView, trick: TableTrick | null): string {
  */
 function TrickReview({
   onClose,
+  opponentName,
   trick,
   view,
 }: {
   readonly onClose: () => void;
+  readonly opponentName: string;
   readonly trick: CompletedTrick;
   readonly view: PlayerView;
 }): React.JSX.Element {
@@ -119,7 +135,7 @@ function TrickReview({
           const card = played(player);
           return (
             <div key={player} className="flex flex-col items-center gap-2">
-              <p className="text-xs text-white/50">{player === view.me ? "You" : "Opponent"}</p>
+              <p className="text-xs text-white/50">{player === view.me ? "You" : opponentName}</p>
               {card === undefined ? (
                 <CardSlot size="table" />
               ) : (
@@ -130,7 +146,7 @@ function TrickReview({
         })}
       </div>
       <p className="text-base font-semibold">
-        {trick.winner === view.me ? "You won it" : "Opponent won it"}
+        {trick.winner === view.me ? "You won it" : `${opponentName} won it`}
       </p>
       <button
         type="button"
@@ -143,39 +159,45 @@ function TrickReview({
   );
 }
 
-export function PlayPhase({ lastTrick, view }: PlayPhaseProps): React.JSX.Element {
+export function PlayPhase({ lastTrick, opponentName, view }: PlayPhaseProps): React.JSX.Element {
   const [reviewing, setReviewing] = useState(false);
 
   const trick = tableTrick(view, lastTrick);
   const cards = trick?.cards ?? [];
   const resolved = trick !== null && trick.winner !== null;
+  const result = resultLine(view, trick, opponentName);
 
   // Both cards travel the same way — towards whoever took them.
-  const sweepTo = !resolved
-    ? null
-    : trick.winner === view.me
-      ? SWEEP_DISTANCE
-      : -SWEEP_DISTANCE;
+  const sweepTo = !resolved ? null : trick.winner === view.me ? SWEEP_DISTANCE : -SWEEP_DISTANCE;
 
   const trickKey = `${view.completedTricks.length}-${resolved ? "done" : "live"}`;
 
+  const yourTurn = view.toAct === view.me;
+
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center gap-3">
-      <p className="text-sm text-white/50">Opponent</p>
+      <SeatLabel active={!yourTurn} name={opponentName} />
       <Slot
         played={cards.find((played) => played.by === view.opponent)}
         sweepTo={sweepTo}
         trickKey={trickKey}
       />
-      <p className="min-h-6 text-center text-sm font-medium text-white/80">
-        {caption(view, trick)}
-      </p>
+
+      <div className="flex min-h-10 flex-col items-center justify-center">
+        {result === null ? null : (
+          <p className="text-center text-sm font-medium text-white/80">{result}</p>
+        )}
+        {instruction(view) === null ? null : (
+          <p className="text-center text-sm text-white/50">{instruction(view)}</p>
+        )}
+      </div>
+
       <Slot
         played={cards.find((played) => played.by === view.me)}
         sweepTo={sweepTo}
         trickKey={trickKey}
       />
-      <p className="text-sm text-white/50">You</p>
+      <SeatLabel active={yourTurn} name="You" />
 
       <button
         type="button"
@@ -190,6 +212,7 @@ export function PlayPhase({ lastTrick, view }: PlayPhaseProps): React.JSX.Elemen
 
       {reviewing && lastTrick !== null ? (
         <TrickReview
+          opponentName={opponentName}
           trick={lastTrick}
           view={view}
           onClose={() => {

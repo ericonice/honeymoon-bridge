@@ -1,10 +1,9 @@
-import { applyAction, createRng, startDeal } from "@hb/engine";
+import { applyAction, createRng, dealScoreFor, startDeal } from "@hb/engine";
 import type { Card, DealState, PlayerId, Rank, Suit } from "@hb/engine";
 import { describe, expect, it } from "vitest";
 import { bestStrain, defensiveTricks, estimatedTricks, quickTricks } from "../src/bot/evaluate.js";
 import { createHeuristicBot } from "../src/bot/heuristicBot.js";
 import { botActionFor } from "../src/game/botTurn.js";
-import { dealScoreFor } from "../src/game/useGameSession.js";
 
 function hand(spec: string): Card[] {
   const ranks: Record<string, Rank> = {
@@ -112,3 +111,4 @@ describe("the bidding bot", () => {
     expect(passed).toBeLessThan(30);
   });
 });
+

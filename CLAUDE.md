@@ -43,8 +43,9 @@ npm workspaces, not pnpm — pnpm is not installed on this machine. Node 24, npm
 
 ```
 packages/engine/     @hb/engine — headless rules engine. No UI, no I/O, no network.
-apps/web/            @hb/web — Vite + React PWA. The robot game.
-apps/server/         (not built yet) Cloudflare Worker + Durable Object
+packages/protocol/   @hb/protocol — what crosses the wire, and the tests that it is only that.
+apps/web/            @hb/web — Vite + React PWA.
+apps/server/         @hb/server — Cloudflare Worker + one Durable Object per table.
 ```
 
 The engine is consumed as TypeScript source (`main` points at `src/index.ts`), not as a build
@@ -60,6 +61,14 @@ know something about legality, the engine should expose it.
 **The engine is a pure reducer.** `startDeal` → `applyAction(state, player, action)` → new state.
 No mutation, no clocks, no randomness outside a seeded `Rng`. This is what makes the server able
 to reconstruct a table after a restart and makes every rule testable headlessly.
+
+**A deal is not the whole game — `table.ts` covers the sitting.** `TableState` holds the deal on
+the table, the rubber behind it and the deals already scored into it; `summarise` derives the
+standing, the scorepad and vulnerability. It lives in the engine because *two* hosts need it: the
+browser runs it for the game against the computer and the server runs it for a game between two
+people. A rubber that advanced differently in the two would be the same class of bug as a rule
+that did. Note `rubberBefore` — the rubber as it stood when the current deal *began*, since
+vulnerability is fixed for a deal and deriving the current score means it cannot be applied twice.
 
 **Randomness is always seeded.** The engine never calls `Math.random` — `createRng(seed)` is the
 only source. `randomSeed()` exists for callers to own that boundary. Once networking lands, deal
@@ -83,10 +92,27 @@ only shape allowed to cross the wire, and the only shape a bot may be given.
 When adding a field to `PlayerView`, ask what it leaks. There are tests asserting these omissions;
 if one starts failing, the fix is almost certainly the code, not the test.
 
-In the web app, `useGameSession` is the only thing that holds a `DealState`. Every component and
-the bot take a `PlayerView`, so the UI is already written against the shape the server will send
-over a socket. Keep it that way — a component reaching for `DealState` would work fine in the
-robot game and be a hole in the networked one.
+In the web app, `useLocalSession` is the only thing that holds a `TableState`. Every component
+takes a `GameSession`, and every bot a `PlayerView`, so the UI is already written against the shape
+the server will send. Keep it that way — a component reaching for `DealState` would work fine in
+the robot game and be a hole in the networked one.
+
+`GameSession` (`game/session.ts`) is deliberately silent about *where* the game runs, so the
+networked mode is a second implementation rather than a second UI. Strip its three methods and
+what remains is exactly `SessionSnapshot` — which is what makes §2.2's "explicit, tested boundary"
+one shape to test rather than a whole UI to audit.
+
+**`snapshotFor` is that boundary, and `packages/protocol/test/snapshot.test.ts` is what enforces
+it.** The test walks the serialised snapshot for anything card-shaped and checks it against what
+the seat may not see: the opponent's hand, the undrawn stock, their card 1, their discards, and
+all of this seat's own discards bar the most recent. It is deliberately blind to the snapshot's
+shape, so a field added later is walked without anyone remembering to update it. There is also an
+anti-vacuity test asserting the seat *does* get its own hand — a leak test that passes by sending
+nothing is worse than none.
+
+Per-seat derivations live beside `viewFor` in `view.ts` — `drawRevealFor`, `ownDrawPairFor` — for
+the same reason: they answer "what may this seat be told", and the server has to get them right
+per seat or it hands over a card nobody should see.
 
 `legalActions(state, player)` needs the privileged state; `legalActionsForView(view)` answers the
 same question for anyone who only has a view. Both call the same rules. Use the second in the UI
@@ -179,9 +205,24 @@ keep-or-reject choice, and the animation is what shows you your own card 2, whic
 require and the first build silently omitted. All draw-phase pacing lives in `game/timing.ts` —
 tune there first if the 26 turns drag.
 
-**Not started.** The heuristic bot, card and auction polish, the Cloudflare Worker and Durable
-Object. Build order is in `REQUIREMENTS.md` §3.5 — the robot version ships standalone with no
-server, so nothing about networking blocks a playable game.
+**Done, unwired.** `packages/protocol` and `apps/server`. A Worker mints invite codes and routes
+a socket to one Durable Object per table; the object owns the `TableState`, deals the seeds,
+validates every action through the engine and sends each seat a `snapshotFor` projection. Sockets
+go through the Hibernation API, state is persisted so a rubber survives a deploy, and a token
+reclaims a seat after a drop.
+
+Verified against a real `wrangler dev` — two seats, 26 draw turns, an out-of-turn action refused
+by the server, and a reconnect resuming mid-auction with the hand intact. `npm run dev --workspace
+@hb/server`, then drive it over a WebSocket.
+
+**Done.** `useNetworkSession` — the second implementation of `GameSession`, so the same `GameBoard`
+serves a reducer in the tab and a Durable Object on Cloudflare. Invite links, a matchmaking queue
+(one Durable Object holding no state; the socket *is* the place in the queue), the "waiting for X"
+countdown, and reconnection on backoff, on `online`, and on the tab becoming visible.
+
+**Not started.** The dev control that force-drops the socket, which §3.6 calls the only way to
+exercise reconnection deliberately rather than hoping. Nothing persists a rubber across a refresh
+in the robot game. And the play screen still has none of the polish the draw screen got.
 
 **The bot bids, draws and plays.** What each part does is written up in `REQUIREMENTS.md` §2.1.
 Measured over 1000+ bot-vs-bot deals at each stage:
@@ -219,6 +260,24 @@ rather than reason about it.
   perfect-memory bot has a real edge. The `Bot` interface must therefore take "what this bot
   remembers seeing" as explicit state handed to it, never read from engine state directly — which
   keeps lossy memory available as a difficulty lever. Whether v1's bot forgets is undecided.
+- **The bot bids as though the auction were silent.** Observed: a human 1♣ answered with 3♣.
+  Nothing is strictly wrong — 3♣ was legal and within what the hand was worth — but two things
+  behind it are worth fixing together.
+
+  First, `bestAffordableBid` values every strain against its own thirteen cards and never reads
+  the opponent's calls. It uses the auction only for legality, and `standingLevel` feeds the
+  double decision alone. So a 1♣ opening tells it nothing, when in a two-player game it is the
+  strongest evidence available: if they have clubs, the bot's own clubs are worth less as trumps
+  and more as defence. §1.5 calls the auction "pure competitive negotiation", and a negotiator
+  that ignores what the other side says is not negotiating.
+
+  Second, it always bids the *most* it thinks it can make rather than the least that takes the
+  contract, so it jumps rather than competing a step at a time and leaves itself no room to be
+  pushed. Below-the-line points do reward bidding your value, so this is a trade rather than a
+  plain bug — but jumping to the maximum on the first opportunity gets both halves wrong at once.
+
+  Beware the standing coupling: changing how the bot bids changes what it makes, which invalidates
+  the calibration in `evaluate.ts`. Re-measure.
 - **The bot has no memory.** `drawDecision.ts` weighs card 1 against the average unknown card,
   where "unknown" means everything not in its hand — including the cards it drew and threw away
   itself. That is exactly a player with no recall. Memory belongs in that pool and nowhere else:

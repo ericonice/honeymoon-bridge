@@ -3,18 +3,20 @@ import type { Card, DrawChoice, PlayerView } from "@hb/engine";
 import { motion } from "framer-motion";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DRAW_TIMING, drawTurnDuration } from "../game/timing.js";
-import { revealsUnseenCard } from "../game/useGameSession.js";
-import type { DrawPair, DrawReveal } from "../game/useGameSession.js";
+import { revealsUnseenCard } from "@hb/engine";
+import type { DrawPair, DrawReveal } from "../game/session.js";
 import { CardBack, CardFace, CardSlot } from "./CardFace.js";
 import { CardText } from "./CardText.js";
 import { DrawFlight } from "./DrawFlight.js";
 import type { Flight, Point } from "./DrawFlight.js";
 import { DiscardPile, DrawDeck } from "./DrawPiles.js";
+import { SeatLabel } from "./SeatLabel.js";
 
 export interface DrawPhaseProps {
   readonly lastDraw: DrawReveal | null;
   /** The two cards your own last turn spent, for the recall control. */
   readonly lastOwnDraw: DrawPair | null;
+  readonly opponentName: string;
   /** Development builds only: names the opponent's last two cards in the commentary. */
   readonly peekLastDraw: DrawPair | null;
   /**
@@ -50,21 +52,23 @@ function lastOpponentChoice(view: PlayerView): DrawChoice | null {
  * draw rule.
  */
 function OpponentLine({
+  opponentName,
   peek,
   settling,
   view,
 }: {
+  readonly opponentName: string;
   readonly peek: DrawPair | null;
   readonly settling: boolean;
   readonly view: PlayerView;
 }): React.JSX.Element {
   if (view.toAct === view.opponent || settling) {
-    return <>Opponent is drawing…</>;
+    return <>{opponentName} is drawing…</>;
   }
 
   const choice = lastOpponentChoice(view);
   if (choice === null) {
-    return <>Opponent has not drawn yet.</>;
+    return <>{opponentName} has not drawn yet.</>;
   }
 
   if (import.meta.env.DEV && peek !== null) {
@@ -72,12 +76,12 @@ function OpponentLine({
       <span className="text-fuchsia-300/90">
         {choice === "kept-first" ? (
           <>
-            Opponent kept the <CardText card={peek.taken} on="dark" /> and threw the{" "}
+            {opponentName} kept the <CardText card={peek.taken} on="dark" /> and threw the{" "}
             <CardText card={peek.discarded} on="dark" />
           </>
         ) : (
           <>
-            Opponent rejected the <CardText card={peek.discarded} on="dark" /> and took the{" "}
+            {opponentName} rejected the <CardText card={peek.discarded} on="dark" /> and took the{" "}
             <CardText card={peek.taken} on="dark" />
           </>
         )}
@@ -88,9 +92,9 @@ function OpponentLine({
   // Which card they acted on is the whole message; what rejecting entails is
   // the same every turn and does not need restating twenty-six times.
   return choice === "kept-first" ? (
-    <>Opponent kept the first card.</>
+    <>{opponentName} kept the first card.</>
   ) : (
-    <>Opponent rejected the first card.</>
+    <>{opponentName} rejected the first card.</>
   );
 }
 
@@ -150,6 +154,7 @@ export function DrawPhase({
   lastDraw,
   lastOwnDraw,
   onDecide,
+  opponentName,
   peekLastDraw,
   peekPending,
   view,
@@ -262,18 +267,9 @@ export function DrawPhase({
       className="relative flex flex-1 flex-col items-center justify-between px-4 py-3"
     >
       <div className="flex flex-col items-center gap-1">
-        <p className="flex items-center gap-1.5 text-xs text-white/50">
-          Opponent
-          {/* Their turn is a pause and a line of text, so it needs something
-              moving or it reads as the game having stopped. */}
-          {view.toAct === view.opponent || settling ? (
-            <motion.span
-              className="inline-block h-1.5 w-1.5 rounded-full bg-amber-300"
-              animate={{ opacity: [0.25, 1, 0.25] }}
-              transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut" }}
-            />
-          ) : null}
-        </p>
+        {/* Lit while they are deciding — and while the board is still settling
+            after their turn, since until it does the decision is not yours. */}
+        <SeatLabel active={view.toAct === view.opponent || settling} name={opponentName} />
         <div ref={opponentRef} className="flex">
           {Array.from({ length: view.handSizes[view.opponent] }, (_, index) => (
             <div key={index} className={index > 0 ? "-ml-4" : ""}>
@@ -325,8 +321,17 @@ export function DrawPhase({
       </div>
 
       <div className="flex w-full max-w-sm flex-col gap-3">
+        {/* Your side of the table: the two buttons are your cards' equivalent
+            here, so the label belongs with them. */}
+        <SeatLabel active={shown !== null} name="You" />
+
         <p className="flex min-h-10 items-center justify-center text-center text-sm text-white/70">
-          <OpponentLine peek={peekLastDraw} settling={settling} view={view} />
+          <OpponentLine
+            opponentName={opponentName}
+            peek={peekLastDraw}
+            settling={settling}
+            view={view}
+          />
         </p>
 
         {lastOwnDraw === null ? null : (
