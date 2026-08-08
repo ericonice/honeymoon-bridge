@@ -1,4 +1,4 @@
-import { drawRevealFor, ownDrawPairFor, summarise, viewFor } from "@hb/engine";
+import { drawRevealFor, ownDrawPairFor, summarize, viewFor } from "@hb/engine";
 import type {
   Card,
   CompletedTrick,
@@ -25,7 +25,7 @@ import type {
  * and any discard other than this seat's most recent one. The rules engine is
  * shared code that could run wholly client-side, so that boundary has to be
  * something tested rather than something assumed — see `snapshot.test.ts`,
- * which walks the serialised snapshot looking for any card it should not hold.
+ * which walks the serialized snapshot looking for any card it should not hold.
  */
 export interface SessionSnapshot {
   /** Every deal of the rubber, oldest first, including the one just finished. */
@@ -53,7 +53,7 @@ export interface SessionSnapshot {
  */
 export function snapshotFor(table: TableState, seat: PlayerId): SessionSnapshot {
   const { deal } = table;
-  const summary = summarise(table);
+  const summary = summarize(table);
   const hand = deal.hands[seat];
 
   return {

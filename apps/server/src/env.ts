@@ -14,6 +14,28 @@ export interface Env {
    * nothing. See §3.6 for why this is the dev control that does not ship.
    */
   readonly DEV_SIGNIN?: string;
+  /**
+   * Secret: the addresses allowed to see unfinished settings, comma separated.
+   *
+   * Named for the people rather than the features on purpose. A list of
+   * experiments and a list of the people who see them are different things, and
+   * a name that suggests the first while holding the second is a trap for
+   * whoever reads it next.
+   *
+   * A secret rather than a `vars` entry because `wrangler.jsonc` is committed
+   * and these are people's email addresses; a secret also survives a deploy,
+   * where a dashboard-set plaintext var does not unless `keep_vars` is on.
+   * Absent means nobody, which is the right answer when there is no
+   * configuration.
+   *
+   * **This is not a security boundary.** It decides which rows a Settings screen
+   * offers, and every one of those rows changes how the computer opponent
+   * behaves in a game played entirely on the player's own device. Somebody
+   * determined to flip one can flip it from devtools regardless. It exists so
+   * that half-finished behavior is not put in front of everybody, not to keep
+   * anyone out of anything.
+   */
+  readonly PLAYTESTERS?: string;
   /** One instance for the whole game — see `Lobby`. */
   readonly LOBBY: DurableObjectNamespace<Lobby>;
   /** Secret: sends the sign-in emails. */

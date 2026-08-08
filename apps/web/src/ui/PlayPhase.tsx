@@ -19,7 +19,7 @@ interface TableTrick {
   readonly winner: PlayerId | null;
 }
 
-/** How far a collected trick travels towards its winner before it fades. */
+/** How far a collected trick travels toward its winner before it fades. */
 const SWEEP_DISTANCE = 130;
 
 /**
@@ -27,7 +27,7 @@ const SWEEP_DISTANCE = 130;
  *
  * The engine resolves a trick the instant the second card lands, so if the
  * table only ever rendered `currentTrick` you would never see the trick you
- * just lost. The resolved trick therefore stays put, is swept towards whoever
+ * just lost. The resolved trick therefore stays put, is swept toward whoever
  * won it, and is gone by the time a card is played to the next one.
  */
 function tableTrick(view: PlayerView, lastTrick: CompletedTrick | null): TableTrick | null {
@@ -172,7 +172,7 @@ export function PlayPhase({ lastTrick, opponentName, view, vulnerable }: PlayPha
   const resolved = trick !== null && trick.winner !== null;
   const result = resultLine(view, trick, opponentName);
 
-  // Both cards travel the same way — towards whoever took them.
+  // Both cards travel the same way — toward whoever took them.
   const sweepTo = !resolved ? null : trick.winner === view.me ? SWEEP_DISTANCE : -SWEEP_DISTANCE;
 
   const trickKey = `${view.completedTricks.length}-${resolved ? "done" : "live"}`;

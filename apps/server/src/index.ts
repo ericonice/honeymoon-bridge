@@ -1,11 +1,12 @@
 import type { MatchFormat } from "@hb/engine";
 import {
   accountFor,
+  isPlaytester,
   accountFromRequest,
-  normaliseCode,
-  normaliseDestination,
-  normaliseEmail,
-  normaliseName,
+  normalizeCode,
+  normalizeDestination,
+  normalizeEmail,
+  normalizeName,
   redeemCode,
   redeemLink,
   requestLink,
@@ -75,6 +76,7 @@ interface RobotRubber {
   readonly deviceToken: string;
   readonly format: MatchFormat;
   readonly nickname: string;
+  readonly botVersion: number | null;
   readonly points: number;
   readonly pointsAgainst: number;
   readonly won: boolean;
@@ -113,9 +115,13 @@ function robotRubberFrom(body: unknown): RobotRubber | null {
 
   const nickname = typeof value.nickname === "string" ? value.nickname.slice(0, 20) : "";
   return {
+    // Null from a client too old to name which bot it played. That is not the
+    // same as version zero and must not be recorded as one — it means the game
+    // predates the question being asked.
+    botVersion: whole(value.botVersion, 1000),
     deals,
     deviceToken: value.deviceToken,
-    // Anything unrecognised is a rubber, which is what a client too old to know
+    // Anything unrecognized is a rubber, which is what a client too old to know
     // about formats would have been playing.
     format: value.format === "game" ? "game" : "rubber",
     nickname: nickname === "" ? "Player" : nickname,
@@ -168,7 +174,7 @@ export default {
         standalone?: unknown;
         to?: unknown;
       };
-      const email = normaliseEmail(body.email);
+      const email = normalizeEmail(body.email);
       // The origin the request came from, so a link opened on the phone lands
       // on the same deployment the phone is already using.
       const appOrigin = request.headers.get("Origin") ?? "https://honeymoon-bridge.ericonice.com";
@@ -177,7 +183,7 @@ export default {
           ? null
           : await requestLink(env, {
               appOrigin,
-              destination: normaliseDestination(body.to),
+              destination: normalizeDestination(body.to),
               email,
               ip: request.headers.get("CF-Connecting-IP"),
               now: Date.now(),
@@ -245,8 +251,8 @@ export default {
         deviceToken?: unknown;
         email?: unknown;
       };
-      const code = normaliseCode(body.code);
-      const email = normaliseEmail(body.email);
+      const code = normalizeCode(body.code);
+      const email = normalizeEmail(body.email);
       if (code === null || email === null) {
         return json(request, { error: "That code is not valid" }, 400);
       }
@@ -289,7 +295,7 @@ export default {
         deviceToken?: unknown;
         email?: unknown;
       };
-      const email = normaliseEmail(body.email);
+      const email = normalizeEmail(body.email);
       if (email === null) {
         return json(request, { error: "That is not an address" }, 400);
       }
@@ -308,7 +314,12 @@ export default {
     if (url.pathname === "/api/auth/me" && request.method === "GET") {
       const accountId = await accountFromRequest(request, env, Date.now());
       const account = accountId === null ? null : await accountFor(env, accountId);
-      return json(request, { account });
+      // Sent as a plain flag rather than the list: the client needs to know
+      // whether to show the rows, and never needs to know who else can.
+      return json(request, {
+        account,
+        playtester: account !== null && isPlaytester(env, account.email),
+      });
     }
 
     // Setting the name somebody is known by. It is on the account rather than
@@ -321,7 +332,7 @@ export default {
         return json(request, { error: "Not signed in" }, 401);
       }
       const body = (await request.json().catch(() => ({}))) as { name?: unknown };
-      const name = normaliseName(body.name);
+      const name = normalizeName(body.name);
       if (name === null) {
         return json(request, { error: "That is not a name" }, 400);
       }
@@ -372,6 +383,7 @@ export default {
       await recordRubber(
         env,
         {
+          botVersion: rubber.botVersion,
           code: "ROBOT",
           deals: rubber.deals,
           format: rubber.format,

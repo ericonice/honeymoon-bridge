@@ -107,7 +107,7 @@ export interface TableSummary {
   readonly vulnerable: Pair<boolean>;
 }
 
-export function summarise(table: TableState): TableSummary {
+export function summarize(table: TableState): TableSummary {
   const vulnerable = vulnerability(table.rubberBefore);
   const score = dealScoreFor(table.deal, vulnerable);
   const rubber = score === null ? table.rubberBefore : applyDealScore(table.rubberBefore, score);
@@ -129,7 +129,7 @@ export function summarise(table: TableState): TableSummary {
  * game it must be generated server-side and never sent to a client.
  */
 export function nextDeal(table: TableState, seed: number): TableState {
-  const { history, rubber } = summarise(table);
+  const { history, rubber } = summarize(table);
   const won = rubber.complete;
   const starter = table.deal.passedOut ? table.deal.starter : opponentOf(table.deal.starter);
 

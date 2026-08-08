@@ -22,6 +22,8 @@ export interface Records {
 }
 
 export interface RobotRubber {
+  /** Which computer opponent this was. See `bot/release.ts`. */
+  readonly botVersion: number;
   readonly deals: number;
   readonly format: MatchFormat;
   readonly points: number;
@@ -42,6 +44,7 @@ export async function reportRobotRubber(rubber: RobotRubber): Promise<void> {
   try {
     await fetch(robotResultUrl(), {
       body: JSON.stringify({
+        botVersion: rubber.botVersion,
         deals: rubber.deals,
         deviceToken: playerToken(),
         format: rubber.format,

@@ -25,14 +25,14 @@ export interface Flight {
   readonly via: Point | null;
 }
 
-/** Half-dimensions, so a Point addresses a card's centre, not its top-left corner. */
+/** Half-dimensions, so a Point addresses a card's center, not its top-left corner. */
 const HALF: Record<string, { x: number; y: number }> = {
   feature: { x: 56, y: 80 },
   table: { x: 32, y: 48 },
 };
 
 /**
- * One card travelling from the stock to wherever the turn sent it.
+ * One card traveling from the stock to wherever the turn sent it.
  *
  * The movement is the message: two cards leave the deck every turn, and where
  * each lands is precisely the keep-or-reject choice. The opponent's fly face

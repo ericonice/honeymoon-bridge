@@ -27,12 +27,29 @@ export const DRAW_TIMING = {
   think: 600,
 };
 
+/**
+ * Everything above, scaled.
+ *
+ * A single multiplier rather than a knob per duration, because these are one
+ * budget and not four settings — the pause between turns is derived from the
+ * animation, so moving them independently would let the opponent act before the
+ * previous turn had finished playing out. Testing only, and set from Settings
+ * while it is being decided what the right pace is.
+ */
+let pacing = 1;
+
+export function setPacing(multiplier: number): void {
+  pacing = multiplier;
+}
+
 /** How long a resolved draw turn takes to play out end to end. */
 export function drawTurnDuration(mine: boolean, holdsReveal: boolean): number {
   if (!mine) {
-    return DRAW_TIMING.think;
+    return DRAW_TIMING.think * pacing;
   }
-  return (holdsReveal ? DRAW_TIMING.hold : 0) + DRAW_TIMING.flight + DRAW_TIMING.settle;
+  return (
+    ((holdsReveal ? DRAW_TIMING.hold : 0) + DRAW_TIMING.flight + DRAW_TIMING.settle) * pacing
+  );
 }
 
 /**
@@ -47,7 +64,7 @@ export const TRICK_TIMING = {
   hold: 900,
   /** Breathing room once it has gone. */
   settle: 150,
-  /** The sweep towards whoever won it. */
+  /** The sweep toward whoever won it. */
   sweep: 400,
 };
 

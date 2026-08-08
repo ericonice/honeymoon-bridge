@@ -113,7 +113,7 @@ function lead(view: PlayerView, legal: readonly Card[]): Card {
   }
 
   // Cash a suit that cannot be beaten, longest first, since that is the one
-  // whose small cards will still be good once the honours have gone.
+  // whose small cards will still be good once the honors have gone.
   const runnable = [...SUITS]
     .map((suit) => cardsIn(view.hand, suit))
     .filter((cards) => cards.length > 0 && cards.some((card) => isCertainWinner(view, card)))
@@ -122,7 +122,7 @@ function lead(view: PlayerView, legal: readonly Card[]): Card {
     return highest(runnable.filter((card) => isCertainWinner(view, card)));
   }
 
-  // Otherwise lead low from length, working towards the point where the suit
+  // Otherwise lead low from length, working toward the point where the suit
   // does run.
   const long = longestSuit(view.hand, trump);
   return lowest(long.length > 0 ? long : legal);

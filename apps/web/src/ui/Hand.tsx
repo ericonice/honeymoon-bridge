@@ -32,7 +32,7 @@ const FRAME_PADDING = 24;
  * spreads out as it is played away rather than staying bunched at its
  * thirteen-card spacing. And during the play phase the space goes where it is
  * needed: a card the follow-suit rule forbids is not tappable, so it only needs
- * to be recognisable, and it gives up its width to the cards that are.
+ * to be recognizable, and it gives up its width to the cards that are.
  */
 function stepsFor(
   cards: readonly Card[],
@@ -144,7 +144,7 @@ export function Hand({ cards, highlight, onPlay, playable }: HandProps): React.J
                 <CardFace card={card} size="hand" />
                 {isNew ? (
                   // Marks the card in place, inside its own bounds and under
-                  // its neighbour like every other card. The wash is what
+                  // its neighbor like every other card. The wash is what
                   // carries it: all that stays visible of an overlapped card is
                   // the narrow strip down its left, so the mark has to read
                   // there rather than around the whole outline.

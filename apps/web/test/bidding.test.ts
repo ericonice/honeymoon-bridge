@@ -3,7 +3,7 @@ import type { Card, DealState, PlayerId, Rank, Suit } from "@hb/engine";
 import { describe, expect, it } from "vitest";
 import { bestStrain, defensiveTricks, estimatedTricks, quickTricks } from "../src/bot/evaluate.js";
 import { createHeuristicBot } from "../src/bot/heuristicBot.js";
-import { botActionFor } from "../src/game/botTurn.js";
+import { botActionFor, loveAll } from "../src/game/botTurn.js";
 
 function hand(spec: string): Card[] {
   const ranks: Record<string, Rank> = {
@@ -21,13 +21,13 @@ function playDeal(seed: number, starter: PlayerId): DealState {
   const bot = createHeuristicBot(createRng(seed));
   let state = startDeal({ seed, starter });
   while (state.phase !== "complete") {
-    state = applyAction(state, state.toAct, botActionFor(bot, state, state.toAct));
+    state = applyAction(state, state.toAct, botActionFor({ bot, seat: state.toAct, standing: loveAll(), state }));
   }
   return state;
 }
 
 describe("hand evaluation", () => {
-  it("counts the top honours as winners and the rest as nothing", () => {
+  it("counts the top honors as winners and the rest as nothing", () => {
     expect(quickTricks(hand("S:AK"))).toBe(2);
     expect(quickTricks(hand("S:AQ"))).toBe(1.5);
     expect(quickTricks(hand("S:A"))).toBe(1);
@@ -62,7 +62,7 @@ describe("hand evaluation", () => {
     expect(bestStrain(hand("S:AK4 H:AK4 D:AK4 C:A432")).strain).toBe("C");
   });
 
-  it("measures defence from winners across the whole hand", () => {
+  it("measures defense from winners across the whole hand", () => {
     expect(defensiveTricks(hand("S:AK H:A2 D:K2 C:432"))).toBe(3.5);
     expect(defensiveTricks(hand("S:8765 H:432 D:432 C:32"))).toBe(0);
   });
@@ -79,7 +79,7 @@ describe("the bidding bot", () => {
   it("bids contracts it can actually make", () => {
     // Deliberately not asserting the level. The random bidder averaged about
     // four, and this bot has climbed past three as its card play improved — the
-    // level alone never distinguished judgement from noise. What separates them
+    // level alone never distinguished judgment from noise. What separates them
     // is that random bidding made 1% of its contracts and this makes most of
     // them, which stays true however the evaluation is tuned.
     let made = 0;

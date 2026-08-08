@@ -11,7 +11,7 @@ import {
 /**
  * A card named in running text — "Keep 7♦", "3♥ made".
  *
- * The suit has to carry its colour here as well as on the card face. A red suit
+ * The suit has to carry its color here as well as on the card face. A red suit
  * printed black beside the card it refers to reads as a different card, which
  * is exactly the kind of doubt this game does not need in the draw phase.
  */

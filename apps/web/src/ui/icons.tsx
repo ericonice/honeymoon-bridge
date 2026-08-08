@@ -3,7 +3,7 @@
  *
  * Inline SVG rather than an icon package, for three icons that would otherwise
  * pull in a dependency and a build step's worth of tree-shaking to use a
- * fraction of a percent of. They take their colour from the text around them
+ * fraction of a percent of. They take their color from the text around them
  * and scale with it, which a glyph like `⚙` does not — that renders as whatever
  * the platform feels like, and differently on the phone this is built for than
  * on the desktop it is developed on.

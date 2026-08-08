@@ -42,7 +42,7 @@ export function suitSymbol(suit: Suit): string {
   return SUIT_SYMBOLS[suit];
 }
 
-/** Diamonds and hearts print red; NT has no symbol and stays with the text colour. */
+/** Diamonds and hearts print red; NT has no symbol and stays with the text color. */
 export function suitIsRed(suit: Suit): boolean {
   return suit === "D" || suit === "H";
 }

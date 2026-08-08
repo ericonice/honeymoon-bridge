@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { applyTableAction, nextDeal, startTable, summarise, totalScore } from "@hb/engine";
+import { applyTableAction, nextDeal, startTable, summarize, totalScore } from "@hb/engine";
 import type { MatchFormat, PlayerId, TableState } from "@hb/engine";
 import { snapshotFor } from "@hb/protocol";
 import type { ClientMessage, Seating, ServerMessage, TableInfo } from "@hb/protocol";
@@ -282,7 +282,7 @@ export class Table extends DurableObject<Env> {
       return stored.recorded;
     }
 
-    const { history, rubber } = summarise(next);
+    const { history, rubber } = summarize(next);
     if (!rubber.complete || rubber.winner === null) {
       return false;
     }
@@ -358,7 +358,7 @@ export class Table extends DurableObject<Env> {
    *
    * The seat is emptied rather than marked absent, so the token no longer
    * reclaims it — that is what distinguishes leaving from dropping. Any grace
-   * period is cancelled too: there is nothing left to wait for.
+   * period is canceled too: there is nothing left to wait for.
    */
   async #leave(ws: WebSocket): Promise<void> {
     const stored = await this.#load();

@@ -25,7 +25,7 @@ function Columns({ opponentName }: { readonly opponentName: string }): React.JSX
 /**
  * A deal's points for one side.
  *
- * Below-the-line points are the ones that count towards a game, so they carry
+ * Below-the-line points are the ones that count toward a game, so they carry
  * the emphasis; everything above the line is real money but can never win a
  * game, and showing them as one figure hides the distinction the whole rubber
  * turns on.
@@ -179,7 +179,7 @@ export function Scorepad({
         {rubber.format === "rubber" ? (
           <Summary label="Games won" values={rubber.gamesWon} view={view} />
         ) : null}
-        <Summary label="Towards game" values={rubber.partScore} view={view} />
+        <Summary label="Toward game" values={rubber.partScore} view={view} />
         <Summary emphasis label="Total" values={totalScore(rubber)} view={view} />
       </div>
     </div>

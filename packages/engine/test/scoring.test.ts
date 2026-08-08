@@ -214,7 +214,7 @@ describe("the line", () => {
     expect(slam.aboveLine[0]).toBe(550);
   });
 
-  it("counts both sides of the line towards the final total", () => {
+  it("counts both sides of the line toward the final total", () => {
     const rubber = applyDealScore(newRubber(), score(3, "NT", 10));
 
     // 100 below wins the game; the overtrick's 30 sits above it.

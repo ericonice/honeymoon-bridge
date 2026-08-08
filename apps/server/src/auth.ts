@@ -61,7 +61,7 @@ function fromBase64Url(value: string): Uint8Array {
  * Case folding matters more than the shape check: without it one person signs
  * up twice and ends up with two records and one confusing history.
  */
-export function normaliseEmail(raw: unknown): string | null {
+export function normalizeEmail(raw: unknown): string | null {
   if (typeof raw !== "string") {
     return null;
   }
@@ -78,7 +78,7 @@ export function normaliseEmail(raw: unknown): string | null {
  * called, and the only genuinely wrong answers are nothing at all and something
  * too long to fit beside a hand of cards.
  */
-export function normaliseName(raw: unknown): string | null {
+export function normalizeName(raw: unknown): string | null {
   if (typeof raw !== "string") {
     return null;
   }
@@ -96,7 +96,7 @@ export function normaliseName(raw: unknown): string | null {
  * that exist rather than sanitised: an open redirect built out of a hash is
  * still an open redirect.
  */
-export function normaliseDestination(raw: unknown): string | null {
+export function normalizeDestination(raw: unknown): string | null {
   if (typeof raw !== "string") {
     return null;
   }
@@ -321,6 +321,22 @@ export interface Account {
   readonly name: string | null;
 }
 
+/**
+ * Whether this address is on the playtesters list.
+ *
+ * Compared case-insensitively and trimmed, because a list typed into a secret by
+ * hand will have stray spaces in it and a mismatch would be silent — the row
+ * simply would not appear, which is indistinguishable from the feature being
+ * off.
+ */
+export function isPlaytester(env: Env, email: string): boolean {
+  const allowed = (env.PLAYTESTERS ?? "")
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry !== "");
+  return allowed.includes(email.trim().toLowerCase());
+}
+
 export async function accountFor(env: Env, accountId: string): Promise<Account | null> {
   const row = await env.DB.prepare("SELECT email, name FROM accounts WHERE id = ?")
     .bind(accountId)
@@ -379,7 +395,7 @@ export async function redeemLink(
 }
 
 /** A typed code, as it was sent. Spaces and case are how people write, not part of it. */
-export function normaliseCode(raw: unknown): string | null {
+export function normalizeCode(raw: unknown): string | null {
   if (typeof raw !== "string") {
     return null;
   }

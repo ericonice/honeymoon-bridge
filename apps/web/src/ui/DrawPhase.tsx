@@ -72,7 +72,7 @@ function OpponentLine({
     return <>{opponentName} has not drawn yet.</>;
   }
 
-  if (import.meta.env.DEV && peek !== null) {
+  if (peek !== null) {
     return (
       <span className="text-fuchsia-300/90">
         {choice === "kept-first" ? (
@@ -297,8 +297,8 @@ export function DrawPhase({
         <div ref={pendingRef} className="pb-6">
           {/* Guarded on DEV as well as on the data, so the branch folds away
               rather than merely never being reached. */}
-          {import.meta.env.DEV && shown === null && peekPending !== null ? (
-            // Theirs, not yours — ringed in the debug colour so it can never be
+          {shown === null && peekPending !== null ? (
+            // Theirs, not yours — ringed in the debug color so it can never be
             // mistaken for a card you are being offered.
             // Card 1 only, exactly what the opponent is looking at — the same
             // card you would be shown in their seat. What they then did with it

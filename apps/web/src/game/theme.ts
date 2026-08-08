@@ -5,7 +5,7 @@ import { createContext, useContext } from "react";
  * `felt` is the green baize the app was built in, kept because a card game on
  * green is what most people expect and the choice costs almost nothing.
  *
- * The colours themselves live in `index.css` — this is only the identity, the
+ * The colors themselves live in `index.css` — this is only the identity, the
  * remembering, and the one bit of chrome CSS cannot reach.
  */
 export type Theme = "felt" | "hockey";
@@ -14,7 +14,7 @@ export const DEFAULT_THEME: Theme = "hockey";
 
 const STORAGE_KEY = "hb.theme";
 
-/** Anything unrecognised — an older build's value, a hand-edited key — falls back. */
+/** Anything unrecognized — an older build's value, a hand-edited key — falls back. */
 export function themeFromStored(value: string | null): Theme {
   return value === "felt" || value === "hockey" ? value : DEFAULT_THEME;
 }
@@ -58,7 +58,7 @@ export function applyTheme(theme: Theme): void {
 
 /**
  * Read by the card back, which is the one piece of the theme that is a
- * different *shape* rather than a different colour and so cannot be a token.
+ * different *shape* rather than a different color and so cannot be a token.
  */
 export const ThemeContext = createContext<Theme>(DEFAULT_THEME);
 

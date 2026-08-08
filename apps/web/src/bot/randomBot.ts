@@ -30,14 +30,17 @@ export function createRandomBot(rng: Rng): Bot {
     name: "Random",
 
     chooseCall(view: PlayerView): Call {
+      // The standing is ignored on purpose: this bot is not trying to be right
+      // about anything, and pretending otherwise would make it look like it was.
       return pick(callsFrom(legalActionsForView(view)), rng);
     },
 
-    chooseDraw(_view: PlayerView): boolean {
+    chooseDraw(): boolean {
       return rng.next() < 0.5;
     },
 
     choosePlay(view: PlayerView): Card {
+      // Recall is offered and ignored, like everything else this bot is told.
       return pick(cardsFrom(legalActionsForView(view)), rng);
     },
   };

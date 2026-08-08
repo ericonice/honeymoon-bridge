@@ -3,7 +3,10 @@
 A two-player contract bridge variant, playable in a phone browser. Two versions: a
 single-player game against a computer opponent, and a live two-device game over a network.
 
-Status: requirements agreed, nothing built yet. Open questions are collected at the end.
+Status: both versions are built and deployed. This document stays the source of truth for the
+rules and the product decisions, and records why as well as what — several of the decisions are
+deliberate and counter-intuitive, and a few have been reversed with the reasoning kept rather than
+tidied away. Open questions are collected at the end.
 
 ---
 
@@ -65,7 +68,7 @@ the keep-or-reject distinction.
 - **The opponent's turn is not animated.** It was, once, with a beat first so their card 1 could be
   told from card 2 — the reasoning being that destinations carry the choice. In the hand it read as
   ceremony. Their hand grows by one either way, the deck drops by two, and a line of text says what
-  they did in words; two face-down cards travelling added none of that and cost about a second on
+  they did in words; two face-down cards traveling added none of that and cost about a second on
   each of their thirteen turns, on the phase whose open question is whether it drags. It is now a
   pause long enough to register, with something visibly moving so the game does not look stopped.
 - **The player's own turn keeps its animation**, because it is doing work nothing else does: it is
@@ -138,7 +141,7 @@ Full contract bridge auction once both hands are complete.
   card of the suit led. Winner of a trick leads to the next.
 - Declarer needs level + 6 tricks (book is 6).
 - **Every deal is played out to all 13 tricks.** No claiming and no conceding.
-- **A finished trick is swept towards whoever won it**, then it is gone. The engine resolves a
+- **A finished trick is swept toward whoever won it**, then it is gone. The engine resolves a
   trick the instant the second card lands and hands the lead to the winner, so without this the
   trick you just lost would be replaced by the next card before you had read it. The direction of
   the sweep is what says who took it.
@@ -205,7 +208,7 @@ deal gets a line: the contract, who declared, whether it made, and the points to
 is ruled across under the deal that wins a game, the way it is on paper.
 
 Below-the-line points are shown distinctly from above-the-line ones. Both are real, but only points
-below the line count towards a game, and a scorepad that adds them into a single figure hides the
+below the line count toward a game, and a scorepad that adds them into a single figure hides the
 distinction the whole rubber turns on.
 
 **Honors** — in scope.
@@ -243,11 +246,24 @@ A=1, KQ=1, guarded K=½). Point counting answers "how much do we hold between us
 question with no meaning here. The raw count under-predicts badly, so it is **calibrated against
 measured outcomes** rather than reasoned about — see §5.2.
 
-**Bidding** (`heuristicBot.ts`) — measure every legal bid against what the hand is worth in that
-strain, discard the ones it cannot make, and take the highest of the rest. Being outbid in a suit
-therefore pushes it into another suit it can afford, never into a level it cannot; when nothing is
-affordable it passes. It doubles only from the five level and holding three defensive tricks — that
-is, only when they have clearly overreached. It never redoubles.
+**Bidding** (`heuristicBot.ts` and `bidValue.ts`) — price every legal call in *points* and take the
+best one, if it beats the price of passing. A candidate contract is played out at each plausible
+number of tricks, scored by the engine's own `scoreDeal`, folded into the rubber with
+`applyDealScore`, and what comes back is how far the standing moved. So the bidder never restates
+a scoring rule and cannot drift from the one the deal is settled by.
+
+It asked "can this hand take this many tricks" until it was measured, and that is the wrong
+question in two directions: it cannot see that the contract finishing a game is worth far more than
+the trick reaching it, nor that going down 100 to deny 500 is a good result. Both are invisible in
+tricks and obvious in points. Stretching for game, sacrificing, doubling, and declining to jump to
+the top of what the hand can make all stopped being rules and became consequences of the one
+comparison. It still never redoubles.
+
+Two numbers carry it, both fitted against par: what this hand takes *declaring* a strain, and what
+it takes *defending* against one. The second is what prices passing, and without it the bidder has
+no way to judge letting them play — assuming they simply make what they bid drives both sides into
+a bidding war neither can win. Worth **+464 points a rubber** over the bidder it replaced, measured
+over 1000 rubbers with the seats exchanged.
 
 **The draw** (`drawDecision.ts`) — the interesting one, because rejecting is not discarding, it is
 swapping for a draw from what is left. So both sides are measured the same way: what card 1 adds to
@@ -265,6 +281,28 @@ non-trump suit, since length is what runs later. Leading: draw trumps while hold
 and the opponent has not shown void; otherwise cash a card nothing outstanding can beat, longest
 suit first; otherwise lead low from length. "Nothing outstanding can beat it" counts the 26 cards
 that were never dealt as though they were still out there, so it is too cautious rather than wrong.
+
+**Card play, the second implementation** (`samplingBot.ts`) — every one of those rules is an
+approximation of a question that is directly computable once both hands are known, so rather than
+sharpen the approximations this guesses the hand it cannot see, many times over, and solves each
+guess exactly with `solver.ts`. A card that wins tricks across most plausible hands is the card to
+play. This is why the game is two-handed rather than four: one opponent and no partner make a
+double-dummy solve small enough to run twenty-five times per card in a phone browser, and remove
+most of the usual objection to the technique, which is that each guess assumes the opponents can
+also see everything.
+
+Measured, it roughly halves what the bot gives away on defense and wins head-to-head by about 37
+points a deal, and it is **what the game against the computer now plays**. The sample count is both the cost and
+the difficulty lever, which is a better lever than
+heuristic weakness: fewer samples make an opponent that is unsure rather than one that is wrong on
+purpose, which is the shape the difficulty question below actually wants.
+
+- **Bot memory is built, and it pays in card play rather than in the draw.** The bot is given the
+  cards it threw away — explicit state handed to `chooseDraw` and `choosePlay`, never read from
+  engine state, so a forgetful opponent is a matter of passing less. In the draw it is worth
+  nothing measurable: 0.6% of decisions change and hand quality moves not at all. In card play it
+  is worth 13% of everything the bot throws away, because there the discards are not a bias in an
+  average but cards the opponent provably cannot hold.
 
 - **Bot memory is a tunable, not a given.** Since discards are not displayed back (§1.4), a human
   will forget some of the 13 cards they discarded and the bot would otherwise never forget
@@ -513,7 +551,7 @@ device, and there is no Safari on Windows to substitute:
 
   **This is the one dev control that does not ship,** and the paragraph above says why without
   meaning to. A shortcut is safe in a deployed build when the server would refuse it regardless;
-  the server cannot refuse this one, since honouring it is the entire point. So it fails the test
+  the server cannot refuse this one, since honoring it is the entire point. So it fails the test
   the other controls pass, and is compiled out of the client *and* refused by the server outside
   the development environment — two independent conditions, because one of them will eventually be
   got wrong. The client's condition is `vite dev` rather than a setting, so testing from a phone
@@ -756,6 +794,20 @@ apart. Scrolling past a scoreboard to reach a theme switch is the wrong way roun
 screen explains what an account buys instead of showing nothing, which makes it a reason to sign in
 rather than a dead end.
 
+**A robot rubber records which computer it was played against.** The bot is versioned from v1, and
+each version carries a name shown in Settings — hockey players in alphabetical order by first name, so the
+ordering is obvious to anybody reading a list of them. The name appears there and nowhere else:
+across the table the opponent stays the computer, because a first name in the seat opposite
+promises a personality that is not there.
+
+This exists for the same reason accounts do. A record against "the computer" pooled across every
+version there has been describes an opponent nobody ever played, and the bot changes enough between
+versions to make that a real distortion rather than a pedantic one. It cannot be applied backwards:
+rows written before the column have no version and never will, and null there means *before
+versions* rather than *unknown version*. A report that omits the version is still accepted, because
+the service worker keeps older builds in circulation and a rubber somebody actually played is worth
+recording whether or not their client knew to name its opponent.
+
 **A finished rubber is what gets recorded**, not a deal. A rubber is what people say they won;
 nobody asks how many deals they have won. Only completed ones land in the table — §2.2 already ends
 an abandoned rubber unscored, which also means a record cannot be improved by walking out of a game
@@ -819,8 +871,18 @@ are shown side by side and never summed into a single record.
 
    Counting winners under-predicts badly, because it credits only the certain cards while length
    and middle cards win tricks too — the more so here, where half the deck is out of play and a
-   nine is often high. The estimate is therefore calibrated against measured outcomes rather than
-   reasoned about: fitted over 4000 deals, raw winners averaged 4.1 against 7.6 tricks actually
-   taken. The fit is in `evaluate.ts` and **wants refitting whenever card play changes**, since it
-   was measured against random play on both sides.
+   nine is often high. The estimate is therefore calibrated against measurement rather than
+   reasoned about. The fit is in `evaluate.ts` and **wants refitting whenever card play changes**.
+
+   What has changed is what it is fitted *against*. The first three fits used deals the bot had
+   itself bid and played, which was circular twice over — the contracts in the sample were the ones
+   the previous constants chose, and the tricks were whatever the previous card play managed. Each
+   fit disagreed with the one before it. It is now fitted against **par**, computed by the
+   double-dummy solver for every hand in every strain whether or not anything would bid it, so the
+   sample is the hands rather than the auctions they happened to produce.
+
+   The remaining problem is no longer the fit but the thing being fitted: r-squared is 0.42 and the
+   residual is ±1.4 tricks, which no straight line through this feature can improve. Hand
+   evaluation is the weak link, and the specific defect and why the obvious fix cannot land alone
+   are recorded in `CLAUDE.md`.
 3. **Turn clock**, if the untimed draw phase proves tedious in practice (§2.2).

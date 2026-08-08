@@ -2,7 +2,7 @@ import { applyAction, cardId, createRng, scoreDeal, startDeal, viewFor } from "@
 import type { DealState, PlayerId } from "@hb/engine";
 import { describe, expect, it } from "vitest";
 import { createRandomBot } from "../src/bot/randomBot.js";
-import { botActionFor } from "../src/game/botTurn.js";
+import { botActionFor, loveAll } from "../src/game/botTurn.js";
 
 /**
  * Drives both seats with random bots until the deal ends. Every action goes
@@ -14,7 +14,7 @@ function playDeal(seed: number, starter: PlayerId): DealState {
   let state = startDeal({ seed, starter });
 
   while (state.phase !== "complete") {
-    state = applyAction(state, state.toAct, botActionFor(bot, state, state.toAct));
+    state = applyAction(state, state.toAct, botActionFor({ bot, seat: state.toAct, standing: loveAll(), state }));
   }
   return state;
 }

@@ -19,12 +19,12 @@ describe("invite codes", () => {
     expect(codes.size).toBe(500);
   });
 
-  it("recognises its own codes and rejects anything else", () => {
+  it("recognizes its own codes and rejects anything else", () => {
     expect(isInviteCode(inviteCode())).toBe(true);
     expect(isInviteCode("")).toBe(false);
     expect(isInviteCode("ABC")).toBe(false);
     expect(isInviteCode("ABCDEFG")).toBe(false);
-    // Lowercase is normalised before this is reached, never accepted here.
+    // Lowercase is normalized before this is reached, never accepted here.
     expect(isInviteCode("abcdef")).toBe(false);
     expect(isInviteCode("AAAA0A")).toBe(false);
   });

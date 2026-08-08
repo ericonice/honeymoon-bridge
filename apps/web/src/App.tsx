@@ -3,7 +3,20 @@ import { useAccount } from "./game/account.js";
 import type { Destination } from "./game/destination.js";
 import { destinationFromWire, HOME, takeDestination } from "./game/destination.js";
 import { readDevTools, writeDevTools } from "./game/devTools.js";
-import { preferredFormat, setPreferredFormat } from "./game/identity.js";
+import {
+  boldness,
+  pace,
+  peeking as storedPeeking,
+  preferredFormat,
+  psychsEnabled,
+  setBoldness,
+  setPace,
+  setPeeking as storePeeking,
+  setPreferredFormat,
+  setPsychsEnabled,
+  setStrength,
+  strength,
+} from "./game/identity.js";
 import {
   clearLocationHash,
   codeFromLocation,
@@ -79,12 +92,18 @@ export function App(): React.JSX.Element {
   // An overlay rather than a screen, so the rules can be checked from inside a
   // game. Anybody wondering whether a pass ends the auction is in an auction.
   const [showingHelp, setShowingHelp] = useState(false);
-  const [peeking, setPeeking] = useState(false);
+  const [peeking, setPeeking] = useState(storedPeeking);
   // Read once, then owned here so Settings can change it without a reload.
   const [devTools, setDevTools] = useState(readDevTools);
   // A preference for the *next* match. A game in progress reads its format from
   // its own state, so changing this cannot alter one already under way.
   const [format, setFormat] = useState(preferredFormat);
+  const [psychs, setPsychs] = useState(psychsEnabled);
+  // Testing settings, kept in state only so the rows re-render when tapped; the
+  // stored value is what anything actually reads.
+  const [bold, setBold] = useState(boldness);
+  const [level, setLevel] = useState(strength);
+  const [speed, setSpeed] = useState(pace);
   // Already on the document by now — main.tsx applies it before the first
   // render — so this is the same value again, for the card back to read.
   const [theme, setTheme] = useState(readTheme);
@@ -299,7 +318,7 @@ export function App(): React.JSX.Element {
           the home indicator. Each region scrolls on its own; the page never
           does.
 
-          Capped at a phone's width and centred: every screen here is laid out
+          Capped at a phone's width and centered: every screen here is laid out
           for a hand holding a phone, and stretching that across a desktop
           monitor makes rows of buttons absurdly wide rather than usefully
           bigger. On a phone the cap never binds. */}
@@ -316,9 +335,14 @@ export function App(): React.JSX.Element {
 
         {showingSettings ? (
           <SettingsOverlay
+            boldness={bold}
             devTools={devTools}
             format={format}
+            pace={speed}
+            playtester={account.playtester}
+            strength={level}
             peeking={peeking}
+            psychs={psychs}
             theme={theme}
             onClose={() => {
               setShowingSettings(false);
@@ -332,7 +356,26 @@ export function App(): React.JSX.Element {
               setPreferredFormat(next);
               setFormat(next);
             }}
-            onPeekingChange={setPeeking}
+            onPeekingChange={(enabled) => {
+              storePeeking(enabled);
+              setPeeking(enabled);
+            }}
+            onPsychsChange={(enabled) => {
+              setPsychsEnabled(enabled);
+              setPsychs(enabled);
+            }}
+            onBoldnessChange={(next) => {
+              setBoldness(next);
+              setBold(next);
+            }}
+            onStrengthChange={(next) => {
+              setStrength(next);
+              setLevel(next);
+            }}
+            onPaceChange={(next) => {
+              setPace(next);
+              setSpeed(next);
+            }}
             onThemeChange={(next) => {
               writeTheme(next);
               applyTheme(next);

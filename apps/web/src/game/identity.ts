@@ -2,6 +2,11 @@ import type { MatchFormat } from "@hb/engine";
 import { readStored, writeStored } from "./storage.js";
 
 const FORMAT_KEY = "hb.format";
+const PSYCHS_KEY = "hb.psychs";
+const BOLDNESS_KEY = "hb.boldness";
+const STRENGTH_KEY = "hb.strength";
+const PACE_KEY = "hb.pace";
+const PEEK_KEY = "hb.peek";
 const NICKNAME_KEY = "hb.nickname";
 const TOKEN_KEY = "hb.token";
 
@@ -53,6 +58,92 @@ export function preferredFormat(): MatchFormat {
 
 export function setPreferredFormat(format: MatchFormat): void {
   writeStored(FORMAT_KEY, format);
+}
+
+/**
+ * Whether the computer is allowed to bid a suit it does not hold.
+ *
+ * **Temporary, and here to answer one question.** Measured against the bot,
+ * psyching costs about ten times what it earns: the lie does land — the sampler
+ * reads the auction and misplays by a measurable amount — but contracts that
+ * were makeable fall four points, because one pass closes the auction and a suit
+ * you do not hold is sometimes a suit you play.
+ *
+ * None of which settles whether it works on a *person*, who forms a far stronger
+ * belief from an auction than a weighted sampler does and holds it much longer.
+ * That is not measurable from here, so it is a switch instead. Once it has been
+ * played with, this and the row in Settings should both go: whichever way it
+ * lands, the answer belongs in the bot rather than in a preference.
+ */
+export function psychsEnabled(): boolean {
+  return readStored(PSYCHS_KEY) === "on";
+}
+
+export function setPsychsEnabled(enabled: boolean): void {
+  writeStored(PSYCHS_KEY, enabled ? "on" : "off");
+}
+
+/**
+ * The three settings that exist to answer a question, not to be preferred.
+ *
+ * Each is a number the benches cannot choose. What a game in hand is worth was
+ * fitted against a reference bidder that barely doubles, so its measured
+ * optimum flatters overbidding in a way that will not transfer to a person. How
+ * strong the computer should be is not a measurement at all — more sampling is
+ * always better play and says nothing about whether the result is worth
+ * sitting down to. And the pace of the draw is twenty-six turns of the same
+ * decision, which either reads as deliberate or as waiting, and no number
+ * produced from a bench has an opinion about which.
+ *
+ * All three are temporary. When each has an answer it belongs in the code as a
+ * constant, and the row should go.
+ */
+export type Boldness = "bold" | "cautious" | "normal";
+export type Strength = "normal" | "strong" | "weak";
+export type Pace = "brisk" | "normal" | "slow";
+
+export function boldness(): Boldness {
+  const stored = readStored(BOLDNESS_KEY);
+  return stored === "bold" || stored === "cautious" ? stored : "normal";
+}
+
+export function setBoldness(next: Boldness): void {
+  writeStored(BOLDNESS_KEY, next);
+}
+
+export function strength(): Strength {
+  const stored = readStored(STRENGTH_KEY);
+  return stored === "strong" || stored === "weak" ? stored : "normal";
+}
+
+export function setStrength(next: Strength): void {
+  writeStored(STRENGTH_KEY, next);
+}
+
+/**
+ * Whether to show the computer's cards.
+ *
+ * Stored, like every other row in Settings. It was component state while it was
+ * a development affordance — nothing that vanished on reload, because a reload
+ * meant a rebuild anyway. As a setting somebody can actually turn on that made
+ * it the one row that forgot itself, which reads exactly like a control that
+ * does not work.
+ */
+export function peeking(): boolean {
+  return readStored(PEEK_KEY) === "on";
+}
+
+export function setPeeking(enabled: boolean): void {
+  writeStored(PEEK_KEY, enabled ? "on" : "off");
+}
+
+export function pace(): Pace {
+  const stored = readStored(PACE_KEY);
+  return stored === "brisk" || stored === "slow" ? stored : "normal";
+}
+
+export function setPace(next: Pace): void {
+  writeStored(PACE_KEY, next);
 }
 
 /**

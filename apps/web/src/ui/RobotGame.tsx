@@ -16,7 +16,7 @@ export function RobotGame({
   onShowSettings,
   peeking,
 }: RobotGameProps): React.JSX.Element {
-  const session = useLocalSession();
+  const session = useLocalSession({ peek: peeking });
   const noun = matchNoun(session.rubber.format);
 
   return (

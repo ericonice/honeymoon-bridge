@@ -239,7 +239,7 @@ export function GameBoard({
         }
       />
 
-      {import.meta.env.DEV && peeking && session.opponentHand !== null ? (
+      {peeking && session.opponentHand !== null ? (
         <OpponentPeek cards={session.opponentHand} />
       ) : null}
 

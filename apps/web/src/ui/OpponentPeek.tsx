@@ -9,7 +9,7 @@ export interface OpponentPeekProps {
 /**
  * The opponent's hand, face up. Development builds only.
  *
- * Marked in a colour used nowhere else in the game, and labelled, because the
+ * Marked in a color used nowhere else in the game, and labeled, because the
  * one thing worse than a debug view is not noticing you are looking at one.
  */
 export function OpponentPeek({ cards }: OpponentPeekProps): React.JSX.Element {

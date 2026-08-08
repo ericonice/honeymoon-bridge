@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normaliseCode, normaliseDestination, normaliseName, signInUrl } from "../src/auth.js";
+import { normalizeCode, normalizeDestination, normalizeName, signInUrl } from "../src/auth.js";
 import { signInCode } from "../src/codes.js";
 import { refuseSeat } from "../src/seating.js";
 
@@ -23,12 +23,12 @@ describe("taking a seat", () => {
 
 describe("where a sign-in link comes back to", () => {
   it("keeps the queue and a table code", () => {
-    expect(normaliseDestination("queue")).toBe("queue");
-    expect(normaliseDestination("table/ABCDEF")).toBe("table/ABCDEF");
+    expect(normalizeDestination("queue")).toBe("queue");
+    expect(normalizeDestination("table/ABCDEF")).toBe("table/ABCDEF");
   });
 
   it("upper-cases a table code, the way a code is read everywhere else", () => {
-    expect(normaliseDestination("table/abcdef")).toBe("table/ABCDEF");
+    expect(normalizeDestination("table/abcdef")).toBe("table/ABCDEF");
   });
 
   it("refuses anything that is not one of the two places there are", () => {
@@ -49,7 +49,7 @@ describe("where a sign-in link comes back to", () => {
       null,
       undefined,
     ]) {
-      expect(normaliseDestination(raw)).toBeNull();
+      expect(normalizeDestination(raw)).toBeNull();
     }
   });
 
@@ -72,7 +72,7 @@ describe("a sign-in code", () => {
   it("accepts one it issued", () => {
     for (let attempt = 0; attempt < 100; attempt++) {
       const code = signInCode();
-      expect(normaliseCode(code)).toBe(code);
+      expect(normalizeCode(code)).toBe(code);
     }
   });
 
@@ -80,26 +80,26 @@ describe("a sign-in code", () => {
     // Typed from an email into another app, so case, spaces and a hyphen
     // somebody added themselves are all how people write rather than part of
     // the code.
-    expect(normaliseCode("abc def")).toBe("ABCDEF");
-    expect(normaliseCode(" ABC-DEF ")).toBe("ABCDEF");
+    expect(normalizeCode("abc def")).toBe("ABCDEF");
+    expect(normalizeCode(" ABC-DEF ")).toBe("ABCDEF");
   });
 
   it("refuses anything that could not be a code", () => {
     for (const raw of ["", "ABCDE", "ABCDEFG", "ABC0EF", "ABCDE!", 123456, null, undefined]) {
-      expect(normaliseCode(raw)).toBeNull();
+      expect(normalizeCode(raw)).toBeNull();
     }
   });
 });
 
 describe("a display name", () => {
   it("is trimmed and capped at what fits beside a hand of cards", () => {
-    expect(normaliseName("  Eric  ")).toBe("Eric");
-    expect(normaliseName("x".repeat(40))).toBe("x".repeat(20));
+    expect(normalizeName("  Eric  ")).toBe("Eric");
+    expect(normalizeName("x".repeat(40))).toBe("x".repeat(20));
   });
 
   it("is refused when there is nothing in it", () => {
     for (const raw of ["", "   ", 7, null, undefined]) {
-      expect(normaliseName(raw)).toBeNull();
+      expect(normalizeName(raw)).toBeNull();
     }
   });
 });

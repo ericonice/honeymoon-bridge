@@ -69,14 +69,14 @@ export default defineConfig({
         // layout assumes a hand held one-handed.
         display: "standalone",
         orientation: "portrait",
-        // The default theme's colours. The manifest is read at install time, so
+        // The default theme's colors. The manifest is read at install time, so
         // unlike the meta tag these cannot follow a change made in Settings —
         // they only decide the splash screen.
         background_color: "#081827",
         theme_color: "#081827",
         start_url: "/",
         // Not declared maskable: the crest runs close to the edge, and a
-        // maskable icon is cropped to a centre circle that would take the
+        // maskable icon is cropped to a center circle that would take the
         // blades off. Better to let the platform letterbox the square.
         icons: [
           { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },

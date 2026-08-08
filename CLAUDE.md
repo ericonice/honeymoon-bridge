@@ -31,11 +31,30 @@ npm run test:watch --workspace @hb/engine
 npm run dev     --workspace @hb/web   # localhost only
 npm run dev:lan --workspace @hb/web   # also on the LAN, for testing on the phone
 npm run build   --workspace @hb/web
+npm run deploy  --workspace @hb/web   # Cloudflare Pages; live at honeymoon-bridge.ericonice.com
 
 # A single test file or test
 npx vitest run test/scoring.test.ts --workspace @hb/engine
 npx vitest run -t "pays 700 for a rubber won two games to none"
+
+# Measuring the bot. Not tests — slow, and they print numbers rather than pass.
+# All from the repo root. Everything after `--` is passed to the bench.
+npm run bench:rubber    --workspace @hb/web -- 500      # two bidders over full rubbers
+npm run bench:par       --workspace @hb/web -- 300 sampling   # tricks lost against perfect play
+npm run bench:head      --workspace @hb/web -- 120 25   # two card-play policies, in points
+npm run bench:calibrate --workspace @hb/web -- 400      # refit the estimates against par
+npm run bench:auction   --workspace @hb/web -- 12       # why the bidder bid that
+npm run bench:strain    --workspace @hb/web -- "S:AK4 H:AK4 D:A43 C:AK32"
 ```
+
+`par` and `head` take minutes and report every 25 deals; `rubber`, `calibrate` and `auction` finish
+in seconds. **Piping any of them through `grep` or `tail` re-buffers stdout and hides the progress
+until the end**, which makes a working run and a wedged one look identical.
+
+**Bidding can only be measured by `bench/rubber.ts`.** Everything else plays deals at love all,
+where a bidder has no part-score to protect, no game to stretch for and nothing to sacrifice
+against — the change that turned out to be worth 464 points a rubber looked like a wash by every
+other bench in the list.
 
 npm workspaces, not pnpm — pnpm is not installed on this machine. Node 24, npm 11.
 
@@ -45,8 +64,21 @@ npm workspaces, not pnpm — pnpm is not installed on this machine. Node 24, npm
 packages/engine/     @hb/engine — headless rules engine. No UI, no I/O, no network.
 packages/protocol/   @hb/protocol — what crosses the wire, and the tests that it is only that.
 apps/web/            @hb/web — Vite + React PWA.
+apps/web/src/bot/    the computer opponent, and the double-dummy solver it plays with.
+apps/web/bench/      how the bot is measured. Not tests: slow, and they print numbers.
 apps/server/         @hb/server — Cloudflare Worker + one Durable Object per table.
 ```
+
+`bench/` is not shipped and not run by `npm test`. It exists because almost every claim about the
+bot in this file was wrong the first time it was measured, and several were wrong in the direction
+that felt most obviously right.
+
+**Before measuring what a setting is worth, measure that it does anything.** Two psych settings once
+came back six points apart with *identical* win-loss counts, which read as a clean null and was
+nothing of the kind: the credit being tested produced two psychs in four hundred deals, so both
+runs were the same bot playing itself. Two hundred rubbers of the slowest bench in here, spent
+comparing nothing against nothing. `bench/auction.ts` reports how often the behavior actually
+fires; a knob whose effect on behavior has never been observed is not yet a knob.
 
 The engine is consumed as TypeScript source (`main` points at `src/index.ts`), not as a build
 artifact. Vite and Wrangler both bundle it directly, so there is no build step to keep in sync.
@@ -63,7 +95,7 @@ No mutation, no clocks, no randomness outside a seeded `Rng`. This is what makes
 to reconstruct a table after a restart and makes every rule testable headlessly.
 
 **A deal is not the whole game — `table.ts` covers the sitting.** `TableState` holds the deal on
-the table, the rubber behind it and the deals already scored into it; `summarise` derives the
+the table, the rubber behind it and the deals already scored into it; `summarize` derives the
 standing, the scorepad and vulnerability. It lives in the engine because *two* hosts need it: the
 browser runs it for the game against the computer and the server runs it for a game between two
 people. A rubber that advanced differently in the two would be the same class of bug as a rule
@@ -103,7 +135,7 @@ what remains is exactly `SessionSnapshot` — which is what makes §2.2's "expli
 one shape to test rather than a whole UI to audit.
 
 **`snapshotFor` is that boundary, and `packages/protocol/test/snapshot.test.ts` is what enforces
-it.** The test walks the serialised snapshot for anything card-shaped and checks it against what
+it.** The test walks the serialized snapshot for anything card-shaped and checks it against what
 the seat may not see: the opponent's hand, the undrawn stock, their card 1, their discards, and
 all of this seat's own discards bar the most recent. It is deliberately blind to the snapshot's
 shape, so a field added later is walked without anyone remembering to update it. There is also an
@@ -175,8 +207,6 @@ from ordinary bridge:
 
 ## Working agreements
 
-- **Do not stage or commit.** The user handles all git operations. Do not run `git stash`, `git
-  reset`, or `git checkout` against uncommitted work.
 - Discuss design decisions conversationally, one at a time, in prose — not as multiple-choice.
 
 ## Status
@@ -194,7 +224,7 @@ The rubber is *derived*, not accumulated: `useGameSession` holds the rubber as i
 current deal and computes the standing including it, so re-rendering cannot score a deal twice.
 `nextDeal` is what commits it.
 
-The whole app is capped at a phone's width and centred, since every screen is laid out for a hand
+The whole app is capped at a phone's width and centered, since every screen is laid out for a hand
 holding a phone — on a desktop monitor a full-bleed layout makes rows of buttons absurdly wide
 rather than usefully bigger.
 
@@ -240,6 +270,21 @@ cannot ship when the others can.
 exercise reconnection deliberately rather than hoping. Nothing persists a rubber across a refresh
 in the robot game. And the play screen still has none of the polish the draw screen got.
 
+**The bot is versioned, from v1 Angela James.** `bot/release.ts` holds it; versions are numbered from
+one and named alphabetically after hockey players, so a list of them reads in the order they
+existed — Angela James, Bobby Orr, Cammi Granato, Doug Harvey, Eddie Shore, Frank Mahovlich,
+Gordie Howe, Hayley Wickenheiser, Igor Larionov, Jean Béliveau. **The name appears
+in Settings and nowhere else.** Across the table the opponent stays the computer: a first name in
+the seat opposite promises a personality that is not there.
+
+Bump it whenever the play changes enough that results either side of the change are not measuring
+the same opponent — which is the whole reason it exists. `records.ts` sends the version, the server
+validates it, and `0006_bot_version.sql` stores it. Two things that will read as bugs later and are
+not: the column is **nullable, and null means "before versions" rather than "unknown version"** —
+nothing recorded which bot those games were against and nothing can. And a report *without* a
+version is accepted rather than refused, because the service worker keeps old builds in circulation
+and a rubber somebody played is worth recording whether or not their client knew the question.
+
 **Found on a real device, and fixed.** A sign-in link cannot reach an installed PWA on iOS. The
 home-screen app has its own storage, Mail opens links in Safari, and a link works once — so tapping
 it signs Safari in, leaves the app untouched, and burns the credential. Sign-in is therefore a
@@ -251,32 +296,126 @@ The general lesson is worth more than the bug: anything that leaves the app and 
 be assumed to come back to the same app, and desktop Chrome will insist that it does.
 
 **The bot bids, draws and plays.** What each part does is written up in `REQUIREMENTS.md` §2.1.
-Measured over 1000+ bot-vs-bot deals at each stage:
 
-| | random | + bidding | + drawing | + card play |
-|---|---|---|---|---|
-| contracts made | 1.1% | 71% | 68% | **67%** |
-| average level | ~4 | 1.7 | 2.7 | **3.5** |
-| deals per rubber | median 356 | median 14 | median 9 | **median 6** |
+**There is a double-dummy solver now, and it changed how everything here is measured.**
+`bot/solver.ts` returns the tricks each side takes with both hands face up and both playing
+perfectly. Two hands rather than four, and a trick decided by its second card, make this a far
+smaller search than in ordinary bridge — bitmask hands, a transposition table, and collapsing
+adjacent cards to one move bring a full 13-trick solve to about 7ms, falling to under 1ms by the
+third trick.
 
-The make rate barely moves after the first step because the bidder is re-tuned to match: each
-improvement makes the hand worth more, and the point is to bid it, not to make the same contract
-more comfortably. Over- and undertricks are balanced (0.67 / 0.57), which is the real target.
+It is the yardstick before it is anything else. Self-play numbers like "contracts made" are not
+strength metrics — a bot that underbids everything makes all of them — and head-to-head needs
+thousands of deals to separate two similar bots because the deal is most of the variance. Par
+cancels the deal, and says *which card* was the mistake. `bench/par.ts` reports it.
 
-**The calibration in `evaluate.ts` couples all of this together.** It maps counted winners to
-tricks actually taken, and it was fitted by measurement, not derived. Anything that changes how
-well the bot plays invalidates it — this has been refit twice already, once after drawing and once
-after card play, and both times outcome measurement disagreed with the raw regression. Re-measure
-rather than reason about it.
+The one number to keep: `test/solver.test.ts` cross-checks the solver against a brute-force
+minimax on small positions. That test immediately caught the collapsing treating the *led* card as
+out of play, which silently made a queen and an ace interchangeable behind a led king. Anything
+touching the search needs that cross-check to stay.
+
+**`bot/samplingBot.ts` is what the solver bought.** It guesses the hand it cannot see — everything
+unaccounted for, minus any suit the opponent has shown out of — 25 times over, solves each guess,
+and plays the card that does best on average. Measured against the heuristic card play it replaces:
+defense went from giving away 1.03 tricks a deal to 0.55, the bot stopped beating double-dummy as
+declarer (it was taking 0.57 tricks a deal more than par purely on gifts from the defense), and
+head-to-head it wins by **+37 points a deal** over 240 deals, near four standard errors. Because
+both bots bid and draw identically, every one of those points comes from card play alone.
+
+That margin has been measured three times and moved a long way each time — +34, then +22, then
++37 — without the card play changing at all. What moved was the bidder underneath it. The first
+refit made it timid and the margin fell; settling the intercept so it bids the hand's value
+restored it and then some. **How much a card-play improvement is worth depends on how much is
+being bid**, because a contract nobody stretched for is a smaller target to defend or to make.
+Quote either number on its own and it misleads; the pair only means something measured together.
+
+**The sampler reads the auction, and it is worth 15% of everything the bot throws away.** A suit
+they bid is a suit they are long in, so guessed hands are drawn with a weighted race off the seeded
+generator rather than a uniform shuffle — cards in a strain they named are twice as likely to be
+theirs. Tricks lost against par fall from 1.23 a deal to 1.05, improving declarer and defense by
+almost exactly the same amount.
+
+That change was nearly deleted. Measured in **points** it reads as slightly *harmful* — +47.8 a
+deal against +50.1 — and it is not: points per deal cannot resolve an effect this size at any
+sample count worth waiting for. **Measure card play against par, never in points.** This is the
+third instrument failure of the same kind here: the bidder looked like a wash until the bench played
+whole rubbers, this looked harmful until it was measured in tricks, and both were real all along.
+When a change that should obviously work measures as nothing, suspect the instrument before the
+idea.
+
+Sampling count is the cost *and* the difficulty lever, which is a better lever than heuristic
+weakness: it makes an opponent that is unsure rather than one that is wrong on purpose.
+
+**This is what the game against the computer now plays.** `localSession.ts` builds it with
+`SAMPLES = 25`, and that has been **checked on a real phone: no stutter.** The concern was that the
+action is computed synchronously on the main thread inside the pause before the bot moves, so the
+180ms at the opening lead eats into an animation rather than delaying the move — it turns out to
+fit inside the pause. If a future change makes it show, turning `SAMPLES` down is the first
+response and a worker is the real fix; neither is needed now. `cardPlay.ts` and
+`createHeuristicBot` stay — the sampling bot delegates bidding and the draw to the second, and the
+first is what the benches measure against.
+
+**The calibration in `evaluate.ts` couples all of this together**, and it is now fitted against par
+rather than against the bot's own play. The three earlier fits were circular twice over: the
+contracts in the sample were the ones the previous constants chose, and the tricks were whatever
+the previous card play managed. Par is computable for every hand in every strain whether or not
+anything would bid it, so the sample is the hands rather than the auctions. `bench/calibrate.ts`
+does this in about 30 seconds.
+
+That refit moved the constants a long way — the old ones over-predicted by 1.2 tricks — and the bot
+now makes 77% of its contracts against 79% that were makeable. It is still slightly under-bidding
+(over- and undertricks 0.75 against 0.36).
+
+Anything that changes how well the bot plays still invalidates the fit. And the second rule, which
+cost a whole afternoon to learn: **the fit cannot rescue a bad feature.** No affine map improves on
+what it is given, so when accuracy stalls the thing to change is `rawTricks`, not the constants.
+
+**`rawTricks` was where the accuracy actually was.** It scored a suit contract on trump *length*
+alone, so AKQ and 8765 were worth the same as trumps — trump honors registered nowhere at all,
+because the no-trump branch was the only place honors were read and there they are not trumps.
+
+Fixing that alone does not work, and the way it fails is worth knowing. Once trump honors count, a
+trump contract scores its own suit at least as highly as no-trump scores it, so **no hand can ever
+prefer no-trump** — measured over 800 hands, no-trump stopped being the best strain even once. The
+`prefers no-trump when the strength is spread` test caught it, and the test was right: paired
+measurement over 800 shared opponent hands gives that hand no-trump 8.98 against clubs 8.86.
+
+So both halves land together, and both come from the same fact — **the opponent holds only a third
+of what you cannot see.** `THEIRS`, and the odds table built from it, are the whole model:
+
+- *Trumps* concede the trumps left in the other hand once the run down from the ace has dragged out
+  what it can. AKQ concedes only a fourth trump if they have one; 8765 concedes about three.
+- *No-trump* adds, to each suit's winners, the cards underneath them for the share of deals in
+  which the opponent has already run out. AK4 is worth about 2.3 rather than 2.
+- *Side suits under a trump contract* get winners and no length credit at all, because length only
+  cashes if nobody ruffs it. That asymmetry is the entire reason a balanced hand can prefer
+  no-trump, and removing it is how the trump-only fix killed no-trump.
+
+The distribution, not its mean, is the point. They hold 3.3 of the ten cards missing from a
+three-card suit *on average*, so on average the third card is dead — but they hold two or fewer
+about three times in ten, and then it wins. Averaging first loses that tail, and the whole
+undervaluation of no-trump traced back to it.
+
+r-squared went from 0.42 to 0.50 and average error from 1.55 tricks to 1.14. `RUNOUT` is the one
+fitted knob and it is touchy: at 1.0 no-trump is over-valued by 1.3 tricks, at 0.45 it is never
+bid at all. **`bench/calibrate.ts` reports bias per strain, and that is the number to watch** — a
+bias that differs by strain is one a single affine calibration structurally cannot remove, and it
+is what catches this class of mistake. `bench/strain.ts` settles arguments about a single hand.
 
 ### Open threads
 
-- **Git identity is not yet configured.** The machine's global git identity is the user's company
-  account, and `gh` is logged in as the company GitHub user. The plan is a conditional include in
-  the global config (`includeIf gitdir:C:/Users/EricNewman/personal/`) pointing at a personal
-  identity, plus an SSH host alias with a dedicated key so the account is determined per repo by
-  the remote URL rather than by global state. Awaiting the user's personal GitHub username and
-  preferred commit email. `git init` has not been run.
+- **The growing-hand thresholds were tried and left alone, which is not the same as untouched.**
+  `rawTricks` counts the opponent's holding against a full thirteen — a finished-hand assumption,
+  and on turn one it says a lone card wins nothing, so every card without an honor scores zero and
+  the bot cannot tell a card in the suit it is building from one in a suit it is not. That is the
+  same shape of mistake `potentialTricks` exists to fix for honors, and it looked like an oversight.
+
+  Scaling the opponent's holding by how full the hand is measured **0.39 tricks a deal worse**
+  (`bench/draw.ts`, about two and a half standard errors). Early in the draw the scarce thing is
+  honors, not length: twelve turns remain to build a suit and no turn at all can manufacture an
+  ace. Crediting early length made the bot keep filler over honors. A test asserting it keeps a
+  queen on turn one failed first and was right; overriding it would have shipped the regression.
+
 - **Draw-phase pacing is unsettled.** The layout and the animation are now specified
   (`REQUIREMENTS.md` §1.3) and built, but the durations in `game/timing.ts` are first guesses. A
   turn costs roughly 0.6s to 1.5s of animation depending on the choice, times 26. Whether that
@@ -286,29 +425,95 @@ rather than reason about it.
   perfect-memory bot has a real edge. The `Bot` interface must therefore take "what this bot
   remembers seeing" as explicit state handed to it, never read from engine state directly — which
   keeps lossy memory available as a difficulty lever. Whether v1's bot forgets is undecided.
-- **The bot bids as though the auction were silent.** Observed: a human 1♣ answered with 3♣.
-  Nothing is strictly wrong — 3♣ was legal and within what the hand was worth — but two things
-  behind it are worth fixing together.
+- **The bot bids in points now, and the auction is the last thing it cannot read.** Contracts are
+  priced by `bidValue.ts`: play the deal out at each plausible number of tricks, hand it to the
+  engine's own `scoreDeal`, fold it in with `applyDealScore`, and read how far the standing moved.
+  Nothing there restates a scoring rule, so game bonuses, the 500 and 700, doubled vulnerable
+  penalties and honors are all priced without anyone remembering to price them.
 
-  First, `bestAffordableBid` values every strain against its own thirteen cards and never reads
-  the opponent's calls. It uses the auction only for legality, and `standingLevel` feeds the
-  double decision alone. So a 1♣ opening tells it nothing, when in a two-player game it is the
-  strongest evidence available: if they have clubs, the bot's own clubs are worth less as trumps
-  and more as defence. §1.5 calls the auction "pure competitive negotiation", and a negotiator
-  that ignores what the other side says is not negotiating.
+  Measured over 1000 rubbers against the old "can I make it" bidder, seats exchanged:
+  **+464 points a rubber, 775 rubbers to 225.** Three things stopped being rules and became
+  consequences of that one comparison — stretching for game, sacrificing, and not jumping to the
+  top of what the hand can make. Doubling too: it was a pair of hand-picked thresholds and is now
+  the same contract priced the same way.
 
-  Second, it always bids the *most* it thinks it can make rather than the least that takes the
-  contract, so it jumps rather than competing a step at a time and leaves itself no room to be
-  pushed. Below-the-line points do reward bidding your value, so this is a trade rather than a
-  plain bug — but jumping to the maximum on the first opportunity gets both halves wrong at once.
+  **The measurement is the lesson here.** Every bench played deals at love all, and by those
+  numbers this change looked like a wash — 64% of contracts made against the old bidder's 68%. Of
+  course it did: part-scores, game stretches, vulnerability and sacrifice are its entire point and
+  a love-all bench has none of them. `bench/rubber.ts` plays full rubbers and the same change is
+  worth 464 points. **A bidder measured on deals in isolation is being marked on the one part of
+  its job it does not do.**
 
-  Beware the standing coupling: changing how the bot bids changes what it makes, which invalidates
-  the calibration in `evaluate.ts`. Re-measure.
-- **The bot has no memory.** `drawDecision.ts` weighs card 1 against the average unknown card,
-  where "unknown" means everything not in its hand — including the cards it drew and threw away
-  itself. That is exactly a player with no recall. Memory belongs in that pool and nowhere else:
-  shrinking it by what the bot remembers discarding is the whole difficulty lever, and it is a few
-  lines rather than a rewrite.
+  Two things bit hard enough to be worth naming. Pricing a pass as "they make exactly what they
+  bid" sounds neutral and is not — it makes defending look hopeless, so every sacrifice beats
+  passing and both bots climb to the seven level; the fix was a defense calibration, fitted the
+  same way against par from the defending seat. And that fit has to be taken **against the strain
+  the declarer would actually pick**, not across all five: the strain that gets bid is the one they
+  are long in, which is disproportionately one this hand is short in, so an unconditional fit is
+  optimistic about defending by 1.47 tricks.
+
+  **It reads the auction now, and the surprise was where the information lives.** The obvious
+  inference — a suit they bid is a suit they are long in, so this hand is worth less in it — is
+  correct, threads neatly into `THEIRS_BID` because the model already keeps an assumption about how
+  much of a suit they hold, and is worth **nothing measurable**: +467 against +464, on a standard
+  error of 30. It fires too rarely, because the bot is usually bidding its own suit rather than
+  theirs.
+
+  What pays is the *level*. Their bid says how many tricks they think they hold, and blending that
+  with what this hand can see is worth **+651 a rubber against +467**, weight fitted at 0.75 on a
+  plateau from 0.6 to 0.9. Their claim is better evidence than the bot's own thirteen cards — which
+  is obvious in hindsight, since it is the only thing in the deal chosen by somebody who could see
+  the cards being described.
+
+  And the postscript worth keeping: trusting the bid *completely* is no longer a disaster. At 1.0
+  the margin only slides back to where 0.6 sits. Taking the bid as fact was what drove both bots
+  into doubled contracts at the five level earlier — but that needed a trick of optimism in the
+  estimate and no price on being doubled as well. **Two bad numbers made the spiral; none of them
+  did it alone**, which is worth remembering before blaming the next regression on whatever changed
+  last.
+
+- **Psyching is built, measured, and deliberately off.** A psych is a bid in a suit the hand does
+  not hold, made to be believed. `PSYCH_CREDIT` in `heuristicBot.ts` prices the deception, since
+  everything else about a bid is priced honestly — it has to be, because one pass closes the
+  auction and every psych is a contract the bot may simply have to play. Zero disables it without
+  removing it. **The frequency was never a setting**: at 200 the credit makes lying worthwhile
+  about once in six deals, and that rate is an outcome of the price, not a schedule.
+
+  Safer here than in bridge, where the danger is *partner* acting on it and there is no partner.
+  And genuinely effective: at one lie in six, against a sampler that now reads the auction and can
+  therefore be fooled, the other seat throws away 0.02 more tricks a deal in both roles. The lie
+  lands. It just costs far more than it returns — contracts makeable at par fall from 53% to 49%.
+  An order of magnitude the wrong way.
+
+  What none of that settles is whether psyching pays against a *person*, who forms a much stronger
+  belief from an auction than a weighted sampler does and holds it far longer. Unmeasurable here,
+  and the same category as `DOUBLED_FROM_DOWN` — behavior aimed at a human that only a human can
+  judge.
+
+- **The bot remembers what it discarded, and it matters in one place rather than two.** Recall is
+  handed to `chooseDraw` and `choosePlay` as explicit state by `botActionFor`, never read out of
+  engine state — which is what the `Bot` interface always said it would be, and what keeps a
+  forgetful opponent a matter of passing less rather than a rewrite.
+
+  **In the draw it is worth nothing measurable**, and the argument for it was better than the
+  result. Its own discards are precisely the cards it judged worse than an unknown card, so leaving
+  them in the pool does bias the expected unknown card downward and does make it keep too often.
+  Measured: it changes **0.6% of decisions** and moves hand quality by **+0.00 ± 0.10 tricks**.
+  Removing a handful of below-average cards from a forty-card pool barely shifts a mean, and only a
+  decision already on a knife edge flips. True, and irrelevant.
+
+  **In the sampler it is not a bias at all but an impossibility, and it is worth 13%.** A card this
+  seat threw away cannot be in the opponent's hand, and without recall the sampler deals them cards
+  it watched itself put face down — by the last tricks roughly half of everything unaccounted for
+  is exactly those thirteen. Tricks lost against par fall from 1.07 a deal to 0.93, and most of
+  that lands on *defense*, which does more guessing about what declarer holds.
+
+  Worth holding onto: the same recall, threaded into two decisions on the same afternoon, was worth
+  nothing in one and 13% in the other. What separated them was not how good the reasoning sounded
+  but whether the correction was to an average or to a set of possibilities. **Shifting a mean by a
+  little changes almost no decisions; removing impossible cards changes what the solver is
+  answering.**
+
 - **Turn clock.** None in v1. Revisit if the 26-turn draw phase drags.
 
 ### Testing on a phone

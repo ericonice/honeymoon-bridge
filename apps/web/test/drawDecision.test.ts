@@ -43,7 +43,7 @@ describe("the draw decision", () => {
     expect(shouldKeepCard(hand("S:8765 H:432"), card("A", "D"))).toBe(true);
   });
 
-  it("keeps a high honour on the very first turn", () => {
+  it("keeps a high honor on the very first turn", () => {
     // A lone king in a finished hand falls to the ace and is worth nothing. On
     // turn one it is not bare, it is early — there are twelve turns left for it
     // to be guarded, and judging it by the finished-hand rule threw kings away.
@@ -91,7 +91,7 @@ describe("the draw decision", () => {
 
   it("builds better hands than chance across many deals", () => {
     // Twenty-six cards of a shuffled deck hold about half of the 40 high-card
-    // points, so a hand drawn without judgement averages around 10.
+    // points, so a hand drawn without judgment averages around 10.
     let points = 0;
     const deals = 40;
     for (let seed = 1; seed <= deals; seed++) {

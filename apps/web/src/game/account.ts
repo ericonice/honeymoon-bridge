@@ -187,10 +187,22 @@ export async function setAccountName(name: string): Promise<boolean> {
  * fail somewhere less obvious later. The signing secret can be rotated, and when
  * it is, every session in existence becomes a string that will never work again.
  */
-export async function currentAccount(): Promise<Account | null> {
+/**
+ * Who is signed in, and whether they are a playtester.
+ *
+ * The server sends a flag rather than the list, so this device learns whether
+ * *it* sees the extra settings and never who else does. Absent or false is the
+ * answer whenever anything is missing, including offline.
+ */
+export interface SignedIn {
+  readonly account: Account | null;
+  readonly playtester: boolean;
+}
+
+export async function currentAccount(): Promise<SignedIn> {
   const session = storedSession();
   if (session === null) {
-    return null;
+    return { account: null, playtester: false };
   }
 
   const response = await fetch(authUrl("me"), {
@@ -200,17 +212,26 @@ export async function currentAccount(): Promise<Account | null> {
     throw new Error(`account lookup failed: ${response.status}`);
   }
 
-  const body = (await response.json()) as { account: Account | null };
+  const body = (await response.json()) as { account: Account | null; playtester?: boolean };
   if (body.account === null) {
     clearSession();
   }
-  return body.account;
+  return { account: body.account, playtester: body.playtester === true };
 }
 
 export interface AccountState {
   /** Null while signed out, and also while the first check is still out. */
   readonly account: Account | null;
   readonly checking: boolean;
+  /**
+   * Whether this player sees settings that are still being decided.
+   *
+   * Not a permission. Everything behind it changes how the computer plays in a
+   * game running on this device, so anybody determined to turn one on can do it
+   * from devtools. It is here to keep half-finished behavior away from people
+   * who did not ask for it.
+   */
+  readonly playtester: boolean;
   refresh(): void;
   signOut(): void;
 }
@@ -225,11 +246,13 @@ export interface AccountState {
  */
 export function useAccount(): AccountState {
   const [account, setAccount] = useState<Account | null>(null);
+  const [playtester, setPlaytester] = useState(false);
   const [checking, setChecking] = useState(storedSession() !== null);
 
   const refresh = useCallback((): void => {
     if (storedSession() === null) {
       setAccount(null);
+      setPlaytester(false);
       setChecking(false);
       return;
     }
@@ -237,7 +260,8 @@ export function useAccount(): AccountState {
     setChecking(true);
     void currentAccount()
       .then((next) => {
-        setAccount(next);
+        setAccount(next.account);
+        setPlaytester(next.playtester);
       })
       .catch(() => {
         // Offline, or the server is down. Say nothing and keep the session.
@@ -254,9 +278,11 @@ export function useAccount(): AccountState {
   return {
     account,
     checking,
+    playtester,
     refresh,
     signOut: () => {
       clearSession();
+      setPlaytester(false);
       // The account that just left has claimed this device's token. Keeping it
       // would give whoever signs in next the previous person's anonymous games.
       resetPlayerToken();

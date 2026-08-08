@@ -8,7 +8,7 @@ import "./index.css";
 registerServiceWorker();
 
 // Before the first render rather than in an effect: the theme decides the
-// colour of the whole frame, and applying it after paint is a visible flash of
+// color of the whole frame, and applying it after paint is a visible flash of
 // the wrong one on every launch.
 applyTheme(readTheme());
 

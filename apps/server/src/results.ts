@@ -5,7 +5,7 @@ import type { Env } from "./env.js";
  * The token standing in for the computer.
  *
  * Not a device and not an account. Deliberately not a UUID, so it cannot collide
- * with a real `playerToken`, and recognisable on sight in the table.
+ * with a real `playerToken`, and recognizable on sight in the table.
  */
 export const ROBOT_TOKEN = "@robot";
 
@@ -18,6 +18,8 @@ export interface FinishedSeat {
 }
 
 export interface FinishedRubber {
+  /** Which computer opponent, for a robot rubber. Null for a game between people. */
+  readonly botVersion?: number | null;
   readonly code: string;
   readonly deals: number;
   readonly format: MatchFormat;
@@ -36,10 +38,10 @@ export async function recordRubber(env: Env, rubber: FinishedRubber, now: number
   const [first, second] = rubber.seats;
   await env.DB.prepare(
     `INSERT INTO results
-       (id, finished_at, table_code, winner, deals, format,
+       (id, finished_at, table_code, winner, deals, format, bot_version,
         account0, token0, nickname0, points0,
         account1, token1, nickname1, points1)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       crypto.randomUUID(),
@@ -48,6 +50,7 @@ export async function recordRubber(env: Env, rubber: FinishedRubber, now: number
       rubber.winner,
       rubber.deals,
       rubber.format,
+      rubber.botVersion ?? null,
       first.accountId,
       first.token,
       first.nickname,
@@ -70,7 +73,7 @@ export async function recordRubber(env: Env, rubber: FinishedRubber, now: number
  * so their side is left exactly as it is and only this side is detached.
  *
  * Detaching means clearing the account and replacing the device token with one
- * that maps to nothing, since the token is the other way a row is recognised.
+ * that maps to nothing, since the token is the other way a row is recognized.
  * What the opponent keeps is a game against somebody with the name that was
  * used at the time, which is the truth of what happened.
  */
@@ -91,7 +94,7 @@ export async function resetRecord(env: Env, accountId: string): Promise<number> 
       `UPDATE results SET account${seat} = NULL, token${seat} = ?3
        WHERE token${other} != ?2 AND ${asSeat(seat)}`,
     )
-      // A value nothing maps to, so the row can never be recognised as this
+      // A value nothing maps to, so the row can never be recognized as this
       // person's again — including by an account that later claims the device
       // token this replaces.
       .bind(accountId, ROBOT_TOKEN, `forgotten:${crypto.randomUUID()}`)

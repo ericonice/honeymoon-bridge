@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyAction } from "../src/deal.js";
-import { applyTableAction, nextDeal, startTable, summarise } from "../src/table.js";
+import { applyTableAction, nextDeal, startTable, summarize } from "../src/table.js";
 import { drawRevealFor, ownDrawPairFor, revealsUnseenCard } from "../src/view.js";
 import { cardId } from "../src/cards.js";
 import type { TableState } from "../src/table.js";
@@ -37,7 +37,7 @@ function completeDeal(table: TableState, contract: Call): TableState {
 
 describe("the table", () => {
   it("starts with an empty scorepad and nobody vulnerable", () => {
-    const summary = summarise(startTable({ seed: 1, starter: 0 }));
+    const summary = summarize(startTable({ seed: 1, starter: 0 }));
 
     expect(summary.history).toEqual([]);
     expect(summary.vulnerable).toEqual([false, false]);
@@ -51,10 +51,10 @@ describe("the table", () => {
       bid: { level: 1, strain: "S" },
     });
 
-    // Summarising repeatedly must not fold the same deal into the rubber twice.
-    const once = summarise(table);
-    const twice = summarise(table);
-    const thrice = summarise(table);
+    // Summarizing repeatedly must not fold the same deal into the rubber twice.
+    const once = summarize(table);
+    const twice = summarize(table);
+    const thrice = summarize(table);
 
     expect(twice.rubber).toEqual(once.rubber);
     expect(thrice.rubber).toEqual(once.rubber);
@@ -74,7 +74,7 @@ describe("the table", () => {
       type: "bid",
       bid: { level: 1, strain: "S" },
     });
-    expect(summarise(table).rubber.format).toBe("game");
+    expect(summarize(table).rubber.format).toBe("game");
     expect(nextDeal(table, 99).rubberBefore.format).toBe("game");
   });
 
@@ -84,7 +84,7 @@ describe("the table", () => {
       bid: { level: 1, strain: "S" },
     });
     expect(first.played).toHaveLength(0);
-    expect(summarise(first).history).toHaveLength(1);
+    expect(summarize(first).history).toHaveLength(1);
 
     const second = nextDeal(first, 99);
     expect(second.played).toHaveLength(1);
@@ -113,9 +113,9 @@ describe("the table", () => {
     let table = startTable({ seed: 11, starter: 0 });
     let guard = 0;
 
-    while (!summarise(table).rubber.complete && guard < 60) {
+    while (!summarize(table).rubber.complete && guard < 60) {
       table = completeDeal(table, { type: "bid", bid: { level: 7, strain: "NT" } });
-      const summary = summarise(table);
+      const summary = summarize(table);
       // The scorepad grows by one every deal, however the deal went.
       expect(summary.history).toHaveLength(table.played.length + 1);
       if (!summary.rubber.complete) {
@@ -124,7 +124,7 @@ describe("the table", () => {
       guard++;
     }
 
-    const won = summarise(table);
+    const won = summarize(table);
     if (won.rubber.complete) {
       // Starting again clears the scorepad rather than carrying it over.
       expect(nextDeal(table, 1).played).toEqual([]);
