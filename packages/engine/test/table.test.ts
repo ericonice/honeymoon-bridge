@@ -61,6 +61,23 @@ describe("the table", () => {
     expect(twice.history).toHaveLength(once.history.length);
   });
 
+  it("is a rubber unless asked for otherwise", () => {
+    expect(startTable({ seed: 1, starter: 0 }).rubberBefore.format).toBe("rubber");
+    expect(startTable({ format: "game", seed: 1, starter: 0 }).rubberBefore.format).toBe("game");
+  });
+
+  it("keeps the match format when the next deal is dealt", () => {
+    // Whether this deal won the game or not, the format has to survive: on one
+    // branch it is carried with the rubber, on the other a fresh match is
+    // started and has to be started as the same kind.
+    const table = completeDeal(startTable({ format: "game", seed: 2024, starter: 0 }), {
+      type: "bid",
+      bid: { level: 1, strain: "S" },
+    });
+    expect(summarise(table).rubber.format).toBe("game");
+    expect(nextDeal(table, 99).rubberBefore.format).toBe("game");
+  });
+
   it("commits the finished deal to the scorepad when the next one is dealt", () => {
     const first = completeDeal(startTable({ seed: 2024, starter: 0 }), {
       type: "bid",

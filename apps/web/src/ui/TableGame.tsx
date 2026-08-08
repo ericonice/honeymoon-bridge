@@ -1,5 +1,6 @@
 import { opponentOf } from "@hb/engine";
 import { useEffect, useState } from "react";
+import { matchNoun } from "../game/labels.js";
 import { useNetworkSession } from "../game/networkSession.js";
 import type { NetworkGame } from "../game/networkSession.js";
 import { inviteLink } from "../game/serverUrl.js";
@@ -192,7 +193,7 @@ export function TableGame({
     return (
       <Message
         title="They left the table"
-        detail="The rubber ends here — there is nowhere to keep it."
+        detail={`The ${matchNoun(game.session?.rubber.format ?? "rubber")} ends here — there is nowhere to keep it.`}
         onLeave={onLeave}
       />
     );

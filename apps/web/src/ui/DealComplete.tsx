@@ -1,5 +1,6 @@
 import { opponentOf, overtrickPoints, totalScore, undertrickPoints } from "@hb/engine";
 import type { DealScore, Pair, PlayerId, PlayerView, RubberState } from "@hb/engine";
+import { matchNoun } from "../game/labels.js";
 import type { DealRecord } from "../game/session.js";
 import { ContractText } from "./CardText.js";
 import { Scorepad } from "./Scorepad.js";
@@ -132,7 +133,7 @@ export function DealComplete({
       {waitingToContinue
         ? `Waiting for ${opponentName}…`
         : rubber.complete
-          ? "New rubber"
+          ? `New ${matchNoun(rubber.format)}`
           : "Next deal"}
     </button>
   );
@@ -140,14 +141,21 @@ export function DealComplete({
   if (rubber.complete) {
     const totals = totalScore(rubber);
     const won = rubber.winner === view.me;
+    const noun = matchNoun(rubber.format);
 
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4">
         <div className="text-center">
-          <h2 className="text-2xl font-semibold">{won ? "You win the rubber" : `${opponentName} wins the rubber`}</h2>
-          <p className="mt-1 text-sm text-white/60">
-            {rubber.gamesWon[view.me]} games to {rubber.gamesWon[view.opponent]}
-          </p>
+          <h2 className="text-2xl font-semibold">
+            {won ? `You win the ${noun}` : `${opponentName} wins the ${noun}`}
+          </h2>
+          {/* A single game is won one game to nothing by definition, so saying so
+              is noise. The margin that means something there is the score. */}
+          {rubber.format === "rubber" ? (
+            <p className="mt-1 text-sm text-white/60">
+              {rubber.gamesWon[view.me]} games to {rubber.gamesWon[view.opponent]}
+            </p>
+          ) : null}
         </div>
         <div className="w-full max-w-sm text-sm">
           <Columns opponentName={opponentName} />

@@ -74,7 +74,7 @@ export function TopBar({
       {onShowScore === null ? null : (
         <button
           type="button"
-          aria-label="Show the rubber score"
+          aria-label="Show the score"
           className="rounded border border-white/25 px-2 py-0.5 text-xs whitespace-nowrap text-white/70"
           onClick={onShowScore}
         >

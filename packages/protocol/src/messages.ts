@@ -1,4 +1,4 @@
-import type { DealAction, Pair, PlayerId } from "@hb/engine";
+import type { DealAction, MatchFormat, Pair, PlayerId } from "@hb/engine";
 import type { SessionSnapshot } from "./snapshot.js";
 
 /** How a seat is identified across a dropped socket. */
@@ -51,6 +51,16 @@ export type ClientMessage =
    */
   | {
       readonly type: "join";
+      /**
+       * How long this player would like the sitting to be.
+       *
+       * A preference, not a decision — the table has two of them and takes the
+       * shorter, so a player who wants one game is never held in a rubber. It is
+       * read only when the match starts; changing the setting mid-match cannot
+       * move the goalposts, and a reconnecting player carries no authority over
+       * a match already under way.
+       */
+      readonly format: MatchFormat;
       readonly nickname: string;
       readonly session: string | null;
       readonly token: string;

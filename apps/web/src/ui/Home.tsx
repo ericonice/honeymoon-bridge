@@ -6,6 +6,7 @@ export interface HomeProps {
   onFindOpponent(): void;
   onJoinTable(code: string): void;
   onPlayComputer(): void;
+  onShowRecord(): void;
   onShowSettings(): void;
 }
 
@@ -56,6 +57,7 @@ export function Home({
   onFindOpponent,
   onJoinTable,
   onPlayComputer,
+  onShowRecord,
   onShowSettings,
 }: HomeProps): React.JSX.Element {
   const [name, setName] = useState(nickname);
@@ -162,13 +164,22 @@ export function Home({
         {error === null ? null : <p className="text-sm text-amber-200">{error}</p>}
       </div>
 
-      <button
-        type="button"
-        className="self-start text-sm text-white/50 underline underline-offset-4"
-        onClick={onShowSettings}
-      >
-        Settings
-      </button>
+      <div className="flex gap-5">
+        <button
+          type="button"
+          className="text-sm text-white/50 underline underline-offset-4"
+          onClick={onShowSettings}
+        >
+          Settings
+        </button>
+        <button
+          type="button"
+          className="text-sm text-white/50 underline underline-offset-4"
+          onClick={onShowRecord}
+        >
+          Your record
+        </button>
+      </div>
     </div>
   );
 }

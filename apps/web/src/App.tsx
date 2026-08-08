@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useAccount } from "./game/account.js";
 import { readDevTools, writeDevTools } from "./game/devTools.js";
+import { preferredFormat, setPreferredFormat } from "./game/identity.js";
 import {
   clearLocationHash,
   codeFromLocation,
@@ -9,6 +10,7 @@ import {
 } from "./game/serverUrl.js";
 import { applyTheme, readTheme, ThemeContext, writeTheme } from "./game/theme.js";
 import { Home } from "./ui/Home.js";
+import { Record } from "./ui/Record.js";
 import { RobotGame } from "./ui/RobotGame.js";
 import { Searching } from "./ui/Searching.js";
 import { SettingsOverlay } from "./ui/SettingsOverlay.js";
@@ -26,6 +28,7 @@ import { TableGame } from "./ui/TableGame.js";
  */
 type Screen =
   | "home"
+  | "record"
   | "robot"
   | "searching"
   | { readonly code: string }
@@ -47,6 +50,9 @@ export function App(): React.JSX.Element {
   const [peeking, setPeeking] = useState(false);
   // Read once, then owned here so Settings can change it without a reload.
   const [devTools, setDevTools] = useState(readDevTools);
+  // A preference for the *next* match. A game in progress reads its format from
+  // its own state, so changing this cannot alter one already under way.
+  const [format, setFormat] = useState(preferredFormat);
   // Already on the document by now — main.tsx applies it before the first
   // render — so this is the same value again, for the card back to read.
   const [theme, setTheme] = useState(readTheme);
@@ -58,8 +64,9 @@ export function App(): React.JSX.Element {
     setShowingSettings(true);
   };
 
-  // Signing in is not a game, so Settings must not offer to leave one from here.
-  const signingIn = typeof screen === "object" && "token" in screen;
+  // Screens with no game behind them, so Settings must not offer to leave one.
+  const noGame =
+    screen === "home" || screen === "record" || (typeof screen === "object" && "token" in screen);
 
   const goHome = (): void => {
     // Give up the seat first, so the other player is told rather than left
@@ -104,6 +111,17 @@ export function App(): React.JSX.Element {
             onPlayComputer={() => {
               setScreen("robot");
             }}
+            onShowRecord={() => {
+              setScreen("record");
+            }}
+            onShowSettings={showSettings}
+          />
+        ) : screen === "record" ? (
+          <Record
+            signedIn={account.account !== null}
+            onBack={() => {
+              setScreen("home");
+            }}
             onShowSettings={showSettings}
           />
         ) : screen === "searching" ? (
@@ -145,6 +163,7 @@ export function App(): React.JSX.Element {
             account={account.account}
             checkingAccount={account.checking}
             devTools={devTools}
+            format={format}
             peeking={peeking}
             theme={theme}
             onClose={() => {
@@ -153,6 +172,10 @@ export function App(): React.JSX.Element {
             onDevToolsChange={(enabled) => {
               writeDevTools(enabled);
               setDevTools(enabled);
+            }}
+            onFormatChange={(next) => {
+              setPreferredFormat(next);
+              setFormat(next);
             }}
             onPeekingChange={setPeeking}
             onSignOut={account.signOut}
@@ -163,7 +186,7 @@ export function App(): React.JSX.Element {
             }}
             // Abandoning a rubber loses it — there is nowhere to keep it — so this
             // is only offered while there is one to abandon.
-            onLeaveGame={screen === "home" || signingIn ? null : goHome}
+            onLeaveGame={noGame ? null : goHome}
           />
         ) : null}
       </div>

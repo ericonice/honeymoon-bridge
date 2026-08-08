@@ -3,7 +3,7 @@ import { applyAction, startDeal } from "./deal.js";
 import { applyDealScore, newRubber, vulnerability } from "./rubber.js";
 import { scoreDeal } from "./scoring.js";
 import type { DealScore } from "./scoring.js";
-import type { RubberState } from "./rubber.js";
+import type { MatchFormat, RubberState } from "./rubber.js";
 import type { Contract, DealAction, DealState, Pair, PlayerId } from "./types.js";
 
 /**
@@ -46,6 +46,8 @@ export interface TableState {
 }
 
 export interface StartTableOptions {
+  /** Defaults to a rubber, which is what this game was until it was not. */
+  readonly format?: MatchFormat;
   readonly seed: number;
   readonly starter: PlayerId;
 }
@@ -54,7 +56,7 @@ export function startTable(options: StartTableOptions): TableState {
   return {
     deal: startDeal(options),
     played: [],
-    rubberBefore: newRubber(),
+    rubberBefore: newRubber(options.format ?? "rubber"),
   };
 }
 
@@ -134,6 +136,8 @@ export function nextDeal(table: TableState, seed: number): TableState {
   return {
     deal: startDeal({ seed, starter }),
     played: won ? [] : history,
-    rubberBefore: won ? newRubber() : rubber,
+    // A new match is the same kind of match. The format is chosen when players
+    // sit down, not per rubber, so it carries across.
+    rubberBefore: won ? newRubber(rubber.format) : rubber,
   };
 }

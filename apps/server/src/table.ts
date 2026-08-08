@@ -1,11 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import { applyTableAction, nextDeal, startTable, summarise, totalScore } from "@hb/engine";
-import type { PlayerId, TableState } from "@hb/engine";
+import type { MatchFormat, PlayerId, TableState } from "@hb/engine";
 import { snapshotFor } from "@hb/protocol";
 import type { ClientMessage, Seating, ServerMessage, TableInfo } from "@hb/protocol";
 import { verifySession } from "./auth.js";
 import { dealSeed } from "./codes.js";
 import type { Env } from "./env.js";
+import { formatFor } from "./matchFormat.js";
 import { recordRubber } from "./results.js";
 
 /** §2.2: a player who vanishes has three minutes to come back before the table is written off. */
@@ -25,6 +26,8 @@ interface SeatRecord {
    * produced worthless.
    */
   readonly accountId: string | null;
+  /** What this player asked for. Only consulted when the match starts. */
+  readonly format: MatchFormat;
   readonly nickname: string;
   /** The opaque value in the client's `localStorage`. This is what holds a seat. */
   readonly token: string;
@@ -200,14 +203,23 @@ export class Table extends DurableObject<Env> {
       return;
     }
 
-    seats[seat] = { accountId: await this.#accountFrom(message.session), nickname, token };
+    seats[seat] = {
+      accountId: await this.#accountFrom(message.session),
+      format: message.format,
+      nickname,
+      token,
+    };
     ws.serializeAttachment({ seat, token } satisfies Attachment);
 
-    // Both seats filled and nothing dealt yet: start the rubber. The seed is
+    // Both seats filled and nothing dealt yet: start the match. The seed is
     // generated here and never leaves — it reconstructs the whole stock order.
     const table =
       stored.table ?? (seats[0] !== null && seats[1] !== null
-        ? startTable({ seed: dealSeed(), starter: 0 })
+        ? startTable({
+            format: formatFor(seats[0].format, seats[1].format),
+            seed: dealSeed(),
+            starter: 0,
+          })
         : null);
 
     await this.#save({ ...stored, seats, table });
@@ -263,6 +275,7 @@ export class Table extends DurableObject<Env> {
         {
           code: stored.code,
           deals: history.length,
+          format: rubber.format,
           seats: [
             {
               accountId: first.accountId,

@@ -1,3 +1,4 @@
+import type { MatchFormat } from "@hb/engine";
 import { normaliseEmail, redeemLink, requestLink, verifySession } from "./auth.js";
 import { inviteCode, isInviteCode } from "./codes.js";
 import type { Env } from "./env.js";
@@ -60,6 +61,7 @@ function json(
 interface RobotRubber {
   readonly deals: number;
   readonly deviceToken: string;
+  readonly format: MatchFormat;
   readonly nickname: string;
   readonly points: number;
   readonly pointsAgainst: number;
@@ -101,6 +103,9 @@ function robotRubberFrom(body: unknown): RobotRubber | null {
   return {
     deals,
     deviceToken: value.deviceToken,
+    // Anything unrecognised is a rubber, which is what a client too old to know
+    // about formats would have been playing.
+    format: value.format === "game" ? "game" : "rubber",
     nickname: nickname === "" ? "Player" : nickname,
     points,
     pointsAgainst,
@@ -243,6 +248,7 @@ export default {
         {
           code: "ROBOT",
           deals: rubber.deals,
+          format: rubber.format,
           seats: [
             {
               accountId,

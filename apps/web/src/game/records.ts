@@ -1,3 +1,4 @@
+import type { MatchFormat } from "@hb/engine";
 import { useCallback, useEffect, useState } from "react";
 import { storedSession } from "./account.js";
 import { nickname, playerToken } from "./identity.js";
@@ -5,7 +6,9 @@ import { recordsUrl, robotResultUrl } from "./serverUrl.js";
 
 /** A record against one opponent. The computer's looks exactly like a person's. */
 export interface OpponentRecord {
+  readonly deals: number;
   readonly email: string | null;
+  readonly format: MatchFormat;
   readonly lastPlayed: number;
   readonly lost: number;
   readonly name: string;
@@ -16,11 +19,12 @@ export interface OpponentRecord {
 
 export interface Records {
   readonly opponents: readonly OpponentRecord[];
-  readonly robot: OpponentRecord | null;
+  readonly robot: readonly OpponentRecord[];
 }
 
 export interface RobotRubber {
   readonly deals: number;
+  readonly format: MatchFormat;
   readonly points: number;
   readonly pointsAgainst: number;
   readonly won: boolean;
@@ -41,6 +45,7 @@ export async function reportRobotRubber(rubber: RobotRubber): Promise<void> {
       body: JSON.stringify({
         deals: rubber.deals,
         deviceToken: playerToken(),
+        format: rubber.format,
         nickname: nickname() === "" ? "Player" : nickname(),
         points: rubber.points,
         pointsAgainst: rubber.pointsAgainst,

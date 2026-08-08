@@ -1,4 +1,15 @@
-import type { Call, Card, Rank, Strain, Suit } from "@hb/engine";
+import type { Call, Card, MatchFormat, Rank, Strain, Suit } from "@hb/engine";
+
+/**
+ * What to call the thing being played, given how long it runs.
+ *
+ * Every screen that says "rubber" has to say "game" in the short format, and
+ * getting one of them wrong is how a player learns the setting did not take.
+ * One place to be wrong is better than eight.
+ */
+export function matchNoun(format: MatchFormat): string {
+  return format === "game" ? "game" : "rubber";
+}
 
 const RANK_LABELS: Record<Rank, string> = {
   2: "2",

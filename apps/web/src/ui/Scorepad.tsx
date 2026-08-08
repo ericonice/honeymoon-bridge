@@ -1,5 +1,6 @@
 import { totalScore } from "@hb/engine";
 import type { Pair, PlayerId, PlayerView, RubberState } from "@hb/engine";
+import { matchNoun } from "../game/labels.js";
 import type { DealRecord } from "../game/session.js";
 import { ContractText } from "./CardText.js";
 
@@ -154,7 +155,9 @@ export function Scorepad({
 }: ScorepadProps): React.JSX.Element {
   return (
     <div className="w-full max-w-sm text-sm">
-      <p className="pb-1 text-xs tracking-wide text-white/45 uppercase">The rubber</p>
+      <p className="pb-1 text-xs tracking-wide text-white/45 uppercase">
+        The {matchNoun(rubber.format)}
+      </p>
       <Columns opponentName={opponentName} />
 
       {history.length === 0 ? (
@@ -171,7 +174,11 @@ export function Scorepad({
       )}
 
       <div className="mt-2 border-t border-white/20 pt-2">
-        <Summary label="Games won" values={rubber.gamesWon} view={view} />
+        {/* Games won is always nil–nil in a single game, since winning one ends
+            the match. A row that can only ever read zero is not a score. */}
+        {rubber.format === "rubber" ? (
+          <Summary label="Games won" values={rubber.gamesWon} view={view} />
+        ) : null}
         <Summary label="Towards game" values={rubber.partScore} view={view} />
         <Summary emphasis label="Total" values={totalScore(rubber)} view={view} />
       </div>

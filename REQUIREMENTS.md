@@ -472,6 +472,37 @@ browser.
 1. Before the phone layout is locked down (end of phase 2).
 2. Once networking works, to validate reconnection against real iOS backgrounding (end of phase 3).
 
+### 3.6a Match Length
+
+A sitting runs to a **rubber** by default — best of three games, as §1.7 describes — or to a
+**single game**, ending the moment somebody first reaches 100 below the line. A rubber is the game
+this was built to play; a single game exists because a rubber runs the better part of an hour and
+not every sitting has that in it.
+
+**A single game pays 300.** Rubber bridge has no bonus for winning a *game* — its 700/500 is
+specifically for taking the rubber — so a single game played by the rubber rules would end with no
+bonus at all and be settled on trick points alone. The 300 is Chicago's non-vulnerable game bonus,
+and it is the one convention here borrowed from another form of the game. Everything else is
+unchanged: the same trick values, the same part-scores accumulating to a hundred, the same line.
+
+**Nobody is ever vulnerable in a single game**, and this is the substantive consequence rather than
+a detail of the implementation. Vulnerability is having won a game, and in this format winning a
+game ends the match — so every deal is played non-vulnerable, and the doubled vulnerable penalties,
+the vulnerable slam bonuses, and the whole pressure of being vulnerable while the opponent is not
+simply never arise. A shorter match is also a flatter one.
+
+**At a table with somebody else, the shorter format wins.** Each player has a preference; if either
+wants a single game, that is what is played. Deliberately not symmetric: somebody who wanted one
+game and is held in a rubber owes the best part of an hour they never agreed to, while somebody who
+wanted a rubber and gets a game can simply play another. The two mistakes are not the same size.
+
+This also means the queue needs no matching on length — a table settles it once both seats are
+filled, so nobody waits longer to be paired for the sake of it.
+
+The preference is read **when a match starts** and never again. Changing the setting cannot move
+the goalposts on a sitting under way, and a player reconnecting mid-match carries no authority over
+it.
+
 ### 3.7 Accounts and Sign-in
 
 Listed as out of scope for v1 (§4) and built anyway, because the thing actually wanted — *how do I
@@ -565,9 +596,16 @@ account, and a stale session should cost somebody their attribution, not their g
 The queue uses the same verified account to avoid pairing somebody with themselves. A token catches
 two tabs on one device; only an account catches two *devices* signed in as the same person.
 
-**Results will attach to the account id, not the email.** The id is the stable key; the address is
-a property of the account that a display joins back to. Copying an address into every result would
+**Results attach to the account id, not the email.** The id is the stable key; the address is a
+property of the account that a display joins back to. Copying an address into every result would
 make it a duplicate of something that can change.
+
+**The record is its own screen**, reached from the home screen rather than shown inside Settings.
+Settings is where you go to *change* something and every row in it is short and bounded; the record
+grows with every person played and doubles again because rubbers and single games are counted
+apart. Scrolling past a scoreboard to reach a theme switch is the wrong way round. Signed out, the
+screen explains what an account buys instead of showing nothing, which makes it a reason to sign in
+rather than a dead end.
 
 **A finished rubber is what gets recorded**, not a deal. A rubber is what people say they won;
 nobody asks how many deals they have won. Only completed ones land in the table — §2.2 already ends

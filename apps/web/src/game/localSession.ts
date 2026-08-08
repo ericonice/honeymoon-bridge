@@ -16,6 +16,7 @@ import type { DealAction, DealState, PlayerId, TableState } from "@hb/engine";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createHeuristicBot } from "../bot/heuristicBot.js";
 import { botActionFor } from "./botTurn.js";
+import { preferredFormat } from "./identity.js";
 import { reportRobotRubber } from "./records.js";
 import type { GameSession } from "./session.js";
 import { drawTurnDuration, trickCollectDuration } from "./timing.js";
@@ -74,8 +75,10 @@ function pauseBefore(state: DealState): number {
  */
 export function useLocalSession(): GameSession {
   const bot = useMemo(() => createHeuristicBot(createRng(randomSeed())), []);
+  // Read once, when the match starts. Changing the setting mid-match would move
+  // the goalposts on a sitting already under way.
   const [table, setTable] = useState<TableState>(() =>
-    startTable({ seed: randomSeed(), starter: HUMAN }),
+    startTable({ format: preferredFormat(), seed: randomSeed(), starter: HUMAN }),
   );
 
   const { deal } = table;
@@ -141,6 +144,7 @@ export function useLocalSession(): GameSession {
     const points = totalScore(summary.rubber);
     void reportRobotRubber({
       deals: summary.history.length,
+      format: summary.rubber.format,
       points: points[HUMAN],
       pointsAgainst: points[OPPONENT],
       won: summary.rubber.winner === HUMAN,

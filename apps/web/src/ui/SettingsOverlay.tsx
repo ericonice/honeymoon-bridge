@@ -1,12 +1,14 @@
+import type { MatchFormat } from "@hb/engine";
 import type { Account } from "../game/account.js";
 import type { Theme } from "../game/theme.js";
 import { AccountPanel } from "./AccountPanel.js";
-import { RecordPanel } from "./RecordPanel.js";
 
 export interface SettingsOverlayProps {
   readonly account: Account | null;
   readonly checkingAccount: boolean;
   readonly devTools: boolean;
+  /** Takes effect on the next match; changing it cannot alter one under way. */
+  readonly format: MatchFormat;
   /** Development builds only; the row is compiled out of anything that ships. */
   readonly peeking: boolean;
   readonly theme: Theme;
@@ -14,6 +16,7 @@ export interface SettingsOverlayProps {
   readonly onLeaveGame: (() => void) | null;
   onClose(): void;
   onDevToolsChange(enabled: boolean): void;
+  onFormatChange(format: MatchFormat): void;
   onPeekingChange(enabled: boolean): void;
   onSignOut(): void;
   onThemeChange(theme: Theme): void;
@@ -67,8 +70,10 @@ export function SettingsOverlay({
   account,
   checkingAccount,
   devTools,
+  format,
   onClose,
   onDevToolsChange,
+  onFormatChange,
   onLeaveGame,
   onPeekingChange,
   onSignOut,
@@ -85,12 +90,20 @@ export function SettingsOverlay({
           <AccountPanel account={account} checking={checkingAccount} onSignOut={onSignOut} />
         </div>
 
+        {/* Above the theme because it changes the game rather than the look of
+            it, and it is the one setting somebody might come here to change
+            before sitting down to play. */}
         <div className="w-full max-w-sm">
-          <RecordPanel active signedIn={account !== null} />
+          <Toggle
+            label="Play a single game"
+            description="A match ends as soon as somebody reaches 100 below the line, worth 300, instead of running to the best of three games. Nobody is ever vulnerable. At a table with somebody else, one game wins if either of you wants it."
+            on={format === "game"}
+            onChange={(on) => {
+              onFormatChange(on ? "game" : "rubber");
+            }}
+          />
         </div>
 
-        {/* First of the switches, because it is the only one a player rather
-            than a developer came looking for. */}
         <div className="w-full max-w-sm">
           <Toggle
             label="Hockey theme"
@@ -135,8 +148,11 @@ export function SettingsOverlay({
             >
               Leave game
             </button>
+            {/* Deliberately not naming the format: this panel knows the setting
+                for the *next* match, which is not necessarily the one being
+                abandoned. Saying neither is better than saying the wrong one. */}
             <p className="mt-1 text-xs text-white/40">
-              The rubber is lost — there is nowhere to keep it yet.
+              Whatever has been played is lost — there is nowhere to keep it yet.
             </p>
           </div>
         )}

@@ -3,7 +3,7 @@ import type { DealAction, PlayerId } from "@hb/engine";
 import type { ClientMessage, ServerMessage, SessionSnapshot, TableInfo } from "@hb/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { storedSession } from "./account.js";
-import { nickname, playerToken } from "./identity.js";
+import { nickname, playerToken, preferredFormat } from "./identity.js";
 import type { GameSession } from "./session.js";
 import { tableSocketUrl } from "./serverUrl.js";
 
@@ -117,6 +117,7 @@ export function useNetworkSession(code: string): NetworkGame {
         ws.send(
           JSON.stringify({
             type: "join",
+            format: preferredFormat(),
             nickname: nickname() === "" ? "Player" : nickname(),
             session: storedSession(),
             token: playerToken(),

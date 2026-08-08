@@ -290,3 +290,64 @@ describe("rubber", () => {
     expect(() => applyDealScore(rubber, score(4, "S", 10))).toThrow();
   });
 });
+
+describe("a one-game match", () => {
+  it("ends the moment somebody first wins a game", () => {
+    let match = newRubber("game");
+    match = applyDealScore(match, score(1, "NT", 7));
+    expect(match.complete).toBe(false);
+
+    match = applyDealScore(match, score(2, "S", 8));
+    expect(match.complete).toBe(true);
+    expect(match.winner).toBe(0);
+    expect(match.gamesWon).toEqual([1, 0]);
+  });
+
+  it("pays 300 rather than a rubber bonus", () => {
+    // 4♠ making is 120 below the line, which is a game on its own.
+    const match = applyDealScore(newRubber("game"), score(4, "S", 10));
+    expect(match.aboveLine[0]).toBe(300);
+    expect(totalScore(match)[0]).toBe(120 + 300);
+  });
+
+  it("never plays a deal with anyone vulnerable", () => {
+    // Vulnerability is read at the start of a deal, and a deal only follows a
+    // match still in progress. Winning the game ends this one, so no deal is
+    // ever dealt into a vulnerable state — while the match is live, both sides
+    // are always non-vulnerable.
+    let match = newRubber("game");
+    expect(vulnerability(match)).toEqual([false, false]);
+
+    match = applyDealScore(match, score(1, "S", 7));
+    expect(match.complete).toBe(false);
+    expect(vulnerability(match)).toEqual([false, false]);
+
+    match = applyDealScore(match, score(4, "S", 10));
+    expect(match.complete).toBe(true);
+  });
+
+  it("accumulates part-scores the same way a rubber does until then", () => {
+    let match = newRubber("game");
+    match = applyDealScore(match, score(1, "S", 7));
+    expect(match.partScore[0]).toBe(30);
+    expect(match.complete).toBe(false);
+
+    // 60 more takes it to 90 — still short of the hundred.
+    match = applyDealScore(match, score(2, "S", 8));
+    expect(match.partScore[0]).toBe(90);
+    expect(match.complete).toBe(false);
+
+    match = applyDealScore(match, score(1, "S", 7));
+    expect(match.complete).toBe(true);
+  });
+
+  it("keeps its format across the deals of the match", () => {
+    const match = applyDealScore(newRubber("game"), score(1, "S", 7));
+    expect(match.format).toBe("game");
+  });
+
+  it("refuses to score into a finished one", () => {
+    const match = applyDealScore(newRubber("game"), score(4, "S", 10));
+    expect(() => applyDealScore(match, score(4, "S", 10))).toThrow();
+  });
+});

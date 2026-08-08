@@ -1,4 +1,4 @@
-import type { PlayerId } from "@hb/engine";
+import type { MatchFormat, PlayerId } from "@hb/engine";
 import type { Env } from "./env.js";
 
 /**
@@ -20,6 +20,7 @@ export interface FinishedSeat {
 export interface FinishedRubber {
   readonly code: string;
   readonly deals: number;
+  readonly format: MatchFormat;
   readonly seats: readonly [FinishedSeat, FinishedSeat];
   readonly winner: PlayerId;
 }
@@ -35,10 +36,10 @@ export async function recordRubber(env: Env, rubber: FinishedRubber, now: number
   const [first, second] = rubber.seats;
   await env.DB.prepare(
     `INSERT INTO results
-       (id, finished_at, table_code, winner, deals,
+       (id, finished_at, table_code, winner, deals, format,
         account0, token0, nickname0, points0,
         account1, token1, nickname1, points1)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       crypto.randomUUID(),
@@ -46,6 +47,7 @@ export async function recordRubber(env: Env, rubber: FinishedRubber, now: number
       rubber.code,
       rubber.winner,
       rubber.deals,
+      rubber.format,
       first.accountId,
       first.token,
       first.nickname,
@@ -63,6 +65,7 @@ interface ResultRow {
   readonly account1: string | null;
   readonly deals: number;
   readonly finished_at: number;
+  readonly format: MatchFormat;
   readonly nickname0: string;
   readonly nickname1: string;
   readonly points0: number;
@@ -72,10 +75,18 @@ interface ResultRow {
   readonly winner: number;
 }
 
-/** A record against one opponent, from the asking player's side. */
+/**
+ * A record against one opponent at one match length, from the asker's side.
+ *
+ * One per opponent *per format*: a rubber and a game are not the same
+ * achievement, and a combined tally would be one number meaning two things.
+ */
 export interface OpponentRecord {
+  /** Deals across all of these matches, which is how long the sittings ran. */
+  readonly deals: number;
   /** Null when that opponent has never signed in, so there is no address to show. */
   readonly email: string | null;
+  readonly format: MatchFormat;
   readonly lastPlayed: number;
   readonly lost: number;
   readonly name: string;
@@ -86,8 +97,8 @@ export interface OpponentRecord {
 
 export interface Records {
   readonly opponents: OpponentRecord[];
-  /** Kept apart from the rest — see `recordsFor`. Null until one has been played. */
-  readonly robot: OpponentRecord | null;
+  /** Kept apart from the rest — see `recordsFor`. One entry per format played. */
+  readonly robot: OpponentRecord[];
 }
 
 type Tallied = OpponentRecord & { readonly account: string | null; readonly token: string };
@@ -143,13 +154,16 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
 
     // Grouped by account where there is one, and otherwise by the device. Two
     // anonymous opponents are two different people; the same one twice is one.
-    const key = theirAccount ?? `token:${theirToken}`;
+    // Split by format as well, so a rubber record and a game record stay apart.
+    const key = `${theirAccount ?? `token:${theirToken}`}|${row.format}`;
     const running = tally.get(key);
     const won = row.winner === seat;
 
     tally.set(key, {
       account: theirAccount,
+      deals: (running?.deals ?? 0) + row.deals,
       email: null,
+      format: row.format,
       lastPlayed: row.finished_at,
       lost: (running?.lost ?? 0) + (won ? 0 : 1),
       // The most recent one, since a nickname is whatever they last called
@@ -163,14 +177,16 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
   }
 
   const all = [...tally.values()];
-  const robot = all.find((entry) => entry.token === ROBOT_TOKEN) ?? null;
 
   return {
     opponents: await withEmails(
       env,
       all.filter((entry) => entry.token !== ROBOT_TOKEN),
     ),
-    robot: robot === null ? null : { ...strip(robot) },
+    robot: all
+      .filter((entry) => entry.token === ROBOT_TOKEN)
+      .map(strip)
+      .sort((a, b) => b.lastPlayed - a.lastPlayed),
   };
 }
 
