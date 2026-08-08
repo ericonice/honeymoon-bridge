@@ -8,10 +8,10 @@ const TOKEN_KEY = "hb.token";
 /**
  * The opaque value that reclaims a seat after a dropped socket.
  *
- * This remains the whole of identity as far as a game is concerned: a seat is
- * held by a device, an invite works for someone who has never signed in, and
- * nothing here gates play. Signing in adds a durable name for a player, not a
- * requirement to be one.
+ * A seat is *held* by this and permitted by an account (§3.7): signing in is
+ * what lets somebody sit down opposite a person, and this is what gets them
+ * back into the same chair afterwards. Keeping the two apart is what lets a
+ * reconnection work when a session has expired underneath a rubber.
  *
  * An account *claims* this token rather than replacing it — see
  * `redeemSignInToken`. The cost that remains is that a rubber in progress is
@@ -25,6 +25,19 @@ export function playerToken(): string {
   const token = crypto.randomUUID();
   writeStored(TOKEN_KEY, token);
   return token;
+}
+
+/**
+ * Forgets this device's token, so the next thing to ask for one gets a new one.
+ *
+ * Called when signing out. The account that just left has claimed this token,
+ * and leaving it in place would hand the next person to sign in on this device
+ * the previous one's anonymous history — harmless when an account was optional
+ * and sharing a device was unusual, and neither once every game against a
+ * person is attributed and the device is the one the family passes around.
+ */
+export function resetPlayerToken(): void {
+  writeStored(TOKEN_KEY, crypto.randomUUID());
 }
 
 /**
@@ -42,6 +55,15 @@ export function setPreferredFormat(format: MatchFormat): void {
   writeStored(FORMAT_KEY, format);
 }
 
+/**
+ * What this device calls the player when there is no account to ask.
+ *
+ * Since §3.7 that is only the game against the computer, which needs no server
+ * and so has nothing to look a name up in. At a table the name comes from the
+ * account, and the server reads it there rather than believing this. It is also
+ * what the name prompt starts from, so somebody who has been playing the
+ * computer as "Eric" is not asked the question from scratch.
+ */
 export function nickname(): string {
   return readStored(NICKNAME_KEY) ?? "";
 }

@@ -17,10 +17,13 @@ export type LobbyClientMessage =
    * session is the same one sent when joining a table — carried here so the
    * queue can decline to pair somebody with themselves across two devices they
    * are signed in on, which a token alone cannot detect.
+   *
+   * A session that does not verify is refused rather than queued anonymously.
+   * The queue is where two people who do not know each other are put together,
+   * and a result is the only thing either of them takes away from it.
    */
   | {
       readonly type: "queue";
-      readonly nickname: string;
       readonly session: string | null;
       readonly token: string;
     }

@@ -8,6 +8,12 @@ const ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 
 const CODE_LENGTH = 6;
 
+function readableCode(): string {
+  const bytes = new Uint8Array(CODE_LENGTH);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => ALPHABET[byte % ALPHABET.length]).join("");
+}
+
 /**
  * A table's invite code, which is also the name of its Durable Object.
  *
@@ -17,9 +23,20 @@ const CODE_LENGTH = 6;
  * code, and the cost of a longer code is real: it is typed on a phone.
  */
 export function inviteCode(): string {
-  const bytes = new Uint8Array(CODE_LENGTH);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => ALPHABET[byte % ALPHABET.length]).join("");
+  return readableCode();
+}
+
+/**
+ * The code in a sign-in email, for typing into the app that asked for it.
+ *
+ * The same alphabet as an invite, and for the same reason: this one is read off
+ * a screen and typed into another app on the same phone, which is exactly the
+ * job that alphabet was chosen for. Guessing it needs the address as well —
+ * `redeemCode` looks up by both — and five wrong tries burn every outstanding
+ * code for that address, so the space does not have to be enormous.
+ */
+export function signInCode(): string {
+  return readableCode();
 }
 
 /** Whether a string could be a code at all, before a Durable Object is woken for it. */

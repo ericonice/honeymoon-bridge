@@ -1,13 +1,9 @@
 import type { MatchFormat } from "@hb/engine";
 import { useState } from "react";
-import type { Account } from "../game/account.js";
 import type { Theme } from "../game/theme.js";
 import { checkForUpdate, reinstall } from "../game/update.js";
-import { AccountPanel } from "./AccountPanel.js";
 
 export interface SettingsOverlayProps {
-  readonly account: Account | null;
-  readonly checkingAccount: boolean;
   readonly devTools: boolean;
   /** Takes effect on the next match; changing it cannot alter one under way. */
   readonly format: MatchFormat;
@@ -18,7 +14,6 @@ export interface SettingsOverlayProps {
   onDevToolsChange(enabled: boolean): void;
   onFormatChange(format: MatchFormat): void;
   onPeekingChange(enabled: boolean): void;
-  onSignOut(): void;
   onThemeChange(theme: Theme): void;
 }
 
@@ -145,15 +140,12 @@ function UpdateControl(): React.JSX.Element {
  * bar of the board now, where a phone puts the way back.
  */
 export function SettingsOverlay({
-  account,
-  checkingAccount,
   devTools,
   format,
   onClose,
   onDevToolsChange,
   onFormatChange,
   onPeekingChange,
-  onSignOut,
   onThemeChange,
   peeking,
   theme,
@@ -162,10 +154,6 @@ export function SettingsOverlay({
     <div className="absolute inset-0 z-30 flex flex-col bg-table-dark/97">
       <div className="flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto px-5 py-6">
         <h2 className="w-full max-w-sm text-lg font-semibold">Settings</h2>
-
-        <div className="w-full max-w-sm">
-          <AccountPanel account={account} checking={checkingAccount} onSignOut={onSignOut} />
-        </div>
 
         {/* Above the theme because it changes the game rather than the look of
             it, and it is the one setting somebody might come here to change

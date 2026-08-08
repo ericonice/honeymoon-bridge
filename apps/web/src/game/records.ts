@@ -7,7 +7,6 @@ import { recordsUrl, robotResultUrl } from "./serverUrl.js";
 /** A record against one opponent. The computer's looks exactly like a person's. */
 export interface OpponentRecord {
   readonly deals: number;
-  readonly email: string | null;
   readonly format: MatchFormat;
   readonly lastPlayed: number;
   readonly lost: number;

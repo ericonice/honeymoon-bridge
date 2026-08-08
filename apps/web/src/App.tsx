@@ -1,20 +1,24 @@
 import { useState } from "react";
 import { useAccount } from "./game/account.js";
+import type { Destination } from "./game/destination.js";
+import { destinationFromWire, HOME, takeDestination } from "./game/destination.js";
 import { readDevTools, writeDevTools } from "./game/devTools.js";
 import { preferredFormat, setPreferredFormat } from "./game/identity.js";
 import {
   clearLocationHash,
   codeFromLocation,
   setLocationCode,
-  signInTokenFromLocation,
+  signInFromLocation,
 } from "./game/serverUrl.js";
 import { applyTheme, readTheme, ThemeContext, writeTheme } from "./game/theme.js";
+import { AccountScreen } from "./ui/AccountScreen.js";
 import { Home } from "./ui/Home.js";
 import { Record } from "./ui/Record.js";
 import { RobotGame } from "./ui/RobotGame.js";
 import { Searching } from "./ui/Searching.js";
 import { SettingsOverlay } from "./ui/SettingsOverlay.js";
 import { SignIn } from "./ui/SignIn.js";
+import { SignInWall } from "./ui/SignInWall.js";
 import { TableGame } from "./ui/TableGame.js";
 
 /**
@@ -27,23 +31,47 @@ import { TableGame } from "./ui/TableGame.js";
  * to know about.
  */
 type Screen =
-  | "home"
-  | "record"
-  | "robot"
-  | "searching"
-  | { readonly code: string }
-  | { readonly token: string };
+  | { readonly kind: "account" }
+  | { readonly kind: "home" }
+  | { readonly kind: "record" }
+  | { readonly kind: "redeem"; readonly to: Destination | null; readonly token: string }
+  | { readonly kind: "robot" }
+  | { readonly kind: "searching" }
+  | { readonly destination: Destination; readonly kind: "signin" }
+  | { readonly code: string; readonly kind: "table" };
+
+/**
+ * What an account is needed for here, and where to come back to afterwards.
+ *
+ * §3.7 gates playing a person and nothing else, so this is the whole of the
+ * rule in one function — and returning the destination rather than a boolean is
+ * what lets the sign-in link bring somebody back to the table they were invited
+ * to rather than to a home screen.
+ */
+function gateFor(screen: Screen): Destination | null {
+  switch (screen.kind) {
+    case "searching": {
+      return { kind: "queue" };
+    }
+    case "table": {
+      return { code: screen.code, kind: "table" };
+    }
+    default: {
+      return null;
+    }
+  }
+}
 
 export function App(): React.JSX.Element {
   const [screen, setScreen] = useState<Screen>(() => {
     // Checked before the table code: arriving with both would mean a stale hash,
     // and the link just opened is the one this person meant.
-    const token = signInTokenFromLocation();
-    if (token !== null) {
-      return { token };
+    const signIn = signInFromLocation();
+    if (signIn !== null) {
+      return { kind: "redeem", to: destinationFromWire(signIn.to), token: signIn.token };
     }
     const code = codeFromLocation();
-    return code === null ? "home" : { code };
+    return code === null ? { kind: "home" } : { code, kind: "table" };
   });
   const account = useAccount();
   const [showingSettings, setShowingSettings] = useState(false);
@@ -67,9 +95,192 @@ export function App(): React.JSX.Element {
   const goHome = (): void => {
     // Clears the table out of the URL too, or a refresh would rejoin it.
     setLocationCode(null);
-    setScreen("home");
+    setScreen({ kind: "home" });
     setShowingSettings(false);
   };
+
+  const goTo = (destination: Destination): void => {
+    switch (destination.kind) {
+      case "home": {
+        goHome();
+        return;
+      }
+      case "queue": {
+        setLocationCode(null);
+        setScreen({ kind: "searching" });
+        return;
+      }
+      case "table": {
+        setLocationCode(destination.code);
+        setScreen({ code: destination.code, kind: "table" });
+        return;
+      }
+    }
+  };
+
+  /**
+   * The gate, applied where the screen is chosen rather than where it is
+   * reached.
+   *
+   * Deriving it means signing in *reveals* what was behind it — the account
+   * arrives, this runs again, and the table is simply there — instead of
+   * needing somebody to be navigated back to where they already were.
+   */
+  const renderGated = (gate: Destination, screenElement: React.JSX.Element): React.JSX.Element => {
+    if (account.checking) {
+      return (
+        <div className="flex flex-1 items-center justify-center px-6">
+          <p className="text-sm text-white/40">One moment…</p>
+        </div>
+      );
+    }
+    if (account.account === null) {
+      return (
+        <SignInWall destination={gate} onBack={goHome} onSignedIn={account.refresh} />
+      );
+    }
+    if (account.account.name === null) {
+      return (
+        <AccountScreen
+          email={account.account.email}
+          existing={null}
+          onBack={goHome}
+          onSaved={account.refresh}
+          onSignOut={account.signOut}
+        />
+      );
+    }
+    return screenElement;
+  };
+
+  const screenElement = ((): React.JSX.Element => {
+    switch (screen.kind) {
+      case "account": {
+        return account.account === null ? (
+          <SignInWall destination={HOME} onBack={goHome} onSignedIn={account.refresh} />
+        ) : (
+          <AccountScreen
+            email={account.account.email}
+            existing={account.account.name}
+            onBack={goHome}
+            onSaved={() => {
+              account.refresh();
+              goHome();
+            }}
+            onSignOut={() => {
+              account.signOut();
+              goHome();
+            }}
+          />
+        );
+      }
+      case "home": {
+        return (
+          <Home
+            account={account.account}
+            checkingAccount={account.checking}
+            onFindOpponent={() => {
+              setScreen({ kind: "searching" });
+            }}
+            onJoinTable={(code) => {
+              setLocationCode(code);
+              setScreen({ code, kind: "table" });
+            }}
+            onPlayComputer={() => {
+              setScreen({ kind: "robot" });
+            }}
+            onShowAccount={() => {
+              setScreen({ kind: "account" });
+            }}
+            onShowRecord={() => {
+              setScreen({ kind: "record" });
+            }}
+            onShowSettings={showSettings}
+            onSignIn={() => {
+              setScreen({ destination: HOME, kind: "signin" });
+            }}
+          />
+        );
+      }
+      case "record": {
+        return (
+          <Record
+            signedIn={account.account !== null}
+            onBack={goHome}
+            onSignIn={() => {
+              setScreen({ destination: HOME, kind: "signin" });
+            }}
+          />
+        );
+      }
+      case "redeem": {
+        return (
+          <SignIn
+            token={screen.token}
+            onDone={() => {
+              // The token is spent either way, so the hash goes before anything
+              // can retry it.
+              clearLocationHash();
+              account.refresh();
+              // The link's own destination first, then whatever this device
+              // remembered. They differ when the mail was opened somewhere else.
+              goTo(screen.to ?? takeDestination() ?? HOME);
+            }}
+          />
+        );
+      }
+      case "robot": {
+        return (
+          <RobotGame
+            devTools={devTools}
+            peeking={peeking}
+            onLeave={goHome}
+            onShowSettings={showSettings}
+          />
+        );
+      }
+      case "searching": {
+        return (
+          <Searching
+            onCancel={goHome}
+            onMatched={(code) => {
+              setLocationCode(code);
+              setScreen({ code, kind: "table" });
+            }}
+          />
+        );
+      }
+      case "signin": {
+        return (
+          <SignInWall
+            destination={screen.destination}
+            onBack={goHome}
+            onSignedIn={() => {
+              // Leaving the screen is the acknowledgement. Refreshing alone left
+              // somebody looking at the same code box after it had worked, so
+              // the obvious next move was to enter the code again — which
+              // genuinely fails, and reported a working sign-in as a broken one.
+              account.refresh();
+              goTo(screen.destination);
+            }}
+          />
+        );
+      }
+      case "table": {
+        return (
+          <TableGame
+            code={screen.code}
+            devTools={devTools}
+            peeking={peeking}
+            onLeave={goHome}
+            onShowSettings={showSettings}
+          />
+        );
+      }
+    }
+  })();
+
+  const gate = gateFor(screen);
 
   return (
     <ThemeContext value={theme}>
@@ -91,71 +302,10 @@ export function App(): React.JSX.Element {
           paddingLeft: "env(safe-area-inset-left)",
         }}
       >
-        {screen === "home" ? (
-          <Home
-            onFindOpponent={() => {
-              setScreen("searching");
-            }}
-            onJoinTable={(code) => {
-              setLocationCode(code);
-              setScreen({ code });
-            }}
-            onPlayComputer={() => {
-              setScreen("robot");
-            }}
-            onShowRecord={() => {
-              setScreen("record");
-            }}
-            onShowSettings={showSettings}
-          />
-        ) : screen === "record" ? (
-          <Record
-            signedIn={account.account !== null}
-            onBack={() => {
-              setScreen("home");
-            }}
-            onShowSettings={showSettings}
-          />
-        ) : screen === "searching" ? (
-          <Searching
-            onCancel={goHome}
-            onMatched={(code) => {
-              setLocationCode(code);
-              setScreen({ code });
-            }}
-          />
-        ) : screen === "robot" ? (
-          <RobotGame
-            devTools={devTools}
-            peeking={peeking}
-            onLeave={goHome}
-            onShowSettings={showSettings}
-          />
-        ) : "token" in screen ? (
-          <SignIn
-            token={screen.token}
-            onDone={() => {
-              // The token is spent either way, so the hash goes before anything
-              // can retry it.
-              clearLocationHash();
-              account.refresh();
-              setScreen("home");
-            }}
-          />
-        ) : (
-          <TableGame
-            code={screen.code}
-            devTools={devTools}
-            peeking={peeking}
-            onLeave={goHome}
-            onShowSettings={showSettings}
-          />
-        )}
+        {gate === null ? screenElement : renderGated(gate, screenElement)}
 
         {showingSettings ? (
           <SettingsOverlay
-            account={account.account}
-            checkingAccount={account.checking}
             devTools={devTools}
             format={format}
             peeking={peeking}
@@ -172,7 +322,6 @@ export function App(): React.JSX.Element {
               setFormat(next);
             }}
             onPeekingChange={setPeeking}
-            onSignOut={account.signOut}
             onThemeChange={(next) => {
               writeTheme(next);
               applyTheme(next);

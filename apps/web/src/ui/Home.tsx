@@ -1,13 +1,72 @@
 import { useState } from "react";
-import { nickname, setNickname } from "../game/identity.js";
+import type { Account } from "../game/account.js";
+import { storedSession } from "../game/account.js";
 import { createTableUrl } from "../game/serverUrl.js";
 
 export interface HomeProps {
+  /** Null when signed out, which is most of what this screen has to say. */
+  readonly account: Account | null;
+  readonly checkingAccount: boolean;
   onFindOpponent(): void;
   onJoinTable(code: string): void;
   onPlayComputer(): void;
+  onShowAccount(): void;
   onShowRecord(): void;
   onShowSettings(): void;
+  onSignIn(): void;
+}
+
+/**
+ * Who you are, at the top of the screen rather than inside Settings.
+ *
+ * Settings is a list of things to change and every other row in it is a toggle;
+ * being signed in is neither a preference nor a thing you set, and since §3.7 it
+ * is what stands between somebody and half of what this app does. Hiding that
+ * behind a gear made the app's answer to "why can't I play?" a place nobody
+ * would think to look.
+ */
+function Identity({
+  account,
+  checking,
+  onShowAccount,
+  onSignIn,
+}: {
+  readonly account: Account | null;
+  readonly checking: boolean;
+  onShowAccount(): void;
+  onSignIn(): void;
+}): React.JSX.Element {
+  if (checking) {
+    return <p className="text-sm text-white/40">Checking your account…</p>;
+  }
+
+  if (account === null) {
+    return (
+      <button
+        type="button"
+        className="w-full rounded-xl border border-white/25 px-4 py-3 text-left"
+        onClick={onSignIn}
+      >
+        <span className="block text-base font-medium">Sign in</span>
+        <span className="mt-0.5 block text-xs text-white/55">
+          Needed to play another person. The computer never asks.
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="w-full rounded-xl border border-white/15 px-4 py-3 text-left"
+      onClick={onShowAccount}
+    >
+      <span className="block text-xs tracking-wide text-white/45 uppercase">Playing as</span>
+      <span className="mt-0.5 block truncate text-base font-medium">
+        {account.name ?? "Choose a name"}
+      </span>
+    </button>
+  );
 }
 
 function Choice({
@@ -54,28 +113,42 @@ function Choice({
  * progress would make the networked game the hidden one.
  */
 export function Home({
+  account,
+  checkingAccount,
   onFindOpponent,
   onJoinTable,
   onPlayComputer,
+  onShowAccount,
   onShowRecord,
   onShowSettings,
+  onSignIn,
 }: HomeProps): React.JSX.Element {
-  const [name, setName] = useState(nickname);
   const [joining, setJoining] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const remember = (value: string): void => {
-    setName(value);
-    setNickname(value);
-  };
-
   const startTable = async (): Promise<void> => {
+    // Minting a code needs an account, so ask before spending a round trip on
+    // being refused. Joining a table or the queue is gated on the way in to
+    // that screen instead, where the destination is worth keeping hold of.
+    const session = storedSession();
+    if (session === null) {
+      onSignIn();
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(createTableUrl(), { method: "POST" });
+      const response = await fetch(createTableUrl(), {
+        headers: { Authorization: `Bearer ${session}` },
+        method: "POST",
+      });
+      if (!response.ok) {
+        onSignIn();
+        return;
+      }
       const body = (await response.json()) as { code: string };
       onJoinTable(body.code);
     } catch {
@@ -100,18 +173,12 @@ export function Home({
           onClick={onPlayComputer}
         />
 
-        <label className="block">
-          <span className="text-xs tracking-wide text-white/45 uppercase">Your name</span>
-          <input
-            className="mt-1 w-full rounded-xl border border-white/25 bg-black/20 px-4 py-3 text-base"
-            placeholder="Player"
-            value={name}
-            maxLength={20}
-            onChange={(event) => {
-              remember(event.target.value);
-            }}
-          />
-        </label>
+        <Identity
+          account={account}
+          checking={checkingAccount}
+          onShowAccount={onShowAccount}
+          onSignIn={onSignIn}
+        />
 
         <Choice
           label="Find an opponent"

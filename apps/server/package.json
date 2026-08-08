@@ -5,7 +5,7 @@
   "description": "Cloudflare Worker and Durable Object: the authority for a networked table.",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --var DEV_SIGNIN:1",
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

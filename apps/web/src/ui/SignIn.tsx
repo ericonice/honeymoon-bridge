@@ -23,7 +23,7 @@ function message(state: State): { readonly body: string; readonly title: string 
     }
     case "refused": {
       return {
-        body: "A sign-in link works once and lasts ten minutes. Ask for a new one from Settings and it will arrive in a moment.",
+        body: "A sign-in link works once and lasts ten minutes. Asking for another takes a moment, and it will bring you back to wherever you were headed.",
         title: "That link has expired",
       };
     }

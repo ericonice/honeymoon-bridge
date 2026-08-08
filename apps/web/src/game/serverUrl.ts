@@ -18,7 +18,7 @@ export function createTableUrl(): string {
   return `${ORIGIN}/api/tables`;
 }
 
-export function authUrl(action: "me" | "request" | "verify"): string {
+export function authUrl(action: "code" | "dev" | "me" | "name" | "request" | "verify"): string {
   return `${ORIGIN}/api/auth/${action}`;
 }
 
@@ -51,14 +51,21 @@ export function codeFromLocation(): string | null {
 }
 
 /**
- * The sign-in token in the current URL, if this page was opened from an email.
+ * The sign-in link this page was opened from, if it was.
  *
- * Left exactly as it was sent, unlike a table code: this is base64url, so case
- * is part of the value rather than presentation.
+ * The token is left exactly as it was sent, unlike a table code: this is
+ * base64url, so case is part of the value rather than presentation. `to` is
+ * where the person was going before they were asked to sign in, which the
+ * server put in the link — see `destination.ts` for why it is not enough to
+ * keep that on the device that asked.
  */
-export function signInTokenFromLocation(): string | null {
-  const match = /^#\/signin\/([A-Za-z0-9_-]+)$/.exec(window.location.hash);
-  return match === null ? null : match[1]!;
+export function signInFromLocation(): { readonly to: string | null; readonly token: string } | null {
+  const match = /^#\/signin\/([A-Za-z0-9_-]+)(?:\?to=(.*))?$/.exec(window.location.hash);
+  if (match === null) {
+    return null;
+  }
+  const to = match[2];
+  return { to: to === undefined ? null : decodeURIComponent(to), token: match[1]! };
 }
 
 /**

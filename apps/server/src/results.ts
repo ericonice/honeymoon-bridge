@@ -84,11 +84,18 @@ interface ResultRow {
 export interface OpponentRecord {
   /** Deals across all of these matches, which is how long the sittings ran. */
   readonly deals: number;
-  /** Null when that opponent has never signed in, so there is no address to show. */
-  readonly email: string | null;
   readonly format: MatchFormat;
   readonly lastPlayed: number;
   readonly lost: number;
+  /**
+   * What to call them.
+   *
+   * The account's name where there is an account, which since §3.7 is every
+   * match against a person played from now on. This screen used to show an
+   * *email address* here, for want of anything else to print — the one place in
+   * the app where one player was shown another's personal data, and it was
+   * never a decision so much as a gap.
+   */
   readonly name: string;
   readonly pointsAgainst: number;
   readonly pointsFor: number;
@@ -162,12 +169,13 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
     tally.set(key, {
       account: theirAccount,
       deals: (running?.deals ?? 0) + row.deals,
-      email: null,
       format: row.format,
       lastPlayed: row.finished_at,
       lost: (running?.lost ?? 0) + (won ? 0 : 1),
-      // The most recent one, since a nickname is whatever they last called
-      // themselves rather than a name they own.
+      // The most recent one stored on the row. For an opponent with an account
+      // this is overwritten below by the name they go by now; it survives only
+      // for rows played before an account was required, where it is all there
+      // is.
       name: theirName,
       pointsAgainst: (running?.pointsAgainst ?? 0) + theirPoints,
       pointsFor: (running?.pointsFor ?? 0) + myPoints,
@@ -179,7 +187,7 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
   const all = [...tally.values()];
 
   return {
-    opponents: await withEmails(
+    opponents: await withNames(
       env,
       all.filter((entry) => entry.token !== ROBOT_TOKEN),
     ),
@@ -194,26 +202,37 @@ function strip({ account: _account, token: _token, ...record }: Tallied): Oppone
   return record;
 }
 
-/** Fills in the address for opponents who have an account, in one query. */
-async function withEmails(env: Env, records: readonly Tallied[]): Promise<OpponentRecord[]> {
+/**
+ * Replaces the name stored on each row with the one that account goes by now,
+ * in one query.
+ *
+ * A name can change and a record is read long after the game, so the current
+ * one is what a person expects to see. Rows with no account keep what was
+ * stored: those were played before an account was required and there is nothing
+ * to look up. Doing it the other way — the stored name always — would leave a
+ * screen where a renamed opponent appears under both names at once.
+ */
+async function withNames(env: Env, records: readonly Tallied[]): Promise<OpponentRecord[]> {
   const ids = [...new Set(records.flatMap((r) => (r.account === null ? [] : [r.account])))];
-  const emails = new Map<string, string>();
+  const names = new Map<string, string>();
 
   if (ids.length > 0) {
     const rows = await env.DB.prepare(
-      `SELECT id, email FROM accounts WHERE id IN (${ids.map(() => "?").join(",")})`,
+      `SELECT id, name FROM accounts WHERE id IN (${ids.map(() => "?").join(",")})`,
     )
       .bind(...ids)
-      .all<{ email: string; id: string }>();
+      .all<{ id: string; name: string | null }>();
     for (const row of rows.results) {
-      emails.set(row.id, row.email);
+      if (row.name !== null) {
+        names.set(row.id, row.name);
+      }
     }
   }
 
   return records
     .map((record) => ({
       ...strip(record),
-      email: record.account === null ? null : (emails.get(record.account) ?? null),
+      name: (record.account === null ? null : names.get(record.account)) ?? record.name,
     }))
     .sort((a, b) => b.lastPlayed - a.lastPlayed);
 }

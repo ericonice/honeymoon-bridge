@@ -5,7 +5,7 @@ import { useRecords } from "../game/records.js";
 export interface RecordProps {
   readonly signedIn: boolean;
   onBack(): void;
-  onShowSettings(): void;
+  onSignIn(): void;
 }
 
 /**
@@ -43,9 +43,6 @@ function Row({ record }: { readonly record: OpponentRecord }): React.JSX.Element
       <div className="flex items-baseline gap-3">
         <span className="min-w-0 flex-1">
           <span className="block truncate text-base">{record.name}</span>
-          {record.email === null ? null : (
-            <span className="block truncate text-xs text-white/40">{record.email}</span>
-          )}
         </span>
         <span className="shrink-0 text-right">
           <span className="block font-mono text-base tabular-nums">
@@ -89,7 +86,7 @@ function Group({
       <h3 className="text-xs tracking-wide text-white/45 uppercase">{title}</h3>
       <div className="mt-1">
         {records.map((record) => (
-          <Row key={`${record.email ?? record.name}-${record.lastPlayed}`} record={record} />
+          <Row key={`${record.name}-${record.lastPlayed}`} record={record} />
         ))}
       </div>
     </div>
@@ -103,10 +100,10 @@ const SECTIONS: { readonly format: MatchFormat; readonly title: string }[] = [
 
 function Body({
   signedIn,
-  onShowSettings,
+  onSignIn,
 }: {
   readonly signedIn: boolean;
-  onShowSettings(): void;
+  onSignIn(): void;
 }): React.JSX.Element {
   const { loading, records } = useRecords(signedIn);
 
@@ -120,7 +117,7 @@ function Body({
         <button
           type="button"
           className="rounded-xl border border-white/25 px-4 py-3 text-base text-white"
-          onClick={onShowSettings}
+          onClick={onSignIn}
         >
           Sign in
         </button>
@@ -176,12 +173,12 @@ function Body({
  * identical, but a networked match was witnessed by the server while one against
  * the computer was played entirely in a browser and is taken on its word.
  */
-export function Record({ onBack, onShowSettings, signedIn }: RecordProps): React.JSX.Element {
+export function Record({ onBack, onSignIn, signedIn }: RecordProps): React.JSX.Element {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-8">
         <h1 className="text-2xl font-semibold">Your record</h1>
-        <Body signedIn={signedIn} onShowSettings={onShowSettings} />
+        <Body signedIn={signedIn} onSignIn={onSignIn} />
       </div>
 
       <div className="px-6 pb-6">

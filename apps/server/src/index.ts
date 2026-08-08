@@ -1,5 +1,17 @@
 import type { MatchFormat } from "@hb/engine";
-import { normaliseEmail, redeemLink, requestLink, verifySession } from "./auth.js";
+import {
+  accountFor,
+  accountFromRequest,
+  normaliseCode,
+  normaliseDestination,
+  normaliseEmail,
+  normaliseName,
+  redeemCode,
+  redeemLink,
+  requestLink,
+  setAccountName,
+  signInAs,
+} from "./auth.js";
 import { inviteCode, isInviteCode } from "./codes.js";
 import type { Env } from "./env.js";
 import { recordRubber, recordsFor, ROBOT_TOKEN } from "./results.js";
@@ -10,9 +22,9 @@ export { Table } from "./table.js";
 /**
  * Where the game is allowed to be played from.
  *
- * There are no accounts and nothing to steal, but an open API is still an open
- * API: this keeps a table to the app it belongs to rather than to anything that
- * can reach the internet.
+ * An open API is an open API: this keeps a table to the app it belongs to
+ * rather than to anything that can reach the internet. It matters more now that
+ * there are accounts behind it than it did when there was nothing to steal.
  *
  * The pattern covers the site's own domain and any subdomain of it, so moving
  * the app from `pages.dev` to a real address needs no redeploy of the server.
@@ -139,18 +151,38 @@ export default {
 
     // Creating a table is just minting a code: the Durable Object it names is
     // brought into being by the first player to connect to it.
+    //
+    // Behind a session because a table is a place to play a person, and §3.7
+    // requires an account for that. Refusing here rather than at the socket
+    // means somebody is turned away before they have a code to share.
     if (request.method === "POST" && url.pathname === "/api/tables") {
+      if ((await accountFromRequest(request, env, Date.now())) === null) {
+        return json(request, { error: "Sign in to start a table" }, 401);
+      }
       return json(request, { code: inviteCode() }, 201);
     }
 
     if (url.pathname === "/api/auth/request" && request.method === "POST") {
-      const body = (await request.json().catch(() => ({}))) as { email?: unknown };
+      const body = (await request.json().catch(() => ({}))) as {
+        email?: unknown;
+        standalone?: unknown;
+        to?: unknown;
+      };
       const email = normaliseEmail(body.email);
       // The origin the request came from, so a link opened on the phone lands
       // on the same deployment the phone is already using.
       const appOrigin = request.headers.get("Origin") ?? "https://honeymoon-bridge.ericonice.com";
       const requested =
-        email === null ? null : await requestLink(env, email, appOrigin, Date.now());
+        email === null
+          ? null
+          : await requestLink(env, {
+              appOrigin,
+              destination: normaliseDestination(body.to),
+              email,
+              ip: request.headers.get("CF-Connecting-IP"),
+              now: Date.now(),
+              standalone: body.standalone === true,
+            });
 
       // Failing to send is a fault on this side rather than a fact about the
       // address, so saying so reveals nothing — and it is the difference between
@@ -194,31 +226,114 @@ export default {
       if (signedIn === null) {
         return json(request, { error: "That link has expired or has already been used" }, 400);
       }
-      return json(request, { email: signedIn.email, session: signedIn.session });
+      return json(request, {
+        email: signedIn.email,
+        name: signedIn.name,
+        session: signedIn.session,
+      });
+    }
+
+    // Signing in by typing the code from the email into whichever app asked.
+    //
+    // This is the path that works on a phone with the app installed: iOS gives
+    // a home-screen app its own storage, so a link opened from Mail signs
+    // Safari in and leaves the app untouched, with the link then spent. A code
+    // goes the other way — it is carried *into* the app by the person.
+    if (url.pathname === "/api/auth/code" && request.method === "POST") {
+      const body = (await request.json().catch(() => ({}))) as {
+        code?: unknown;
+        deviceToken?: unknown;
+        email?: unknown;
+      };
+      const code = normaliseCode(body.code);
+      const email = normaliseEmail(body.email);
+      if (code === null || email === null) {
+        return json(request, { error: "That code is not valid" }, 400);
+      }
+      const signedIn = await redeemCode(env, {
+        code,
+        deviceToken: typeof body.deviceToken === "string" ? body.deviceToken : null,
+        email,
+        now: Date.now(),
+      });
+      // Deliberately the same answer for a wrong code, an expired one and an
+      // address that never asked. Which of those it was is not something a
+      // stranger gets to learn by trying.
+      if (signedIn === null) {
+        return json(request, { error: "That code has expired or has already been used" }, 400);
+      }
+      return json(request, {
+        email: signedIn.email,
+        name: signedIn.name,
+        session: signedIn.session,
+      });
+    }
+
+    // Signing in without the email round trip, for the development loop only.
+    //
+    // Two-player testing is a window and an incognito window, and incognito
+    // forgets its session every time it closes — so with a gate in front of
+    // networked play, the ordinary loop would cost two sign-in emails per run
+    // (§3.6). This is the one dev control that cannot ship: the others are safe
+    // in production precisely because the server refuses them, and refusing
+    // this one would defeat it.
+    //
+    // `DEV_SIGNIN` is set by the `dev` script and by nothing else. A deployed
+    // Worker has no such variable, so this is a 404 there — and a 404 rather
+    // than a 403, because a route that says "forbidden" has admitted it exists.
+    if (url.pathname === "/api/auth/dev" && request.method === "POST") {
+      if (env.DEV_SIGNIN !== "1") {
+        return json(request, { error: "Not found" }, 404);
+      }
+      const body = (await request.json().catch(() => ({}))) as {
+        deviceToken?: unknown;
+        email?: unknown;
+      };
+      const email = normaliseEmail(body.email);
+      if (email === null) {
+        return json(request, { error: "That is not an address" }, 400);
+      }
+      const signedIn = await signInAs(env, {
+        deviceToken: typeof body.deviceToken === "string" ? body.deviceToken : null,
+        email,
+        now: Date.now(),
+      });
+      return json(request, {
+        email: signedIn.email,
+        name: signedIn.name,
+        session: signedIn.session,
+      });
     }
 
     if (url.pathname === "/api/auth/me" && request.method === "GET") {
-      const header = request.headers.get("Authorization") ?? "";
-      const accountId = header.startsWith("Bearer ")
-        ? await verifySession(header.slice(7), env, Date.now())
-        : null;
+      const accountId = await accountFromRequest(request, env, Date.now());
+      const account = accountId === null ? null : await accountFor(env, accountId);
+      return json(request, { account });
+    }
+
+    // Setting the name somebody is known by. It is on the account rather than
+    // on the device because it is shown to whoever they play and kept on every
+    // result they appear in — a name that changed with the browser would make
+    // both of those lie.
+    if (url.pathname === "/api/auth/name" && request.method === "POST") {
+      const accountId = await accountFromRequest(request, env, Date.now());
       if (accountId === null) {
-        return json(request, { account: null });
+        return json(request, { error: "Not signed in" }, 401);
       }
-      const row = await env.DB.prepare("SELECT email FROM accounts WHERE id = ?")
-        .bind(accountId)
-        .first<{ email: string }>();
-      return json(request, { account: row === null ? null : { email: row.email } });
+      const body = (await request.json().catch(() => ({}))) as { name?: unknown };
+      const name = normaliseName(body.name);
+      if (name === null) {
+        return json(request, { error: "That is not a name" }, 400);
+      }
+      await setAccountName(env, accountId, name);
+      return json(request, { name });
     }
 
     // Your record against everyone you have finished a rubber against. Behind a
     // session because it is the one thing here that is nobody else's business:
     // who somebody plays and how they do against them.
     if (url.pathname === "/api/results" && request.method === "GET") {
-      const header = request.headers.get("Authorization") ?? "";
-      const accountId = header.startsWith("Bearer ")
-        ? await verifySession(header.slice(7), env, Date.now())
-        : null;
+      const accountId = await accountFromRequest(request, env, Date.now());
       if (accountId === null) {
         return json(request, { error: "Not signed in" }, 401);
       }
@@ -238,10 +353,11 @@ export default {
         return json(request, { error: "Not a result" }, 400);
       }
 
-      const header = request.headers.get("Authorization") ?? "";
-      const accountId = header.startsWith("Bearer ")
-        ? await verifySession(header.slice(7), env, Date.now())
-        : null;
+      const accountId = await accountFromRequest(request, env, Date.now());
+      // A signed-in player is known by their account's name, the same as at a
+      // table. The reported one is only for somebody who has never signed in,
+      // whose robot rubbers are attached to the device until they do.
+      const account = accountId === null ? null : await accountFor(env, accountId);
 
       await recordRubber(
         env,
@@ -252,7 +368,7 @@ export default {
           seats: [
             {
               accountId,
-              nickname: rubber.nickname,
+              nickname: account?.name ?? rubber.nickname,
               points: rubber.points,
               token: rubber.deviceToken,
             },

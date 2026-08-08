@@ -6,9 +6,8 @@ import type { Env } from "./env.js";
 
 /** Kept on the socket so a hibernated lobby still knows who is queued. */
 interface Waiting {
-  /** The verified account, or null for somebody queuing anonymously. */
-  readonly accountId: string | null;
-  readonly nickname: string;
+  /** The verified account. Nobody reaches the queue without one (§3.7). */
+  readonly accountId: string;
   readonly token: string;
 }
 
@@ -51,11 +50,16 @@ export class Lobby extends DurableObject<Env> {
         ? null
         : await verifySession(message.session, this.env, Date.now());
 
-    ws.serializeAttachment({
-      accountId,
-      nickname: message.nickname,
-      token: message.token,
-    } satisfies Waiting);
+    // Nothing to reclaim here, unlike a seat at a table — being in the queue is
+    // having a socket open, so there is no game to be taken away from anybody
+    // and no reason to let a failed session through.
+    if (accountId === null) {
+      this.#send(ws, { type: "error", message: "Sign in to find an opponent" });
+      ws.close(1008, "Not signed in");
+      return;
+    }
+
+    ws.serializeAttachment({ accountId, token: message.token } satisfies Waiting);
     await this.#pair();
   }
 
@@ -82,14 +86,13 @@ export class Lobby extends DurableObject<Env> {
    *
    * Two tabs on one device share a token, which is how this gets tested and so
    * the first thing that would go wrong. Two *devices* signed into one account
-   * do not share a token, and nothing but the account can tell them apart — so
-   * a verified account, when both have one, is the stronger test of the two.
+   * do not share a token, and nothing but the account can tell them apart. Both
+   * checks now always apply, since every socket here carries a verified account
+   * — the account test used to be skipped whenever either side lacked one,
+   * which was exactly the case it was needed for.
    */
   #distinct(a: Waiting, b: Waiting): boolean {
-    if (a.token === b.token) {
-      return false;
-    }
-    return a.accountId === null || b.accountId === null || a.accountId !== b.accountId;
+    return a.token !== b.token && a.accountId !== b.accountId;
   }
 
   async #pair(): Promise<void> {

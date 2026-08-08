@@ -3,7 +3,7 @@ import type { DealAction, PlayerId } from "@hb/engine";
 import type { ClientMessage, ServerMessage, SessionSnapshot, TableInfo } from "@hb/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { storedSession } from "./account.js";
-import { nickname, playerToken, preferredFormat } from "./identity.js";
+import { playerToken, preferredFormat } from "./identity.js";
 import type { GameSession } from "./session.js";
 import { tableSocketUrl } from "./serverUrl.js";
 
@@ -115,11 +115,13 @@ export function useNetworkSession(code: string): NetworkGame {
         // The token is what makes this a reconnection rather than a new player.
         // The session is read fresh on every join rather than captured once, so
         // signing in or out takes effect on the next reconnect without a reload.
+        //
+        // No name goes with it: the server reads that off the account the
+        // session proves, so there is nothing here for a seat to claim.
         ws.send(
           JSON.stringify({
             type: "join",
             format: preferredFormat(),
-            nickname: nickname() === "" ? "Player" : nickname(),
             session: storedSession(),
             token: playerToken(),
           } satisfies ClientMessage),

@@ -187,7 +187,7 @@ player-view projection. Fully playable headlessly.
 **Done, deliberately rough.** `apps/web` plays a full rubber against a bot that picks uniformly at
 random from the legal actions — draw phase, auction, 13 tricks, deal scoring, part-scores and
 vulnerability carried deal to deal, rubber bonus, new rubber, and a scorepad showing every deal of
-the rubber. The play screen is plain on purpose. 97 tests across the two workspaces, typecheck
+the rubber. The play screen is plain on purpose. 161 tests across the four workspaces, typecheck
 clean.
 
 The rubber is *derived*, not accumulated: `useGameSession` holds the rubber as it stood before the
@@ -220,9 +220,35 @@ serves a reducer in the tab and a Durable Object on Cloudflare. Invite links, a 
 (one Durable Object holding no state; the socket *is* the place in the queue), the "waiting for X"
 countdown, and reconnection on backoff, on `online`, and on the tab becoming visible.
 
+**Done, and it reversed a rule.** Playing a person requires an account (§3.7). The gate is on
+*sitting down*, not on staying seated: a reconnect whose device token matches a seat resumes it
+whatever the session says, so a rotated secret or a deploy cannot take a rubber off somebody
+mid-game. The seat's name comes from the account and no longer travels in `join` at all — the
+server reads it off the session it just verified, which deleted the several scattered decisions
+about what to call a nameless player. Where somebody was going survives the sign-in round trip in
+two places at once, stashed locally *and* encoded in the mailed link, because the browser that
+opens the mail is often not the one that asked.
+
+Two things this made load-bearing that were not before. Mail is now on the critical path, so a
+per-IP limit guards the send quota and the per-address limit is loose enough to absorb an impatient
+person. And two-player testing would otherwise cost an email per window per run, so `npm run dev
+--workspace @hb/server` passes `DEV_SIGNIN`, which is the one dev control that is compiled out of
+the client *and* refused by any server the dev script did not start — §3.6 explains why this one
+cannot ship when the others can.
+
 **Not started.** The dev control that force-drops the socket, which §3.6 calls the only way to
 exercise reconnection deliberately rather than hoping. Nothing persists a rubber across a refresh
 in the robot game. And the play screen still has none of the polish the draw screen got.
+
+**Found on a real device, and fixed.** A sign-in link cannot reach an installed PWA on iOS. The
+home-screen app has its own storage, Mail opens links in Safari, and a link works once — so tapping
+it signs Safari in, leaves the app untouched, and burns the credential. Sign-in is therefore a
+**typed code** now, with the link demoted to a convenience and omitted entirely when the request
+comes from a standalone app. The code is six characters of the invite alphabet, looked up by
+address *and* code, with five attempts before the outstanding codes for that address are burned.
+
+The general lesson is worth more than the bug: anything that leaves the app and comes back cannot
+be assumed to come back to the same app, and desktop Chrome will insist that it does.
 
 **The bot bids, draws and plays.** What each part does is written up in `REQUIREMENTS.md` §2.1.
 Measured over 1000+ bot-vs-bot deals at each stage:

@@ -43,11 +43,17 @@ export type ClientMessage =
    * after a reconnect (§2.2), and it stays the thing a seat is held by — an
    * account carries a record between devices, not a rubber in progress.
    *
-   * `session` is the signed session for a player who has signed in, and null for
-   * one who has not. It rides in this message rather than in a header because a
-   * browser cannot set headers on a WebSocket. The server verifies the signature
-   * before believing any of it; an unsigned or altered one is treated exactly
-   * like not being signed in, which is a supported way to play.
+   * `session` is the signed session, and it rides in this message rather than in
+   * a header because a browser cannot set headers on a WebSocket. The server
+   * verifies the signature before believing any of it. Since §3.7 an unsigned or
+   * altered one no longer seats the player: taking a seat opposite a person
+   * requires an account, and only a token already holding a seat gets back into
+   * one without a working session.
+   *
+   * There is no name here on purpose. It used to sit beside the session, which
+   * meant a seat could call itself anything at all — the server now reads the
+   * name off the account it has just verified, for the same reason it has never
+   * believed a claimed account id.
    */
   | {
       readonly type: "join";
@@ -61,7 +67,6 @@ export type ClientMessage =
        * a match already under way.
        */
       readonly format: MatchFormat;
-      readonly nickname: string;
       readonly session: string | null;
       readonly token: string;
     }

@@ -3,11 +3,13 @@ import { applyTableAction, nextDeal, startTable, summarise, totalScore } from "@
 import type { MatchFormat, PlayerId, TableState } from "@hb/engine";
 import { snapshotFor } from "@hb/protocol";
 import type { ClientMessage, Seating, ServerMessage, TableInfo } from "@hb/protocol";
-import { verifySession } from "./auth.js";
+import { accountFor, verifySession } from "./auth.js";
 import { dealSeed } from "./codes.js";
 import type { Env } from "./env.js";
 import { formatFor } from "./matchFormat.js";
 import { recordRubber } from "./results.js";
+import type { SeatedAccount } from "./seating.js";
+import { refuseSeat } from "./seating.js";
 
 /** §2.2: a player who vanishes has three minutes to come back before the table is written off. */
 const GRACE_MS = 3 * 60 * 1000;
@@ -17,13 +19,15 @@ const OPEN = 1;
 
 interface SeatRecord {
   /**
-   * The signed-in account holding this seat, or null for somebody playing
-   * anonymously — which is a supported way to play and always will be (§3.7).
+   * The signed-in account holding this seat.
    *
    * Set only from a session whose signature verified here. It is what a result
-   * will eventually be attributed to, so it must never be taken on a client's
-   * word: a seat that merely *claimed* an account would make the record it
-   * produced worthless.
+   * will be attributed to, so it must never be taken on a client's word: a seat
+   * that merely *claimed* an account would make the record it produced
+   * worthless.
+   *
+   * Null only for a seat taken before §3.7 required an account, which a token
+   * can still reclaim — the gate is on sitting down, not on staying seated.
    */
   readonly accountId: string | null;
   /** What this player asked for. Only consulted when the match starts. */
@@ -181,11 +185,8 @@ export class Table extends DurableObject<Env> {
     this.#cached = null;
   }
 
-  async #join(
-    ws: WebSocket,
-    message: Extract<ClientMessage, { type: "join" }>,
-  ): Promise<void> {
-    const { nickname, token } = message;
+  async #join(ws: WebSocket, message: Extract<ClientMessage, { type: "join" }>): Promise<void> {
+    const { token } = message;
     const stored = await this.#load();
     const seats: [SeatRecord | null, SeatRecord | null] = [stored.seats[0], stored.seats[1]];
 
@@ -193,20 +194,38 @@ export class Table extends DurableObject<Env> {
     // socket a reconnection rather than a new player. Deliberately still the
     // token and not the account — §4 keeps a rubber on the device that started
     // it, so signing in on a second phone does not walk off with a seat.
-    let seat = SEATS.find((index) => seats[index]?.token === token) ?? null;
-    if (seat === null) {
-      seat = SEATS.find((index) => seats[index] === null) ?? null;
+    const held = SEATS.find((index) => seats[index]?.token === token) ?? null;
+    const account = await this.#accountFrom(message.session);
+
+    // The gate is on sitting down, not on staying seated (§3.7). Somebody
+    // already at this table comes back whatever their session says, because a
+    // rotated secret or an expired session would otherwise take a rubber away
+    // from somebody in the middle of it. Somebody arriving needs an account.
+    if (held === null) {
+      const refusal = refuseSeat(account);
+      if (refusal !== null) {
+        this.#send(ws, { type: "error", message: refusal });
+        ws.close(1008, refusal);
+        return;
+      }
     }
+
+    const seat = held ?? SEATS.find((index) => seats[index] === null) ?? null;
     if (seat === null) {
       this.#send(ws, { type: "error", message: "This table already has two players" });
       ws.close(1008, "Table full");
       return;
     }
 
+    const previous = seats[seat];
     seats[seat] = {
-      accountId: await this.#accountFrom(message.session),
+      // A session that no longer verifies leaves the seat's attribution alone
+      // rather than erasing it: the account was proved when the seat was taken.
+      accountId: account?.id ?? previous?.accountId ?? null,
       format: message.format,
-      nickname,
+      // The last fallback is unreachable: a seat is either being resumed, and
+      // has a name already, or has just passed `refuse`, which requires one.
+      nickname: account?.name ?? previous?.nickname ?? "",
       token,
     };
     ws.serializeAttachment({ seat, token } satisfies Attachment);
@@ -359,19 +378,24 @@ export class Table extends DurableObject<Env> {
   }
 
   /**
-   * The account a session actually proves, or null.
+   * The account a session actually proves, with the name that account goes by.
    *
    * Anything that fails — absent, forged, altered, signed with a secret that has
-   * since been rotated — comes back null and the player is seated anonymously.
-   * Refusing the seat would be the wrong trade: playing has never required an
-   * account, and a stale session should cost somebody their attribution, not
-   * their game.
+   * since been rotated — comes back null. For somebody taking a seat that is a
+   * refusal; for somebody returning to one it costs them nothing, which is the
+   * older rule about a stale session costing attribution rather than a game,
+   * kept where it still applies.
    */
-  async #accountFrom(session: string | null): Promise<string | null> {
+  async #accountFrom(session: string | null): Promise<SeatedAccount | null> {
     if (session === null || session === "") {
       return null;
     }
-    return verifySession(session, this.env, Date.now());
+    const accountId = await verifySession(session, this.env, Date.now());
+    if (accountId === null) {
+      return null;
+    }
+    const account = await accountFor(this.env, accountId);
+    return account === null ? null : { id: accountId, name: account.name };
   }
 
   #seatOf(ws: WebSocket): PlayerId | null {

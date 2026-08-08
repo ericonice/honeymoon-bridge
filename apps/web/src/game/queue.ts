@@ -1,7 +1,7 @@
 import type { LobbyClientMessage, LobbyServerMessage } from "@hb/protocol";
 import { useEffect, useRef, useState } from "react";
 import { storedSession } from "./account.js";
-import { nickname, playerToken } from "./identity.js";
+import { playerToken } from "./identity.js";
 import { queueSocketUrl } from "./serverUrl.js";
 
 const HEARTBEAT_MS = 25_000;
@@ -45,7 +45,6 @@ export function useQueue(active: boolean): QueueState {
       ws.send(
         JSON.stringify({
           type: "queue",
-          nickname: nickname() === "" ? "Player" : nickname(),
           session: storedSession(),
           token: playerToken(),
         } satisfies LobbyClientMessage),
