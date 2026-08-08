@@ -1,3 +1,6 @@
+/** The workspace root's version — see `appVersion` in `vite.config.ts`. */
+declare const __APP_VERSION__: string;
+
 /** Stamped in by Vite at build time — see `buildId` in `vite.config.ts`. */
 declare const __BUILD_ID__: string;
 

@@ -1,0 +1,35 @@
+# Cloudflare Pages reads this from the root of the deployed directory, so it
+# lives in public/ to be copied there verbatim.
+#
+# Pages' own default is `max-age=0, must-revalidate` on every file, leaning
+# entirely on ETag revalidation. That is safe but costs a round trip per asset
+# on a cold load, and it says nothing about the one file where the answer
+# genuinely matters. Both halves are stated here rather than inherited.
+#
+# None of this takes effect while the ericonice.com zone overrides browser TTL
+# — a zone-level Browser Cache TTL rewrites what the origin says. The cache
+# rule scoped to this hostname has to respect origin TTL first.
+
+# Content-hashed filenames, so a changed file is a changed URL and a year is
+# safe. This is the only reason a phone on cellular does not refetch the whole
+# app on every launch.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Never cached, at any layer. This is the file whose freshness gates every
+# other file: if the browser answers an update check from its own cache, no new
+# worker installs, nothing reloads, and an installed app sits on an old build
+# indefinitely.
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+# The shell and the manifest are small, and both decide what the rest of the
+# app will be. Revalidating them on every load is the cheap half of the trade.
+/
+  Cache-Control: public, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/manifest.webmanifest
+  Cache-Control: public, max-age=0, must-revalidate

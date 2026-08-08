@@ -1,8 +1,23 @@
-import type { PlayerView } from "@hb/engine";
+import type { DealPhase, PlayerView } from "@hb/engine";
 import { ContractText } from "./CardText.js";
 
 export interface TopBarProps {
   readonly opponentName: string;
+  /**
+   * The phase being *shown*, which is not always the one the engine is in — the
+   * board holds the last turn of the draw and of the play on screen after the
+   * engine has moved on. The bar has to lag with it, or it announces the
+   * scorepad over a trick still being collected.
+   */
+  readonly phase: DealPhase;
+  /**
+   * Gives up the match. Null when there is no way out of this one.
+   *
+   * Top left, where a phone puts the way back, because leaving is the inverse
+   * of arriving rather than a preference — which is what it read as while it
+   * sat among the toggles in Settings, and why nobody found it there.
+   */
+  readonly onLeave: (() => void) | null;
   /** Dev-only shortcut past the phase in progress. Null when it is not on offer. */
   readonly onSkipPhase: (() => void) | null;
   /** Opens the rubber scorepad. Null on the screen that already shows it. */
@@ -13,12 +28,14 @@ export interface TopBarProps {
 
 function Headline({
   opponentName,
+  phase,
   view,
 }: {
   readonly opponentName: string;
+  readonly phase: DealPhase;
   readonly view: PlayerView;
 }): React.JSX.Element {
-  switch (view.phase) {
+  switch (phase) {
     case "draw": {
       return <>Draw</>;
     }
@@ -48,26 +65,38 @@ function Headline({
  * itself, and how many cards you hold is answered by looking at your hand —
  * during the auction it is always 13, which is no answer at all.
  */
-function detail(view: PlayerView): string | null {
-  if (view.phase === "play" || view.phase === "complete") {
+function detail(phase: DealPhase, view: PlayerView): string | null {
+  if (phase === "play" || phase === "complete") {
     return `Tricks  ${view.tricksWon[view.me]} – ${view.tricksWon[view.opponent]}`;
   }
   return null;
 }
 
 export function TopBar({
+  onLeave,
   onShowScore,
   onShowSettings,
   onSkipPhase,
   opponentName,
+  phase,
   view,
 }: TopBarProps): React.JSX.Element {
-  const right = detail(view);
+  const right = detail(phase, view);
 
   return (
     <header className="flex items-baseline justify-between gap-2 border-b border-white/10 px-4 py-2">
-      <h1 className="text-base font-semibold text-white">
-        <Headline opponentName={opponentName} view={view} />
+      {onLeave === null ? null : (
+        <button
+          type="button"
+          aria-label="Leave"
+          className="-ml-2 px-2 text-xl leading-4 text-white/70"
+          onClick={onLeave}
+        >
+          ‹
+        </button>
+      )}
+      <h1 className="min-w-0 truncate text-base font-semibold text-white">
+        <Headline opponentName={opponentName} phase={phase} view={view} />
       </h1>
       <span className="flex-1" />
       {right === null ? null : <p className="text-sm tabular-nums text-white/60">{right}</p>}

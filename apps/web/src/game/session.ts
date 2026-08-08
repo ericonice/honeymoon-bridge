@@ -70,6 +70,14 @@ export interface GameSession {
   readonly opponentLastDraw: DrawPair | null;
   /** Card 1 of the opponent's draw turn. Null in anything that ships. */
   readonly opponentPending: Card | null;
+  /**
+   * True once the other player has asked to move on and you have not.
+   *
+   * The mirror of `waitingToContinue`, and the half that was missing: without
+   * it a finished deal looks the same whether or not somebody is sitting there
+   * waiting on you. Always false against the computer, which never asks.
+   */
+  readonly opponentWaitingToContinue: boolean;
   /** The rubber including the deal just finished. */
   readonly rubber: RubberState;
   /** Present once the deal is complete and was not passed out. */

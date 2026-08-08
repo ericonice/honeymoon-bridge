@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useAccount } from "./game/account.js";
 import { readDevTools, writeDevTools } from "./game/devTools.js";
 import { preferredFormat, setPreferredFormat } from "./game/identity.js";
@@ -56,23 +56,15 @@ export function App(): React.JSX.Element {
   // Already on the document by now — main.tsx applies it before the first
   // render — so this is the same value again, for the card back to read.
   const [theme, setTheme] = useState(readTheme);
-  // Set by the table screen while one is open. Leaving can be started from
-  // Settings, which lives out here, so the exit has to be reachable from here.
-  const leaveTable = useRef<(() => void) | null>(null);
 
   const showSettings = (): void => {
     setShowingSettings(true);
   };
 
-  // Screens with no game behind them, so Settings must not offer to leave one.
-  const noGame =
-    screen === "home" || screen === "record" || (typeof screen === "object" && "token" in screen);
-
+  // Only ever the last step of leaving. Giving up the seat is the table
+  // screen's own job, since it is the one holding the socket and the only one
+  // that knows what to warn about before it does.
   const goHome = (): void => {
-    // Give up the seat first, so the other player is told rather than left
-    // watching a countdown for somebody who is not coming back.
-    leaveTable.current?.();
-    leaveTable.current = null;
     // Clears the table out of the URL too, or a refresh would rejoin it.
     setLocationCode(null);
     setScreen("home");
@@ -133,7 +125,12 @@ export function App(): React.JSX.Element {
             }}
           />
         ) : screen === "robot" ? (
-          <RobotGame devTools={devTools} peeking={peeking} onShowSettings={showSettings} />
+          <RobotGame
+            devTools={devTools}
+            peeking={peeking}
+            onLeave={goHome}
+            onShowSettings={showSettings}
+          />
         ) : "token" in screen ? (
           <SignIn
             token={screen.token}
@@ -150,9 +147,6 @@ export function App(): React.JSX.Element {
             code={screen.code}
             devTools={devTools}
             peeking={peeking}
-            registerLeave={(leave) => {
-              leaveTable.current = leave;
-            }}
             onLeave={goHome}
             onShowSettings={showSettings}
           />
@@ -184,9 +178,6 @@ export function App(): React.JSX.Element {
               applyTheme(next);
               setTheme(next);
             }}
-            // Abandoning a rubber loses it — there is nowhere to keep it — so this
-            // is only offered while there is one to abandon.
-            onLeaveGame={noGame ? null : goHome}
           />
         ) : null}
       </div>

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { matchNoun } from "../game/labels.js";
 import { useNetworkSession } from "../game/networkSession.js";
 import type { NetworkGame } from "../game/networkSession.js";
+import type { GameSession } from "../game/session.js";
 import { inviteLink } from "../game/serverUrl.js";
 import { GameBoard } from "./GameBoard.js";
 
@@ -10,15 +11,8 @@ export interface TableGameProps {
   readonly code: string;
   readonly devTools: boolean;
   readonly peeking: boolean;
+  /** Goes back to the home screen. The seat is given up before this is called. */
   onLeave(): void;
-  /**
-   * Hands the app a way to give up this seat.
-   *
-   * Leaving can be started from Settings, which is rendered outside this
-   * screen, so the app needs to be able to reach the socket. Every exit then
-   * goes through one path and the other player is always told.
-   */
-  registerLeave(leave: (() => void) | null): void;
   onShowSettings(): void;
 }
 
@@ -151,26 +145,62 @@ function Message({
   );
 }
 
+/**
+ * The other seat has been emptied, which is somebody leaving on purpose — a
+ * dropped socket keeps its seat and gets a countdown instead.
+ *
+ * A match that has already been won is a different piece of news: leaving one
+ * of those is declining another rather than abandoning anything, and the result
+ * is on the record either way. Telling somebody a rubber they just won has been
+ * thrown away would be the wrong news entirely.
+ */
+function TheyLeft({
+  onLeave,
+  session,
+}: {
+  readonly session: GameSession;
+  onLeave(): void;
+}): React.JSX.Element {
+  const noun = matchNoun(session.rubber.format);
+
+  if (session.rubber.complete) {
+    return (
+      <Message
+        title={`${session.opponentName} has left`}
+        detail={`The ${noun} is over and on your record. Nothing was lost by stopping here.`}
+        onLeave={onLeave}
+      />
+    );
+  }
+
+  return (
+    <Message
+      title={`${session.opponentName} left the table`}
+      detail={`The ${noun} ends here — there is nowhere to keep an unfinished one.`}
+      onLeave={onLeave}
+    />
+  );
+}
+
 export function TableGame({
   code,
   devTools,
   onLeave,
   onShowSettings,
   peeking,
-  registerLeave,
 }: TableGameProps): React.JSX.Element {
   const game = useNetworkSession(code);
-  const { leave } = game;
 
-  useEffect(() => {
-    registerLeave(leave);
-    return () => {
-      registerLeave(null);
-    };
-  }, [leave, registerLeave]);
+  // Every way out of this screen goes through here, so the other player is
+  // always told rather than left watching a countdown for somebody who has
+  // gone. Giving up a seat the server has already closed costs nothing.
+  const quit = (): void => {
+    game.leave();
+    onLeave();
+  };
 
   if (game.error !== null && game.session === null) {
-    return <Message title={game.error} detail="" onLeave={onLeave} />;
+    return <Message title={game.error} detail="" onLeave={quit} />;
   }
 
   // Nothing heard from the server yet. Deliberately not the waiting screen:
@@ -187,29 +217,31 @@ export function TableGame({
   // A seat that has been emptied after the game began is somebody who left, as
   // distinct from somebody whose socket dropped — they keep their seat.
   const seat = game.seat;
-  const theyLeft =
-    seat !== null && game.session !== null && game.table.seats[opponentOf(seat)] === null;
-  if (theyLeft) {
-    return (
-      <Message
-        title="They left the table"
-        detail={`The ${matchNoun(game.session?.rubber.format ?? "rubber")} ends here — there is nowhere to keep it.`}
-        onLeave={onLeave}
-      />
-    );
+  const session = game.session;
+  if (seat !== null && session !== null && game.table.seats[opponentOf(seat)] === null) {
+    return <TheyLeft session={session} onLeave={quit} />;
   }
 
-  if (game.session === null) {
-    return <Waiting code={code} game={game} onLeave={onLeave} />;
+  if (session === null) {
+    return <Waiting code={code} game={game} onLeave={quit} />;
   }
+
+  const noun = matchNoun(session.rubber.format);
 
   return (
     <>
       <Interruption game={game} />
       <GameBoard
         devTools={devTools}
+        exit={{
+          leave: quit,
+          title: "Leave the table?",
+          // The half Settings never said: somebody else is sitting there, and
+          // walking out ends their match too.
+          warning: `${session.opponentName} will be told the ${noun} ended. There is nowhere to keep an unfinished one.`,
+        }}
         peeking={peeking}
-        session={game.session}
+        session={session}
         onShowSettings={onShowSettings}
       />
     </>

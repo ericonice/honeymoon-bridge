@@ -1,13 +1,37 @@
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 /**
+ * The version of the whole product, read from the workspace root rather than
+ * from this app's own `package.json`.
+ *
+ * The engine, the protocol, the server and the app ship together and are only
+ * ever meaningful together — a rules change is as much a new version as a
+ * screen is. One number for the repo says that; four numbers to bump in
+ * lockstep would only be four chances to forget one.
+ *
+ * Relative to this file rather than to the working directory, so it survives
+ * being built from the repo root or from the workspace.
+ */
+function appVersion(): string {
+  const manifest = JSON.parse(
+    readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+  ) as { readonly version: string };
+  return manifest.version;
+}
+
+/**
  * The commit this was built from, with a `+` when the tree had uncommitted
  * changes. Shown in the app so a deployed build can be told apart from a stale
  * cached one — a question that is otherwise unanswerable from a phone.
+ *
+ * This answers a different question from the version above: the version is what
+ * was *intended*, the commit is what is actually running. Two people on "0.1.0"
+ * can still be a deploy apart.
  */
 function buildId(): string {
   try {
@@ -21,6 +45,7 @@ function buildId(): string {
 
 export default defineConfig({
   define: {
+    __APP_VERSION__: JSON.stringify(appVersion()),
     __BUILD_ID__: JSON.stringify(buildId()),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString().slice(0, 16).replace("T", " ")),
   },
@@ -30,6 +55,12 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["icons/apple-touch-icon.png"],
+      // The generated `registerSW.js` registers with the default
+      // `updateViaCache: "imports"`, which lets a browser answer an update
+      // check for `sw.js` out of its own HTTP cache — and a CDN browser TTL on
+      // that file then pins an installed app to an old build. `game/update.ts`
+      // registers by hand to say `"none"` instead.
+      injectRegister: null,
       manifest: {
         name: "Honeymoon Bridge",
         short_name: "Honeymoon",

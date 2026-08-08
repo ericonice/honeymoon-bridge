@@ -1,6 +1,8 @@
 import type { MatchFormat } from "@hb/engine";
+import { useState } from "react";
 import type { Account } from "../game/account.js";
 import type { Theme } from "../game/theme.js";
+import { checkForUpdate, reinstall } from "../game/update.js";
 import { AccountPanel } from "./AccountPanel.js";
 
 export interface SettingsOverlayProps {
@@ -12,8 +14,6 @@ export interface SettingsOverlayProps {
   /** Development builds only; the row is compiled out of anything that ships. */
   readonly peeking: boolean;
   readonly theme: Theme;
-  /** Null when there is no game to leave. */
-  readonly onLeaveGame: (() => void) | null;
   onClose(): void;
   onDevToolsChange(enabled: boolean): void;
   onFormatChange(format: MatchFormat): void;
@@ -60,11 +60,89 @@ function Toggle({
 }
 
 /**
+ * `current` is the interesting one: it is the state in which somebody is
+ * looking at a build they believe is stale and has just been told it is not.
+ * That is exactly when the reinstall is worth offering, and the only time.
+ */
+type UpdateState = "checking" | "current" | "failed" | "idle" | "reinstalling" | "updating";
+
+/**
+ * The manual half of staying current.
+ *
+ * `registerServiceWorker` already checks on every return to the app, so this
+ * button is for the case where somebody has reason to doubt it — a deploy that
+ * just went out, or a screen that looks wrong. It reports the answer either
+ * way, because "nothing happened" is indistinguishable from "the check is
+ * broken", which is the position this whole feature was written from.
+ */
+function UpdateControl(): React.JSX.Element {
+  const [state, setState] = useState<UpdateState>("idle");
+
+  async function check(): Promise<void> {
+    setState("checking");
+    // On an update the page is about to reload underneath this, so that state
+    // is only ever seen for a moment.
+    setState(await checkForUpdate());
+  }
+
+  if (state === "updating") {
+    return <p className="mt-3 text-xs text-emerald-300">A new build is on its way — reloading.</p>;
+  }
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        className="w-full rounded-xl border border-white/15 px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+        disabled={state === "checking" || state === "reinstalling"}
+        onClick={() => {
+          void check();
+        }}
+      >
+        {state === "checking" ? "Checking…" : "Check for updates"}
+      </button>
+
+      {state === "failed" ? (
+        <p className="mt-2 text-xs text-white/40">
+          Could not reach the server, so there is no answer either way.
+        </p>
+      ) : null}
+
+      {state === "reinstalling" ? (
+        <p className="mt-2 text-xs text-white/40">Reinstalling…</p>
+      ) : null}
+
+      {state === "current" ? (
+        <p className="mt-2 text-xs text-white/40">
+          This is the latest build.{" "}
+          <button
+            type="button"
+            className="underline"
+            onClick={() => {
+              setState("reinstalling");
+              void reinstall();
+            }}
+          >
+            Reinstall
+          </button>{" "}
+          to download the whole app again.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * Settings, reachable from every screen.
  *
  * Only ever offers controls that are safe in a build anyone can open — see
  * `readDevTools`. Anything that could show a player cards they are not entitled
  * to is compiled out of production rather than hidden behind a switch here.
+ *
+ * Everything in here changes a preference and nothing acts on the match in
+ * progress. Leaving one used to sit at the bottom of this list, which is both
+ * the wrong category and the wrong place to look for it; it lives in the top
+ * bar of the board now, where a phone puts the way back.
  */
 export function SettingsOverlay({
   account,
@@ -74,7 +152,6 @@ export function SettingsOverlay({
   onClose,
   onDevToolsChange,
   onFormatChange,
-  onLeaveGame,
   onPeekingChange,
   onSignOut,
   onThemeChange,
@@ -139,33 +216,17 @@ export function SettingsOverlay({
           </div>
         ) : null}
 
-        {onLeaveGame === null ? null : (
-          <div className="w-full max-w-sm pt-2">
-            <button
-              type="button"
-              className="w-full rounded-xl border border-white/25 px-4 py-3 text-base text-white"
-              onClick={onLeaveGame}
-            >
-              Leave game
-            </button>
-            {/* Deliberately not naming the format: this panel knows the setting
-                for the *next* match, which is not necessarily the one being
-                abandoned. Saying neither is better than saying the wrong one. */}
-            <p className="mt-1 text-xs text-white/40">
-              Whatever has been played is lost — there is nowhere to keep it yet.
-            </p>
-          </div>
-        )}
-
         {/* From a phone there is otherwise no way to tell a fresh deployment
             from a service worker still serving the last one. */}
         <div className="w-full max-w-sm pt-2 text-xs text-white/40">
-          <p>
+          <p className="text-sm text-white/55">Version {__APP_VERSION__}</p>
+          <p className="mt-0.5">
             Build {__BUILD_ID__} · {__BUILD_TIME__} UTC
           </p>
           <p className="mt-1 text-white/30">
             A trailing + means the build had uncommitted changes.
           </p>
+          <UpdateControl />
         </div>
       </div>
 

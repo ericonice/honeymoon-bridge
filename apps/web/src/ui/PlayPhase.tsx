@@ -99,7 +99,11 @@ function resultLine(view: PlayerView, trick: TableTrick | null, opponentName: st
  * follow a suit.
  */
 function instruction(view: PlayerView): string | null {
-  if (view.toAct !== view.me) {
+  // There is nothing left to do once the deal is over. The board goes on
+  // showing this screen for a beat so the thirteenth trick can be collected,
+  // and the engine has already handed the lead on by then — so without this it
+  // asks for a card that no longer exists.
+  if (view.phase !== "play" || view.toAct !== view.me) {
     return null;
   }
   return view.currentTrick.length === 0 ? "Your lead" : "Follow suit";
@@ -173,11 +177,18 @@ export function PlayPhase({ lastTrick, opponentName, view, vulnerable }: PlayPha
 
   const trickKey = `${view.completedTricks.length}-${resolved ? "done" : "live"}`;
 
-  const yourTurn = view.toAct === view.me;
+  // Neither seat is on turn once the deal is over, so both go quiet while the
+  // last trick is collected rather than one of them claiming a move to make.
+  const live = view.phase === "play";
+  const yourTurn = live && view.toAct === view.me;
 
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center gap-3">
-      <SeatLabel active={!yourTurn} name={opponentName} vulnerable={vulnerable[view.opponent]} />
+      <SeatLabel
+        active={live && !yourTurn}
+        name={opponentName}
+        vulnerable={vulnerable[view.opponent]}
+      />
       <Slot
         played={cards.find((played) => played.by === view.opponent)}
         sweepTo={sweepTo}

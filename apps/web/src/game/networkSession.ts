@@ -54,6 +54,7 @@ function sessionFrom(
     opponentLastDraw: null,
     opponentName: them?.nickname ?? "Opponent",
     opponentPending: null,
+    opponentWaitingToContinue: !table.ready[seat] && table.ready[opponentOf(seat)],
     rubber: snapshot.rubber,
     score: snapshot.score,
     // Not on offer: the server decides what a seat may do and would refuse it.

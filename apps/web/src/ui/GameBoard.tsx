@@ -1,19 +1,37 @@
 import { legalActionsForView, revealsUnseenCard } from "@hb/engine";
-import type { Call, Card, DealPhase, PlayerView } from "@hb/engine";
+import type { Call, Card, DealPhase, DrawReveal, PlayerView } from "@hb/engine";
 import { useEffect, useRef, useState } from "react";
-import { drawTurnDuration } from "../game/timing.js";
+import { drawTurnDuration, trickCollectDuration } from "../game/timing.js";
 import type { GameSession } from "../game/session.js";
 import { AuctionPhase } from "./AuctionPhase.js";
 import { DealComplete } from "./DealComplete.js";
 import { DrawPhase } from "./DrawPhase.js";
 import { Hand } from "./Hand.js";
+import { LeaveConfirm } from "./LeaveConfirm.js";
 import { OpponentPeek } from "./OpponentPeek.js";
 import { PlayPhase } from "./PlayPhase.js";
 import { ScoreOverlay } from "./ScoreOverlay.js";
 import { TopBar } from "./TopBar.js";
 
+/**
+ * The way out of this match, and what to say about taking it.
+ *
+ * The board knows nothing about where the game is running, and whether anybody
+ * else is told when you walk out is exactly that knowledge — so the words come
+ * from whoever set the game up, and this only renders them.
+ */
+export interface GameExit {
+  /** Heading on the confirmation. */
+  readonly title: string;
+  /** What leaving costs. */
+  readonly warning: string;
+  leave(): void;
+}
+
 export interface GameBoardProps {
   readonly devTools: boolean;
+  /** Null when this match has no exit of its own to offer. */
+  readonly exit: GameExit | null;
   readonly peeking: boolean;
   readonly session: GameSession;
   onShowSettings(): void;
@@ -30,10 +48,12 @@ function playableCards(view: PlayerView): Card[] | null {
 }
 
 function CurrentPhase({
+  onDone,
   peeking,
   phase,
   session,
 }: {
+  readonly onDone: (() => void) | null;
   readonly peeking: boolean;
   readonly phase: DealPhase;
   readonly session: GameSession;
@@ -84,16 +104,82 @@ function CurrentPhase({
         <DealComplete
           history={history}
           opponentName={session.opponentName}
+          opponentWaitingToContinue={session.opponentWaitingToContinue}
           rubber={rubber}
           score={score}
           view={view}
           vulnerable={vulnerable}
           waitingToContinue={session.waitingToContinue}
+          onDone={onDone}
           onNextDeal={nextDeal}
         />
       );
     }
   }
+}
+
+/**
+ * How long the phase just left still needs to finish what it was showing, or
+ * null when it has nothing left to play out.
+ *
+ * Both of these are the same mistake in two places: a phase ends on a beat the
+ * engine has no reason to wait for, so the last turn of the phase is the one
+ * turn nobody gets to watch.
+ */
+function finalBeat(left: DealPhase, entered: DealPhase, lastDraw: DrawReveal | null): number | null {
+  // The twenty-sixth draw turn becomes the auction the instant it resolves, and
+  // on a keep that made card 2 — which §1.3 requires you to be shown — the one
+  // card of the phase you never saw.
+  if (left === "draw" && lastDraw !== null) {
+    return drawTurnDuration(lastDraw.taken !== null, revealsUnseenCard(lastDraw));
+  }
+  // The thirteenth trick is the same shape. The deal is complete the moment the
+  // last card lands, so the trick that decides a contract was swept off the
+  // table by the scorepad arriving on top of it.
+  if (left === "play" && entered === "complete") {
+    return trickCollectDuration();
+  }
+  return null;
+}
+
+/**
+ * The phase to *show*, which lags the engine at the end of the draw and again
+ * at the end of the play.
+ *
+ * Holding the outgoing phase for the length of its own last animation gives the
+ * final turn the same ending as every turn before it.
+ */
+function useShownPhase(session: GameSession): DealPhase {
+  const actual = session.view.phase;
+  const [held, setHeld] = useState<DealPhase | null>(null);
+  const previous = useRef(actual);
+  const { lastDraw } = session;
+
+  useEffect(() => {
+    const left = previous.current;
+    previous.current = actual;
+    if (left === actual) {
+      return;
+    }
+
+    const hold = finalBeat(left, actual, lastDraw);
+    if (hold === null) {
+      return;
+    }
+
+    setHeld(left);
+    const timer = setTimeout(() => {
+      setHeld(null);
+    }, hold);
+    return () => {
+      clearTimeout(timer);
+    };
+    // Only the transition matters; re-running on anything else would reopen a
+    // phase the player has already left.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actual]);
+
+  return held ?? actual;
 }
 
 /**
@@ -104,65 +190,42 @@ function CurrentPhase({
  * component serves both is the test of whether `GameSession` was drawn in the
  * right place.
  */
-/**
- * The phase to *show*, which lags the engine at the end of the draw.
- *
- * The engine turns the twenty-sixth draw turn straight into the auction, so the
- * last turn of the phase was the one turn you never got to watch — and on a
- * keep, that meant never seeing the card 2 the rules require you to look at.
- * Holding the draw screen for the length of its own animation gives the final
- * turn the same ending as the twenty-five before it.
- */
-function useShownPhase(session: GameSession): DealPhase {
-  const actual = session.view.phase;
-  const [held, setHeld] = useState(false);
-  const previous = useRef(actual);
-  const { lastDraw } = session;
-
-  useEffect(() => {
-    const wasDrawing = previous.current === "draw";
-    previous.current = actual;
-    if (!wasDrawing || actual === "draw" || lastDraw === null) {
-      return;
-    }
-
-    setHeld(true);
-    const timer = setTimeout(
-      () => {
-        setHeld(false);
-      },
-      drawTurnDuration(lastDraw.taken !== null, revealsUnseenCard(lastDraw)),
-    );
-    return () => {
-      clearTimeout(timer);
-    };
-    // Only the transition matters; re-running on anything else would reopen a
-    // phase the player has already left.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [actual]);
-
-  return held ? "draw" : actual;
-}
-
 export function GameBoard({
   devTools,
+  exit,
   onShowSettings,
   peeking,
   session,
 }: GameBoardProps): React.JSX.Element {
   const [showingScore, setShowingScore] = useState(false);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
   const { view } = session;
   const phase = useShownPhase(session);
   const playable = playableCards(view);
+
+  // Once the match is won there is nothing left to lose by going, so the exit
+  // stops asking. Mid-rubber it always asks, including between deals — a
+  // part-score and two games' history are exactly what walking out throws away.
+  const settled = session.rubber.complete;
 
   return (
     <>
       <TopBar
         opponentName={session.opponentName}
+        phase={phase}
         view={view}
+        onLeave={
+          exit === null
+            ? null
+            : settled
+              ? exit.leave
+              : () => {
+                  setConfirmingLeave(true);
+                }
+        }
         // The score screen already shows the scorepad in full.
         onShowScore={
-          view.phase === "complete"
+          phase === "complete"
             ? null
             : () => {
                 setShowingScore(true);
@@ -181,10 +244,20 @@ export function GameBoard({
       ) : null}
 
       <main className="flex min-h-0 flex-1 flex-col">
-        <CurrentPhase peeking={peeking} phase={phase} session={session} />
+        {/* Offered only on the screen that ends a match, where "done" is a real
+            answer rather than a way out of something unfinished. */}
+        <CurrentPhase
+          peeking={peeking}
+          phase={phase}
+          session={session}
+          onDone={settled && exit !== null ? exit.leave : null}
+        />
       </main>
 
-      {phase === "complete" ? null : (
+      {/* "No cards yet" is true at the start of the draw and a lie at the end
+          of the thirteenth trick, where the hand is empty because all of it has
+          been played. An emptied hand takes its row with it. */}
+      {phase === "complete" || (phase !== "draw" && view.hand.length === 0) ? null : (
         <footer className="border-t border-white/10 pt-1">
           <Hand
             cards={view.hand}
@@ -211,6 +284,17 @@ export function GameBoard({
           onClose={() => {
             setShowingScore(false);
           }}
+        />
+      ) : null}
+
+      {confirmingLeave && exit !== null ? (
+        <LeaveConfirm
+          title={exit.title}
+          warning={exit.warning}
+          onCancel={() => {
+            setConfirmingLeave(false);
+          }}
+          onConfirm={exit.leave}
         />
       ) : null}
     </>

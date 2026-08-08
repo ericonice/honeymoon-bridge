@@ -176,6 +176,8 @@ export function useLocalSession(): GameSession {
     // sight-unseen gamble the phase is built on, even in a development build.
     opponentPending:
       import.meta.env.DEV && deal.phase === "draw" && deal.toAct === OPPONENT ? deal.pending : null,
+    // The computer neither waits nor asks: `nextDeal` simply deals.
+    opponentWaitingToContinue: false,
     rubber: summary.rubber,
     score: summary.score,
     skipPhase,

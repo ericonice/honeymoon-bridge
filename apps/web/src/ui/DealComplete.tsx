@@ -8,12 +8,19 @@ import { Scorepad } from "./Scorepad.js";
 export interface DealCompleteProps {
   readonly history: readonly DealRecord[];
   readonly opponentName: string;
+  /** True once the other player has asked to move on and you have not. */
+  readonly opponentWaitingToContinue: boolean;
   readonly rubber: RubberState;
   readonly score: DealScore | null;
   readonly view: PlayerView;
   readonly vulnerable: Pair<boolean>;
   /** True once you have asked to move on and the other player has not. */
   readonly waitingToContinue: boolean;
+  /**
+   * Finishes here rather than starting another. Null while a match is still
+   * running, where stopping is abandoning and belongs behind a confirmation.
+   */
+  readonly onDone: (() => void) | null;
   onNextDeal(): void;
 }
 
@@ -115,8 +122,10 @@ function Columns({ opponentName }: { readonly opponentName: string }): React.JSX
 
 export function DealComplete({
   history,
+  onDone,
   onNextDeal,
   opponentName,
+  opponentWaitingToContinue,
   rubber,
   score,
   view,
@@ -124,18 +133,44 @@ export function DealComplete({
   waitingToContinue,
 }: DealCompleteProps): React.JSX.Element {
   const button = (
-    <button
-      type="button"
-      className="w-full max-w-sm rounded-xl bg-white px-4 py-4 text-lg font-semibold text-stone-900 disabled:bg-white/10 disabled:text-white/60"
-      disabled={waitingToContinue}
-      onClick={onNextDeal}
-    >
-      {waitingToContinue
-        ? `Waiting for ${opponentName}…`
-        : rubber.complete
-          ? `New ${matchNoun(rubber.format)}`
-          : "Next deal"}
-    </button>
+    <div className="flex w-full max-w-sm flex-col items-center gap-3">
+      <button
+        type="button"
+        className="w-full rounded-xl bg-white px-4 py-4 text-lg font-semibold text-stone-900 disabled:bg-white/10 disabled:text-white/60"
+        disabled={waitingToContinue}
+        onClick={onNextDeal}
+      >
+        {waitingToContinue
+          ? `Waiting for ${opponentName}…`
+          : rubber.complete
+            ? `New ${matchNoun(rubber.format)}`
+            : "Next deal"}
+      </button>
+
+      {/* The other half of "Waiting for X…". Moving on takes both, and without
+          this a finished deal looks the same whether or not somebody is sitting
+          there waiting on you. */}
+      {opponentWaitingToContinue ? (
+        <p className="text-xs text-white/50">
+          {rubber.complete
+            ? `${opponentName} wants another ${matchNoun(rubber.format)}`
+            : `${opponentName} is ready`}
+        </p>
+      ) : null}
+
+      {/* A won match used to offer only another one, which left no way to say
+          that was the last. Nothing is lost by taking it — the match is over
+          and already recorded — so it goes without a confirmation. */}
+      {onDone === null ? null : (
+        <button
+          type="button"
+          className="text-sm text-white/50 underline underline-offset-4"
+          onClick={onDone}
+        >
+          Done for now
+        </button>
+      )}
+    </div>
   );
 
   if (rubber.complete) {

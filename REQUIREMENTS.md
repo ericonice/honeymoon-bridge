@@ -142,6 +142,17 @@ Full contract bridge auction once both hands are complete.
   trick the instant the second card lands and hands the lead to the winner, so without this the
   trick you just lost would be replaced by the next card before you had read it. The direction of
   the sweep is what says who took it.
+- **The thirteenth trick gets the same ending as the other twelve.** The deal is complete the
+  instant the last card lands, so the scorepad used to arrive on top of a trick that had not been
+  collected yet — and the trick that decides whether a contract was made is the one most worth
+  watching. The board therefore holds the play screen for exactly as long as a trick takes to
+  collect before the score replaces it.
+
+  This is the same mistake as the one §1.3 fixes at the end of the draw, in the same place: a phase
+  ends on a beat the engine has no reason to wait for, so its last turn is the one turn nobody sees.
+  Both are now one rule — the phase being *shown* lags the phase the engine is in by the length of
+  whatever it was still animating — and anything that ends a phase on an animation belongs there
+  too rather than in a third special case.
 - **The last completed trick can be called back up on demand.** Both cards were played face up and
   both players saw them, so this is public — it is the paper game's right to look back at the trick
   just played. Only the most recent one: the whole history is available in the state, and offering
@@ -312,6 +323,33 @@ that were never dealt as though they were still out there, so it is too cautious
     end the table.
 - **Abandoned rubbers end unscored** and the table is discarded. There are no ratings,
   standings or history to protect.
+- **Leaving is the way back, not a preference.** The exit sat at the bottom of Settings for a
+  while, which was wrong twice over: Settings is a list of things to *change* and every other row
+  in it is a toggle, and nobody hunting for the way out of a game opens a gear icon to find it. It
+  is a back control in the top left of the board now, where a phone puts the way back from
+  anywhere. This holds in both versions — the game against the computer is left the same way.
+
+  Because that makes it easy to hit, it **asks first**, and the confirmation names what is actually
+  lost. That differs by version, so the words come from whoever set the game up rather than from
+  the board, which deliberately does not know where it is running: against the computer only this
+  browser's deals go, while at a table somebody else is sitting there and their match ends too.
+  The one thing the old warning never said is the one thing worth saying.
+
+  It stops asking once the match has been won. There is nothing left to lose by then, and a
+  confirmation that guards nothing only teaches people to tap through confirmations.
+- **A won match offers to stop, not only to go again.** It used to offer a new rubber and nothing
+  else, so the only ways to say *that was the last one* were the buried exit or closing the tab.
+  Another match stays the weighted choice — with family, one more is usually the point — with
+  **Done for now** beside it, unconfirmed, since the result is already recorded.
+
+  **Leaving a finished match is declining a rematch, not abandoning one**, and the other player is
+  told so. The seat empties identically either way, so the difference is read from whether the
+  rubber was complete; without that, somebody who had just won would be told their rubber ended
+  with nowhere to keep it, which is both alarming and untrue.
+- **Waiting to continue is stated from both sides.** Moving on from a finished deal takes both
+  players, so one of them is always waiting on the other, and only the waiting half was ever shown
+  — the player being waited *on* saw an ordinary scorepad with no sign that anybody was sitting
+  there. Both seats' readiness is already on the wire; it just had to be said.
 - **No turn clock in v1.** The risk is a 26-turn draw phase held up by a slow opponent;
   revisit if it proves annoying in practice.
 
