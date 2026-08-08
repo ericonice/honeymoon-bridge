@@ -26,6 +26,10 @@ export function recordsUrl(): string {
   return `${ORIGIN}/api/results`;
 }
 
+export function resetRecordUrl(): string {
+  return `${ORIGIN}/api/results/reset`;
+}
+
 export function robotResultUrl(): string {
   return `${ORIGIN}/api/results/robot`;
 }

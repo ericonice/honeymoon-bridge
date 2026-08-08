@@ -1,6 +1,7 @@
 import type { MatchFormat } from "@hb/engine";
+import { useState } from "react";
 import type { OpponentRecord } from "../game/records.js";
-import { useRecords } from "../game/records.js";
+import { resetRecord, useRecords } from "../game/records.js";
 
 export interface RecordProps {
   readonly signedIn: boolean;
@@ -14,9 +15,16 @@ export interface RecordProps {
  * A date is not what the question is: "three days ago" answers whether this is
  * a standing rivalry or something from last winter, and an exact timestamp on a
  * scoreboard is precision nobody asked for.
+ *
+ * Counted in calendar days from local midnight, not in elapsed 24-hour spans.
+ * Dividing the difference by a day says "today" about a game played at eleven
+ * last night and "yesterday" about one from two mornings ago — which is wrong
+ * in the small hours, and the small hours are when this gets played.
  */
-function whenPlayed(at: number): string {
-  const days = Math.floor((Date.now() - at) / 86_400_000);
+export function whenPlayed(at: number): string {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const days = Math.ceil((midnight.getTime() - at) / 86_400_000);
   if (days <= 0) {
     return "today";
   }
@@ -30,8 +38,9 @@ function whenPlayed(at: number): string {
   return months <= 1 ? "a month ago" : `${months} months ago`;
 }
 
-function count(n: number, noun: string): string {
-  return `${n.toLocaleString()} ${noun}${n === 1 ? "" : "s"}`;
+/** The plural is given rather than guessed, because "matchs" is not a word. */
+function count(n: number, singular: string, plural = `${singular}s`): string {
+  return `${n.toLocaleString()} ${n === 1 ? singular : plural}`;
 }
 
 function Row({ record }: { readonly record: OpponentRecord }): React.JSX.Element {
@@ -48,7 +57,12 @@ function Row({ record }: { readonly record: OpponentRecord }): React.JSX.Element
           <span className="block font-mono text-base tabular-nums">
             {record.won}–{record.lost}
           </span>
-          <span className="block text-xs text-white/40">{count(played, "match")}</span>
+          {/* Both totals together. Deals used to sit beside "today" at the
+              bottom, which read as a count of deals played today rather than
+              the running total it is. */}
+          <span className="block text-xs text-white/40">
+            {count(played, "match", "matches")} · {count(record.deals, "deal")}
+          </span>
         </span>
       </div>
 
@@ -63,9 +77,7 @@ function Row({ record }: { readonly record: OpponentRecord }): React.JSX.Element
             {Math.abs(margin).toLocaleString()}
           </span>
         </span>
-        <span className="shrink-0">
-          {count(record.deals, "deal")} · {whenPlayed(record.lastPlayed)}
-        </span>
+        <span className="shrink-0">last played {whenPlayed(record.lastPlayed)}</span>
       </div>
     </div>
   );
@@ -98,6 +110,84 @@ const SECTIONS: { readonly format: MatchFormat; readonly title: string }[] = [
   { format: "game", title: "Single games" },
 ];
 
+/**
+ * Forgetting the lot.
+ *
+ * Asks first, and the confirmation names what is actually lost — the same rule
+ * §2.2 arrived at for leaving a game, and for the same reason: a warning that
+ * does not say what goes only teaches people to tap through warnings.
+ *
+ * What it names is the part that surprises: a rubber against a person stays on
+ * *their* record. It is one row holding both sides of a game they also played,
+ * and taking a win off somebody else's scoreboard is not this button's to do.
+ */
+function Reset({ onDone }: { onDone(): void }): React.JSX.Element {
+  const [asking, setAsking] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const go = async (): Promise<void> => {
+    setWorking(true);
+    setFailed(false);
+    const forgotten = await resetRecord().catch(() => null);
+    setWorking(false);
+    if (forgotten === null) {
+      setFailed(true);
+      return;
+    }
+    setAsking(false);
+    onDone();
+  };
+
+  if (!asking) {
+    return (
+      <button
+        type="button"
+        className="self-start text-sm text-white/40 underline underline-offset-4"
+        onClick={() => {
+          setAsking(true);
+        }}
+      >
+        Reset your record
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-white/15 px-4 py-3">
+      <p className="text-sm text-white/70">
+        Forget every match on your record? Games against the computer are deleted outright. Games
+        against people leave your record but stay on theirs — they played them too.
+      </p>
+      <p className="mt-1 text-xs text-white/40">This cannot be undone.</p>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          className="flex-1 rounded-lg bg-amber-200 px-3 py-2 text-sm font-semibold text-stone-900 disabled:opacity-35"
+          disabled={working}
+          onClick={() => {
+            void go();
+          }}
+        >
+          {working ? "Forgetting…" : "Forget them"}
+        </button>
+        <button
+          type="button"
+          className="flex-1 rounded-lg border border-white/25 px-3 py-2 text-sm"
+          disabled={working}
+          onClick={() => {
+            setAsking(false);
+            setFailed(false);
+          }}
+        >
+          Keep them
+        </button>
+      </div>
+      {failed ? <p className="mt-2 text-sm text-amber-200">That did not work. Try again.</p> : null}
+    </div>
+  );
+}
+
 function Body({
   signedIn,
   onSignIn,
@@ -105,7 +195,7 @@ function Body({
   readonly signedIn: boolean;
   onSignIn(): void;
 }): React.JSX.Element {
-  const { loading, records } = useRecords(signedIn);
+  const { loading, records, reload } = useRecords(signedIn);
 
   if (!signedIn) {
     return (
@@ -155,6 +245,7 @@ function Body({
           <Group records={section.robot} title="Against the computer" />
         </div>
       ))}
+      <Reset onDone={reload} />
     </div>
   );
 }

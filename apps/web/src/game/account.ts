@@ -32,7 +32,8 @@ export type LinkRequestOutcome =
   | { readonly ok: true };
 
 /**
- * Asks the server to send a sign-in link.
+ * Asks the server to send a sign-in email — always a code, and a link as well
+ * when this is a browser tab rather than an installed app.
  *
  * Success is only ever an acknowledgement: the server will not say whether the
  * address is one it already knows, so this cannot report it either, and the

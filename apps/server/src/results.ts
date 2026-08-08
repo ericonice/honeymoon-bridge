@@ -60,6 +60,48 @@ export async function recordRubber(env: Env, rubber: FinishedRubber, now: number
     .run();
 }
 
+/**
+ * Forgets this account's record.
+ *
+ * Two different operations, because a row is not always this person's to
+ * delete. A rubber against the computer involves nobody else and goes. A rubber
+ * against a *person* is one row holding both sides of a game they also played,
+ * and deleting it would reach into their record and remove a match they won —
+ * so their side is left exactly as it is and only this side is detached.
+ *
+ * Detaching means clearing the account and replacing the device token with one
+ * that maps to nothing, since the token is the other way a row is recognised.
+ * What the opponent keeps is a game against somebody with the name that was
+ * used at the time, which is the truth of what happened.
+ */
+export async function resetRecord(env: Env, accountId: string): Promise<number> {
+  const mine = "(account{seat} = ?1 OR token{seat} IN (SELECT token FROM account_tokens WHERE account_id = ?1))";
+  const asSeat = (seat: 0 | 1): string => mine.replaceAll("{seat}", String(seat));
+
+  const removed = await env.DB.prepare(
+    `DELETE FROM results WHERE token1 = ?2 AND ${asSeat(0)}`,
+  )
+    .bind(accountId, ROBOT_TOKEN)
+    .run();
+
+  let detached = 0;
+  for (const seat of [0, 1] as const) {
+    const other = seat === 0 ? 1 : 0;
+    const result = await env.DB.prepare(
+      `UPDATE results SET account${seat} = NULL, token${seat} = ?3
+       WHERE token${other} != ?2 AND ${asSeat(seat)}`,
+    )
+      // A value nothing maps to, so the row can never be recognised as this
+      // person's again — including by an account that later claims the device
+      // token this replaces.
+      .bind(accountId, ROBOT_TOKEN, `forgotten:${crypto.randomUUID()}`)
+      .run();
+    detached += result.meta.changes;
+  }
+
+  return removed.meta.changes + detached;
+}
+
 interface ResultRow {
   readonly account0: string | null;
   readonly account1: string | null;

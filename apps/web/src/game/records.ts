@@ -2,7 +2,7 @@ import type { MatchFormat } from "@hb/engine";
 import { useCallback, useEffect, useState } from "react";
 import { storedSession } from "./account.js";
 import { nickname, playerToken } from "./identity.js";
-import { recordsUrl, robotResultUrl } from "./serverUrl.js";
+import { recordsUrl, resetRecordUrl, robotResultUrl } from "./serverUrl.js";
 
 /** A record against one opponent. The computer's looks exactly like a person's. */
 export interface OpponentRecord {
@@ -60,6 +60,29 @@ export async function reportRobotRubber(rubber: RobotRubber): Promise<void> {
     // Offline, most likely — the robot game is meant to work with no network at
     // all, so this is an expected outcome rather than a fault.
   }
+}
+
+/**
+ * Forgets this account's record, and returns how many matches it let go of.
+ *
+ * Games against people are not deleted, only detached from this account — they
+ * are one row shared with somebody who also played them, and taking a match off
+ * their record is not this button's to do.
+ */
+export async function resetRecord(): Promise<number | null> {
+  const session = storedSession();
+  if (session === null) {
+    return null;
+  }
+  const response = await fetch(resetRecordUrl(), {
+    headers: { Authorization: `Bearer ${session}` },
+    method: "POST",
+  });
+  if (!response.ok) {
+    return null;
+  }
+  const body = (await response.json()) as { forgotten: number };
+  return body.forgotten;
 }
 
 export interface RecordsState {

@@ -39,7 +39,7 @@ function asking(destination: Destination): { readonly body: string; readonly tit
     }
     case "table": {
       return {
-        body: `Table ${destination.code} is waiting for you. Signing in takes an email and a tap, and the link will bring you straight back here.`,
+        body: `Table ${destination.code} is waiting for you. Signing in takes an email and a short code, and you come straight back here.`,
         title: "Sign in to join the table",
       };
     }
@@ -239,11 +239,13 @@ export function SignInWall({
             void send();
           }}
         >
-          {sending ? "Sending…" : "Send a sign-in link"}
+          {sending ? "Sending…" : "Email me a sign-in code"}
         </button>
 
         <p className="mt-1 text-xs text-white/40">
-          No password. We send a link, you open it, and it lasts a year on this device.
+          No password. We email you a six-character code, you type it in, and this device stays
+          signed in for a year.
+          {installed ? "" : " There is a link in the email too, if you would rather tap it."}
         </p>
 
         {error === null ? null : <p className="mt-1 text-sm text-amber-200">{error}</p>}

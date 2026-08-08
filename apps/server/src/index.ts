@@ -14,7 +14,7 @@ import {
 } from "./auth.js";
 import { inviteCode, isInviteCode } from "./codes.js";
 import type { Env } from "./env.js";
-import { recordRubber, recordsFor, ROBOT_TOKEN } from "./results.js";
+import { recordRubber, recordsFor, resetRecord, ROBOT_TOKEN } from "./results.js";
 
 export { Lobby } from "./lobby.js";
 export { Table } from "./table.js";
@@ -338,6 +338,16 @@ export default {
         return json(request, { error: "Not signed in" }, 401);
       }
       return json(request, await recordsFor(env, accountId));
+    }
+
+    // Forgetting your own record. Deliberately does not take anything away
+    // from the person on the other side of it — see `resetRecord`.
+    if (url.pathname === "/api/results/reset" && request.method === "POST") {
+      const accountId = await accountFromRequest(request, env, Date.now());
+      if (accountId === null) {
+        return json(request, { error: "Not signed in" }, 401);
+      }
+      return json(request, { forgotten: await resetRecord(env, accountId) });
     }
 
     // A rubber against the computer, reported by the browser that played it.
