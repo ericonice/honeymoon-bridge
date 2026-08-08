@@ -12,8 +12,18 @@
  * have walked away from.
  */
 export type LobbyClientMessage =
-  /** Join the queue. The token is the same one that identifies a seat. */
-  | { readonly type: "queue"; readonly nickname: string; readonly token: string }
+  /**
+   * Join the queue. The token is the same one that identifies a seat, and the
+   * session is the same one sent when joining a table — carried here so the
+   * queue can decline to pair somebody with themselves across two devices they
+   * are signed in on, which a token alone cannot detect.
+   */
+  | {
+      readonly type: "queue";
+      readonly nickname: string;
+      readonly session: string | null;
+      readonly token: string;
+    }
   | { readonly type: "heartbeat" };
 
 export type LobbyServerMessage =

@@ -1,0 +1,203 @@
+import type { PlayerId } from "@hb/engine";
+import type { Env } from "./env.js";
+
+/**
+ * The token standing in for the computer.
+ *
+ * Not a device and not an account. Deliberately not a UUID, so it cannot collide
+ * with a real `playerToken`, and recognisable on sight in the table.
+ */
+export const ROBOT_TOKEN = "@robot";
+
+/** One seat's side of a finished rubber, as the table knew it. */
+export interface FinishedSeat {
+  readonly accountId: string | null;
+  readonly nickname: string;
+  readonly points: number;
+  readonly token: string;
+}
+
+export interface FinishedRubber {
+  readonly code: string;
+  readonly deals: number;
+  readonly seats: readonly [FinishedSeat, FinishedSeat];
+  readonly winner: PlayerId;
+}
+
+/**
+ * Writes a finished rubber down.
+ *
+ * Recorded even when neither player was signed in. A token can be claimed by an
+ * account afterwards, and the row is what makes that claim worth anything — a
+ * rubber discarded for want of an account at the time could never be recovered.
+ */
+export async function recordRubber(env: Env, rubber: FinishedRubber, now: number): Promise<void> {
+  const [first, second] = rubber.seats;
+  await env.DB.prepare(
+    `INSERT INTO results
+       (id, finished_at, table_code, winner, deals,
+        account0, token0, nickname0, points0,
+        account1, token1, nickname1, points1)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      crypto.randomUUID(),
+      now,
+      rubber.code,
+      rubber.winner,
+      rubber.deals,
+      first.accountId,
+      first.token,
+      first.nickname,
+      first.points,
+      second.accountId,
+      second.token,
+      second.nickname,
+      second.points,
+    )
+    .run();
+}
+
+interface ResultRow {
+  readonly account0: string | null;
+  readonly account1: string | null;
+  readonly deals: number;
+  readonly finished_at: number;
+  readonly nickname0: string;
+  readonly nickname1: string;
+  readonly points0: number;
+  readonly points1: number;
+  readonly token0: string;
+  readonly token1: string;
+  readonly winner: number;
+}
+
+/** A record against one opponent, from the asking player's side. */
+export interface OpponentRecord {
+  /** Null when that opponent has never signed in, so there is no address to show. */
+  readonly email: string | null;
+  readonly lastPlayed: number;
+  readonly lost: number;
+  readonly name: string;
+  readonly pointsAgainst: number;
+  readonly pointsFor: number;
+  readonly won: number;
+}
+
+export interface Records {
+  readonly opponents: OpponentRecord[];
+  /** Kept apart from the rest — see `recordsFor`. Null until one has been played. */
+  readonly robot: OpponentRecord | null;
+}
+
+type Tallied = OpponentRecord & { readonly account: string | null; readonly token: string };
+
+/**
+ * Everyone this account has finished a rubber against.
+ *
+ * Aggregated here rather than in SQL. A person is two different columns
+ * depending on which seat they took, and both of them resolve through a second
+ * table, which turns a plain grouping into something long enough to be worth
+ * getting wrong. The volume this will ever see is a family's worth of card
+ * games, so the readable version is also the right one.
+ *
+ * The computer is reported separately rather than listed among the opponents,
+ * and not only because it reads better. A networked rubber is witnessed by the
+ * server, which owned the state and applied every rule; a rubber against the
+ * computer happened entirely in a browser and is taken on that browser's word.
+ * They are not the same kind of fact and should not be added together.
+ */
+export async function recordsFor(env: Env, accountId: string): Promise<Records> {
+  const tokens = await env.DB.prepare("SELECT token FROM account_tokens WHERE account_id = ?")
+    .bind(accountId)
+    .all<{ token: string }>();
+  const mine = new Set(tokens.results.map((row) => row.token));
+
+  const rows = await env.DB.prepare(
+    `SELECT * FROM results
+     WHERE account0 = ?1 OR account1 = ?1 OR token0 IN (
+       SELECT token FROM account_tokens WHERE account_id = ?1
+     ) OR token1 IN (
+       SELECT token FROM account_tokens WHERE account_id = ?1
+     )
+     ORDER BY finished_at`,
+  )
+    .bind(accountId)
+    .all<ResultRow>();
+
+  const isMine = (account: string | null, token: string): boolean =>
+    account === accountId || (account === null && mine.has(token));
+
+  const tally = new Map<string, Tallied>();
+
+  for (const row of rows.results) {
+    // Which seat was this account? Seat 0 unless only seat 1 matches.
+    const seat: PlayerId = isMine(row.account0, row.token0) ? 0 : 1;
+    const them = seat === 0 ? 1 : 0;
+
+    const theirAccount = them === 0 ? row.account0 : row.account1;
+    const theirToken = them === 0 ? row.token0 : row.token1;
+    const theirName = them === 0 ? row.nickname0 : row.nickname1;
+    const myPoints = seat === 0 ? row.points0 : row.points1;
+    const theirPoints = them === 0 ? row.points0 : row.points1;
+
+    // Grouped by account where there is one, and otherwise by the device. Two
+    // anonymous opponents are two different people; the same one twice is one.
+    const key = theirAccount ?? `token:${theirToken}`;
+    const running = tally.get(key);
+    const won = row.winner === seat;
+
+    tally.set(key, {
+      account: theirAccount,
+      email: null,
+      lastPlayed: row.finished_at,
+      lost: (running?.lost ?? 0) + (won ? 0 : 1),
+      // The most recent one, since a nickname is whatever they last called
+      // themselves rather than a name they own.
+      name: theirName,
+      pointsAgainst: (running?.pointsAgainst ?? 0) + theirPoints,
+      pointsFor: (running?.pointsFor ?? 0) + myPoints,
+      token: theirToken,
+      won: (running?.won ?? 0) + (won ? 1 : 0),
+    });
+  }
+
+  const all = [...tally.values()];
+  const robot = all.find((entry) => entry.token === ROBOT_TOKEN) ?? null;
+
+  return {
+    opponents: await withEmails(
+      env,
+      all.filter((entry) => entry.token !== ROBOT_TOKEN),
+    ),
+    robot: robot === null ? null : { ...strip(robot) },
+  };
+}
+
+function strip({ account: _account, token: _token, ...record }: Tallied): OpponentRecord {
+  return record;
+}
+
+/** Fills in the address for opponents who have an account, in one query. */
+async function withEmails(env: Env, records: readonly Tallied[]): Promise<OpponentRecord[]> {
+  const ids = [...new Set(records.flatMap((r) => (r.account === null ? [] : [r.account])))];
+  const emails = new Map<string, string>();
+
+  if (ids.length > 0) {
+    const rows = await env.DB.prepare(
+      `SELECT id, email FROM accounts WHERE id IN (${ids.map(() => "?").join(",")})`,
+    )
+      .bind(...ids)
+      .all<{ email: string; id: string }>();
+    for (const row of rows.results) {
+      emails.set(row.id, row.email);
+    }
+  }
+
+  return records
+    .map((record) => ({
+      ...strip(record),
+      email: record.account === null ? null : (emails.get(record.account) ?? null),
+    }))
+    .sort((a, b) => b.lastPlayed - a.lastPlayed);
+}

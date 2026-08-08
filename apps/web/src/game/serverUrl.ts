@@ -18,6 +18,18 @@ export function createTableUrl(): string {
   return `${ORIGIN}/api/tables`;
 }
 
+export function authUrl(action: "me" | "request" | "verify"): string {
+  return `${ORIGIN}/api/auth/${action}`;
+}
+
+export function recordsUrl(): string {
+  return `${ORIGIN}/api/results`;
+}
+
+export function robotResultUrl(): string {
+  return `${ORIGIN}/api/results/robot`;
+}
+
 export function tableSocketUrl(code: string): string {
   // Same origin, other scheme: ws for http, wss for https.
   return `${ORIGIN.replace(/^http/, "ws")}/api/tables/${code}/ws`;
@@ -38,7 +50,32 @@ export function codeFromLocation(): string | null {
   return match === null ? null : match[1]!.toUpperCase();
 }
 
+/**
+ * The sign-in token in the current URL, if this page was opened from an email.
+ *
+ * Left exactly as it was sent, unlike a table code: this is base64url, so case
+ * is part of the value rather than presentation.
+ */
+export function signInTokenFromLocation(): string | null {
+  const match = /^#\/signin\/([A-Za-z0-9_-]+)$/.exec(window.location.hash);
+  return match === null ? null : match[1]!;
+}
+
+/**
+ * Takes the hash back off the URL.
+ *
+ * Worth doing the moment a sign-in link has been spent: leaving it there means a
+ * refresh retries a token that now cannot work, and the honest report of that is
+ * indistinguishable from the link having genuinely gone stale.
+ */
+export function clearLocationHash(): void {
+  history.replaceState(null, "", window.location.pathname);
+}
+
 export function setLocationCode(code: string | null): void {
-  const next = code === null ? " " : `#/table/${code}`;
-  history.replaceState(null, "", code === null ? window.location.pathname : next);
+  if (code === null) {
+    clearLocationHash();
+    return;
+  }
+  history.replaceState(null, "", `#/table/${code}`);
 }

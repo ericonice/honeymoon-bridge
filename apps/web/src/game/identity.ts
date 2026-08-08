@@ -1,46 +1,34 @@
-const TOKEN_KEY = "hb.token";
+import { readStored, writeStored } from "./storage.js";
+
 const NICKNAME_KEY = "hb.nickname";
-
-function read(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    // Safari in private mode throws rather than returning null.
-    return null;
-  }
-}
-
-function write(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // The value still holds for this session, which is enough to finish a game.
-  }
-}
+const TOKEN_KEY = "hb.token";
 
 /**
  * The opaque value that reclaims a seat after a dropped socket.
  *
- * This is the whole of identity — §2.2 has no accounts, no passwords and no
- * email. The accepted cost is that a rubber is bound to the device that started
- * it: clearing browser data or moving to another phone forfeits the seat, and
- * there is deliberately no way to recover one, because a recoverable seat would
- * need an account to recover it to.
+ * This remains the whole of identity as far as a game is concerned: a seat is
+ * held by a device, an invite works for someone who has never signed in, and
+ * nothing here gates play. Signing in adds a durable name for a player, not a
+ * requirement to be one.
+ *
+ * An account *claims* this token rather than replacing it — see
+ * `redeemSignInToken`. The cost that remains is that a rubber in progress is
+ * still bound to the device that started it, because nothing yet moves one.
  */
 export function playerToken(): string {
-  const existing = read(TOKEN_KEY);
+  const existing = readStored(TOKEN_KEY);
   if (existing !== null && existing !== "") {
     return existing;
   }
   const token = crypto.randomUUID();
-  write(TOKEN_KEY, token);
+  writeStored(TOKEN_KEY, token);
   return token;
 }
 
 export function nickname(): string {
-  return read(NICKNAME_KEY) ?? "";
+  return readStored(NICKNAME_KEY) ?? "";
 }
 
 export function setNickname(value: string): void {
-  write(NICKNAME_KEY, value.trim().slice(0, 20));
+  writeStored(NICKNAME_KEY, value.trim().slice(0, 20));
 }

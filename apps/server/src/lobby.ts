@@ -1,10 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
 import type { LobbyClientMessage, LobbyServerMessage } from "@hb/protocol";
+import { verifySession } from "./auth.js";
 import { inviteCode } from "./codes.js";
 import type { Env } from "./env.js";
 
 /** Kept on the socket so a hibernated lobby still knows who is queued. */
 interface Waiting {
+  /** The verified account, or null for somebody queuing anonymously. */
+  readonly accountId: string | null;
   readonly nickname: string;
   readonly token: string;
 }
@@ -43,7 +46,16 @@ export class Lobby extends DurableObject<Env> {
       return;
     }
 
-    ws.serializeAttachment({ nickname: message.nickname, token: message.token } satisfies Waiting);
+    const accountId =
+      message.session === null || message.session === ""
+        ? null
+        : await verifySession(message.session, this.env, Date.now());
+
+    ws.serializeAttachment({
+      accountId,
+      nickname: message.nickname,
+      token: message.token,
+    } satisfies Waiting);
     await this.#pair();
   }
 
@@ -65,13 +77,29 @@ export class Lobby extends DurableObject<Env> {
       });
   }
 
+  /**
+   * Whether these two are actually different people.
+   *
+   * Two tabs on one device share a token, which is how this gets tested and so
+   * the first thing that would go wrong. Two *devices* signed into one account
+   * do not share a token, and nothing but the account can tell them apart — so
+   * a verified account, when both have one, is the stronger test of the two.
+   */
+  #distinct(a: Waiting, b: Waiting): boolean {
+    if (a.token === b.token) {
+      return false;
+    }
+    return a.accountId === null || b.accountId === null || a.accountId !== b.accountId;
+  }
+
   async #pair(): Promise<void> {
     const queued = this.#queued();
 
-    // Never match somebody with themselves. Two tabs on one device is how this
-    // gets tested, so it is the first thing that would go wrong.
     const first = queued[0];
-    const second = queued.find((entry) => entry.seat.token !== first?.seat.token);
+    const second =
+      first === undefined
+        ? undefined
+        : queued.find((entry) => this.#distinct(first.seat, entry.seat));
 
     if (first === undefined || second === undefined) {
       this.#announce();

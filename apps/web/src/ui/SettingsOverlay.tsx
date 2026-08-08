@@ -1,6 +1,11 @@
+import type { Account } from "../game/account.js";
 import type { Theme } from "../game/theme.js";
+import { AccountPanel } from "./AccountPanel.js";
+import { RecordPanel } from "./RecordPanel.js";
 
 export interface SettingsOverlayProps {
+  readonly account: Account | null;
+  readonly checkingAccount: boolean;
   readonly devTools: boolean;
   /** Development builds only; the row is compiled out of anything that ships. */
   readonly peeking: boolean;
@@ -10,6 +15,7 @@ export interface SettingsOverlayProps {
   onClose(): void;
   onDevToolsChange(enabled: boolean): void;
   onPeekingChange(enabled: boolean): void;
+  onSignOut(): void;
   onThemeChange(theme: Theme): void;
 }
 
@@ -58,11 +64,14 @@ function Toggle({
  * to is compiled out of production rather than hidden behind a switch here.
  */
 export function SettingsOverlay({
+  account,
+  checkingAccount,
   devTools,
   onClose,
   onDevToolsChange,
   onLeaveGame,
   onPeekingChange,
+  onSignOut,
   onThemeChange,
   peeking,
   theme,
@@ -72,8 +81,16 @@ export function SettingsOverlay({
       <div className="flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto px-5 py-6">
         <h2 className="w-full max-w-sm text-lg font-semibold">Settings</h2>
 
-        {/* First, because it is the only row here a player rather than a
-            developer came looking for. */}
+        <div className="w-full max-w-sm">
+          <AccountPanel account={account} checking={checkingAccount} onSignOut={onSignOut} />
+        </div>
+
+        <div className="w-full max-w-sm">
+          <RecordPanel active signedIn={account !== null} />
+        </div>
+
+        {/* First of the switches, because it is the only one a player rather
+            than a developer came looking for. */}
         <div className="w-full max-w-sm">
           <Toggle
             label="Hockey theme"

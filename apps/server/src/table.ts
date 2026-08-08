@@ -1,10 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
-import { applyTableAction, nextDeal, startTable } from "@hb/engine";
+import { applyTableAction, nextDeal, startTable, summarise, totalScore } from "@hb/engine";
 import type { PlayerId, TableState } from "@hb/engine";
 import { snapshotFor } from "@hb/protocol";
 import type { ClientMessage, Seating, ServerMessage, TableInfo } from "@hb/protocol";
+import { verifySession } from "./auth.js";
 import { dealSeed } from "./codes.js";
 import type { Env } from "./env.js";
+import { recordRubber } from "./results.js";
 
 /** §2.2: a player who vanishes has three minutes to come back before the table is written off. */
 const GRACE_MS = 3 * 60 * 1000;
@@ -13,8 +15,18 @@ const GRACE_MS = 3 * 60 * 1000;
 const OPEN = 1;
 
 interface SeatRecord {
+  /**
+   * The signed-in account holding this seat, or null for somebody playing
+   * anonymously — which is a supported way to play and always will be (§3.7).
+   *
+   * Set only from a session whose signature verified here. It is what a result
+   * will eventually be attributed to, so it must never be taken on a client's
+   * word: a seat that merely *claimed* an account would make the record it
+   * produced worthless.
+   */
+  readonly accountId: string | null;
   readonly nickname: string;
-  /** The opaque value in the client's `localStorage`. This is the whole of identity. */
+  /** The opaque value in the client's `localStorage`. This is what holds a seat. */
   readonly token: string;
 }
 
@@ -22,6 +34,14 @@ interface Stored {
   readonly code: string;
   /** Who has asked to move on from the finished deal. Cleared when it is dealt. */
   readonly ready: [boolean, boolean];
+  /**
+   * Whether the rubber in progress has already been written to `results`.
+   *
+   * A rubber is won part-way through an action, and actions keep arriving after
+   * it — so without this the same rubber would be recorded once per remaining
+   * message. Cleared when a fresh rubber starts.
+   */
+  readonly recorded: boolean;
   readonly seats: [SeatRecord | null, SeatRecord | null];
   /** Null until both seats are filled and the first deal is dealt. */
   readonly table: TableState | null;
@@ -57,7 +77,13 @@ export class Table extends DurableObject<Env> {
       return this.#cached;
     }
     const stored = await this.ctx.storage.get<Stored>("table");
-    this.#cached = stored ?? { code: "", ready: [false, false], seats: [null, null], table: null };
+    this.#cached = stored ?? {
+      code: "",
+      ready: [false, false],
+      recorded: false,
+      seats: [null, null],
+      table: null,
+    };
     return this.#cached;
   }
 
@@ -98,7 +124,7 @@ export class Table extends DurableObject<Env> {
 
     switch (message.type) {
       case "join": {
-        await this.#join(ws, message.token, message.nickname);
+        await this.#join(ws, message);
         return;
       }
       case "action": {
@@ -152,12 +178,18 @@ export class Table extends DurableObject<Env> {
     this.#cached = null;
   }
 
-  async #join(ws: WebSocket, token: string, nickname: string): Promise<void> {
+  async #join(
+    ws: WebSocket,
+    message: Extract<ClientMessage, { type: "join" }>,
+  ): Promise<void> {
+    const { nickname, token } = message;
     const stored = await this.#load();
     const seats: [SeatRecord | null, SeatRecord | null] = [stored.seats[0], stored.seats[1]];
 
     // A token reclaims the seat it already holds; that is what makes a dropped
-    // socket a reconnection rather than a new player.
+    // socket a reconnection rather than a new player. Deliberately still the
+    // token and not the account — §4 keeps a rubber on the device that started
+    // it, so signing in on a second phone does not walk off with a seat.
     let seat = SEATS.find((index) => seats[index]?.token === token) ?? null;
     if (seat === null) {
       seat = SEATS.find((index) => seats[index] === null) ?? null;
@@ -168,7 +200,7 @@ export class Table extends DurableObject<Env> {
       return;
     }
 
-    seats[seat] = { nickname, token };
+    seats[seat] = { accountId: await this.#accountFrom(message.session), nickname, token };
     ws.serializeAttachment({ seat, token } satisfies Attachment);
 
     // Both seats filled and nothing dealt yet: start the rubber. The seed is
@@ -201,8 +233,59 @@ export class Table extends DurableObject<Env> {
       return;
     }
 
-    await this.#save({ ...stored, table: next });
+    await this.#save({ ...stored, recorded: await this.#recordIfWon(stored, next), table: next });
     await this.#broadcast();
+  }
+
+  /**
+   * Writes the rubber down if that action just won it.
+   *
+   * Deliberately cannot fail the move. A rubber is a real thing that happened
+   * whether or not the database was reachable, and throwing here would reject an
+   * action the engine had already accepted — losing the game to save the record
+   * of it.
+   */
+  async #recordIfWon(stored: Stored, next: TableState): Promise<boolean> {
+    const [first, second] = stored.seats;
+    if (stored.recorded || first === null || second === null) {
+      return stored.recorded;
+    }
+
+    const { history, rubber } = summarise(next);
+    if (!rubber.complete || rubber.winner === null) {
+      return false;
+    }
+
+    const points = totalScore(rubber);
+    try {
+      await recordRubber(
+        this.env,
+        {
+          code: stored.code,
+          deals: history.length,
+          seats: [
+            {
+              accountId: first.accountId,
+              nickname: first.nickname,
+              points: points[0],
+              token: first.token,
+            },
+            {
+              accountId: second.accountId,
+              nickname: second.nickname,
+              points: points[1],
+              token: second.token,
+            },
+          ],
+          winner: rubber.winner,
+        },
+        Date.now(),
+      );
+      return true;
+    } catch (error) {
+      console.error("could not record the rubber", (error as Error).message);
+      return false;
+    }
   }
 
   async #nextDeal(ws: WebSocket): Promise<void> {
@@ -230,6 +313,9 @@ export class Table extends DurableObject<Env> {
     await this.#save({
       ...stored,
       ready: [false, false],
+      // `nextDeal` starts a fresh rubber when the last one was won, so whatever
+      // was recorded belongs to a rubber that is now over.
+      recorded: false,
       table: nextDeal(stored.table, dealSeed()),
     });
     await this.#broadcast();
@@ -257,6 +343,22 @@ export class Table extends DurableObject<Env> {
     await this.ctx.storage.deleteAlarm();
     await this.#broadcast();
     ws.close(1000, "Left the table");
+  }
+
+  /**
+   * The account a session actually proves, or null.
+   *
+   * Anything that fails — absent, forged, altered, signed with a secret that has
+   * since been rotated — comes back null and the player is seated anonymously.
+   * Refusing the seat would be the wrong trade: playing has never required an
+   * account, and a stale session should cost somebody their attribution, not
+   * their game.
+   */
+  async #accountFrom(session: string | null): Promise<string | null> {
+    if (session === null || session === "") {
+      return null;
+    }
+    return verifySession(session, this.env, Date.now());
   }
 
   #seatOf(ws: WebSocket): PlayerId | null {

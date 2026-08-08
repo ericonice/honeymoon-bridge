@@ -1,11 +1,18 @@
 import { useRef, useState } from "react";
+import { useAccount } from "./game/account.js";
 import { readDevTools, writeDevTools } from "./game/devTools.js";
-import { codeFromLocation, setLocationCode } from "./game/serverUrl.js";
+import {
+  clearLocationHash,
+  codeFromLocation,
+  setLocationCode,
+  signInTokenFromLocation,
+} from "./game/serverUrl.js";
 import { applyTheme, readTheme, ThemeContext, writeTheme } from "./game/theme.js";
 import { Home } from "./ui/Home.js";
 import { RobotGame } from "./ui/RobotGame.js";
 import { Searching } from "./ui/Searching.js";
 import { SettingsOverlay } from "./ui/SettingsOverlay.js";
+import { SignIn } from "./ui/SignIn.js";
 import { TableGame } from "./ui/TableGame.js";
 
 /**
@@ -13,15 +20,29 @@ import { TableGame } from "./ui/TableGame.js";
  *
  * A table lives in the URL hash rather than in a route, so an invite link is a
  * plain link that needs no server-side rewrite to work — and opening one goes
- * straight to the table instead of past a menu.
+ * straight to the table instead of past a menu. A sign-in link is the same
+ * trick, which is why it is a hash too rather than a path the server would have
+ * to know about.
  */
-type Screen = "home" | "robot" | "searching" | { readonly code: string };
+type Screen =
+  | "home"
+  | "robot"
+  | "searching"
+  | { readonly code: string }
+  | { readonly token: string };
 
 export function App(): React.JSX.Element {
   const [screen, setScreen] = useState<Screen>(() => {
+    // Checked before the table code: arriving with both would mean a stale hash,
+    // and the link just opened is the one this person meant.
+    const token = signInTokenFromLocation();
+    if (token !== null) {
+      return { token };
+    }
     const code = codeFromLocation();
     return code === null ? "home" : { code };
   });
+  const account = useAccount();
   const [showingSettings, setShowingSettings] = useState(false);
   const [peeking, setPeeking] = useState(false);
   // Read once, then owned here so Settings can change it without a reload.
@@ -36,6 +57,9 @@ export function App(): React.JSX.Element {
   const showSettings = (): void => {
     setShowingSettings(true);
   };
+
+  // Signing in is not a game, so Settings must not offer to leave one from here.
+  const signingIn = typeof screen === "object" && "token" in screen;
 
   const goHome = (): void => {
     // Give up the seat first, so the other player is told rather than left
@@ -92,6 +116,17 @@ export function App(): React.JSX.Element {
           />
         ) : screen === "robot" ? (
           <RobotGame devTools={devTools} peeking={peeking} onShowSettings={showSettings} />
+        ) : "token" in screen ? (
+          <SignIn
+            token={screen.token}
+            onDone={() => {
+              // The token is spent either way, so the hash goes before anything
+              // can retry it.
+              clearLocationHash();
+              account.refresh();
+              setScreen("home");
+            }}
+          />
         ) : (
           <TableGame
             code={screen.code}
@@ -107,6 +142,8 @@ export function App(): React.JSX.Element {
 
         {showingSettings ? (
           <SettingsOverlay
+            account={account.account}
+            checkingAccount={account.checking}
             devTools={devTools}
             peeking={peeking}
             theme={theme}
@@ -118,6 +155,7 @@ export function App(): React.JSX.Element {
               setDevTools(enabled);
             }}
             onPeekingChange={setPeeking}
+            onSignOut={account.signOut}
             onThemeChange={(next) => {
               writeTheme(next);
               applyTheme(next);
@@ -125,7 +163,7 @@ export function App(): React.JSX.Element {
             }}
             // Abandoning a rubber loses it — there is nowhere to keep it — so this
             // is only offered while there is one to abandon.
-            onLeaveGame={screen === "home" ? null : goHome}
+            onLeaveGame={screen === "home" || signingIn ? null : goHome}
           />
         ) : null}
       </div>

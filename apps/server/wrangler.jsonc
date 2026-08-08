@@ -3,6 +3,28 @@
   "name": "honeymoon-bridge-server",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
+  // A custom domain rather than the workers.dev subdomain, so the API is
+  // same-site with the app. Nothing depends on that yet — the session lives in
+  // localStorage — but a login session belongs in an HttpOnly cookie, and that
+  // only works cleanly when the two share a registrable domain. Cheaper to
+  // settle now than to move an origin clients have already cached.
+  //
+  // Cloudflare creates the DNS record itself, since the zone is in this account.
+  "routes": [{ "pattern": "api.ericonice.com", "custom_domain": true }],
+  // Durable Objects are right for one live table: one object, one game,
+  // strongly consistent. They are wrong for "my record against everyone", which
+  // is a query across many players — so accounts and results live in D1.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "honeymoon-bridge",
+      "database_id": "4bff42cc-19d7-4151-9bcc-3014e8e84af1",
+      // Belongs to the database, not to the Worker. The top-level "migrations"
+      // below is an unrelated thing with a confusingly similar name: those
+      // migrate Durable Object classes, these migrate D1 schema.
+      "migrations_dir": "migrations"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       { "name": "LOBBY", "class_name": "Lobby" },

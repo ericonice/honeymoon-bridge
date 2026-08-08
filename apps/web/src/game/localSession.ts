@@ -9,12 +9,14 @@ import {
   sortHand,
   startTable,
   summarise,
+  totalScore,
   viewFor,
 } from "@hb/engine";
 import type { DealAction, DealState, PlayerId, TableState } from "@hb/engine";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createHeuristicBot } from "../bot/heuristicBot.js";
 import { botActionFor } from "./botTurn.js";
+import { reportRobotRubber } from "./records.js";
 import type { GameSession } from "./session.js";
 import { drawTurnDuration, trickCollectDuration } from "./timing.js";
 
@@ -126,6 +128,32 @@ export function useLocalSession(): GameSession {
   }, [table]);
 
   const summary = summarise(table);
+
+  // Reported the moment the rubber is won rather than when the player taps on,
+  // because tapping on is optional: closing the tab on a won rubber is a
+  // perfectly ordinary way to finish, and it would otherwise go unrecorded.
+  const reported = useRef(false);
+  useEffect(() => {
+    if (!summary.rubber.complete || summary.rubber.winner === null || reported.current) {
+      return;
+    }
+    reported.current = true;
+    const points = totalScore(summary.rubber);
+    void reportRobotRubber({
+      deals: summary.history.length,
+      points: points[HUMAN],
+      pointsAgainst: points[OPPONENT],
+      won: summary.rubber.winner === HUMAN,
+    });
+  }, [summary.history.length, summary.rubber]);
+
+  // A new rubber is a new thing to report. `nextDeal` starts one once the last
+  // was won, which is the only way past a completed rubber.
+  useEffect(() => {
+    if (!summary.rubber.complete) {
+      reported.current = false;
+    }
+  }, [summary.rubber.complete]);
 
   return {
     act,

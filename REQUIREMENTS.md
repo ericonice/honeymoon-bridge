@@ -283,10 +283,18 @@ that were never dealt as though they were still out there, so it is too cautious
   useful to somebody who was sent it. The queue is the one place two strangers can meet, and it
   is open to anyone who knows the site's address — accepted deliberately, on the grounds that
   there is no chat, nothing to steal, and no account to compromise.
-- **Identity:** anonymous. A nickname plus an opaque token persisted in `localStorage`,
-  which is what reclaims the player's seat on reconnect. No accounts, no passwords, no email.
-  Accepted trade-off: a rubber is bound to the device that started it — clearing browser data
-  or switching phones mid-rubber forfeits the seat.
+- **Identity: anonymous, with an optional account over the top.** A nickname plus an opaque token
+  persisted in `localStorage` is what seats a player and what reclaims the seat on reconnect. That
+  is unchanged, and it remains the whole of identity as far as a *table* is concerned.
+
+  This bullet originally read "no accounts, no passwords, no email". Accounts now exist — §3.7 —
+  and they are strictly additive: signing in is never required to play, an invite works for
+  somebody who has never signed in, and the game against the computer still needs no server at
+  all. What an account buys is a record that outlives the browser it was made in.
+
+  Accepted trade-off, unchanged by any of that: a rubber is bound to the device that started it.
+  Clearing browser data or switching phones mid-rubber forfeits the seat, and an account does not
+  yet move a game in progress between devices.
 - **Server authority is a hard requirement.** The server holds the authoritative game state.
   A client is sent only its own hand, the public state, and the opponent's visible choices.
   The opponent's hand, the undrawn stock and all discards must never cross the wire to a
@@ -323,6 +331,8 @@ TypeScript end to end.
 | Animation | Framer Motion — card deal/play feel is most of the perceived quality on a phone |
 | Rules engine | Standalone TypeScript package, no UI or I/O dependencies |
 | Server (networked version only) | Cloudflare Workers + Durable Objects |
+| Accounts, and later results | Cloudflare D1 (SQLite) |
+| Transactional email | Resend |
 | Static hosting | Cloudflare Pages |
 
 **Phone-first.** The primary target is iPhone Safari. Layout, tap targets and card
@@ -372,9 +382,16 @@ Verified against current Cloudflare documentation:
 - Duration is the only allowance worth designing around, and hibernation reduces idle cost
   to zero. Even without hibernation the free duration allowance would cover roughly 35
   rubbers a day.
+- D1 is on the free plan as well: 5 GB storage, 5 million rows read/day, 100,000 rows
+  written/day. Accounts cost a handful of rows per sign-in and one row read per session check,
+  which does not register against any of those.
+- Resend's free plan sends 3,000 emails a month, capped at 100 a day, from one custom domain.
+  A sign-in link is sent once per device rather than once per game, so the daily cap is the only
+  one that could ever bind, and only if something were wrong.
 
 Sources: [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/),
-[Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/).
+[Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/),
+[D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/).
 
 Deliberately avoided: free tiers that spin down on idle (e.g. Render's). Cold starts drop
 WebSockets, which is fatal for a live game.
@@ -442,9 +459,135 @@ device, and there is no Safari on Windows to substitute:
   Firewall allowance). Service workers require HTTPS, so testing the *installed PWA* specifically
   needs an HTTPS tunnel such as `cloudflared`.
 
+**A script is not a browser, and saying "verified" on the strength of one is a mistake this project
+has already made.** `curl`, Node and PowerShell send the request you asked for. A browser sends a
+preflight first, refuses to attach headers it was not given permission for, and enforces an origin
+policy none of those tools have. Sign-in shipped with `Authorization` missing from
+`Access-Control-Allow-Headers`: every script passed, and in Chrome the session check never left the
+page — so signing in appeared to work and the app still could not tell who you were. Anything
+touching CORS, cookies, storage or the service worker is only tested once it has been done in a
+browser.
+
 **Real-device checkpoints.** Two planned, rather than continuous device testing:
 1. Before the phone layout is locked down (end of phase 2).
 2. Once networking works, to validate reconnection against real iOS backgrounding (end of phase 3).
+
+### 3.7 Accounts and Sign-in
+
+Listed as out of scope for v1 (§4) and built anyway, because the thing actually wanted — *how do I
+do against each of the people I play* — cannot be built without it. A record has to attach to a
+person, and a `localStorage` token is a browser rather than a person: it dies with cleared site
+data and does not follow anyone to a second device.
+
+**An account never gates a game.** This is the constraint everything else here bends around, and it
+is worth stating as a rule rather than an intention. The game against the computer needs no server
+at all. Somebody opening an invite should be seated in seconds, not standing in front of a sign-up.
+An account adds durable identity; it never adds permission.
+
+**Email and a link, no passwords.** A password would mean storing a hash, building a reset flow —
+which is a magic link with extra steps — and asking family to invent a password for a card game.
+Email is the one identifier people can already receive something at, and the link *is* the proof:
+it arrived somewhere only that person can read.
+
+The email address is the only personal data held. No name, no marketing, nothing else. It is
+lower-cased on the way in, so one person cannot end up with two accounts and one confusing history.
+
+**A link works once and lasts ten minutes.** Only a hash of the token is stored, so a copy of the
+table grants nobody a login. Single use is enforced by the write itself — the statement marks the
+row used and requires it to be unused in the same breath, so two taps on the same link cannot both
+succeed and there is no transaction to get wrong.
+
+**Five outstanding links per address per fifteen minutes**, blunt and sufficient. Two details that
+were wrong at first and are worth keeping right. A link that failed to send is *deleted*, so it
+does not count: the row must be written before the mail is attempted, because the token has to
+exist before it can be sent, but a row for a message that never left records nothing and holding it
+against the next attempt punishes somebody for our fault. And being turned away is now **said out
+loud**, with how long to wait. That admits the address has asked recently, which is a small thing to
+give up, and the alternative is worse — a silent refusal makes the app claim a link is coming when
+it is not, which is indistinguishable from mail going missing and sent this exact feature's
+debugging down the wrong path for an evening.
+
+**A sign-in link is never logged.** A live link in the logs is a credential in the logs. One was
+added deliberately for a single round of end-to-end verification and removed immediately after,
+which is the only form that is acceptable.
+
+**Signing in claims the device token rather than replacing it.** The token exists before any
+account does — it is what seated the player and what any record is already attached to. An account
+whose first act was to discard the history it was created to keep would be worse than no account.
+
+**Sessions are signed, not stored.** An HMAC over the account id and issue time, held by the
+client. Nothing to look up per request and no session table to leak; the signature is what makes it
+trustworthy. Sessions last a year, because signing in should be something done once per device.
+
+The cost is that rotating the signing secret invalidates every session at once. Accepted — that is
+also the only revocation mechanism there is, and the client drops a session the server refuses
+rather than carrying a string that can never work again.
+
+**Asking for a link never reveals whether an address is known here.** The answer is the same
+either way.
+
+**Accounts live in D1, not in a Durable Object.** A Durable Object is right for one live table:
+small, long-lived, strongly consistent, singly addressed. It is precisely wrong for "my record
+against everyone", which is a query across many players and many tables — the one question no
+per-table object can answer.
+
+**Mail goes out as `play@ericonice.com`,** the domain Resend has verified. SPF, DKIM and DMARC are
+published; DMARC sits at `p=none` with a reporting address, which asks receivers to report without
+acting, so nothing can break while the reports are watched.
+
+It was first written to send from `play@send.ericonice.com`, reasoning that a subdomain keeps the
+game's sending reputation apart from anything the domain's owner sends themselves. That is a real
+technique and this was not it: the `send.` records Resend asks for are the parent domain's return
+path and SPF, not a domain in their own right, and Resend answers a `From:` on one with a flat 403.
+Doing it properly means verifying `send.ericonice.com` as a domain of its own, and the free plan
+verifies one. Worth revisiting only if this ever sends enough mail for reputation to matter.
+
+**Sending failures are reported.** Every message was rejected for the first stretch of this
+feature's life and nothing said so: the endpoint answered "ok" whatever happened, on the reasoning
+that a uniform answer is what stops a stranger probing which addresses have accounts. That
+reasoning is right about the *address* and wrong about the *server* — a refusal to send is a fault
+on this side and reveals nothing, so it now returns a failure and the screen says so. Being unable
+to send is not a reason to tell somebody their link is on its way.
+
+**A seat records the account holding it, and never takes that on trust.** The session travels in
+the `join` message rather than a header, because a browser cannot set headers on a WebSocket. The
+table verifies the signature itself before believing any of it — a seat that merely *claimed* an
+account would make the record it produced worthless, which is the whole reason for having accounts.
+
+What a seat is *held* by is still the device token. Signing in does not let a second device take
+over a rubber in progress; that stays out of scope (§4), and keeping the two separate means the
+account decides attribution while the token decides possession.
+
+A session that fails for any reason — absent, forged, altered, or signed with a secret since
+rotated — seats the player anonymously rather than refusing them. Playing has never required an
+account, and a stale session should cost somebody their attribution, not their game.
+
+The queue uses the same verified account to avoid pairing somebody with themselves. A token catches
+two tabs on one device; only an account catches two *devices* signed in as the same person.
+
+**Results will attach to the account id, not the email.** The id is the stable key; the address is
+a property of the account that a display joins back to. Copying an address into every result would
+make it a duplicate of something that can change.
+
+**A finished rubber is what gets recorded**, not a deal. A rubber is what people say they won;
+nobody asks how many deals they have won. Only completed ones land in the table — §2.2 already ends
+an abandoned rubber unscored, which also means a record cannot be improved by walking out of a game
+going badly.
+
+Each row keeps both seats twice over: the account signed in at the time, which is null for most
+rubbers, and the device token, which is always there. The token is what makes an anonymous game
+recoverable — signing in claims it, and the games already played on that device come with it.
+Storing only the account would have thrown that away, and it is the whole reason claiming a token
+was chosen over replacing one.
+
+**Rubbers against the computer are kept in their own section.** The row is identical — won, lost,
+points either way — because a rubber against the computer is won exactly as a rubber against a
+person is. What differs is where the claim comes from: a networked rubber was witnessed by the
+server that owned the state and applied every rule, while the game against the computer runs
+entirely in a browser (§2.1) and is therefore reported by that browser and taken on its word.
+Nothing can make that verifiable without moving the robot game to the server, which would cost it
+the one thing it has that the networked game does not — working with no network at all. So the two
+are shown side by side and never summed into a single record.
 
 ---
 
@@ -453,9 +596,13 @@ device, and there is no Safari on Windows to substitute:
 - Bidding conventions and alerting (meaningless without a partner — see §1.5).
 - Defensive carding signals, for the same reason.
 - Claiming, conceding, undo.
-- Accounts, authentication, cross-device seat recovery.
+- ~~Accounts, authentication~~ — **built after all**, see §3.7. The reason for the reversal is
+  that per-opponent results need somewhere to attach, and a browser is not a person. **Cross-device
+  seat recovery stays out:** an account carries a *record* between devices, not a rubber in
+  progress.
 - Spectators.
-- Ratings, standings, game history, hand records.
+- Ratings and hand records. Standings and game history are partly reversed with §3.7: a record
+  against each opponent is now the point of having accounts at all, though nothing yet writes one.
 - Turn clocks.
 - Player-selectable robot difficulty.
 - Native App Store distribution. (Expo/React Native is the alternative route if this ever

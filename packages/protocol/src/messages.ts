@@ -37,11 +37,24 @@ export interface TableInfo {
 
 export type ClientMessage =
   /**
-   * Claims a seat. The token is the opaque value in `localStorage` that
-   * reclaims the same seat after a reconnect (§2.2); the nickname is only a
-   * label. There are no accounts, so the token is the whole of identity.
+   * Claims a seat.
+   *
+   * The token is the opaque value in `localStorage` that reclaims the same seat
+   * after a reconnect (§2.2), and it stays the thing a seat is held by — an
+   * account carries a record between devices, not a rubber in progress.
+   *
+   * `session` is the signed session for a player who has signed in, and null for
+   * one who has not. It rides in this message rather than in a header because a
+   * browser cannot set headers on a WebSocket. The server verifies the signature
+   * before believing any of it; an unsigned or altered one is treated exactly
+   * like not being signed in, which is a supported way to play.
    */
-  | { readonly type: "join"; readonly nickname: string; readonly token: string }
+  | {
+      readonly type: "join";
+      readonly nickname: string;
+      readonly session: string | null;
+      readonly token: string;
+    }
   | { readonly type: "action"; readonly action: DealAction }
   | { readonly type: "next-deal" }
   /**
