@@ -1,4 +1,4 @@
-import type { Pair, PlayerView } from "@hb/engine";
+import type { PlayerView } from "@hb/engine";
 import { ContractText } from "./CardText.js";
 
 export interface TopBarProps {
@@ -9,37 +9,6 @@ export interface TopBarProps {
   readonly onShowScore: (() => void) | null;
   onShowSettings(): void;
   readonly view: PlayerView;
-  readonly vulnerable: Pair<boolean>;
-}
-
-/**
- * Who is vulnerable, shown from the auction onwards.
- *
- * It doubles the penalty for going down and it is decided before a card is
- * played, so it belongs on screen while there are still bidding decisions to
- * make — not revealed at scoring time.
- */
-function Vulnerability({
-  opponentName,
-  vulnerable,
-  view,
-}: {
-  readonly opponentName: string;
-  readonly vulnerable: Pair<boolean>;
-  readonly view: PlayerView;
-}): React.JSX.Element | null {
-  const mine = vulnerable[view.me];
-  const theirs = vulnerable[view.opponent];
-  if (!mine && !theirs) {
-    return null;
-  }
-
-  const label = mine && theirs ? "Both vul" : mine ? "You vul" : `${opponentName} vul`;
-  return (
-    <span className="rounded bg-red-500/25 px-1.5 py-0.5 text-xs font-medium text-red-200">
-      {label}
-    </span>
-  );
 }
 
 function Headline({
@@ -92,7 +61,6 @@ export function TopBar({
   onSkipPhase,
   opponentName,
   view,
-  vulnerable,
 }: TopBarProps): React.JSX.Element {
   const right = detail(view);
 
@@ -102,9 +70,6 @@ export function TopBar({
         <Headline opponentName={opponentName} view={view} />
       </h1>
       <span className="flex-1" />
-      {view.phase === "draw" ? null : (
-        <Vulnerability opponentName={opponentName} vulnerable={vulnerable} view={view} />
-      )}
       {right === null ? null : <p className="text-sm tabular-nums text-white/60">{right}</p>}
       {onShowScore === null ? null : (
         <button

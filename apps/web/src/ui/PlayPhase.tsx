@@ -1,5 +1,5 @@
 import { cardId } from "@hb/engine";
-import type { CompletedTrick, PlayedCard, PlayerId, PlayerView } from "@hb/engine";
+import type { CompletedTrick, Pair, PlayedCard, PlayerId, PlayerView } from "@hb/engine";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { TRICK_TIMING } from "../game/timing.js";
@@ -11,6 +11,7 @@ export interface PlayPhaseProps {
   readonly lastTrick: CompletedTrick | null;
   readonly opponentName: string;
   readonly view: PlayerView;
+  readonly vulnerable: Pair<boolean>;
 }
 
 interface TableTrick {
@@ -159,7 +160,7 @@ function TrickReview({
   );
 }
 
-export function PlayPhase({ lastTrick, opponentName, view }: PlayPhaseProps): React.JSX.Element {
+export function PlayPhase({ lastTrick, opponentName, view, vulnerable }: PlayPhaseProps): React.JSX.Element {
   const [reviewing, setReviewing] = useState(false);
 
   const trick = tableTrick(view, lastTrick);
@@ -176,7 +177,7 @@ export function PlayPhase({ lastTrick, opponentName, view }: PlayPhaseProps): Re
 
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center gap-3">
-      <SeatLabel active={!yourTurn} name={opponentName} />
+      <SeatLabel active={!yourTurn} name={opponentName} vulnerable={vulnerable[view.opponent]} />
       <Slot
         played={cards.find((played) => played.by === view.opponent)}
         sweepTo={sweepTo}
@@ -197,7 +198,7 @@ export function PlayPhase({ lastTrick, opponentName, view }: PlayPhaseProps): Re
         sweepTo={sweepTo}
         trickKey={trickKey}
       />
-      <SeatLabel active={yourTurn} name="You" />
+      <SeatLabel active={yourTurn} name="You" vulnerable={vulnerable[view.me]} />
 
       <button
         type="button"

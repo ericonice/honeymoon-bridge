@@ -21,11 +21,11 @@ export interface CardFaceProps {
 }
 
 export function CardFace({ card, size }: CardFaceProps): React.JSX.Element {
-  const tone = suitIsRed(card.suit) ? "text-red-600" : "text-stone-900";
+  const tone = suitIsRed(card.suit) ? "text-ink-red" : "text-ink-black";
 
   return (
     <div
-      className={`${SIZES[size]} ${tone} flex flex-col justify-between bg-white shadow-md ring-1 ring-black/20`}
+      className={`${SIZES[size]} ${tone} card-face flex flex-col justify-between shadow-md ring-1 ring-black/20`}
     >
       {/* Flush top-left, because in a fanned hand this narrow strip is the only
           part of the card that is not covered by the next one. */}
@@ -42,12 +42,23 @@ export interface CardBackProps {
   readonly size: CardSize;
 }
 
+/**
+ * The back is a surface rather than a picture of anything: scored ice on the
+ * hockey theme, the inset border on the baize. Both are drawn at four sizes,
+ * from a mini in the scorepad up to the 26-card stock in the draw phase, and a
+ * texture is the one thing that survives that without a focal point to fight
+ * whatever sits on top of it.
+ */
 export function CardBack({ size }: CardBackProps): React.JSX.Element {
   return (
     <div
-      className={`${SIZES[size]} flex items-center justify-center bg-sky-900 shadow-md ring-1 ring-black/20`}
+      className={`${SIZES[size]} card-back flex items-center justify-center shadow-md ring-1 ring-black/20`}
     >
-      <span className="h-full w-full rounded-md border-2 border-sky-600/60" />
+      {/* The frame is not decoration. The opponent's hand is a row of backs
+          overlapped to a 12px strip, and this line down the left of each one is
+          the only thing that makes them countable — a plain dark back merges
+          into one shape. */}
+      <span className="h-full w-full rounded-md border-2 border-card-back-mark/60" />
     </div>
   );
 }

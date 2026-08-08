@@ -38,8 +38,11 @@ export default defineConfig({
         // layout assumes a hand held one-handed.
         display: "standalone",
         orientation: "portrait",
-        background_color: "#064e3b",
-        theme_color: "#064e3b",
+        // The default theme's colours. The manifest is read at install time, so
+        // unlike the meta tag these cannot follow a change made in Settings —
+        // they only decide the splash screen.
+        background_color: "#081827",
+        theme_color: "#081827",
         start_url: "/",
         // Not declared maskable: the crest runs close to the edge, and a
         // maskable icon is cropped to a centre circle that would take the

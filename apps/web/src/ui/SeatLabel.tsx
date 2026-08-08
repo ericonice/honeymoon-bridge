@@ -3,6 +3,15 @@ import { motion } from "framer-motion";
 export interface SeatLabelProps {
   readonly active: boolean;
   readonly name: string;
+  /**
+   * Whether *this* player is vulnerable.
+   *
+   * It used to be one chip in the top bar reading "You vul" or "Both vul",
+   * which made the reader work out who it meant. Vulnerability is a fact about
+   * a player, so it belongs on that player — and with two labels on screen,
+   * "both" needs no wording at all.
+   */
+  readonly vulnerable: boolean;
 }
 
 /**
@@ -19,7 +28,7 @@ export interface SeatLabelProps {
  * raised, which is a loud "it is you", and two loud signals for one fact read
  * worse than one.
  */
-export function SeatLabel({ active, name }: SeatLabelProps): React.JSX.Element {
+export function SeatLabel({ active, name, vulnerable }: SeatLabelProps): React.JSX.Element {
   return (
     <p
       className={`flex items-center gap-1.5 text-xs transition-colors ${
@@ -33,6 +42,14 @@ export function SeatLabel({ active, name }: SeatLabelProps): React.JSX.Element {
           animate={{ opacity: [0.25, 1, 0.25] }}
           transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
         />
+      ) : null}
+      {vulnerable ? (
+        // Stays at full strength on a dimmed label: whose turn it is changes
+        // every few seconds, but vulnerability holds for the rest of the rubber
+        // and is worth as much to the player who is waiting.
+        <span className="shrink-0 rounded bg-red-500/25 px-1 py-px text-[0.6rem] font-semibold tracking-wide text-red-200 uppercase">
+          vul
+        </span>
       ) : null}
     </p>
   );

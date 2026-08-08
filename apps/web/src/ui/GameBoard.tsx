@@ -1,6 +1,7 @@
-import { legalActionsForView } from "@hb/engine";
-import type { Call, Card, PlayerView } from "@hb/engine";
-import { useState } from "react";
+import { legalActionsForView, revealsUnseenCard } from "@hb/engine";
+import type { Call, Card, DealPhase, PlayerView } from "@hb/engine";
+import { useEffect, useRef, useState } from "react";
+import { drawTurnDuration } from "../game/timing.js";
 import type { GameSession } from "../game/session.js";
 import { AuctionPhase } from "./AuctionPhase.js";
 import { DealComplete } from "./DealComplete.js";
@@ -30,14 +31,16 @@ function playableCards(view: PlayerView): Card[] | null {
 
 function CurrentPhase({
   peeking,
+  phase,
   session,
 }: {
   readonly peeking: boolean;
+  readonly phase: DealPhase;
   readonly session: GameSession;
 }): React.JSX.Element {
   const { history, lastDraw, lastTrick, nextDeal, rubber, score, view, vulnerable } = session;
 
-  switch (view.phase) {
+  switch (phase) {
     case "draw": {
       return (
         <DrawPhase
@@ -46,6 +49,7 @@ function CurrentPhase({
           opponentName={session.opponentName}
           peekLastDraw={peeking ? session.opponentLastDraw : null}
           peekPending={peeking ? session.opponentPending : null}
+          vulnerable={vulnerable}
           view={view}
           onDecide={(keep) => {
             session.act({ type: "draw-decide", keep });
@@ -58,6 +62,7 @@ function CurrentPhase({
         <AuctionPhase
           opponentName={session.opponentName}
           view={view}
+          vulnerable={vulnerable}
           onCall={(call: Call) => {
             session.act({ type: "call", call });
           }}
@@ -66,7 +71,12 @@ function CurrentPhase({
     }
     case "play": {
       return (
-        <PlayPhase lastTrick={lastTrick} opponentName={session.opponentName} view={view} />
+        <PlayPhase
+          lastTrick={lastTrick}
+          opponentName={session.opponentName}
+          view={view}
+          vulnerable={vulnerable}
+        />
       );
     }
     default: {
@@ -94,6 +104,46 @@ function CurrentPhase({
  * component serves both is the test of whether `GameSession` was drawn in the
  * right place.
  */
+/**
+ * The phase to *show*, which lags the engine at the end of the draw.
+ *
+ * The engine turns the twenty-sixth draw turn straight into the auction, so the
+ * last turn of the phase was the one turn you never got to watch — and on a
+ * keep, that meant never seeing the card 2 the rules require you to look at.
+ * Holding the draw screen for the length of its own animation gives the final
+ * turn the same ending as the twenty-five before it.
+ */
+function useShownPhase(session: GameSession): DealPhase {
+  const actual = session.view.phase;
+  const [held, setHeld] = useState(false);
+  const previous = useRef(actual);
+  const { lastDraw } = session;
+
+  useEffect(() => {
+    const wasDrawing = previous.current === "draw";
+    previous.current = actual;
+    if (!wasDrawing || actual === "draw" || lastDraw === null) {
+      return;
+    }
+
+    setHeld(true);
+    const timer = setTimeout(
+      () => {
+        setHeld(false);
+      },
+      drawTurnDuration(lastDraw.taken !== null, revealsUnseenCard(lastDraw)),
+    );
+    return () => {
+      clearTimeout(timer);
+    };
+    // Only the transition matters; re-running on anything else would reopen a
+    // phase the player has already left.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actual]);
+
+  return held ? "draw" : actual;
+}
+
 export function GameBoard({
   devTools,
   onShowSettings,
@@ -102,6 +152,7 @@ export function GameBoard({
 }: GameBoardProps): React.JSX.Element {
   const [showingScore, setShowingScore] = useState(false);
   const { view } = session;
+  const phase = useShownPhase(session);
   const playable = playableCards(view);
 
   return (
@@ -109,7 +160,6 @@ export function GameBoard({
       <TopBar
         opponentName={session.opponentName}
         view={view}
-        vulnerable={session.vulnerable}
         // The score screen already shows the scorepad in full.
         onShowScore={
           view.phase === "complete"
@@ -131,10 +181,10 @@ export function GameBoard({
       ) : null}
 
       <main className="flex min-h-0 flex-1 flex-col">
-        <CurrentPhase peeking={peeking} session={session} />
+        <CurrentPhase peeking={peeking} phase={phase} session={session} />
       </main>
 
-      {view.phase === "complete" ? null : (
+      {phase === "complete" ? null : (
         <footer className="border-t border-white/10 pt-1">
           <Hand
             cards={view.hand}

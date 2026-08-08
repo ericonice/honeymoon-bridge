@@ -1,12 +1,16 @@
+import type { Theme } from "../game/theme.js";
+
 export interface SettingsOverlayProps {
   readonly devTools: boolean;
   /** Development builds only; the row is compiled out of anything that ships. */
   readonly peeking: boolean;
+  readonly theme: Theme;
   /** Null when there is no game to leave. */
   readonly onLeaveGame: (() => void) | null;
   onClose(): void;
   onDevToolsChange(enabled: boolean): void;
   onPeekingChange(enabled: boolean): void;
+  onThemeChange(theme: Theme): void;
 }
 
 function Toggle({
@@ -59,12 +63,27 @@ export function SettingsOverlay({
   onDevToolsChange,
   onLeaveGame,
   onPeekingChange,
+  onThemeChange,
   peeking,
+  theme,
 }: SettingsOverlayProps): React.JSX.Element {
   return (
-    <div className="absolute inset-0 z-30 flex flex-col bg-felt-dark/97">
+    <div className="absolute inset-0 z-30 flex flex-col bg-table-dark/97">
       <div className="flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto px-5 py-6">
         <h2 className="w-full max-w-sm text-lg font-semibold">Settings</h2>
+
+        {/* First, because it is the only row here a player rather than a
+            developer came looking for. */}
+        <div className="w-full max-w-sm">
+          <Toggle
+            label="Hockey theme"
+            description="An arena palette and a face-off card back. Turn it off for the green baize a card game usually comes on."
+            on={theme === "hockey"}
+            onChange={(on) => {
+              onThemeChange(on ? "hockey" : "felt");
+            }}
+          />
+        </div>
 
         <div className="w-full max-w-sm">
           <Toggle

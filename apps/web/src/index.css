@@ -1,8 +1,55 @@
 @import "tailwindcss";
 
+/* Tokens are named for what they are *for*, not what colour they are, so that
+   neither theme's vocabulary is baked into the utility names. The values here
+   are the hockey theme, which is the default; `html[data-theme="felt"]` below
+   puts the original green baize back. */
 @theme {
-  --color-felt: #064e3b;
-  --color-felt-dark: #033024;
+  --color-card-back: #0b2a47;
+  --color-card-back-mark: #bfe0ff;
+  --color-card-face: #eef3f9;
+  /* Jersey ink rather than printer's ink. Red stays unmistakably red: telling
+     the two colours apart at a glance is load-bearing in a fanned hand. */
+  --color-ink-black: #16233a;
+  --color-ink-red: #c8102e;
+  --color-table: #14324f;
+  --color-table-dark: #081827;
+}
+
+:root {
+  /* Skate-scored ice: two crossing sets of scratches on different periods, so
+     they read as wear rather than as a weave. Faint on purpose — a card back is
+     a surface, and anything with a focal point competes with whatever is drawn
+     on top of it. */
+  --card-back-pattern:
+    linear-gradient(to bottom, rgb(255 255 255 / 0.07), transparent 55%),
+    repeating-linear-gradient(63deg, rgb(226 240 255 / 0.1) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-63deg, rgb(226 240 255 / 0.07) 0 1px, transparent 1px 9px);
+  /* The same scoring on the front, at about a third of the strength: enough to
+     tie the two faces of a card together, not enough to sit under a rank and
+     make it harder to read. */
+  --card-face-pattern:
+    repeating-linear-gradient(63deg, rgb(90 130 170 / 0.06) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-63deg, rgb(90 130 170 / 0.045) 0 1px, transparent 1px 9px);
+  /* Ice lit from above. The only gradient in the app, and the whole difference
+     between "a blue screen" and a rink. */
+  --table-sheen: radial-gradient(125% 75% at 50% 15%, #1e4c78 0%, #14324f 48%, #0c2440 100%);
+}
+
+/* Literal values rather than `var(--color-red-600)` and friends: Tailwind drops
+   a palette variable from the build as soon as nothing references its utility,
+   which would leave these resolving to nothing. */
+html[data-theme="felt"] {
+  --card-back-pattern: none;
+  --card-face-pattern: none;
+  --color-card-back: #0c4a6e;
+  --color-card-back-mark: #0284c7;
+  --color-card-face: #fff;
+  --color-ink-black: oklch(21.6% 0.006 56.043);
+  --color-ink-red: oklch(57.7% 0.245 27.325);
+  --color-table: #064e3b;
+  --color-table-dark: #033024;
+  --table-sheen: none;
 }
 
 html,
@@ -12,11 +59,31 @@ body,
 }
 
 body {
-  background-color: var(--color-felt-dark);
+  background-color: var(--color-table-dark);
   /* No page-level scrolling anywhere: the app is a fixed frame and each region
      scrolls on its own. Rubber-banding the whole board feels broken on iOS. */
   overscroll-behavior: none;
   overflow: hidden;
+}
+
+/* The frame the whole app sits in. A class rather than a `bg-table` utility
+   because the sheen has to switch off with the theme, and a colour token cannot
+   carry a background image. */
+.table-surface {
+  background-color: var(--color-table);
+  background-image: var(--table-sheen);
+}
+
+/* Same reason as `.table-surface`: the pattern has to switch off with the
+   theme, and a colour token cannot carry a background image. */
+.card-back {
+  background-color: var(--color-card-back);
+  background-image: var(--card-back-pattern);
+}
+
+.card-face {
+  background-color: var(--color-card-face);
+  background-image: var(--card-face-pattern);
 }
 
 /* Kill the grey flash and the double-tap-to-zoom delay on every tap target. */

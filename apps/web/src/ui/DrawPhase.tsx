@@ -1,5 +1,5 @@
 import { cardId } from "@hb/engine";
-import type { Card, DrawChoice, PlayerView } from "@hb/engine";
+import type { Card, DrawChoice, Pair, PlayerView } from "@hb/engine";
 import { motion } from "framer-motion";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DRAW_TIMING, drawTurnDuration } from "../game/timing.js";
@@ -17,6 +17,7 @@ export interface DrawPhaseProps {
   /** The two cards your own last turn spent, for the recall control. */
   readonly lastOwnDraw: DrawPair | null;
   readonly opponentName: string;
+  readonly vulnerable: Pair<boolean>;
   /** Development builds only: names the opponent's last two cards in the commentary. */
   readonly peekLastDraw: DrawPair | null;
   /**
@@ -158,6 +159,7 @@ export function DrawPhase({
   peekLastDraw,
   peekPending,
   view,
+  vulnerable,
 }: DrawPhaseProps): React.JSX.Element {
   const [recalling, setRecalling] = useState(false);
   const turnCount = view.drawTurns.length;
@@ -269,7 +271,11 @@ export function DrawPhase({
       <div className="flex flex-col items-center gap-1">
         {/* Lit while they are deciding — and while the board is still settling
             after their turn, since until it does the decision is not yours. */}
-        <SeatLabel active={view.toAct === view.opponent || settling} name={opponentName} />
+        <SeatLabel
+          active={view.toAct === view.opponent || settling}
+          name={opponentName}
+          vulnerable={vulnerable[view.opponent]}
+        />
         <div ref={opponentRef} className="flex">
           {Array.from({ length: view.handSizes[view.opponent] }, (_, index) => (
             <div key={index} className={index > 0 ? "-ml-4" : ""}>
@@ -323,7 +329,7 @@ export function DrawPhase({
       <div className="flex w-full max-w-sm flex-col gap-3">
         {/* Your side of the table: the two buttons are your cards' equivalent
             here, so the label belongs with them. */}
-        <SeatLabel active={shown !== null} name="You" />
+        <SeatLabel active={shown !== null} name="You" vulnerable={vulnerable[view.me]} />
 
         <p className="flex min-h-10 items-center justify-center text-center text-sm text-white/70">
           <OpponentLine

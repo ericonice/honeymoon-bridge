@@ -19,8 +19,19 @@ export type Ground = "dark" | "light";
 
 const RED: Record<Ground, string> = {
   dark: "text-red-400",
-  light: "text-red-600",
+  light: "text-ink-red",
 };
+
+/**
+ * The class that keeps a red suit red on a given ground.
+ *
+ * Exported because a symbol shown on its own — a strain button in the auction —
+ * has the same problem as one in running text, and the two must not drift into
+ * different reds.
+ */
+export function redTone(on: Ground): string {
+  return RED[on];
+}
 
 export interface CardTextProps {
   readonly card: Card;

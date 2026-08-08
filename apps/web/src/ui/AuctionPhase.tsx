@@ -1,8 +1,8 @@
 import { STRAINS, legalActionsForView } from "@hb/engine";
-import type { Call, Level, PlayerView, Strain } from "@hb/engine";
+import type { Call, Level, Pair, PlayerView, Strain } from "@hb/engine";
 import { useEffect, useState } from "react";
 import { callLabel, strainIsRed, strainSymbol } from "../game/labels.js";
-import { CallText } from "./CardText.js";
+import { CallText, redTone } from "./CardText.js";
 import { SeatLabel } from "./SeatLabel.js";
 
 const LEVELS: readonly Level[] = [1, 2, 3, 4, 5, 6, 7];
@@ -10,6 +10,7 @@ const LEVELS: readonly Level[] = [1, 2, 3, 4, 5, 6, 7];
 export interface AuctionPhaseProps {
   readonly opponentName: string;
   readonly view: PlayerView;
+  readonly vulnerable: Pair<boolean>;
   onCall(call: Call): void;
 }
 
@@ -66,6 +67,7 @@ export function AuctionPhase({
   onCall,
   opponentName,
   view,
+  vulnerable,
 }: AuctionPhaseProps): React.JSX.Element {
   const [level, setLevel] = useState<Level | null>(null);
   const [chosen, setChosen] = useState<Call | null>(null);
@@ -99,8 +101,8 @@ export function AuctionPhase({
       {/* The auction has no cards on the table for a label to sit beside, so
           the two seats go above the record of what each of them has said. */}
       <div className="flex items-center justify-between px-4 pt-2">
-        <SeatLabel active={!myTurn} name={opponentName} />
-        <SeatLabel active={myTurn} name="You" />
+        <SeatLabel active={!myTurn} name={opponentName} vulnerable={vulnerable[view.opponent]} />
+        <SeatLabel active={myTurn} name="You" vulnerable={vulnerable[view.me]} />
       </div>
 
       <History opponentName={opponentName} view={view} />
@@ -140,7 +142,11 @@ export function AuctionPhase({
                   }
                 }}
               >
-                <span className={strainIsRed(strain) && !selected ? "text-red-400" : ""}>
+                {/* Selecting a strain turns the button amber, which is a light
+                    ground — so the red changes value rather than switching off.
+                    Dropping it entirely printed hearts and diamonds in black,
+                    which reads as a different bid. */}
+                <span className={strainIsRed(strain) ? redTone(selected ? "light" : "dark") : ""}>
                   {strainSymbol(strain)}
                 </span>
               </button>

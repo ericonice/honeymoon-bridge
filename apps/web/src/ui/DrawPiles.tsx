@@ -1,3 +1,4 @@
+import { useTheme } from "../game/theme.js";
 import { CardBack, CardSlot } from "./CardFace.js";
 
 const MAX_LAYERS = 4;
@@ -30,6 +31,7 @@ function Stack({
   readonly max: number;
 }): React.JSX.Element {
   const layers = layersFor(count, max);
+  const theme = useTheme();
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -52,8 +54,17 @@ function Stack({
             );
           })
         )}
-        <span className="absolute inset-0 flex items-center justify-center text-xl font-bold tabular-nums text-white">
-          {count}
+        <span className="absolute inset-0 flex items-center justify-center">
+          {theme === "hockey" ? (
+            // The count on a puck. The number is the information and the spot
+            // beneath it is decoration, so the number gets its own ground
+            // instead of competing with the ring for the middle of the card.
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-950/85 text-lg font-bold tabular-nums text-white ring-1 ring-white/15">
+              {count}
+            </span>
+          ) : (
+            <span className="text-xl font-bold tabular-nums text-white">{count}</span>
+          )}
         </span>
       </div>
       <p className="text-xs text-white/50">{label}</p>
