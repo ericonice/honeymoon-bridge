@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Account } from "../game/account.js";
 import { storedSession } from "../game/account.js";
 import { createTableUrl } from "../game/serverUrl.js";
+import { HelpIcon, RecordIcon, SettingsIcon } from "./icons.js";
 
 export interface HomeProps {
   /** Null when signed out, which is most of what this screen has to say. */
@@ -11,9 +12,45 @@ export interface HomeProps {
   onJoinTable(code: string): void;
   onPlayComputer(): void;
   onShowAccount(): void;
+  onShowHelp(): void;
   onShowRecord(): void;
   onShowSettings(): void;
   onSignIn(): void;
+}
+
+/**
+ * The three that are not a way to start playing.
+ *
+ * An icon over a caption, which is the shape a phone has taught everybody to
+ * read, and a tap target of 56px rather than the 20px a line of underlined text
+ * gave. The caption stays: two of these have a universal symbol and the third
+ * does not, and a row where one glyph is a guess is worse than a row of words.
+ *
+ * Deliberately *not* a tab bar, despite borrowing its vocabulary. A real one
+ * carries its own background and a selected state, and it is the most
+ * authoritative position an iPhone has — which would rank Settings above the
+ * four buttons this screen exists for. It also promises somewhere you stay,
+ * and these are three overlays you glance at and leave.
+ */
+function Secondary({
+  icon,
+  label,
+  onClick,
+}: {
+  readonly icon: React.ReactNode;
+  readonly label: string;
+  onClick(): void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="flex min-h-14 flex-1 flex-col items-center justify-center gap-1 rounded-xl text-white/55"
+      onClick={onClick}
+    >
+      {icon}
+      <span className="text-[11px] leading-none">{label}</span>
+    </button>
+  );
 }
 
 /**
@@ -119,6 +156,7 @@ export function Home({
   onJoinTable,
   onPlayComputer,
   onShowAccount,
+  onShowHelp,
   onShowRecord,
   onShowSettings,
   onSignIn,
@@ -231,21 +269,15 @@ export function Home({
         {error === null ? null : <p className="text-sm text-amber-200">{error}</p>}
       </div>
 
-      <div className="flex gap-5">
-        <button
-          type="button"
-          className="text-sm text-white/50 underline underline-offset-4"
-          onClick={onShowSettings}
-        >
-          Settings
-        </button>
-        <button
-          type="button"
-          className="text-sm text-white/50 underline underline-offset-4"
-          onClick={onShowRecord}
-        >
-          Your record
-        </button>
+      {/* Kept at the bottom, where a thumb is. A hairline rather than a filled
+          bar: enough to read as the foot of the screen, short of claiming to be
+          the chrome that a tab bar is. */}
+      <div className="flex gap-1 border-t border-white/10 pt-2">
+        {/* First of the three: the only one answering a question somebody has
+            before they have played rather than after. */}
+        <Secondary icon={<HelpIcon />} label="How to play" onClick={onShowHelp} />
+        <Secondary icon={<SettingsIcon />} label="Settings" onClick={onShowSettings} />
+        <Secondary icon={<RecordIcon />} label="Your record" onClick={onShowRecord} />
       </div>
     </div>
   );

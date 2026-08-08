@@ -12,6 +12,7 @@ import {
 } from "./game/serverUrl.js";
 import { applyTheme, readTheme, ThemeContext, writeTheme } from "./game/theme.js";
 import { AccountScreen } from "./ui/AccountScreen.js";
+import { HelpOverlay } from "./ui/HelpOverlay.js";
 import { Home } from "./ui/Home.js";
 import { Record } from "./ui/Record.js";
 import { RobotGame } from "./ui/RobotGame.js";
@@ -75,6 +76,9 @@ export function App(): React.JSX.Element {
   });
   const account = useAccount();
   const [showingSettings, setShowingSettings] = useState(false);
+  // An overlay rather than a screen, so the rules can be checked from inside a
+  // game. Anybody wondering whether a pass ends the auction is in an auction.
+  const [showingHelp, setShowingHelp] = useState(false);
   const [peeking, setPeeking] = useState(false);
   // Read once, then owned here so Settings can change it without a reload.
   const [devTools, setDevTools] = useState(readDevTools);
@@ -87,6 +91,11 @@ export function App(): React.JSX.Element {
 
   const showSettings = (): void => {
     setShowingSettings(true);
+  };
+
+  const showHelp = (): void => {
+    setShowingSettings(false);
+    setShowingHelp(true);
   };
 
   // Only ever the last step of leaving. Giving up the seat is the table
@@ -195,6 +204,7 @@ export function App(): React.JSX.Element {
             onShowRecord={() => {
               setScreen({ kind: "record" });
             }}
+            onShowHelp={showHelp}
             onShowSettings={showSettings}
             onSignIn={() => {
               setScreen({ destination: HOME, kind: "signin" });
@@ -313,6 +323,7 @@ export function App(): React.JSX.Element {
             onClose={() => {
               setShowingSettings(false);
             }}
+            onShowHelp={showHelp}
             onDevToolsChange={(enabled) => {
               writeDevTools(enabled);
               setDevTools(enabled);
@@ -326,6 +337,16 @@ export function App(): React.JSX.Element {
               writeTheme(next);
               applyTheme(next);
               setTheme(next);
+            }}
+          />
+        ) : null}
+
+        {/* Above Settings in the stack, since Settings is one of the places it
+            is opened from. */}
+        {showingHelp ? (
+          <HelpOverlay
+            onClose={() => {
+              setShowingHelp(false);
             }}
           />
         ) : null}

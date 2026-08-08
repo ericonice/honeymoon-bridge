@@ -14,6 +14,7 @@ export interface SettingsOverlayProps {
   onDevToolsChange(enabled: boolean): void;
   onFormatChange(format: MatchFormat): void;
   onPeekingChange(enabled: boolean): void;
+  onShowHelp(): void;
   onThemeChange(theme: Theme): void;
 }
 
@@ -146,6 +147,7 @@ export function SettingsOverlay({
   onDevToolsChange,
   onFormatChange,
   onPeekingChange,
+  onShowHelp,
   onThemeChange,
   peeking,
   theme,
@@ -154,6 +156,20 @@ export function SettingsOverlay({
     <div className="absolute inset-0 z-30 flex flex-col bg-table-dark/97">
       <div className="flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto px-5 py-6">
         <h2 className="w-full max-w-sm text-lg font-semibold">Settings</h2>
+
+        {/* Not a setting, and here anyway: the gear is the only control on the
+            board, so this is the one place the rules can be reached from inside
+            a game — which is where the question gets asked. */}
+        <button
+          type="button"
+          className="w-full max-w-sm rounded-xl border border-white/15 px-4 py-3 text-left"
+          onClick={onShowHelp}
+        >
+          <span className="block text-base font-medium">How to play</span>
+          <span className="mt-0.5 block text-xs text-white/55">
+            What this game does differently from bridge.
+          </span>
+        </button>
 
         {/* Above the theme because it changes the game rather than the look of
             it, and it is the one setting somebody might come here to change
