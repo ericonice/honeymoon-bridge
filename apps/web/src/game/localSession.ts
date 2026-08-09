@@ -5,7 +5,6 @@ import {
   nextDeal,
   ownDrawPairFor,
   randomSeed,
-  revealsUnseenCard,
   sortHand,
   startTable,
   summarize,
@@ -23,7 +22,7 @@ import { botActionFor } from "./botTurn.js";
 import { boldness, pace, preferredFormat, psychsEnabled, strength } from "./identity.js";
 import { reportRobotRubber } from "./records.js";
 import type { GameSession } from "./session.js";
-import { drawTurnDuration, setPacing, trickCollectDuration } from "./timing.js";
+import { drawPauseBefore, setPacing, trickCollectDuration } from "./timing.js";
 
 export const HUMAN: PlayerId = 0;
 export const OPPONENT: PlayerId = 1;
@@ -77,16 +76,10 @@ const PAUSE_MS = {
   play: 700,
 };
 
-function pauseBefore(state: DealState): number {
+function pauseBefore(state: DealState, peek: boolean): number {
   switch (state.phase) {
     case "draw": {
-      // With no previous turn to play out, this is the opponent opening the
-      // deal — still give the board a beat before anything moves on its own.
-      const previous = drawRevealFor(state, HUMAN);
-      return drawTurnDuration(
-        previous === null || previous.by === HUMAN,
-        previous !== null && revealsUnseenCard(previous),
-      );
+      return drawPauseBefore(drawRevealFor(state, HUMAN), peek);
     }
     case "auction": {
       return PAUSE_MS.auction;
@@ -172,12 +165,12 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
       setTable((current) =>
         current === table ? applyTableAction(current, OPPONENT, action) : current,
       );
-    }, pauseBefore(deal));
+    }, pauseBefore(deal, peek));
 
     return () => {
       clearTimeout(timer);
     };
-  }, [bot, deal, table, waitingOnBot]);
+  }, [bot, deal, peek, table, waitingOnBot]);
 
   const act = useCallback((action: DealAction) => {
     setTable((current) =>
@@ -248,7 +241,6 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     justTaken:
       deal.phase === "draw" ? (deal.hands[HUMAN][deal.hands[HUMAN].length - 1] ?? null) : null,
     lastDraw: drawRevealFor(deal, HUMAN),
-    lastOwnDraw: deal.phase === "draw" ? ownDrawPairFor(deal, HUMAN) : null,
     lastTrick: deal.completedTricks[deal.completedTricks.length - 1] ?? null,
     nextDeal: advance,
     opponentHand: peek ? sortHand(deal.hands[OPPONENT]) : null,

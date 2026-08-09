@@ -1,7 +1,7 @@
-import { legalActionsForView, revealsUnseenCard } from "@hb/engine";
+import { legalActionsForView } from "@hb/engine";
 import type { Call, Card, DealPhase, DrawReveal, PlayerView } from "@hb/engine";
 import { useEffect, useRef, useState } from "react";
-import { drawTurnDuration, trickCollectDuration } from "../game/timing.js";
+import { drawPlayout, trickCollectDuration } from "../game/timing.js";
 import type { GameSession } from "../game/session.js";
 import { AuctionPhase } from "./AuctionPhase.js";
 import { DealComplete } from "./DealComplete.js";
@@ -49,11 +49,14 @@ function playableCards(view: PlayerView): Card[] | null {
 
 function CurrentPhase({
   onDone,
+  onStartPlay,
   peeking,
   phase,
   session,
 }: {
   readonly onDone: (() => void) | null;
+  /** Non-null only while the closed auction is waiting to be dismissed. */
+  readonly onStartPlay: (() => void) | null;
   readonly peeking: boolean;
   readonly phase: DealPhase;
   readonly session: GameSession;
@@ -65,10 +68,10 @@ function CurrentPhase({
       return (
         <DrawPhase
           lastDraw={lastDraw}
-          lastOwnDraw={session.lastOwnDraw}
           opponentName={session.opponentName}
           peekLastDraw={peeking ? session.opponentLastDraw : null}
           peekPending={peeking ? session.opponentPending : null}
+          showingTheirCards={peeking && session.opponentHand !== null}
           vulnerable={vulnerable}
           view={view}
           onDecide={(keep) => {
@@ -86,6 +89,7 @@ function CurrentPhase({
           onCall={(call: Call) => {
             session.act({ type: "call", call });
           }}
+          onStartPlay={onStartPlay}
         />
       );
     }
@@ -119,41 +123,81 @@ function CurrentPhase({
 }
 
 /**
- * How long the phase just left still needs to finish what it was showing, or
- * null when it has nothing left to play out.
+ * What the phase just left still needs before it can be replaced, or null when
+ * it has nothing left to show.
  *
- * Both of these are the same mistake in two places: a phase ends on a beat the
- * engine has no reason to wait for, so the last turn of the phase is the one
- * turn nobody gets to watch.
+ * All three are the same mistake in three places: a phase ends on a beat the
+ * engine has no reason to wait for, so the last thing that happened in it is
+ * the one thing nobody gets to see.
  */
-function finalBeat(left: DealPhase, entered: DealPhase, lastDraw: DrawReveal | null): number | null {
+type FinalBeat =
+  /** Dismissed by hand, because nothing about it supplies a length. */
+  | { readonly kind: "dismissed" }
+  | { readonly kind: "timed"; readonly ms: number };
+
+function finalBeat({
+  entered,
+  lastDraw,
+  left,
+  theirCardsShowing,
+}: {
+  readonly entered: DealPhase;
+  readonly lastDraw: DrawReveal | null;
+  readonly left: DealPhase;
+  readonly theirCardsShowing: boolean;
+}): FinalBeat | null {
   // The twenty-sixth draw turn becomes the auction the instant it resolves, and
   // on a keep that made card 2 — which §1.3 requires you to be shown — the one
   // card of the phase you never saw.
   if (left === "draw" && lastDraw !== null) {
-    return drawTurnDuration(lastDraw.taken !== null, revealsUnseenCard(lastDraw));
+    return { kind: "timed", ms: drawPlayout(lastDraw, theirCardsShowing).duration };
   }
   // The thirteenth trick is the same shape. The deal is complete the moment the
   // last card lands, so the trick that decides a contract was swept off the
   // table by the scorepad arriving on top of it.
   if (left === "play" && entered === "complete") {
-    return trickCollectDuration();
+    return { kind: "timed", ms: trickCollectDuration() };
+  }
+  // And the auction, which is the same shape with no length to borrow: a sweep
+  // and a card 2 can be waited out, a closed auction cannot. The contract lives
+  // on in the top bar but the calls that reached it do not, so the record of
+  // how the deal got priced is what vanishes.
+  if (left === "auction" && entered === "play") {
+    return { kind: "dismissed" };
   }
   return null;
 }
 
+/** The phase to show, and the way out of it when only a tap will end it. */
+interface ShownPhase {
+  readonly phase: DealPhase;
+  /** Non-null only while the screen is waiting to be dismissed. */
+  readonly release: (() => void) | null;
+}
+
 /**
- * The phase to *show*, which lags the engine at the end of the draw and again
- * at the end of the play.
+ * The phase to *show*, which lags the engine at the end of every phase but one.
  *
- * Holding the outgoing phase for the length of its own last animation gives the
- * final turn the same ending as every turn before it.
+ * Holding the outgoing phase gives the last thing that happened in it the same
+ * ending as everything before it. What ends the hold differs: an animation
+ * supplies its own length, and a closed auction supplies none, so that one is
+ * dismissed by hand.
+ *
+ * Nothing here holds up the *game* — only this seat's view of it. The engine
+ * has moved on, the computer goes on taking its turns, and over a network the
+ * other seat could not be stopped anyway.
  */
-function useShownPhase(session: GameSession): DealPhase {
+function useShownPhase(session: GameSession, peeking: boolean): ShownPhase {
   const actual = session.view.phase;
   const [held, setHeld] = useState<DealPhase | null>(null);
+  const [dismissable, setDismissable] = useState(false);
   const previous = useRef(actual);
   const { lastDraw } = session;
+  // The setting alone is not enough: over a network the opponent's cards are
+  // never sent to this device, so nothing is showing however it is set. Same
+  // rule the draw screen goes by, so the two cannot disagree about whether the
+  // turn it is holding the phase open for was animated.
+  const theirCardsShowing = peeking && session.opponentHand !== null;
 
   useEffect(() => {
     const left = previous.current;
@@ -162,15 +206,22 @@ function useShownPhase(session: GameSession): DealPhase {
       return;
     }
 
-    const hold = finalBeat(left, actual, lastDraw);
-    if (hold === null) {
+    const beat = finalBeat({ entered: actual, lastDraw, left, theirCardsShowing });
+    if (beat === null) {
       return;
     }
 
     setHeld(left);
+    // Set either way: a phase reached by a shortcut rather than by being played
+    // out can arrive while an earlier hold is still standing.
+    setDismissable(beat.kind === "dismissed");
+    if (beat.kind === "dismissed") {
+      return;
+    }
+
     const timer = setTimeout(() => {
       setHeld(null);
-    }, hold);
+    }, beat.ms);
     return () => {
       clearTimeout(timer);
     };
@@ -179,7 +230,15 @@ function useShownPhase(session: GameSession): DealPhase {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actual]);
 
-  return held ?? actual;
+  return {
+    phase: held ?? actual,
+    release: dismissable
+      ? () => {
+          setDismissable(false);
+          setHeld(null);
+        }
+      : null,
+  };
 }
 
 /**
@@ -200,7 +259,7 @@ export function GameBoard({
   const [showingScore, setShowingScore] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const { view } = session;
-  const phase = useShownPhase(session);
+  const { phase, release } = useShownPhase(session, peeking);
   const playable = playableCards(view);
 
   // Once the match is won there is nothing left to lose by going, so the exit
@@ -251,6 +310,7 @@ export function GameBoard({
           phase={phase}
           session={session}
           onDone={settled && exit !== null ? exit.leave : null}
+          onStartPlay={release}
         />
       </main>
 

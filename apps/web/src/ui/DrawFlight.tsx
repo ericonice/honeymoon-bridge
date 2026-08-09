@@ -27,23 +27,21 @@ export interface Flight {
 
 /** Half-dimensions, so a Point addresses a card's center, not its top-left corner. */
 const HALF: Record<string, { x: number; y: number }> = {
-  feature: { x: 56, y: 80 },
+  mini: { x: 14, y: 20 },
   table: { x: 32, y: 48 },
 };
 
 /**
- * One card traveling from the stock to wherever the turn sent it.
+ * One card leaving the pair for wherever the turn sent it.
  *
- * The movement is the message: two cards leave the deck every turn, and where
- * each lands is precisely the keep-or-reject choice. The opponent's fly face
- * down, so destinations are public and cards stay private.
+ * The movement is the message: a turn spends both cards of the pair, and which
+ * one ends in a hand rather than the discard is precisely the choice that was
+ * made.
  *
- * A card with a `via` stops there on the way, for one of two reasons. Yours is
- * card 2 on a keep — the card the rules have you look at and the one you would
- * otherwise never see — pausing where you were already looking. Theirs is card
- * 1, held in front of them before their choice resolves it, because two face-
- * down cards are otherwise indistinguishable and the destinations would carry
- * no information at all. Neither is replayable; once it lands it is gone.
+ * A card with a `via` stops there on the way. That is card 2 on a keep — the
+ * card the rules have you look at and the one you would otherwise never see —
+ * pausing where it already lay so that turning over and being thrown away read
+ * as one movement. It is not replayable; once it lands it is gone.
  */
 export function DrawFlight({ flight }: { readonly flight: Flight }): React.JSX.Element {
   const half = HALF[flight.size] ?? HALF.table!;

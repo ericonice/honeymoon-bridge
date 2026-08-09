@@ -46,10 +46,38 @@ The draw phase is 26 turns of the same decision, so the screen it happens on car
 game's feel. What follows is a layout requirement, not a styling one — each element earns its place
 by making a rule visible.
 
-Top to bottom: **the opponent's hand** as a face-down row that grows a card a turn; **the stock,
-card 1, and the discard pile** in a row across the middle; **keep and reject** as two full-width
-buttons; **your own hand** along the bottom, visible at all times, because every keep-or-reject is
-judged against what you already hold.
+Top to bottom: **the opponent's hand** as a face-down row that grows a card a turn; **the stock and
+the discard pile** across the middle; **the two cards the turn spends**, card 1 face up and card 2
+face down; **your own hand** along the bottom, visible at all times, because every draw is judged
+against what you already hold.
+
+**The choice is those two cards, not a pair of buttons.** It was keep and reject as two full-width
+buttons, which stated the rule correctly and left the player to translate it: *reject* is a word
+that has to be turned back into "and take an unknown card instead" every single time it is read. A
+turn spends two cards and yields one, so what is actually being decided is **which of the two goes
+into the hand** — one that can be seen and one that cannot. Two cards side by side, one face up and
+one face down, is that sentence as a picture. Tapping the face-up card keeps it; tapping the
+face-down card takes it sight-unseen. Nothing needs translating, and the gamble looks like a gamble
+instead of being described as one.
+
+The cost is a smaller target than a full-width button, on a decision that is final and has no
+confirmation step, and it is paid rather than dodged: the pair is drawn at the largest card size in
+the app, each card's tappable area is padded past its edges, and each is labeled underneath with
+what taking it does. The face-down card is kept clear of the stock, which is the other face-down
+thing on the screen and must never be what a thumb finds first.
+
+**The pair is yours, and only ever yours.** A single shared pair whose ownership followed the turn
+was tried first, on the reasoning that the opponent is visibly taking the same decision you take.
+With the computer's cards showing it read instead as a card of theirs turning up in your slot, told
+apart from your own by nothing but a colored outline — and in a card game *position* is what says
+whose a card is, so position was saying nothing. **The computer gets a pair of its own**, under its
+own hand, and yours stops being lent out.
+
+Theirs appears only while its cards are being shown, and is drawn smaller than yours. Both follow
+from the same fact: it is an aid to watching the computer rather than a part of the game, so
+reserving a strip of a phone screen for two unreadable face-down cards would charge every deal
+anybody plays for it. The difference in size is not decoration either — it says whose pair is whose
+a second time, in the way that survives being glanced at.
 
 The stock shows its remaining count and visibly thins as it empties. The discard pile does the
 reverse. Both are the same information as the number printed on them; the phase is *about* the deck
@@ -63,25 +91,43 @@ vanishes. Within a suit, high cards first.
 
 **Your own resolved turn is animated as the movement of two cards**, because where those two cards
 go is the rule: one arrives in your hand and one in the discard, and which went where is exactly
-the keep-or-reject distinction.
+what you just chose. Both leave from the pair rather than from the stock — they are already on the
+table, so the animation is that pair resolving rather than two cards arriving from somewhere else.
 
-- **The opponent's turn is not animated.** It was, once, with a beat first so their card 1 could be
-  told from card 2 — the reasoning being that destinations carry the choice. In the hand it read as
-  ceremony. Their hand grows by one either way, the deck drops by two, and a line of text says what
-  they did in words; two face-down cards traveling added none of that and cost about a second on
-  each of their thirteen turns, on the phase whose open question is whether it drags. It is now a
-  pause long enough to register, with something visibly moving so the game does not look stopped.
+- **The opponent's turn is not animated, unless their cards are showing.** It was, once, with a
+  beat first so their card 1 could be told from card 2 — the reasoning being that destinations
+  carry the choice. In the hand it read as ceremony. Their hand grows by one either way, the deck
+  drops by two, and a line of text says what they did in words; two face-down cards traveling added
+  none of that and cost about a second on each of their thirteen turns, on the phase whose open
+  question is whether it drags. It is now a pause long enough to register, with something visibly
+  moving so the game does not look stopped.
+
+  **With the setting that shows the robot's cards turned on, their turn plays out exactly as yours
+  does.** This is the same test rather than a hole in it: the animation was cut because it carried
+  no information, not because motion is bad. With their cards visible it carries plenty — card 1 is
+  face up in the pair, card 2 stays hidden until they commit just as yours does, and watching which
+  one they took is watching the decision instead of being told the result afterwards. Motion that
+  carries information earns its second back, and somebody who turned that setting on turned it on
+  to watch. The commentary line goes back to naming the choice rather than the two cards, which are
+  now on the screen anyway.
 - **The player's own turn keeps its animation**, because it is doing work nothing else does: it is
   what shows you card 2 on a keep, which the rules require.
-- **Both of your own cards are shown face up**, and on a keep, card 2 is held face up long enough
-  to read before it goes to the discard. This is required, not decorative: §1.4 has you look at
-  both cards on every turn, and the 13 cards you keep plus the 13 you throw away are the 26 you are
-  entitled to have seen. A UI that skips card 2 silently deletes half of what you are supposed to
-  be remembering.
-- **Your card 1 is not turned over until the board is still.** The rules engine hands it to you
-  the instant the opponent's turn resolves, but that turn is still playing out on screen. Showing
-  it early steps on their animation and invites a decision taken while you are still being told
-  what just happened. It stays face down, and both buttons stay disabled, until the table settles.
+- **Both of your own cards are shown face up**, and on a keep, card 2 turns over in place and is
+  held long enough to read before it goes to the discard. This is required, not decorative: §1.4
+  has you look at both cards on every turn, and the 13 cards you keep plus the 13 you throw away
+  are the 26 you are entitled to have seen. A UI that skips card 2 silently deletes half of what
+  you are supposed to be remembering.
+- **Neither seat's card 1 is turned over until the board is still.** The rules engine hands a player
+  card 1 the instant the other's turn resolves, but that turn is still playing out on screen.
+  Showing it early steps on the animation and invites a decision taken while you are still being
+  told what just happened. Yours stays face down, and neither of your cards can be tapped, until
+  the table settles.
+
+  **The computer's card 1 obeys the same rule**, and the first build of its pair broke it: its card
+  turned face up the moment you tapped, so the card you were about to read appeared over the top of
+  your own two still travelling to your hand and the discard. It follows that the computer also
+  waits a beat longer than the animation before it moves — a card that turns over and leaves in the
+  same instant was never shown at all, and showing it is the entire reason its pair is on the table.
 - **The card that just entered your hand is marked** until the next one replaces it. The hand is
   displayed sorted, so a card taken sight-unseen slots in among twelve others with nothing to say
   it just arrived. The mark does not move the card out of the row — a card that jumps forward
@@ -102,13 +148,17 @@ reasons over it.
 - Consequence: the 26 cards a player has *not* seen are split between the opponent's hand
   and the opponent's discards, in unknown proportion. Deducing which is the core inference
   problem of the game.
-- **A player's own discards reach back exactly one turn.** Each is seen at the moment of the
+- **A player's own discards are seen once and never again.** Each is seen at the moment of the
   turn that throws it away — §1.3 requires that, or the player has not in fact looked at both
-  cards — and the turn just played can be called back up, because the reveal is a card in
-  motion and can be missed. That recall closes the instant the next turn is taken. There is no
-  discard list, no history and no way further back; the app shows the current hand and nothing
-  else. Recalling the other twelve is the player's own problem. Memory is deliberately part of
-  the game.
+  cards — and that is the whole of it. There is no discard list, no history, and no way back to
+  any of the thirteen; the app shows the current hand and nothing else. Recalling them is the
+  player's own problem. Memory is deliberately part of the game.
+
+  The turn just played *could* be called back up for a while, on the reasoning that the reveal is
+  a card in motion and can be missed. It went unused in practice, and the reason it did is worth
+  keeping: card 2 no longer flies past on its way somewhere: since the pair sits on the table, it
+  turns face up where it already lies and is held there to be read. The recall was covering for a
+  reveal that was easy to miss, and that reveal was fixed rather than compensated for.
 
 **Public to both players:**
 - Whose turn it is and how many cards remain in the stock.
@@ -153,9 +203,31 @@ Full contract bridge auction once both hands are complete.
 
   This is the same mistake as the one §1.3 fixes at the end of the draw, in the same place: a phase
   ends on a beat the engine has no reason to wait for, so its last turn is the one turn nobody sees.
-  Both are now one rule — the phase being *shown* lags the phase the engine is in by the length of
+  These are now one rule — the phase being *shown* lags the phase the engine is in by the length of
   whatever it was still animating — and anything that ends a phase on an animation belongs there
   too rather than in a third special case.
+- **The closed auction is held until it is dismissed, rather than for a set time.** An auction
+  settles on the call before the final pass, and the play screen used to replace it in that same
+  instant — taking the record of how it got there with it. The contract itself survives in the top
+  bar for the whole of the play; the *sequence of calls* does not, and that is the only thing that
+  says why the contract is what it is.
+
+  This is the rule above with the budget taken out of it. A trick being swept and a card 2 being
+  read have a natural length and can therefore be waited out; a closed auction has none, so any
+  delay would be a number picked out of the air — and a delay long enough to study an auction is
+  one nobody would sit through on every deal of a rubber. It is dismissed by hand instead, with a
+  control that reads as starting the play rather than as closing a dialog, because what comes next
+  is the opening lead and the lead is made by the **non-declarer** — the rule here people most
+  reliably have backwards.
+
+  **The opponent is not held along with it.** Over a network there is no way to stop the other seat
+  leading while this sits on somebody's screen, so the computer is not stopped either. The hold is
+  one seat's screen lagging its own game, exactly as at the end of the draw, and not a pause in the
+  deal: a lead already on the table when the screen is dismissed is the correct outcome, and it is
+  the same outcome in both versions.
+
+  A deal passed out needs none of this. It completes rather than going to play, and the screen that
+  says so is already dismissed by hand.
 - **The last completed trick can be called back up on demand.** Both cards were played face up and
   both players saw them, so this is public — it is the paper game's right to look back at the trick
   just played. Only the most recent one: the whole history is available in the state, and offering

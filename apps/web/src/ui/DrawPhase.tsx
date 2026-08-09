@@ -1,12 +1,11 @@
 import { cardId } from "@hb/engine";
 import type { Card, DrawChoice, Pair, PlayerView } from "@hb/engine";
 import { motion } from "framer-motion";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { DRAW_TIMING, drawTurnDuration } from "../game/timing.js";
-import { revealsUnseenCard } from "@hb/engine";
+import { useLayoutEffect, useRef, useState } from "react";
+import { DRAW_TIMING, drawPlayout } from "../game/timing.js";
 import type { DrawPair, DrawReveal } from "../game/session.js";
-import { CardBack, CardFace, CardSlot } from "./CardFace.js";
-import { CardText } from "./CardText.js";
+import { CardBack, CardFace } from "./CardFace.js";
+import type { CardSize } from "./CardFace.js";
 import { DrawFlight } from "./DrawFlight.js";
 import type { Flight, Point } from "./DrawFlight.js";
 import { DiscardPile, DrawDeck } from "./DrawPiles.js";
@@ -14,17 +13,21 @@ import { SeatLabel } from "./SeatLabel.js";
 
 export interface DrawPhaseProps {
   readonly lastDraw: DrawReveal | null;
-  /** The two cards your own last turn spent, for the recall control. */
-  readonly lastOwnDraw: DrawPair | null;
   readonly opponentName: string;
   readonly vulnerable: Pair<boolean>;
-  /** Development builds only: names the opponent's last two cards in the commentary. */
-  readonly peekLastDraw: DrawPair | null;
   /**
-   * Development builds only: card 1 of the opponent's turn, shown in the slot
-   * where your own would be. Never enables the buttons — it is their turn.
+   * Development builds only: the two cards the opponent's last turn spent, which
+   * is what lets their turn be animated the way yours is.
    */
+  readonly peekLastDraw: DrawPair | null;
+  /** Development builds only: card 1 of the opponent's turn, shown in their pair. */
   readonly peekPending: Card | null;
+  /**
+   * Whether the computer's cards are actually being shown, which is the setting
+   * *and* a game that holds them — over a network they never reach the device.
+   * It is what puts the computer's own pair on the table.
+   */
+  readonly showingTheirCards: boolean;
   readonly view: PlayerView;
   onDecide(keep: boolean): void;
 }
@@ -40,26 +43,18 @@ function lastOpponentChoice(view: PlayerView): DrawChoice | null {
 }
 
 /**
- * The opponent's choice is public even though neither of their cards is. It is
- * the only thing you learn about their hand across the whole draw, so it is
- * said in full words as well as shown by where their cards fly.
- */
-/**
  * The running commentary on the opponent's turn.
  *
- * While peeking it is the same sentence with the cards named, rather than a
- * second line beside it: watching a face-down card fly says what the bot chose
- * but never what it chose from, and that is most of what you need to judge a
- * draw rule.
+ * Their choice is public even though neither of their cards is. It is the only
+ * thing you learn about their hand across the whole draw, so it is said in
+ * words as well as shown by where their cards go.
  */
 function OpponentLine({
   opponentName,
-  peek,
   settling,
   view,
 }: {
   readonly opponentName: string;
-  readonly peek: DrawPair | null;
   readonly settling: boolean;
   readonly view: PlayerView;
 }): React.JSX.Element {
@@ -72,70 +67,100 @@ function OpponentLine({
     return <>{opponentName} has not drawn yet.</>;
   }
 
-  if (peek !== null) {
-    return (
-      <span className="text-fuchsia-300/90">
-        {choice === "kept-first" ? (
-          <>
-            {opponentName} kept the <CardText card={peek.taken} on="dark" /> and threw the{" "}
-            <CardText card={peek.discarded} on="dark" />
-          </>
-        ) : (
-          <>
-            {opponentName} rejected the <CardText card={peek.discarded} on="dark" /> and took the{" "}
-            <CardText card={peek.taken} on="dark" />
-          </>
-        )}
-      </span>
-    );
-  }
-
-  // Which card they acted on is the whole message; what rejecting entails is
-  // the same every turn and does not need restating twenty-six times.
+  // The same two words the labels under your own pair use. "Rejected" was the
+  // vocabulary of the buttons that pair replaced, and it needed translating
+  // back into "and took an unknown card instead" every time it was read — which
+  // is the reason those buttons went, and applies to a sentence just as well.
   return choice === "kept-first" ? (
     <>{opponentName} kept the first card.</>
   ) : (
-    <>{opponentName} rejected the first card.</>
+    <>{opponentName} took the unseen card.</>
   );
 }
 
 /**
- * The turn you have just played, on demand.
+ * One half of the pair, and the tap that takes it.
  *
- * Both cards were yours to see at the time — §1.3 has you look at card 2 even
- * when you throw it away — and this reaches back exactly one turn, closing the
- * moment you take the next. It exists because the reveal is a card in motion
- * and can be missed, not to spare you remembering: the thirteen cards behind
- * this one stay gone.
+ * The card *is* the choice: one that can be seen and one that cannot, and
+ * taking either is what the turn amounts to. The hit area is padded well past
+ * the card because a draw is final the instant it is made — §1.6 gives a bid a
+ * confirmation tap and gives this none, so the target has to be forgiving
+ * instead.
  */
-function LastDrawReview({
-  onClose,
-  pair,
+function ChoiceCard({
+  card,
+  label,
+  onTake,
+  slotRef,
 }: {
-  readonly onClose: () => void;
-  readonly pair: DrawPair;
+  /** Null shows a back: card 2 always, and card 1 until it is yours to see. */
+  readonly card: Card | null;
+  /** What taking this card does, or null when the turn is not yours. */
+  readonly label: string | null;
+  readonly onTake: (() => void) | null;
+  readonly slotRef: React.RefObject<HTMLDivElement | null>;
 }): React.JSX.Element {
+  const takeable = onTake !== null;
+
   return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-black/75 px-6">
-      <p className="text-sm text-white/60">Your last turn</p>
-      <div className="flex items-start gap-6">
-        {[
-          { card: pair.taken, label: "into your hand" },
-          { card: pair.discarded, label: "thrown away" },
-        ].map((entry) => (
-          <div key={entry.label} className="flex flex-col items-center gap-2">
-            <CardFace card={entry.card} size="table" />
-            <span className="text-xs text-white/50">{entry.label}</span>
-          </div>
-        ))}
-      </div>
+    <div className="flex flex-col items-center gap-2">
       <button
         type="button"
-        className="rounded-xl bg-white px-6 py-3 text-base font-semibold text-stone-900"
-        onClick={onClose}
+        className={`rounded-2xl p-3 ${takeable ? "transition-transform active:scale-95" : "cursor-default"}`}
+        disabled={!takeable}
+        onClick={onTake ?? undefined}
       >
-        Close
+        <div ref={slotRef}>
+          {card === null ? (
+            <CardBack size="table" />
+          ) : (
+            <motion.div
+              // Keyed on the card, so turning over each new card 1 is its own
+              // moment rather than a silent swap.
+              key={cardId(card)}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+            >
+              <CardFace card={card} size="table" />
+            </motion.div>
+          )}
+        </div>
       </button>
+      {/* The height is held whether or not there is a label, so the pair does
+          not shift up and down twice a turn. */}
+      <span className="h-4 text-xs text-white/55">{label}</span>
+    </div>
+  );
+}
+
+/**
+ * The computer's own pair, while its cards are being shown.
+ *
+ * It had a turn's use of yours once, marked with a ring. Position is what says
+ * whose a card is, and borrowing your slot made position say nothing — so it
+ * has its own, under its own hand, and the smaller size says it again. Never
+ * tappable: it is not your decision. The ring is around the whole area rather
+ * than each card, marking the thing that is not part of the game exactly once.
+ */
+function TheirPair({
+  cardOne,
+  oneRef,
+  twoRef,
+}: {
+  /** Their card 1 while they are deciding; a back once the turn has resolved. */
+  readonly cardOne: Card | null;
+  readonly oneRef: React.RefObject<HTMLDivElement | null>;
+  readonly twoRef: React.RefObject<HTMLDivElement | null>;
+}): React.JSX.Element {
+  return (
+    <div className="flex items-start gap-2 rounded-lg p-1.5 ring-1 ring-fuchsia-400/40">
+      <div ref={oneRef}>
+        {cardOne === null ? <CardBack size="mini" /> : <CardFace card={cardOne} size="mini" />}
+      </div>
+      <div ref={twoRef}>
+        <CardBack size="mini" />
+      </div>
     </div>
   );
 }
@@ -151,29 +176,37 @@ function centerIn(container: DOMRect, element: HTMLElement | null): Point | null
   };
 }
 
+/**
+ * The two cards a resolved turn spent, or null when they are not this screen's
+ * to show — which is every turn of the opponent's without their cards showing.
+ */
+function pairFor(reveal: DrawReveal, mine: boolean, peekLastDraw: DrawPair | null): DrawPair | null {
+  if (!mine) {
+    return peekLastDraw;
+  }
+  return reveal.discarded === null || reveal.taken === null
+    ? null
+    : { discarded: reveal.discarded, taken: reveal.taken };
+}
+
 export function DrawPhase({
   lastDraw,
-  lastOwnDraw,
   onDecide,
   opponentName,
   peekLastDraw,
   peekPending,
+  showingTheirCards,
   view,
   vulnerable,
 }: DrawPhaseProps): React.JSX.Element {
-  const [recalling, setRecalling] = useState(false);
-  const turnCount = view.drawTurns.length;
-
-  // Closes as soon as the next turn is taken: this reaches back exactly one
-  // turn, never further.
-  useEffect(() => {
-    setRecalling(false);
-  }, [turnCount]);
   const containerRef = useRef<HTMLDivElement>(null);
   const deckRef = useRef<HTMLDivElement>(null);
   const discardRef = useRef<HTMLDivElement>(null);
   const opponentRef = useRef<HTMLDivElement>(null);
-  const pendingRef = useRef<HTMLDivElement>(null);
+  const oneRef = useRef<HTMLDivElement>(null);
+  const twoRef = useRef<HTMLDivElement>(null);
+  const theirOneRef = useRef<HTMLDivElement>(null);
+  const theirTwoRef = useRef<HTMLDivElement>(null);
   const mineRef = useRef<HTMLDivElement>(null);
   const [flights, setFlights] = useState<readonly Flight[]>([]);
   const [settling, setSettling] = useState(false);
@@ -181,10 +214,13 @@ export function DrawPhase({
   const pending = view.pending;
   const turn = lastDraw?.turn ?? 0;
 
-  // The engine hands you card 1 the instant the opponent's turn resolves.
-  // Turning it over that same instant invites a decision taken while you are
-  // still being told what just happened, so it stays face down for a beat.
+  // The engine hands each seat its card 1 the instant the other's turn
+  // resolves. Turning one over in that same instant puts it on top of an
+  // animation still running, so neither is turned over until the board is
+  // still — yours here, and the computer's in the pair above.
   const shown = settling ? null : pending;
+  const theirShown = settling ? null : peekPending;
+  const decidable = shown !== null;
 
   // Keyed on the turn number alone, deliberately: one flight per resolved turn,
   // replayed never. Re-running it on any other change would re-show a card the
@@ -195,70 +231,85 @@ export function DrawPhase({
       return;
     }
 
-    // The opponent's cards do not fly. Their hand grows by one, the deck drops
-    // by two and the line below says what they did — watching two face-down
-    // cards travel added a second a turn and told you none of that. All that is
-    // needed is long enough to register that a turn happened.
-    if (lastDraw.by !== view.me) {
-      setSettling(true);
-      const beat = setTimeout(() => {
+    const mine = lastDraw.by === view.me;
+    const pair = pairFor(lastDraw, mine, peekLastDraw);
+    const playout = drawPlayout(lastDraw, !mine && showingTheirCards && pair !== null);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    // Whoever just went, the board is busy until their turn has played out, and
+    // no card 1 turns over while it is. Set for your own turn too: the engine
+    // deals the computer its card the instant you tap, and without this it
+    // turned face up over your own two cards still travelling.
+    setSettling(true);
+    timers.push(
+      setTimeout(() => {
         setSettling(false);
-      }, DRAW_TIMING.think);
-      return () => {
-        clearTimeout(beat);
-      };
-    }
+      }, playout.duration),
+    );
 
+    // Each seat's cards leave that seat's own pair, and are drawn at that pair's
+    // own size — which is the same thing the layout is saying, said again while
+    // the cards are in the air.
+    const size: CardSize = mine ? "table" : "mini";
     const bounds = container.getBoundingClientRect();
-    const deck = centerIn(bounds, deckRef.current);
     const discard = centerIn(bounds, discardRef.current);
-    const hand = centerIn(bounds, mineRef.current);
-    if (deck === null || discard === null || hand === null) {
-      return;
+    const hand = centerIn(bounds, mine ? mineRef.current : opponentRef.current);
+    const one = centerIn(bounds, mine ? oneRef.current : theirOneRef.current);
+    const two = centerIn(bounds, mine ? twoRef.current : theirTwoRef.current);
+
+    if (
+      playout.animated &&
+      pair !== null &&
+      discard !== null &&
+      hand !== null &&
+      one !== null &&
+      two !== null
+    ) {
+      const kept = lastDraw.choice === "kept-first";
+
+      // Choreograph by card 1 and card 2, not by taken and discarded: card 1
+      // goes to a hand on a keep and to the discard on a reject, and card 2
+      // takes whichever place is left. Both leave from the pair rather than
+      // from the stock, because that is where they already are.
+      const cardOne = kept ? pair.taken : pair.discarded;
+      const cardTwo = kept ? pair.discarded : pair.taken;
+
+      setFlights([
+        {
+          card: cardOne,
+          delay: 0,
+          from: one,
+          hold: 0,
+          key: `${turn}-one`,
+          size,
+          to: kept ? hand : discard,
+          via: null,
+        },
+        {
+          card: cardTwo,
+          delay: 0,
+          from: two,
+          hold: playout.holdsReveal ? DRAW_TIMING.hold : 0,
+          key: `${turn}-two`,
+          size,
+          to: kept ? discard : hand,
+          // Card 2 on a keep turns face up where it already lies and stays
+          // there long enough to read. It is the only chance to see it.
+          via: playout.holdsReveal ? two : null,
+        },
+      ]);
+
+      timers.push(
+        setTimeout(() => {
+          setFlights([]);
+        }, playout.duration),
+      );
     }
-
-    const slot = centerIn(bounds, pendingRef.current);
-    const kept = lastDraw.choice === "kept-first";
-    const holdsReveal = revealsUnseenCard(lastDraw);
-
-    // Choreograph by card 1 and card 2, not by taken and discarded: card 1 goes
-    // to your hand on a keep and to the discard on a reject, and card 2 takes
-    // whichever place is left.
-    const cardOne = kept ? lastDraw.taken : lastDraw.discarded;
-    const cardTwo = kept ? lastDraw.discarded : lastDraw.taken;
-
-    setFlights([
-      {
-        card: cardOne,
-        delay: 0,
-        // It was already face up in the middle, so it leaves from there.
-        from: slot ?? deck,
-        hold: 0,
-        key: `${turn}-one`,
-        size: "feature",
-        to: kept ? hand : discard,
-        via: null,
-      },
-      {
-        card: cardTwo,
-        delay: 0,
-        from: deck,
-        hold: holdsReveal ? DRAW_TIMING.hold : 0,
-        key: `${turn}-two`,
-        // Card 2 on a keep pauses in the middle at full size, big enough to
-        // commit to memory. It is the only chance you get to see it.
-        size: holdsReveal ? "feature" : "table",
-        to: kept ? discard : hand,
-        via: holdsReveal ? slot : null,
-      },
-    ]);
-
-    const timer = setTimeout(() => {
-      setFlights([]);
-    }, drawTurnDuration(true, holdsReveal));
 
     return () => {
-      clearTimeout(timer);
+      for (const timer of timers) {
+        clearTimeout(timer);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turn]);
@@ -266,6 +317,11 @@ export function DrawPhase({
   return (
     <div
       ref={containerRef}
+      // Deliberately not scrollable. Making it so was tried, to stop the app
+      // frame's `overflow-hidden` cutting the bottom off in silence — but the
+      // cards in flight are positioned against this box and pass beyond its
+      // edges on the way to a hand, so a scrollbar appeared on every turn. The
+      // sizes below are what has to keep this fitting instead.
       className="relative flex flex-1 flex-col items-center justify-between px-4 py-3"
     >
       <div className="flex flex-col items-center gap-1">
@@ -276,119 +332,96 @@ export function DrawPhase({
           name={opponentName}
           vulnerable={vulnerable[view.opponent]}
         />
-        <div ref={opponentRef} className="flex">
-          {Array.from({ length: view.handSizes[view.opponent] }, (_, index) => (
-            <div key={index} className={index > 0 ? "-ml-4" : ""}>
-              <CardBack size="mini" />
-            </div>
-          ))}
-          {view.handSizes[view.opponent] === 0 ? (
-            <span className="h-10 text-xs text-white/30">no cards yet</span>
-          ) : null}
-        </div>
+        {/* Their hand as a growing row of backs — except while their cards are
+            showing, when the same hand is already on screen face up in the band
+            above and this is the identical information with less in it. */}
+        {showingTheirCards ? null : (
+          // Sized from the outset for all thirteen — 28px for the first card
+          // and 12px for each one that overlaps it. The row still visibly grows
+          // a card a turn, which is the point of it, but the box holding it
+          // never changes, so nothing above or below is nudged by the growing.
+          <div className="flex h-10 w-43 items-center justify-center">
+            {view.handSizes[view.opponent] === 0 ? (
+              <span className="text-xs text-white/30">no cards yet</span>
+            ) : (
+              Array.from({ length: view.handSizes[view.opponent] }, (_, index) => (
+                <div key={index} className={index > 0 ? "-ml-4" : ""}>
+                  <CardBack size="mini" />
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* Their side of the table, and only while their cards are showing —
+            two unreadable backs would cost every deal anybody plays a strip of
+            the screen to say nothing. */}
+        {showingTheirCards ? (
+          <TheirPair cardOne={theirShown} oneRef={theirOneRef} twoRef={theirTwoRef} />
+        ) : null}
+
+        {/* What they did, directly under whatever of theirs is on screen — the
+            pair while it is showing, the face-down hand otherwise. It sat down
+            in your own half once, which put a sentence about them as far from
+            them as the layout allows. */}
+        <p className="flex min-h-10 max-w-sm items-center justify-center px-4 text-center text-sm text-white/70">
+          <OpponentLine opponentName={opponentName} settling={settling} view={view} />
+        </p>
       </div>
 
-      {/* Deck, card 1 and the discard in one row: two cards leave the left,
-          one ends in a hand and one ends on the right, every turn. */}
-      <div className="flex items-center justify-center gap-3">
+      {/* The stock and the discard sit at the edges, clear of the pair below:
+          the deck is the other face-down thing on this screen and must never be
+          what a thumb reaching for card 2 finds first. */}
+      <div className="flex w-full max-w-xs items-start justify-between">
         <div ref={deckRef}>
           <DrawDeck remaining={view.stockRemaining - (pending === null ? 0 : 1)} />
-        </div>
-        <div ref={pendingRef} className="pb-6">
-          {/* Guarded on DEV as well as on the data, so the branch folds away
-              rather than merely never being reached. */}
-          {shown === null && peekPending !== null ? (
-            // Theirs, not yours — ringed in the debug color so it can never be
-            // mistaken for a card you are being offered.
-            // Card 1 only, exactly what the opponent is looking at — the same
-            // card you would be shown in their seat. What they then did with it
-            // is said in the line below and shown by where it flies.
-            <div className="rounded-2xl ring-2 ring-fuchsia-400">
-              <CardFace card={peekPending} size="feature" />
-            </div>
-          ) : shown === null ? (
-            <CardBack size="feature" />
-          ) : (
-            <motion.div
-              // Keyed on the card, so turning over each new card 1 is its own
-              // moment rather than a silent swap.
-              key={cardId(shown)}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-            >
-              <CardFace card={shown} size="feature" />
-            </motion.div>
-          )}
         </div>
         <div ref={discardRef}>
           <DiscardPile count={view.drawTurns.length} />
         </div>
       </div>
 
-      <div className="flex w-full max-w-sm flex-col gap-3">
-        {/* Your side of the table: the two buttons are your cards' equivalent
-            here, so the label belongs with them. */}
-        <SeatLabel active={shown !== null} name="You" vulnerable={vulnerable[view.me]} />
-
-        <p className="flex min-h-10 items-center justify-center text-center text-sm text-white/70">
-          <OpponentLine
-            opponentName={opponentName}
-            peek={peekLastDraw}
-            settling={settling}
-            view={view}
-          />
-        </p>
-
-        {lastOwnDraw === null ? null : (
-          <button
-            type="button"
-            className="self-center rounded-lg border border-white/25 px-3 py-1.5 text-xs text-white/70"
-            onClick={() => {
-              setRecalling(true);
-            }}
-          >
-            Show my last draw
-          </button>
-        )}
-        <button
-          type="button"
-          className="rounded-xl bg-white px-4 py-4 text-lg font-semibold text-stone-900 disabled:opacity-30"
-          disabled={shown === null}
-          onClick={() => {
-            onDecide(true);
-          }}
-        >
-          Keep {shown === null ? "this card" : <CardText card={shown} on="light" />}
-        </button>
-        <button
-          type="button"
-          className="rounded-xl border border-white/30 px-4 py-4 text-base font-medium text-white disabled:opacity-30"
-          disabled={shown === null}
-          onClick={() => {
-            onDecide(false);
-          }}
-        >
-          Reject
-        </button>
+      {/* The decision itself: the two cards this turn spends, one you can see
+          and one you cannot. Taking either is the whole move. */}
+      <div className="flex items-start justify-center gap-8">
+        <ChoiceCard
+          card={shown}
+          label={decidable ? "Keep" : null}
+          slotRef={oneRef}
+          onTake={
+            decidable
+              ? () => {
+                  onDecide(true);
+                }
+              : null
+          }
+        />
+        <ChoiceCard
+          card={null}
+          label={decidable ? "Take unseen" : null}
+          slotRef={twoRef}
+          onTake={
+            decidable
+              ? () => {
+                  onDecide(false);
+                }
+              : null
+          }
+        />
       </div>
 
-      {/* Where cards headed for your own hand are aimed: just above the hand
-          pinned to the bottom of the app frame. */}
+      <SeatLabel active={decidable} name="You" vulnerable={vulnerable[view.me]} />
+
+      {/* Where cards headed for a hand are aimed: yours pinned to the bottom of
+          the app frame, theirs to the top. Anchors rather than the rows
+          themselves, because their row is not always drawn — a flight must not
+          depend on whether the thing it flies towards is currently on screen. */}
       <div ref={mineRef} className="absolute bottom-0 left-1/2 h-0 w-0" />
+      <div ref={opponentRef} className="absolute top-0 left-1/2 h-0 w-0" />
 
       {flights.map((flight) => (
         <DrawFlight key={flight.key} flight={flight} />
       ))}
-
-      {recalling && lastOwnDraw !== null ? (
-        <LastDrawReview
-          pair={lastOwnDraw}
-          onClose={() => {
-            setRecalling(false);
-          }}
-        />
-      ) : null}
     </div>
   );
 }

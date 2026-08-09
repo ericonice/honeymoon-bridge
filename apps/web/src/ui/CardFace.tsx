@@ -1,15 +1,20 @@
 import type { Card } from "@hb/engine";
 import { rankLabel, suitIsRed, suitSymbol } from "../game/labels.js";
 
-export type CardSize = "feature" | "hand" | "mini" | "table";
+export type CardSize = "hand" | "mini" | "table";
 
 /**
  * Sizes are set here rather than by the caller so cards stay the same size
- * everywhere they appear. `feature` is the single card you are deciding on
- * during the draw, which wants to be unmistakably the subject of the screen.
+ * everywhere they appear.
+ *
+ * There was a fourth, half again as tall as `table`, for the pair being decided
+ * between during the draw — on the reasoning that the subject of the screen
+ * should look like it, and that a card being tapped needs a target. It made the
+ * draw phase the one screen that could not hold everything on it at once. A
+ * card at `table` is tapped comfortably enough, and padding the hit area past
+ * the card's edges is what was really carrying that anyway.
  */
 const SIZES: Record<CardSize, string> = {
-  feature: "h-40 w-28 rounded-2xl p-2 text-2xl",
   hand: "h-20 w-14 rounded-lg p-1 text-base",
   mini: "h-10 w-7 rounded p-0.5 text-[0.6rem]",
   table: "h-24 w-16 rounded-xl p-1.5 text-lg",

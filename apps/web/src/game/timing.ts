@@ -1,3 +1,5 @@
+import type { DrawReveal } from "@hb/engine";
+
 /**
  * Draw-phase pacing, in milliseconds.
  *
@@ -23,6 +25,9 @@ export const DRAW_TIMING = {
    * what they did in words, their hand grows by one either way, and the two
    * face-down cards moving added nothing but about a second — thirteen times a
    * deal, on the phase whose whole open question is whether it drags.
+   *
+   * With their cards showing it is information again, and their turn costs what
+   * yours does instead. See `drawPlayout`.
    */
   think: 600,
 };
@@ -43,13 +48,62 @@ export function setPacing(multiplier: number): void {
 }
 
 /** How long a resolved draw turn takes to play out end to end. */
-export function drawTurnDuration(mine: boolean, holdsReveal: boolean): number {
-  if (!mine) {
+export function drawTurnDuration(animated: boolean, holdsReveal: boolean): number {
+  if (!animated) {
     return DRAW_TIMING.think * pacing;
   }
   return (
     ((holdsReveal ? DRAW_TIMING.hold : 0) + DRAW_TIMING.flight + DRAW_TIMING.settle) * pacing
   );
+}
+
+/** How a resolved draw turn plays out on screen. */
+export interface DrawPlayout {
+  /** Whether the two cards travel, or the turn is only a pause. */
+  readonly animated: boolean;
+  /** Milliseconds it occupies, start to finish. */
+  readonly duration: number;
+  /** Whether card 2 is turned face up and held long enough to read. */
+  readonly holdsReveal: boolean;
+}
+
+/**
+ * How a turn plays out, decided in one place because three callers have to
+ * agree on it: the screen choreographs it, the board holds the phase open for
+ * it, and the session waits it out before the computer moves again.
+ *
+ * Your own turn always travels — it is the only thing that shows you card 2.
+ * Theirs normally does not, because two face-down cards moving say nothing the
+ * line of text below them does not already say. With their cards showing that
+ * stops being true, so their turn plays exactly as yours does.
+ */
+/**
+ * How long the board is left alone before the computer takes its draw turn.
+ *
+ * The turn before it has to finish playing out first, or the computer moves
+ * over the top of an animation still being watched.
+ *
+ * With its cards showing there is a second beat on top of that, because its
+ * card 1 is turned face up when the board settles — exactly as yours is — and a
+ * card that turns over and leaves in the same instant was never shown at all.
+ * Being able to watch it decide is the whole reason its pair is on the table.
+ */
+export function drawPauseBefore(previous: DrawReveal | null, theirCardsShowing: boolean): number {
+  // With no previous turn to play out, this is the computer opening the deal —
+  // still give the board a beat before anything moves on its own.
+  const playedOut =
+    previous === null
+      ? drawTurnDuration(true, false)
+      : drawPlayout(previous, theirCardsShowing).duration;
+  return theirCardsShowing ? playedOut + DRAW_TIMING.think * pacing : playedOut;
+}
+
+export function drawPlayout(reveal: DrawReveal, theirCardsShowing: boolean): DrawPlayout {
+  // `taken` is filled in only for the seat's own turn, so it needs no second
+  // opinion about whose turn this was.
+  const animated = reveal.taken !== null || theirCardsShowing;
+  const holdsReveal = animated && reveal.choice === "kept-first";
+  return { animated, duration: drawTurnDuration(animated, holdsReveal), holdsReveal };
 }
 
 /**

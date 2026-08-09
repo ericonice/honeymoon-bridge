@@ -65,11 +65,11 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
           </Rule>
 
           <Rule title="Each turn spends two cards and keeps one">
-            You are shown one card and must decide before the second is turned over. Keep the
-            first and the second is drawn, shown to you, and discarded. Reject the first and it is
-            discarded instead, and the second goes into your hand sight unseen — a real gamble on
-            a card you have not met. Either way you see both and keep one, which is why half the
-            deck never comes into play at all.
+            Two cards are put in front of you, one face up and one face down, and you take one of
+            them. Keep the face-up card and the other is drawn, shown to you, and discarded. Take
+            the unseen one instead and the first is discarded — a real gamble on a card you have
+            not met, since you commit before it is turned over. Either way you see both and keep
+            one, which is why half the deck never comes into play at all.
           </Rule>
 
           <Rule title="What you throw away is not shown again">

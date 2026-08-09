@@ -128,9 +128,16 @@ export function setStrength(next: Strength): void {
  * meant a rebuild anyway. As a setting somebody can actually turn on that made
  * it the one row that forgot itself, which reads exactly like a control that
  * does not work.
+ *
+ * **On by default on the dev server, off by default anywhere else.** It shows
+ * what the computer is up to and changes nothing about what it does, so locally
+ * it is wanted on nearly every run — and a stored choice still wins, which is
+ * what leaves the shipped experience reachable by turning it off rather than by
+ * building without it.
  */
 export function peeking(): boolean {
-  return readStored(PEEK_KEY) === "on";
+  const stored = readStored(PEEK_KEY);
+  return stored === null ? import.meta.env.DEV : stored === "on";
 }
 
 export function setPeeking(enabled: boolean): void {

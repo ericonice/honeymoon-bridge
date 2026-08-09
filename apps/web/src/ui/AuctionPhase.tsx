@@ -2,7 +2,7 @@ import { STRAINS, legalActionsForView } from "@hb/engine";
 import type { Call, Level, Pair, PlayerView, Strain } from "@hb/engine";
 import { useEffect, useState } from "react";
 import { callLabel, strainIsRed, strainSymbol } from "../game/labels.js";
-import { CallText, redTone } from "./CardText.js";
+import { CallText, ContractText, redTone } from "./CardText.js";
 import { SeatLabel } from "./SeatLabel.js";
 
 const LEVELS: readonly Level[] = [1, 2, 3, 4, 5, 6, 7];
@@ -12,6 +12,12 @@ export interface AuctionPhaseProps {
   readonly view: PlayerView;
   readonly vulnerable: Pair<boolean>;
   onCall(call: Call): void;
+  /**
+   * Non-null only once the auction has closed and this screen is being held
+   * open over a deal that has already moved on. Calling it gives the play
+   * screen up to the deal.
+   */
+  onStartPlay: (() => void) | null;
 }
 
 function callKey(call: Call): string {
@@ -63,8 +69,43 @@ function History({
   );
 }
 
+/**
+ * What the auction settled on, in place of the calls once there are none left
+ * to make.
+ *
+ * Who leads is stated rather than left to be worked out: the lead is the
+ * *non-declarer's*, which is the rule here people most reliably have backwards,
+ * and it is the very next thing that happens.
+ */
+function Settled({
+  opponentName,
+  view,
+}: {
+  readonly opponentName: string;
+  readonly view: PlayerView;
+}): React.JSX.Element | null {
+  const { contract } = view;
+  if (contract === null) {
+    return null;
+  }
+
+  const declared = contract.declarer === view.me;
+  return (
+    <div className="flex flex-col items-center gap-1 py-3">
+      <p className="text-xs tracking-widest text-white/40 uppercase">Contract</p>
+      <p className="text-3xl font-semibold">
+        <ContractText contract={contract} on="dark" />
+      </p>
+      <p className="text-sm text-white/60">
+        by {declared ? "you" : opponentName} — {declared ? opponentName : "you"} to lead
+      </p>
+    </div>
+  );
+}
+
 export function AuctionPhase({
   onCall,
+  onStartPlay,
   opponentName,
   view,
   vulnerable,
@@ -74,6 +115,9 @@ export function AuctionPhase({
 
   const myTurn = view.toAct === view.me;
   const legal = legalCallKeys(view);
+  // The deal has already moved to the play; this screen is only still up
+  // because §1.6 holds it there until it is dismissed.
+  const closed = onStartPlay !== null;
 
   // Anything picked before the opponent called may no longer be legal, and in
   // any case the auction has moved on. Start the decision again.
@@ -107,69 +151,77 @@ export function AuctionPhase({
 
       <History opponentName={opponentName} view={view} />
 
-      <div className="flex flex-col gap-1.5 px-3">
-        <div className="grid grid-cols-7 gap-1.5">
-          {LEVELS.map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              className={`${BUTTON} ${toneFor(activeLevel === candidate)}`}
-              disabled={!myTurn || !levelIsOpen(candidate)}
-              onClick={() => {
-                chooseLevel(candidate);
-              }}
-            >
-              {candidate}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-5 gap-1.5">
-          {STRAINS.map((strain) => {
-            const open = activeLevel !== null && legal.has(bidKey(activeLevel, strain));
-            const selected =
-              chosen !== null && chosen.type === "bid" && chosen.bid.strain === strain;
-
-            return (
+      {/* Once the auction has closed there are no calls left to make, so the
+          three grids give their room to what they settled on. Leaving them
+          there disabled would fill the screen with dead buttons at the one
+          moment the record above them is the thing worth reading. */}
+      {closed ? (
+        <Settled opponentName={opponentName} view={view} />
+      ) : (
+        <div className="flex flex-col gap-1.5 px-3">
+          <div className="grid grid-cols-7 gap-1.5">
+            {LEVELS.map((candidate) => (
               <button
-                key={strain}
+                key={candidate}
                 type="button"
-                className={`${BUTTON} ${toneFor(selected)}`}
-                disabled={!myTurn || !open}
+                className={`${BUTTON} ${toneFor(activeLevel === candidate)}`}
+                disabled={!myTurn || !levelIsOpen(candidate)}
                 onClick={() => {
-                  if (activeLevel !== null) {
-                    setChosen({ type: "bid", bid: { level: activeLevel, strain } });
-                  }
+                  chooseLevel(candidate);
                 }}
               >
-                {/* Selecting a strain turns the button amber, which is a light
-                    ground — so the red changes value rather than switching off.
-                    Dropping it entirely printed hearts and diamonds in black,
-                    which reads as a different bid. */}
-                <span className={strainIsRed(strain) ? redTone(selected ? "light" : "dark") : ""}>
-                  {strainSymbol(strain)}
-                </span>
+                {candidate}
               </button>
-            );
-          })}
-        </div>
+            ))}
+          </div>
 
-        <div className="grid grid-cols-3 gap-1.5">
-          {([{ type: "pass" }, { type: "double" }, { type: "redouble" }] as const).map((call) => (
-            <button
-              key={call.type}
-              type="button"
-              className={`${BUTTON} ${toneFor(chosen !== null && chosen.type === call.type)}`}
-              disabled={!myTurn || !legal.has(call.type)}
-              onClick={() => {
-                setChosen(call);
-              }}
-            >
-              {callLabel(call)}
-            </button>
-          ))}
+          <div className="grid grid-cols-5 gap-1.5">
+            {STRAINS.map((strain) => {
+              const open = activeLevel !== null && legal.has(bidKey(activeLevel, strain));
+              const selected =
+                chosen !== null && chosen.type === "bid" && chosen.bid.strain === strain;
+
+              return (
+                <button
+                  key={strain}
+                  type="button"
+                  className={`${BUTTON} ${toneFor(selected)}`}
+                  disabled={!myTurn || !open}
+                  onClick={() => {
+                    if (activeLevel !== null) {
+                      setChosen({ type: "bid", bid: { level: activeLevel, strain } });
+                    }
+                  }}
+                >
+                  {/* Selecting a strain turns the button amber, which is a light
+                      ground — so the red changes value rather than switching off.
+                      Dropping it entirely printed hearts and diamonds in black,
+                      which reads as a different bid. */}
+                  <span className={strainIsRed(strain) ? redTone(selected ? "light" : "dark") : ""}>
+                    {strainSymbol(strain)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-3 gap-1.5">
+            {([{ type: "pass" }, { type: "double" }, { type: "redouble" }] as const).map((call) => (
+              <button
+                key={call.type}
+                type="button"
+                className={`${BUTTON} ${toneFor(chosen !== null && chosen.type === call.type)}`}
+                disabled={!myTurn || !legal.has(call.type)}
+                onClick={() => {
+                  setChosen(call);
+                }}
+              >
+                {callLabel(call)}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Always present rather than appearing once a call is picked, so the
           layout does not jump and no space is reserved for a hint. It is still
@@ -179,14 +231,20 @@ export function AuctionPhase({
         <button
           type="button"
           className="w-full rounded-xl bg-white px-4 py-3.5 text-base font-semibold text-stone-900 disabled:bg-white/10 disabled:text-white/50"
-          disabled={!myTurn || chosen === null}
+          disabled={!closed && (!myTurn || chosen === null)}
           onClick={() => {
-            if (chosen !== null) {
+            if (onStartPlay !== null) {
+              onStartPlay();
+            } else if (chosen !== null) {
               onCall(chosen);
             }
           }}
         >
-          {!myTurn ? (
+          {closed ? (
+            // Not "close" or "continue": what it does is hand the deal to the
+            // play screen, and the opening lead is the next thing to happen.
+            "Start play"
+          ) : !myTurn ? (
             // The seat labels say whose turn it is; this says what to do.
             "Their bid"
           ) : chosen === null ? (

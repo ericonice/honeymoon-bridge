@@ -19,8 +19,11 @@ export function OpponentPeek({ cards }: OpponentPeekProps): React.JSX.Element {
         Opponent
       </span>
       {/* Thirteen minis overlapped come to about 200px, so they always fit and
-          the row never needs to scroll. */}
-      <div className="flex">
+          the row never needs to scroll. The height is held whether or not there
+          are any: this band sits above everything else on the board, so a row
+          that collapses when empty moves the whole game down a card's height
+          the moment the first one is drawn. */}
+      <div className="flex h-10">
         {cards.map((card, index) => (
           <div key={cardId(card)} className={index > 0 ? "-ml-3.5" : ""}>
             <CardFace card={card} size="mini" />

@@ -43,15 +43,6 @@ export interface GameSession {
   readonly justTaken: Card | null;
   /** The draw turn that just resolved, or null before the first one. */
   readonly lastDraw: DrawReveal | null;
-  /**
-   * The two cards of *your* last draw turn — the one you took and the one you
-   * threw away.
-   *
-   * Not a development hole: both were yours to see at the time (§1.3), and this
-   * only reaches back to the turn just played. It exists because the reveal is
-   * a moving card that can be missed, not to spare you remembering.
-   */
-  readonly lastOwnDraw: DrawPair | null;
   /** The resolved trick still lying on the table, until the next card is played. */
   readonly lastTrick: CompletedTrick | null;
   /** What to call the other player. */

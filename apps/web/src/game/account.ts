@@ -237,6 +237,18 @@ export interface AccountState {
 }
 
 /**
+ * The dev server is always a playtester.
+ *
+ * The flag is the server's answer, which means that locally it costs a session,
+ * an address on the list and a round trip before the row that turns on the
+ * developer shortcuts is so much as visible — on the one machine where they are
+ * wanted on every run, and in the incognito window that throws its storage away
+ * after each one. It is a floor and not an override, so a deployed build is
+ * exactly as it was: nobody sees these without being told they may.
+ */
+const PLAYTESTER_FLOOR = import.meta.env.DEV;
+
+/**
  * The signed-in account, checked against the server on load.
  *
  * A failed check leaves the stored session alone. Being offline is not evidence
@@ -246,13 +258,13 @@ export interface AccountState {
  */
 export function useAccount(): AccountState {
   const [account, setAccount] = useState<Account | null>(null);
-  const [playtester, setPlaytester] = useState(false);
+  const [playtester, setPlaytester] = useState(PLAYTESTER_FLOOR);
   const [checking, setChecking] = useState(storedSession() !== null);
 
   const refresh = useCallback((): void => {
     if (storedSession() === null) {
       setAccount(null);
-      setPlaytester(false);
+      setPlaytester(PLAYTESTER_FLOOR);
       setChecking(false);
       return;
     }
@@ -261,7 +273,7 @@ export function useAccount(): AccountState {
     void currentAccount()
       .then((next) => {
         setAccount(next.account);
-        setPlaytester(next.playtester);
+        setPlaytester(next.playtester || PLAYTESTER_FLOOR);
       })
       .catch(() => {
         // Offline, or the server is down. Say nothing and keep the session.
@@ -282,7 +294,7 @@ export function useAccount(): AccountState {
     refresh,
     signOut: () => {
       clearSession();
-      setPlaytester(false);
+      setPlaytester(PLAYTESTER_FLOOR);
       // The account that just left has claimed this device's token. Keeping it
       // would give whoever signs in next the previous person's anonymous games.
       resetPlayerToken();

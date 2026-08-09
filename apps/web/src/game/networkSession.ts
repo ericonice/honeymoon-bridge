@@ -44,7 +44,6 @@ function sessionFrom(
     history: snapshot.history,
     justTaken: snapshot.justTaken,
     lastDraw: snapshot.lastDraw,
-    lastOwnDraw: snapshot.lastOwnDraw,
     lastTrick: snapshot.lastTrick,
     nextDeal: () => {
       send({ type: "next-deal" });

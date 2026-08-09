@@ -42,9 +42,12 @@ function cardsWithin(value: unknown, found: Card[] = []): Card[] {
 /**
  * Cards this seat has no right to see.
  *
- * Its own discards are permitted only as far as the most recent one: §1.4 shows
- * that card back for a single turn and no further, so everything before it is
- * as forbidden as the opponent's.
+ * Its own discards are permitted in one case only: the card its own last turn
+ * threw, and then only while that turn is the one that has just resolved. That
+ * is not a concession but a requirement — §1.3 has the card being thrown away
+ * shown as it goes, which on a keep is the only sight of card 2 anyone ever
+ * gets. The moment the opponent draws, the reveal is over and the card is as
+ * forbidden as the twelve behind it.
  *
  * Card 1 is the exception that proves the rule — it is face up to whoever is
  * deciding on it and face down to everyone else, so it is forbidden here only
@@ -56,15 +59,27 @@ function forbiddenFor(table: TableState, seat: PlayerId): Set<string> {
   const mine = deal.discards[seat];
   const theirCardOne = deal.pending !== null && deal.toAct !== seat ? [deal.pending] : [];
 
+  const justDrew = deal.drawTurns[deal.drawTurns.length - 1]?.by === seat;
+  const ownDiscards = justDrew ? mine.slice(0, Math.max(0, mine.length - 1)) : mine;
+
   return new Set(
     [
       ...deal.hands[them],
       ...deal.stock,
       ...theirCardOne,
       ...deal.discards[them],
-      ...mine.slice(0, Math.max(0, mine.length - 1)),
+      ...ownDiscards,
     ].map(cardId),
   );
+}
+
+/** A draw phase run out `turns` deep, both seats keeping card 1 every time. */
+function drawnOut(turns: number): TableState {
+  let table = startTable({ seed: 11, starter: 0 });
+  for (let turn = 0; turn < turns; turn++) {
+    table = applyTableAction(table, table.deal.toAct, { type: "draw-decide", keep: true });
+  }
+  return table;
 }
 
 /** Drives the table with whatever is legal, so every phase gets inspected. */
@@ -108,11 +123,9 @@ describe("what a seat is sent", () => {
   });
 
   it("shows a seat the card it just threw away, and nothing older", () => {
-    let table = startTable({ seed: 11, starter: 0 });
-    // Four turns each, so there is a discard history to get wrong.
-    for (let move = 0; move < 8; move++) {
-      table = applyTableAction(table, table.deal.toAct, { type: "draw-decide", keep: true });
-    }
+    // An odd number of turns, so seat 0's own turn is the one that just
+    // resolved and its reveal is the one still on screen.
+    let table = drawnOut(7);
 
     const discards = table.deal.discards[0];
     const sent = new Set(cardsWithin(snapshotFor(table, 0)).map(cardId));
@@ -122,6 +135,15 @@ describe("what a seat is sent", () => {
     for (const older of discards.slice(0, -1)) {
       expect(sent.has(cardId(older))).toBe(false);
     }
+  });
+
+  it("stops sending that card as soon as the opponent has drawn", () => {
+    const mine = drawnOut(7);
+    const thrown = mine.deal.discards[0][mine.deal.discards[0].length - 1]!;
+    const theirs = applyTableAction(mine, mine.deal.toAct, { type: "draw-decide", keep: true });
+
+    const sent = new Set(cardsWithin(snapshotFor(theirs, 0)).map(cardId));
+    expect(sent.has(cardId(thrown))).toBe(false);
   });
 
   it("names neither of the opponent's cards on their draw turn, only the choice", () => {

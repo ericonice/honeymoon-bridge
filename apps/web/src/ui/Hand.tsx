@@ -113,7 +113,19 @@ export function Hand({ cards, highlight, onPlay, playable }: HandProps): React.J
   const steps = stepsFor(cards, playable, available - FRAME_PADDING);
 
   if (cards.length === 0) {
-    return <p className="py-6 text-center text-sm text-white/50">No cards yet</p>;
+    // Built to the exact height of a row of cards rather than to whatever the
+    // text needs. This footer is pinned to the bottom of a fixed-height frame,
+    // so an empty state of its own size hands back the difference the moment
+    // the first card arrives and shifts every row above it.
+    return (
+      <div className="px-3 pb-1">
+        <div className="flex items-end pt-4">
+          <p className="flex h-20 w-full items-center justify-center text-sm text-white/50">
+            No cards yet
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (

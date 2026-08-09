@@ -1,10 +1,9 @@
-import { drawRevealFor, ownDrawPairFor, summarize, viewFor } from "@hb/engine";
+import { drawRevealFor, summarize, viewFor } from "@hb/engine";
 import type {
   Card,
   CompletedTrick,
   DealRecord,
   DealScore,
-  DrawPair,
   DrawReveal,
   Pair,
   PlayerId,
@@ -22,10 +21,13 @@ import type {
  * different source for the same data.
  *
  * What it must never contain, per §2.2: the opponent's hand, the undrawn stock,
- * and any discard other than this seat's most recent one. The rules engine is
- * shared code that could run wholly client-side, so that boundary has to be
- * something tested rather than something assumed — see `snapshot.test.ts`,
- * which walks the serialized snapshot looking for any card it should not hold.
+ * and any discard at all bar one: the card this seat's own last turn threw,
+ * named by `lastDraw` and only while that turn is the one that just resolved,
+ * because §1.3 has the card being thrown away shown as it goes. The rules
+ * engine is shared code that could run wholly client-side, so that boundary has
+ * to be something tested rather than something assumed — see
+ * `snapshot.test.ts`, which walks the serialized snapshot looking for any card
+ * it should not hold.
  */
 export interface SessionSnapshot {
   /** Every deal of the rubber, oldest first, including the one just finished. */
@@ -34,8 +36,6 @@ export interface SessionSnapshot {
   readonly justTaken: Card | null;
   /** The draw turn that just resolved, with only this seat's own cards named. */
   readonly lastDraw: DrawReveal | null;
-  /** The two cards this seat's own last turn spent — both were its to see. */
-  readonly lastOwnDraw: DrawPair | null;
   /** The resolved trick still lying on the table. Both cards were played face up. */
   readonly lastTrick: CompletedTrick | null;
   readonly rubber: RubberState;
@@ -60,7 +60,6 @@ export function snapshotFor(table: TableState, seat: PlayerId): SessionSnapshot 
     history: summary.history,
     justTaken: deal.phase === "draw" ? (hand[hand.length - 1] ?? null) : null,
     lastDraw: drawRevealFor(deal, seat),
-    lastOwnDraw: deal.phase === "draw" ? ownDrawPairFor(deal, seat) : null,
     lastTrick: deal.completedTricks[deal.completedTricks.length - 1] ?? null,
     rubber: summary.rubber,
     score: summary.score,

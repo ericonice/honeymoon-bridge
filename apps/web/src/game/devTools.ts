@@ -44,8 +44,12 @@ export function writeDevTools(enabled: boolean): void {
  * not entitled to see. They decide both seats at random through the ordinary
  * `applyAction` path; they fast-forward the game, they do not open it up. When
  * the networked version arrives the server is the authority, so a client-side
- * skip is simply refused. Anything failing that test — `peek`, for one — is
- * compiled out instead, and must not be offered here.
+ * skip is simply refused, which is the test of whether a control belongs here.
+ *
+ * `peek` is the one that reads like a failure of that test and is not: over a
+ * network the other hand never reaches the device at all, so there is nothing
+ * for it to reveal and nothing for the server to refuse. It ships as its own
+ * setting rather than as one of these — see `LocalSessionOptions`.
  *
  * Resolution order: the query string, then a remembered choice, then the dev
  * server default. So `?dev=0` also gives a clean run locally.

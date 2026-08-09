@@ -137,10 +137,12 @@ one shape to test rather than a whole UI to audit.
 **`snapshotFor` is that boundary, and `packages/protocol/test/snapshot.test.ts` is what enforces
 it.** The test walks the serialized snapshot for anything card-shaped and checks it against what
 the seat may not see: the opponent's hand, the undrawn stock, their card 1, their discards, and
-all of this seat's own discards bar the most recent. It is deliberately blind to the snapshot's
-shape, so a field added later is walked without anyone remembering to update it. There is also an
-anti-vacuity test asserting the seat *does* get its own hand — a leak test that passes by sending
-nothing is worse than none.
+every one of this seat's own discards bar the card its own last turn threw — and that one only
+while that turn is the one that just resolved, since `lastDraw` names it so §1.3's reveal can show
+the card being thrown away as it goes. The moment the opponent draws, it is forbidden too. It is
+deliberately blind to the snapshot's shape, so a field added later is walked without anyone
+remembering to update it. There is also an anti-vacuity test asserting the seat *does* get its own
+hand — a leak test that passes by sending nothing is worse than none.
 
 Per-seat derivations live beside `viewFor` in `view.ts` — `drawRevealFor`, `ownDrawPairFor` — for
 the same reason: they answer "what may this seat be told", and the server has to get them right
