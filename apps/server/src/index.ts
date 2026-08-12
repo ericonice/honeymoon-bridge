@@ -15,7 +15,7 @@ import {
 } from "./auth.js";
 import { inviteCode, isInviteCode } from "./codes.js";
 import type { Env } from "./env.js";
-import { recordRubber, recordsFor, resetRecord, ROBOT_TOKEN } from "./results.js";
+import { recentMatchesFor, recordRubber, recordsFor, resetRecord, ROBOT_TOKEN } from "./results.js";
 
 export { Lobby } from "./lobby.js";
 export { Table } from "./table.js";
@@ -349,6 +349,16 @@ export default {
         return json(request, { error: "Not signed in" }, 401);
       }
       return json(request, await recordsFor(env, accountId));
+    }
+
+    // The individual matches behind that record, newest first — the record
+    // above tallies by opponent, which cannot say what was played or when.
+    if (url.pathname === "/api/results/recent" && request.method === "GET") {
+      const accountId = await accountFromRequest(request, env, Date.now());
+      if (accountId === null) {
+        return json(request, { error: "Not signed in" }, 401);
+      }
+      return json(request, { matches: await recentMatchesFor(env, accountId, 20) });
     }
 
     // Forgetting your own record. Deliberately does not take anything away

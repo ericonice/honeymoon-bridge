@@ -108,6 +108,7 @@ export async function resetRecord(env: Env, accountId: string): Promise<number> 
 interface ResultRow {
   readonly account0: string | null;
   readonly account1: string | null;
+  readonly bot_version: number | null;
   readonly deals: number;
   readonly finished_at: number;
   readonly format: MatchFormat;
@@ -257,8 +258,11 @@ function strip({ account: _account, token: _token, ...record }: Tallied): Oppone
  * to look up. Doing it the other way — the stored name always — would leave a
  * screen where a renamed opponent appears under both names at once.
  */
-async function withNames(env: Env, records: readonly Tallied[]): Promise<OpponentRecord[]> {
-  const ids = [...new Set(records.flatMap((r) => (r.account === null ? [] : [r.account])))];
+async function currentNamesFor(
+  env: Env,
+  accountIds: readonly (string | null)[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(accountIds.flatMap((id) => (id === null ? [] : [id])))];
   const names = new Map<string, string>();
 
   if (ids.length > 0) {
@@ -274,10 +278,98 @@ async function withNames(env: Env, records: readonly Tallied[]): Promise<Opponen
     }
   }
 
+  return names;
+}
+
+async function withNames(env: Env, records: readonly Tallied[]): Promise<OpponentRecord[]> {
+  const names = await currentNamesFor(
+    env,
+    records.map((r) => r.account),
+  );
+
   return records
     .map((record) => ({
       ...strip(record),
       name: (record.account === null ? null : names.get(record.account)) ?? record.name,
     }))
     .sort((a, b) => b.lastPlayed - a.lastPlayed);
+}
+
+/** One finished match, from the asker's side, newest first. */
+export interface MatchRecord {
+  /** Which computer opponent, for a robot match. Null against a person. */
+  readonly botVersion: number | null;
+  readonly deals: number;
+  readonly finishedAt: number;
+  readonly format: MatchFormat;
+  readonly opponentName: string;
+  readonly pointsAgainst: number;
+  readonly pointsFor: number;
+  readonly won: boolean;
+}
+
+/**
+ * The most recent matches this account finished, one row per match rather
+ * than tallied by opponent — `recordsFor` answers "how am I doing against
+ * them", this answers "what did I just play".
+ */
+export async function recentMatchesFor(
+  env: Env,
+  accountId: string,
+  limit: number,
+): Promise<MatchRecord[]> {
+  const tokens = await env.DB.prepare("SELECT token FROM account_tokens WHERE account_id = ?")
+    .bind(accountId)
+    .all<{ token: string }>();
+  const mine = new Set(tokens.results.map((row) => row.token));
+  const isMine = (account: string | null, token: string): boolean =>
+    account === accountId || (account === null && mine.has(token));
+
+  const rows = await env.DB.prepare(
+    `SELECT * FROM results
+     WHERE account0 = ?1 OR account1 = ?1 OR token0 IN (
+       SELECT token FROM account_tokens WHERE account_id = ?1
+     ) OR token1 IN (
+       SELECT token FROM account_tokens WHERE account_id = ?1
+     )
+     ORDER BY finished_at DESC
+     LIMIT ?2`,
+  )
+    .bind(accountId, limit)
+    .all<ResultRow>();
+
+  const perspectives = rows.results.map((row) => {
+    const seat: PlayerId = isMine(row.account0, row.token0) ? 0 : 1;
+    const them = seat === 0 ? 1 : 0;
+    const theirAccount = them === 0 ? row.account0 : row.account1;
+    const theirToken = them === 0 ? row.token0 : row.token1;
+
+    return {
+      account: theirAccount,
+      botVersion: theirToken === ROBOT_TOKEN ? row.bot_version : null,
+      deals: row.deals,
+      finishedAt: row.finished_at,
+      format: row.format,
+      name: them === 0 ? row.nickname0 : row.nickname1,
+      pointsAgainst: them === 0 ? row.points0 : row.points1,
+      pointsFor: seat === 0 ? row.points0 : row.points1,
+      won: row.winner === seat,
+    };
+  });
+
+  const names = await currentNamesFor(
+    env,
+    perspectives.map((p) => p.account),
+  );
+
+  return perspectives.map((p) => ({
+    botVersion: p.botVersion,
+    deals: p.deals,
+    finishedAt: p.finishedAt,
+    format: p.format,
+    opponentName: (p.account === null ? null : names.get(p.account)) ?? p.name,
+    pointsAgainst: p.pointsAgainst,
+    pointsFor: p.pointsFor,
+    won: p.won,
+  }));
 }

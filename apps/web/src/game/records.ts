@@ -2,7 +2,7 @@ import type { MatchFormat } from "@hb/engine";
 import { useCallback, useEffect, useState } from "react";
 import { storedSession } from "./account.js";
 import { nickname, playerToken } from "./identity.js";
-import { recordsUrl, resetRecordUrl, robotResultUrl } from "./serverUrl.js";
+import { recentMatchesUrl, recordsUrl, resetRecordUrl, robotResultUrl } from "./serverUrl.js";
 
 /** A record against one opponent. The computer's looks exactly like a person's. */
 export interface OpponentRecord {
@@ -19,6 +19,18 @@ export interface OpponentRecord {
 export interface Records {
   readonly opponents: readonly OpponentRecord[];
   readonly robot: readonly OpponentRecord[];
+}
+
+/** One finished match, newest first — what `OpponentRecord` tallies away. */
+export interface MatchRecord {
+  readonly botVersion: number | null;
+  readonly deals: number;
+  readonly finishedAt: number;
+  readonly format: MatchFormat;
+  readonly opponentName: string;
+  readonly pointsAgainst: number;
+  readonly pointsFor: number;
+  readonly won: boolean;
 }
 
 export interface RobotRubber {
@@ -131,4 +143,38 @@ export function useRecords(active: boolean): RecordsState {
   }, [active, reload]);
 
   return { loading, records, reload };
+}
+
+export interface RecentMatchesState {
+  readonly loading: boolean;
+  readonly matches: readonly MatchRecord[] | null;
+}
+
+/** The signed-in player's most recent matches, individually, fetched when asked for. */
+export function useRecentMatches(active: boolean): RecentMatchesState {
+  const [matches, setMatches] = useState<readonly MatchRecord[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const session = storedSession();
+    if (!active || session === null) {
+      setMatches(null);
+      return;
+    }
+
+    setLoading(true);
+    void fetch(recentMatchesUrl(), { headers: { Authorization: `Bearer ${session}` } })
+      .then(async (response) =>
+        response.ok ? ((await response.json()) as { matches: MatchRecord[] }).matches : null,
+      )
+      .then(setMatches)
+      .catch(() => {
+        setMatches(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [active]);
+
+  return { loading, matches };
 }

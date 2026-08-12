@@ -36,9 +36,10 @@ import { createProgress } from "./progress.js";
  *
  * Pass a sample count to play the cards properly instead. That is far slower and
  * is needed for exactly one question: **only the sampler reads the auction**, so
- * anything whose value is that the other seat believed something — a psych above
- * all — is invisible while the heuristic is holding the cards. A bench where
- * nobody can be fooled will always report that lying does not pay.
+ * anything whose value is that the other seat believed something — bidding
+ * unpredictably above all — is invisible while the heuristic is holding the
+ * cards. A bench where nobody can be fooled will always report that the
+ * ambiguity does not pay.
  *
  *   npm run bench:rubber --workspace @hb/web -- [rubbers] [samples]
  */

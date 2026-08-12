@@ -197,7 +197,7 @@ export function Home({
   };
 
   return (
-    <div className="flex flex-1 flex-col justify-between overflow-y-auto px-6 py-8">
+    <div className="flex flex-1 flex-col justify-between overflow-y-auto px-6 pt-8 pb-4">
       <div>
         <h1 className="text-3xl font-semibold">Honeymoon Bridge</h1>
         <p className="mt-1 text-sm text-white/55">Contract bridge for two.</p>

@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 export interface HelpOverlayProps {
   onClose(): void;
 }
@@ -18,6 +20,48 @@ function Rule({
 }
 
 /**
+ * A named group of rules, open by default.
+ *
+ * Collapsible rather than always open so the list of headings reads as a
+ * table of contents, but open by default because this overlay is meant to be
+ * reached mid-game, for the one rule somebody currently doubts — and that
+ * lookup should not cost a tap to open the section before it costs one to
+ * find the line.
+ */
+function Section({
+  children,
+  onToggle,
+  open,
+  title,
+}: {
+  readonly children: React.ReactNode;
+  onToggle(): void;
+  readonly open: boolean;
+  readonly title: string;
+}): React.JSX.Element {
+  return (
+    <div className="w-full max-w-sm pt-4">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2 border-b border-white/10 pb-2 text-left"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">{title}</h2>
+        <span className={`text-white/40 transition-transform ${open ? "rotate-180" : ""}`}>
+          ⌄
+        </span>
+      </button>
+
+      {open ? <div className="flex flex-col gap-3 pt-3">{children}</div> : null}
+    </div>
+  );
+}
+
+const SECTION_TITLES = ["draw", "auction", "play", "scoring", "app"] as const;
+type SectionKey = (typeof SECTION_TITLES)[number];
+
+/**
  * What is different about this game, for somebody who already plays bridge.
  *
  * Deliberately not a bridge tutorial. This was built for a family who play, and
@@ -25,8 +69,9 @@ function Rule({
  * borrowed from the four-player game is wrong. Teaching bidding and trick play
  * from nothing is a different document and a much larger one.
  *
- * Ordered by what costs a deal soonest rather than by the order of play, which
- * is why the auction comes before the draw phase that precedes it.
+ * Grouped by the phase of a deal a rule belongs to, so the heading somebody is
+ * already thinking about — "wait, does one pass really end this?" mid-auction —
+ * is also the one that gets them to the answer fastest.
  *
  * Deliberately says nothing about how a deal is scored. The engine computes
  * that and the deal-complete screen already itemises it — honors included, on
@@ -39,25 +84,30 @@ function Rule({
  * in an auction.
  */
 export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
+  const [open, setOpen] = useState<Record<SectionKey, boolean>>({
+    app: true,
+    auction: true,
+    draw: true,
+    play: true,
+    scoring: true,
+  });
+
+  function toggle(key: SectionKey): void {
+    setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-table-dark/97">
-      <div className="flex min-h-0 flex-1 flex-col items-center gap-3 overflow-y-auto px-5 py-6">
+      <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto px-5 py-6">
         <div className="w-full max-w-sm">
-          <h2 className="text-lg font-semibold">How this differs from bridge</h2>
+          <h1 className="text-lg font-semibold">How this differs from bridge</h1>
           <p className="mt-1 text-sm text-white/40">
             This assumes you play bridge and covers only what is not the same. Two players, one
             deck, no partner.
           </p>
         </div>
 
-        <div className="flex w-full max-w-sm flex-col gap-3 pt-2">
-          <Rule title="One pass ends the auction">
-            Not three. Waiting for the auction to come back round to you is the four-player rule,
-            and there is nobody for it to come back round from — so a pass over a bid settles the
-            contract there. Two passes to open pass the deal out. Declarer is simply whoever made
-            the last bid.
-          </Rule>
-
+        <Section title="The draw" open={open.draw} onToggle={() => toggle("draw")}>
           <Rule title="You build your hand before you play it">
             Nobody is dealt thirteen cards. The deal starts with a stock, and there are twenty-six
             turns of drawing from it before a single trick is played. Thirteen of those turns are
@@ -77,7 +127,18 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
             the draw you will have seen twenty-six cards and kept thirteen; remembering the other
             thirteen is meant to be part of playing well, not an oversight.
           </Rule>
+        </Section>
 
+        <Section title="The auction" open={open.auction} onToggle={() => toggle("auction")}>
+          <Rule title="One pass ends the auction">
+            Not three. Waiting for the auction to come back round to you is the four-player rule,
+            and there is nobody for it to come back round from — so a pass over a bid settles the
+            contract there. Two passes to open pass the deal out. Declarer is simply whoever made
+            the last bid.
+          </Rule>
+        </Section>
+
+        <Section title="Play" open={open.play} onToggle={() => toggle("play")}>
           <Rule title="No dummy, and no partner">
             Both hands stay concealed from first bid to last trick. Nothing is ever laid down. With
             no partner there is nobody to tell anything to, so there are no conventions, no alerts
@@ -96,18 +157,23 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
             and that includes the defender — so points can arrive for a hand you did not bid.
           </Rule>
 
+          <Rule title="Press near the card, not on it">
+            A full hand fanned to fit a phone screen leaves each card only a sliver to tap. Press
+            anywhere close to the one you want and the nearest legal card lifts to show what would
+            be played; slide your finger before letting go to change your mind. Whatever is raised
+            when you lift your finger is the card that gets played.
+          </Rule>
+        </Section>
+
+        <Section title="Scoring" open={open.scoring} onToggle={() => toggle("scoring")}>
           <Rule title="Rubber scoring">
             Best of three games, with vulnerability following from having won one, exactly as at a
             rubber. Settings will shorten a sitting to a single game instead; at a table with
             somebody else, one game wins if either of you asks for it.
           </Rule>
-        </div>
+        </Section>
 
-        <div className="w-full max-w-sm pt-5">
-          <h2 className="text-lg font-semibold">In the app</h2>
-        </div>
-
-        <div className="flex w-full max-w-sm flex-col gap-3 pt-2">
+        <Section title="In the app" open={open.app} onToggle={() => toggle("app")}>
           <Rule title="The computer needs nothing">
             No account, no connection. It runs entirely on this device and works on a plane.
           </Rule>
@@ -127,7 +193,13 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
             A match that is abandoned is not scored and never reaches your record — which also
             means a record cannot be improved by walking out of a game going badly.
           </Rule>
-        </div>
+
+          <Rule title="Rotating can flicker, installed">
+            Added to your home screen rather than opened in Safari, turning the phone to landscape
+            and back can flash for an instant. That is iOS forcing the screen back to portrait, not
+            the game — it settles on its own and nothing is lost.
+          </Rule>
+        </Section>
       </div>
 
       <div className="px-5 pb-5">

@@ -198,6 +198,9 @@ export function DealComplete({
           <Row label="Above the line" values={rubber.aboveLine} view={view} />
           <Row emphasis label="Final score" values={totals} view={view} />
         </div>
+
+        <Scorepad history={history} opponentName={opponentName} rubber={rubber} view={view} />
+
         {button}
       </div>
     );

@@ -5,16 +5,18 @@ import { destinationFromWire, HOME, takeDestination } from "./game/destination.j
 import { readDevTools, writeDevTools } from "./game/devTools.js";
 import {
   boldness,
+  disguiseEnabled,
   pace,
   peeking as storedPeeking,
   preferredFormat,
-  psychsEnabled,
   setBoldness,
+  setDisguiseEnabled,
   setPace,
   setPeeking as storePeeking,
   setPreferredFormat,
-  setPsychsEnabled,
+  setSoundEnabled,
   setStrength,
+  soundEnabled,
   strength,
 } from "./game/identity.js";
 import {
@@ -98,12 +100,13 @@ export function App(): React.JSX.Element {
   // A preference for the *next* match. A game in progress reads its format from
   // its own state, so changing this cannot alter one already under way.
   const [format, setFormat] = useState(preferredFormat);
-  const [psychs, setPsychs] = useState(psychsEnabled);
+  const [disguise, setDisguise] = useState(disguiseEnabled);
   // Testing settings, kept in state only so the rows re-render when tapped; the
   // stored value is what anything actually reads.
   const [bold, setBold] = useState(boldness);
   const [level, setLevel] = useState(strength);
   const [speed, setSpeed] = useState(pace);
+  const [sound, setSound] = useState(soundEnabled);
   // Already on the document by now — main.tsx applies it before the first
   // render — so this is the same value again, for the card back to read.
   const [theme, setTheme] = useState(readTheme);
@@ -263,6 +266,7 @@ export function App(): React.JSX.Element {
           <RobotGame
             devTools={devTools}
             peeking={peeking}
+            sound={sound}
             onLeave={goHome}
             onShowSettings={showSettings}
           />
@@ -301,6 +305,7 @@ export function App(): React.JSX.Element {
             code={screen.code}
             devTools={devTools}
             peeking={peeking}
+            sound={sound}
             onLeave={goHome}
             onShowSettings={showSettings}
           />
@@ -342,7 +347,8 @@ export function App(): React.JSX.Element {
             playtester={account.playtester}
             strength={level}
             peeking={peeking}
-            psychs={psychs}
+            disguise={disguise}
+            sound={sound}
             theme={theme}
             onClose={() => {
               setShowingSettings(false);
@@ -360,9 +366,9 @@ export function App(): React.JSX.Element {
               storePeeking(enabled);
               setPeeking(enabled);
             }}
-            onPsychsChange={(enabled) => {
-              setPsychsEnabled(enabled);
-              setPsychs(enabled);
+            onDisguiseChange={(enabled) => {
+              setDisguiseEnabled(enabled);
+              setDisguise(enabled);
             }}
             onBoldnessChange={(next) => {
               setBoldness(next);
@@ -375,6 +381,10 @@ export function App(): React.JSX.Element {
             onPaceChange={(next) => {
               setPace(next);
               setSpeed(next);
+            }}
+            onSoundChange={(enabled) => {
+              setSoundEnabled(enabled);
+              setSound(enabled);
             }}
             onThemeChange={(next) => {
               writeTheme(next);

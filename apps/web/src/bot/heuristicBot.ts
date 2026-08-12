@@ -28,48 +28,69 @@ const BOOK = 6;
  */
 const THEIR_BID_WEIGHT = 0.75;
 
-/** Cards in a suit past which naming it is no longer a lie. */
-const PSYCH_MAX_LENGTH = 3;
+/**
+ * Cards in a suit below which naming it is not a disguise but an outright lie.
+ *
+ * This used to be an upper bound: the old psych fired on anything from a void
+ * up through three cards, treating "I hold none of this" and "I hold three of
+ * this" as the same trick. They are not. Below three, a bid claims a suit that
+ * is not there at all, and one pass closing the auction means the bot may
+ * simply have to play it — that was the old mechanism (see CLAUDE.md), and it
+ * cost about ten times what it earned. This is now a floor instead: nothing
+ * below it is ever eligible for the credit, at any price.
+ */
+const DISGUISE_MIN_LENGTH = 3;
 
 /**
- * What the deception in a psych is worth, on top of the contract itself.
- *
- * A psych is a bid in a suit the hand does not hold, made to be believed. Its
- * value is not the contract — that part is priced honestly, and has to be,
- * because one pass closes the auction and every psych is a contract the bot may
- * simply have to play. Its value is what the lie does to the other seat, and
- * that lives in their head rather than in this deal, so it is the one thing
- * `bidValue.ts` cannot compute.
- *
- * Hence a single explicit credit, fitted. Setting it to zero turns psyching off
- * without removing the code, because a short suit never outbids an honest one on
- * the contract alone. **The frequency is an outcome, not a setting** — how often
- * the bot lies is whatever this credit makes worthwhile, which is the right way
- * round: it psychs when a hand offers the chance rather than on a timer.
- *
- * Zero, and this time properly measured rather than assumed. The scale is not
- * obvious from the number: 50 produces no psychs at all, 100 produces two in
- * four hundred deals, and 200 produces one in every six — so an early sweep at
- * 100 compared a bot that never lies against one that lied twice, and returned
- * an identical win-loss count that looked like a clean null.
- *
- * At 200, against a sampler that does read the auction and can therefore be
- * fooled, **the deception works and does not come close to paying for itself.**
- * The other seat throws away 0.02 more tricks a deal in both roles, consistently,
- * so the lie is landing. Meanwhile contracts that were makeable at par fall from
- * 53% to 49%, because one pass closes the auction and a suit you do not hold is
- * sometimes a suit you are left playing. The gain is an order of magnitude under
- * the cost.
- *
- * What this does *not* settle is whether psyching pays against a person. A human
- * forms a much stronger belief from an auction than a weighted sampler does, and
- * holds it for longer. That is unmeasurable here, and the same category as
- * `DOUBLED_FROM_DOWN` — behavior aimed at a human that only a human can judge.
+ * The one length still allowed but kept rare — the shortest suit worth naming
+ * at all, rather than the shortest one a lie can get away with.
  */
-const PSYCH_CREDIT = 0;
+const DISGUISE_THIN_LENGTH = 3;
 
-/** What the credit becomes when psyching is switched on: about one lie in six. */
-export const PSYCH_CREDIT_ON = 200;
+/**
+ * What a thin (exactly three-card) suit's credit is scaled by, against a
+ * comfortable one's full credit.
+ *
+ * Checked against `bench/auction.ts` rather than only reasoned about: at 0.25
+ * (an effective credit of 50 off the default `DISGUISE_CREDIT_ON`) a three-card
+ * suit never won at all in 400 deals — indistinguishable from off, which is too
+ * conservative for what "very infrequently" was asking for. 0.5 (effective 100)
+ * produced a handful in the same 400, which is the shape wanted: rare, not
+ * impossible. Still a guess above that point — the credit this scales has not
+ * been refitted for the floored mechanic at all.
+ */
+const DISGUISE_THIN_FACTOR = 0.5;
+
+/**
+ * What naming a suit that is not necessarily this hand's best one is worth, on
+ * top of the contract itself.
+ *
+ * Not a lie any more, since the floor above means it never fires under three
+ * cards — a suit named this way is always one this hand could reasonably have
+ * opened. What it buys is unpredictability: a bid that always named the
+ * objectively strongest suit would let the other seat read this hand's shape
+ * off the auction with no room for doubt. The value is not the contract —
+ * that part is still priced honestly, because one pass closes the auction and
+ * the bot may simply have to play whatever it named — it is what the
+ * ambiguity does to the other seat's reading of the auction, and that lives in
+ * their head rather than in this deal, so it is the one thing `bidValue.ts`
+ * cannot compute. Hence a single explicit credit, and setting it to zero turns
+ * the whole thing off without removing the code.
+ *
+ * Zero for now. The old fitted value (200, about one lie in six) measured a
+ * mechanic that could bid a void; it does not describe this one and has not
+ * been refitted. See `DISGUISE_CREDIT_ON`.
+ */
+const DISGUISE_CREDIT = 0;
+
+/**
+ * What the credit becomes when the setting is switched on.
+ *
+ * Carried over from the old psych credit as a starting point, not a measured
+ * answer — the floor and the thin-suit taper above change what this number
+ * buys, and it has not been refitted against par or against a rubber since.
+ */
+export const DISGUISE_CREDIT_ON = 200;
 
 /**
  * The dials Settings can move while their right values are still open.
@@ -79,23 +100,32 @@ export const PSYCH_CREDIT_ON = 200;
  * about the cards — see `identity.ts`.
  */
 export interface BotTuning {
+  /** What naming a suit that isn't necessarily this hand's best one is worth. Zero is off. */
+  readonly disguiseCredit?: number;
   /** What a game in hand is worth, in points. */
   readonly gameEquity?: number;
-  /** What the deception in a psych is worth. Zero is off. */
-  readonly psychCredit?: number;
 }
 
 /**
- * A bid this hand cannot back up.
+ * What naming this suit at this level is worth on top of the contract, for the
+ * sake of not always giving away this hand's exact shape.
  *
- * Cheap, in a suit it is short in, and a suit rather than no-trump — naming
- * no-trump says nothing about where anything lies, so there is nothing to
- * mislead anybody about.
+ * Never below `DISGUISE_MIN_LENGTH` — a suit this thin is not a real
+ * alternative, it is a lie, and that is not what this buys. Rare rather than
+ * forbidden at exactly three, since three is the shortest suit worth naming at
+ * all but still the one likeliest to go badly if it is left to play. No-trump
+ * is exempt because it says nothing about where anything lies, so there is
+ * nothing to be ambiguous about.
  */
-function isPsych(view: PlayerView, level: number, strain: Strain): boolean {
-  return (
-    level === 1 && strain !== "NT" && cardsIn(view.hand, strain).length <= PSYCH_MAX_LENGTH
-  );
+function disguiseValue(view: PlayerView, level: number, strain: Strain, credit: number): number {
+  if (credit === 0 || level !== 1 || strain === "NT") {
+    return 0;
+  }
+  const length = cardsIn(view.hand, strain).length;
+  if (length < DISGUISE_MIN_LENGTH) {
+    return 0;
+  }
+  return length === DISGUISE_THIN_LENGTH ? credit * DISGUISE_THIN_FACTOR : credit;
 }
 
 /**
@@ -207,7 +237,7 @@ function valueOfPassing(
 function bidCandidates(
   view: PlayerView,
   standing: Standing,
-  psychCredit: number,
+  disguiseCredit: number,
   gameEquity: number,
 ): Candidate[] {
   const theirs = strainsTheyBid(view);
@@ -234,7 +264,7 @@ function bidCandidates(
             hand: view.hand,
             me: view.me,
             standing,
-          }) + (isPsych(view, call.bid.level, call.bid.strain) ? psychCredit : 0),
+          }) + disguiseValue(view, call.bid.level, call.bid.strain, disguiseCredit),
       },
     ];
   });
@@ -288,12 +318,12 @@ function doubleCandidate(
 function bestCall(
   view: PlayerView,
   standing: Standing,
-  psychCredit: number,
+  disguiseCredit: number,
   gameEquity: number,
 ): Call {
   const passing = valueOfPassing(view, standing, gameEquity);
   const best = [
-    ...bidCandidates(view, standing, psychCredit, gameEquity),
+    ...bidCandidates(view, standing, disguiseCredit, gameEquity),
     ...doubleCandidate(view, standing, gameEquity),
   ].reduce<
     Candidate | null
@@ -314,7 +344,7 @@ function bestCall(
  */
 export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
   const fallback = createRandomBot(rng);
-  const psychCredit = tuning.psychCredit ?? PSYCH_CREDIT;
+  const disguiseCredit = tuning.disguiseCredit ?? DISGUISE_CREDIT;
   const gameEquity = tuning.gameEquity ?? DEFAULT_GAME_EQUITY;
 
   return {
@@ -323,7 +353,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
     name: "Computer",
 
     chooseCall(view: PlayerView, standing: Standing): Call {
-      return bestCall(view, standing, psychCredit, gameEquity);
+      return bestCall(view, standing, disguiseCredit, gameEquity);
     },
 
     chooseDraw(view: PlayerView, remembered: readonly Card[]): boolean {

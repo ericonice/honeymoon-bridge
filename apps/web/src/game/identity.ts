@@ -2,11 +2,12 @@ import type { MatchFormat } from "@hb/engine";
 import { readStored, writeStored } from "./storage.js";
 
 const FORMAT_KEY = "hb.format";
-const PSYCHS_KEY = "hb.psychs";
+const DISGUISE_KEY = "hb.disguise";
 const BOLDNESS_KEY = "hb.boldness";
 const STRENGTH_KEY = "hb.strength";
 const PACE_KEY = "hb.pace";
 const PEEK_KEY = "hb.peek";
+const SOUND_KEY = "hb.sound";
 const NICKNAME_KEY = "hb.nickname";
 const TOKEN_KEY = "hb.token";
 
@@ -61,26 +62,31 @@ export function setPreferredFormat(format: MatchFormat): void {
 }
 
 /**
- * Whether the computer is allowed to bid a suit it does not hold.
+ * Whether the computer is allowed to name a suit that isn't necessarily its
+ * best one, to avoid always giving its shape away.
  *
- * **Temporary, and here to answer one question.** Measured against the bot,
- * psyching costs about ten times what it earns: the lie does land — the sampler
- * reads the auction and misplays by a measurable amount — but contracts that
- * were makeable fall four points, because one pass closes the auction and a suit
- * you do not hold is sometimes a suit you play.
+ * **Temporary, and here to answer one question.** This used to let the bot
+ * claim a suit it did not hold at all — measured against itself, that lie cost
+ * about ten times what it earned, landing on the other seat but not nearly
+ * enough to pay for the contracts it left the bot stuck playing. It is now
+ * floored at three cards, so it can no longer manufacture a suit from nothing;
+ * what remains is closer to declining to always announce its best suit. That
+ * floored version has not been measured yet, so it stays off by default here
+ * too.
  *
- * None of which settles whether it works on a *person*, who forms a far stronger
- * belief from an auction than a weighted sampler does and holds it much longer.
- * That is not measurable from here, so it is a switch instead. Once it has been
+ * And the older question is still open underneath it: none of this settles
+ * whether the ambiguity works on a *person*, who forms a far stronger belief
+ * from an auction than a weighted sampler does and holds it much longer. That
+ * is not measurable from here, so it is a switch instead. Once it has been
  * played with, this and the row in Settings should both go: whichever way it
  * lands, the answer belongs in the bot rather than in a preference.
  */
-export function psychsEnabled(): boolean {
-  return readStored(PSYCHS_KEY) === "on";
+export function disguiseEnabled(): boolean {
+  return readStored(DISGUISE_KEY) === "on";
 }
 
-export function setPsychsEnabled(enabled: boolean): void {
-  writeStored(PSYCHS_KEY, enabled ? "on" : "off");
+export function setDisguiseEnabled(enabled: boolean): void {
+  writeStored(DISGUISE_KEY, enabled ? "on" : "off");
 }
 
 /**
@@ -104,7 +110,7 @@ export type Pace = "brisk" | "normal" | "slow";
 
 export function boldness(): Boldness {
   const stored = readStored(BOLDNESS_KEY);
-  return stored === "bold" || stored === "cautious" ? stored : "normal";
+  return stored === "cautious" || stored === "normal" ? stored : "bold";
 }
 
 export function setBoldness(next: Boldness): void {
@@ -113,7 +119,7 @@ export function setBoldness(next: Boldness): void {
 
 export function strength(): Strength {
   const stored = readStored(STRENGTH_KEY);
-  return stored === "strong" || stored === "weak" ? stored : "normal";
+  return stored === "normal" || stored === "weak" ? stored : "strong";
 }
 
 export function setStrength(next: Strength): void {
@@ -144,9 +150,24 @@ export function setPeeking(enabled: boolean): void {
   writeStored(PEEK_KEY, enabled ? "on" : "off");
 }
 
+/**
+ * Whether the game plays sound effects.
+ *
+ * On by default: unlike the testing settings above, this is an ordinary
+ * preference rather than an answer still being worked out, so it defaults to
+ * the experience most people would want rather than to off.
+ */
+export function soundEnabled(): boolean {
+  return readStored(SOUND_KEY) !== "off";
+}
+
+export function setSoundEnabled(enabled: boolean): void {
+  writeStored(SOUND_KEY, enabled ? "on" : "off");
+}
+
 export function pace(): Pace {
   const stored = readStored(PACE_KEY);
-  return stored === "brisk" || stored === "slow" ? stored : "normal";
+  return stored === "normal" || stored === "slow" ? stored : "brisk";
 }
 
 export function setPace(next: Pace): void {

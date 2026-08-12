@@ -1,7 +1,8 @@
 import type { MatchFormat } from "@hb/engine";
 import { useState } from "react";
-import type { OpponentRecord } from "../game/records.js";
-import { resetRecord, useRecords } from "../game/records.js";
+import { matchNoun } from "../game/labels.js";
+import type { MatchRecord, OpponentRecord } from "../game/records.js";
+import { resetRecord, useRecentMatches, useRecords } from "../game/records.js";
 
 export interface RecordProps {
   readonly signedIn: boolean;
@@ -99,6 +100,71 @@ function Group({
       <div className="mt-1">
         {records.map((record) => (
           <Row key={`${record.name}-${record.lastPlayed}`} record={record} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * When a match finished, in whatever timezone this device is currently set
+ * to — unlike `whenPlayed`, which only says how long ago, this is for telling
+ * two matches from the same day apart.
+ */
+function formatMatchTime(at: number): string {
+  return new Date(at).toLocaleString(undefined, {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+  });
+}
+
+function MatchRow({ match }: { readonly match: MatchRecord }): React.JSX.Element {
+  return (
+    <div className="border-t border-white/10 py-2 first:border-t-0">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="min-w-0 flex-1 truncate">
+          <span className={match.won ? "text-emerald-300/80" : "text-amber-200/70"}>
+            {match.won ? "Won" : "Lost"}
+          </span>{" "}
+          vs {match.opponentName}
+        </span>
+        <span className="shrink-0 font-mono text-sm tabular-nums text-white/70">
+          {match.pointsFor.toLocaleString()}–{match.pointsAgainst.toLocaleString()}
+        </span>
+      </div>
+      <div className="mt-0.5 flex items-baseline justify-between gap-3 text-xs text-white/40">
+        <span>
+          {matchNoun(match.format)} · {count(match.deals, "deal")}
+        </span>
+        <span>{formatMatchTime(match.finishedAt)}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The individual matches behind the tallies above, newest first.
+ *
+ * A tally can say how a rivalry stands but not what was played last Tuesday
+ * evening or how a string of wins actually happened one game at a time — this
+ * is for that, so it stays a short, ungrouped list rather than another set of
+ * sections.
+ */
+function RecentMatches({ signedIn }: { readonly signedIn: boolean }): React.JSX.Element | null {
+  const { matches } = useRecentMatches(signedIn);
+
+  if (matches === null || matches.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <h2 className="text-lg font-semibold">Recent matches</h2>
+      <div>
+        {matches.map((match) => (
+          <MatchRow key={`${match.finishedAt}-${match.opponentName}`} match={match} />
         ))}
       </div>
     </div>
@@ -245,6 +311,7 @@ function Body({
           <Group records={section.robot} title="Against the computer" />
         </div>
       ))}
+      <RecentMatches signedIn={signedIn} />
       <Reset onDone={reload} />
     </div>
   );

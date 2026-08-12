@@ -26,6 +26,10 @@ export function recordsUrl(): string {
   return `${ORIGIN}/api/results`;
 }
 
+export function recentMatchesUrl(): string {
+  return `${ORIGIN}/api/results/recent`;
+}
+
 export function resetRecordUrl(): string {
   return `${ORIGIN}/api/results/reset`;
 }

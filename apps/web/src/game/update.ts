@@ -14,20 +14,6 @@
 const SCRIPT_URL = "/sw.js";
 
 /**
- * Guards against reloading twice — `reinstall` and the controller change can
- * otherwise both fire, and the second lands mid-navigation.
- */
-let reloading = false;
-
-function reload(): void {
-  if (reloading) {
-    return;
-  }
-  reloading = true;
-  window.location.reload();
-}
-
-/**
  * Reload once a new worker takes over.
  *
  * The service worker is built with `skipWaiting` and `clientsClaim`, so a new
@@ -47,7 +33,7 @@ function reloadWhenUpdated(): void {
     if (!hadController) {
       return;
     }
-    reload();
+    window.location.reload();
   });
 }
 
@@ -88,69 +74,22 @@ export function registerServiceWorker(): void {
 }
 
 /**
- * `failed` is worth keeping distinct from `current`. The check goes to the
- * network, so a phone in a lift fails it — and answering "you have the latest
- * build" to a question that was never asked is the exact confusion this module
- * exists to end.
- */
-export type UpdateCheck = "current" | "failed" | "updating";
-
-/**
- * Ask whether a newer build has been deployed.
+ * Ask the browser whether a newer build has been deployed.
  *
- * `updating` means one is on its way and nothing further is needed: the new
- * worker installs, claims the page, and `reloadWhenUpdated` reloads it.
- *
- * Never rejects — callers are a button and two event listeners, and none of
- * them has anywhere to put an exception.
+ * If one has, the new worker installs, claims the page, and
+ * `reloadWhenUpdated` reloads it — there is nothing further to do here. Never
+ * throws: a phone offline or asleep in a pocket fails this silently rather
+ * than surfacing an error nobody asked to see.
  */
-export async function checkForUpdate(): Promise<UpdateCheck> {
+async function checkForUpdate(): Promise<void> {
   if (!("serviceWorker" in navigator)) {
-    return "failed";
+    return;
   }
 
   try {
     const registration = await navigator.serviceWorker.getRegistration();
-    if (registration === undefined) {
-      return "failed";
-    }
-
-    await registration.update();
-
-    // `waiting` is all but unreachable with `skipWaiting` — a new worker goes
-    // straight to activating — but it costs nothing to answer for a build that
-    // has arrived and stalled, and the alternative is reporting "up to date" to
-    // somebody looking at the old one.
-    return registration.installing !== null || registration.waiting !== null
-      ? "updating"
-      : "current";
+    await registration?.update();
   } catch {
-    // Offline, or the fetch for `sw.js` failed. Either way there is no answer.
-    return "failed";
+    // Offline, or the fetch for `sw.js` failed.
   }
-}
-
-/**
- * Throw away the installed app and fetch it again.
- *
- * The escape hatch, not the routine path — it drops the precache, so the next
- * load pays for the whole app over whatever connection the phone has. It earns
- * its place because an installed PWA on iOS can get wedged in ways an update
- * check does not fix, and reinstalling from the home screen is the alternative.
- *
- * With no worker left to serve the shell, the reload goes to the network, where
- * `_headers` has already promised the shell is never cached.
- */
-export async function reinstall(): Promise<void> {
-  if ("serviceWorker" in navigator) {
-    const registrations = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(registrations.map((registration) => registration.unregister()));
-  }
-
-  if ("caches" in window) {
-    const keys = await caches.keys();
-    await Promise.all(keys.map((key) => caches.delete(key)));
-  }
-
-  reload();
 }

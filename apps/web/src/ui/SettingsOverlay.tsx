@@ -1,9 +1,7 @@
 import type { MatchFormat } from "@hb/engine";
-import { useState } from "react";
 import { BOT_RELEASE } from "../bot/release.js";
 import type { Boldness, Pace, Strength } from "../game/identity.js";
 import type { Theme } from "../game/theme.js";
-import { checkForUpdate, reinstall } from "../game/update.js";
 
 export interface SettingsOverlayProps {
   readonly devTools: boolean;
@@ -19,20 +17,22 @@ export interface SettingsOverlayProps {
   readonly playtester: boolean;
   /** Offered to playtesters only; reveals the computer's cards and nobody else's. */
   readonly peeking: boolean;
-  /** Temporary, while it is being decided whether psyching works on a person. */
-  readonly psychs: boolean;
+  /** Temporary, while it is being decided whether the ambiguity works on a person. */
+  readonly disguise: boolean;
   readonly boldness: Boldness;
   readonly pace: Pace;
+  readonly sound: boolean;
   readonly strength: Strength;
   onBoldnessChange(next: Boldness): void;
   onPaceChange(next: Pace): void;
+  onSoundChange(enabled: boolean): void;
   onStrengthChange(next: Strength): void;
   readonly theme: Theme;
   onClose(): void;
   onDevToolsChange(enabled: boolean): void;
   onFormatChange(format: MatchFormat): void;
   onPeekingChange(enabled: boolean): void;
-  onPsychsChange(enabled: boolean): void;
+  onDisguiseChange(enabled: boolean): void;
   onShowHelp(): void;
   onThemeChange(theme: Theme): void;
 }
@@ -119,79 +119,6 @@ function Choice<T extends string>({
 }
 
 /**
- * `current` is the interesting one: it is the state in which somebody is
- * looking at a build they believe is stale and has just been told it is not.
- * That is exactly when the reinstall is worth offering, and the only time.
- */
-type UpdateState = "checking" | "current" | "failed" | "idle" | "reinstalling" | "updating";
-
-/**
- * The manual half of staying current.
- *
- * `registerServiceWorker` already checks on every return to the app, so this
- * button is for the case where somebody has reason to doubt it — a deploy that
- * just went out, or a screen that looks wrong. It reports the answer either
- * way, because "nothing happened" is indistinguishable from "the check is
- * broken", which is the position this whole feature was written from.
- */
-function UpdateControl(): React.JSX.Element {
-  const [state, setState] = useState<UpdateState>("idle");
-
-  async function check(): Promise<void> {
-    setState("checking");
-    // On an update the page is about to reload underneath this, so that state
-    // is only ever seen for a moment.
-    setState(await checkForUpdate());
-  }
-
-  if (state === "updating") {
-    return <p className="mt-3 text-xs text-emerald-300">A new build is on its way — reloading.</p>;
-  }
-
-  return (
-    <div className="mt-3">
-      <button
-        type="button"
-        className="w-full rounded-xl border border-white/15 px-4 py-2.5 text-sm font-medium disabled:opacity-50"
-        disabled={state === "checking" || state === "reinstalling"}
-        onClick={() => {
-          void check();
-        }}
-      >
-        {state === "checking" ? "Checking…" : "Check for updates"}
-      </button>
-
-      {state === "failed" ? (
-        <p className="mt-2 text-xs text-white/40">
-          Could not reach the server, so there is no answer either way.
-        </p>
-      ) : null}
-
-      {state === "reinstalling" ? (
-        <p className="mt-2 text-xs text-white/40">Reinstalling…</p>
-      ) : null}
-
-      {state === "current" ? (
-        <p className="mt-2 text-xs text-white/40">
-          This is the latest build.{" "}
-          <button
-            type="button"
-            className="underline"
-            onClick={() => {
-              setState("reinstalling");
-              void reinstall();
-            }}
-          >
-            Reinstall
-          </button>{" "}
-          to download the whole app again.
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-/**
  * Settings, reachable from every screen.
  *
  * Only ever offers controls that are safe in a build anyone can open — see
@@ -206,21 +133,23 @@ function UpdateControl(): React.JSX.Element {
 export function SettingsOverlay({
   boldness,
   devTools,
+  disguise,
   format,
   onBoldnessChange,
   onClose,
   onDevToolsChange,
+  onDisguiseChange,
   onFormatChange,
   onPaceChange,
   onPeekingChange,
-  onPsychsChange,
   onShowHelp,
+  onSoundChange,
   onStrengthChange,
   onThemeChange,
   pace,
   peeking,
   playtester,
-  psychs,
+  sound,
   strength,
   theme,
 }: SettingsOverlayProps): React.JSX.Element {
@@ -268,6 +197,15 @@ export function SettingsOverlay({
           />
         </div>
 
+        <div className="w-full max-w-sm">
+          <Toggle
+            label="Sound"
+            description="A few short cues — a call in the auction, a made or a down contract, the rubber won. Works against the computer and at a table with somebody else."
+            on={sound}
+            onChange={onSoundChange}
+          />
+        </div>
+
         {playtester ? (
           <div className="w-full max-w-sm rounded-2xl border border-amber-300/30 bg-amber-300/5 p-3">
             {/* Padded to match the rows below. Each of those is a bordered box
@@ -289,10 +227,10 @@ export function SettingsOverlay({
                 others as they are added and removed. */}
             <div className="mt-3 space-y-3">
               <Toggle
-                label="Let the computer bluff"
-                description="It will sometimes name a suit it does not hold, hoping you place its cards wrongly for the rest of the deal. Against itself this costs more than it gains; whether it works on a person is the open question. Takes effect on the next match."
-                on={psychs}
-                onChange={onPsychsChange}
+                label="Let the computer bid unpredictably"
+                description="It will sometimes name a decent suit rather than its objectively best one, so a bid alone can't be read as this hand's exact shape. It will never name a suit with fewer than three cards, and rarely one with only three. Takes effect on the next match."
+                on={disguise}
+                onChange={onDisguiseChange}
               />
 
               <Choice
@@ -367,7 +305,6 @@ export function SettingsOverlay({
           <p className="mt-1 text-white/30">
             A trailing + means the build had uncommitted changes.
           </p>
-          <UpdateControl />
         </div>
       </div>
 

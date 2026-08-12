@@ -11,6 +11,7 @@ export interface TableGameProps {
   readonly code: string;
   readonly devTools: boolean;
   readonly peeking: boolean;
+  readonly sound: boolean;
   /** Goes back to the home screen. The seat is given up before this is called. */
   onLeave(): void;
   onShowSettings(): void;
@@ -188,6 +189,7 @@ export function TableGame({
   onLeave,
   onShowSettings,
   peeking,
+  sound,
 }: TableGameProps): React.JSX.Element {
   const game = useNetworkSession(code);
 
@@ -242,6 +244,7 @@ export function TableGame({
         }}
         peeking={peeking}
         session={session}
+        sound={sound}
         onShowSettings={onShowSettings}
       />
     </>

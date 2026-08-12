@@ -474,23 +474,44 @@ is what catches this class of mistake. `bench/strain.ts` settles arguments about
   did it alone**, which is worth remembering before blaming the next regression on whatever changed
   last.
 
-- **Psyching is built, measured, and deliberately off.** A psych is a bid in a suit the hand does
-  not hold, made to be believed. `PSYCH_CREDIT` in `heuristicBot.ts` prices the deception, since
-  everything else about a bid is priced honestly — it has to be, because one pass closes the
-  auction and every psych is a contract the bot may simply have to play. Zero disables it without
-  removing it. **The frequency was never a setting**: at 200 the credit makes lying worthwhile
-  about once in six deals, and that rate is an outcome of the price, not a schedule.
+- **What used to be called psyching is built, measured once under that shape, and now floored.**
+  The original version let the bot name a suit it did not hold at all — a real psych, in the
+  bridge sense, priced by a single `PSYCH_CREDIT`. Measured, it worked exactly as a lie should: at
+  200 (about one in six deals) the other seat, playing against a sampler that reads the auction and
+  can therefore be fooled, threw away 0.02 more tricks a deal in both roles. It just cost far more
+  than it returned — contracts makeable at par fell from 53% to 49%, an order of magnitude the
+  wrong way — because one pass closes the auction and a suit named from nothing is sometimes a suit
+  the bot is stuck playing.
 
-  Safer here than in bridge, where the danger is *partner* acting on it and there is no partner.
-  And genuinely effective: at one lie in six, against a sampler that now reads the auction and can
-  therefore be fooled, the other seat throws away 0.02 more tricks a deal in both roles. The lie
-  lands. It just costs far more than it returns — contracts makeable at par fall from 53% to 49%.
-  An order of magnitude the wrong way.
+  That version shipped switched off and stayed switched off, but a session with it turned on for
+  testing surfaced the actual failure mode: the bot opened **2 of a suit** it barely held. Not a
+  bigger lie — the credit only ever touched the opening bid — but the honest, undiscounted
+  consequence of one: having named a three-card suit for the credit, a normal sacrifice calculation
+  later in the same auction can honestly prefer competing in it again over letting the contract go,
+  and a person watching sees a computer that named and then re-raised a suit it plainly does not
+  have. A credit that cannot tell "claims nothing" from "claims three cards" apart was pricing both
+  as the same lie.
 
-  What none of that settles is whether psyching pays against a *person*, who forms a much stronger
-  belief from an auction than a weighted sampler does and holds it far longer. Unmeasurable here,
-  and the same category as `DOUBLED_FROM_DOWN` — behavior aimed at a human that only a human can
-  judge.
+  **The mechanic is now a disguise rather than a lie, and it is floored rather than priced flat.**
+  `DISGUISE_MIN_LENGTH` in `heuristicBot.ts` means the credit never fires under three cards, at any
+  price — a suit that thin is not a real alternative, so there is nothing left to switch on that
+  could produce the void-suit case above. What the credit buys instead is not naming this hand's
+  objectively best suit every time, so the auction alone cannot be read as an exact map of its
+  shape; every suit it can still pick this way is one it could honestly have opened. Three cards is
+  kept rare rather than forbidden — `DISGUISE_THIN_FACTOR` scales the credit down hard at exactly
+  three, checked against `bench/auction.ts`: 0.25 produced no three-card disguises at all in 400
+  deals, 0.5 produced one, which is the "very infrequently" this was asked for rather than "never."
+  Four or more cards gets the full credit and is the common case: 91 of 1000 deals in the same
+  bench, against zero, ever, below the floor.
+
+  **None of the old cost/benefit numbers describe this version.** They were measured against a
+  mechanic that could bid a void; this one structurally cannot, and the floor removes what made
+  those psychs the cheapest and most damaging kind. It has not been refitted against par or against
+  a rubber since, so it stays off by default (`DISGUISE_CREDIT` is 0) pending that, the same as
+  before. What was never settled either way carries over unchanged: whether the disguise pays
+  against a *person*, who forms a much stronger belief from an auction than a weighted sampler does
+  and holds it far longer, is not measurable here — the same category as `DOUBLED_FROM_DOWN`,
+  behavior aimed at a human that only a human can judge.
 
 - **The bot remembers what it discarded, and it matters in one place rather than two.** Recall is
   handed to `chooseDraw` and `choosePlay` as explicit state by `botActionFor`, never read out of

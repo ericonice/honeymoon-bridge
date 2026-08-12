@@ -1,5 +1,6 @@
 import type { DealPhase, PlayerView } from "@hb/engine";
 import { ContractText } from "./CardText.js";
+import { RecordIcon, SettingsIcon } from "./icons.js";
 
 export interface TopBarProps {
   readonly opponentName: string;
@@ -104,9 +105,10 @@ export function TopBar({
         <button
           type="button"
           aria-label="Show the score"
-          className="rounded border border-white/25 px-2 py-0.5 text-xs whitespace-nowrap text-white/70"
+          className="flex items-center gap-1 rounded border border-white/25 px-2 py-0.5 text-xs whitespace-nowrap text-white/70"
           onClick={onShowScore}
         >
+          <RecordIcon className="h-3.5 w-3.5" />
           score
         </button>
       )}
@@ -127,10 +129,10 @@ export function TopBar({
       <button
         type="button"
         aria-label="Settings"
-        className="rounded border border-white/25 px-1.5 py-0.5 text-sm leading-5 text-white/70"
+        className="rounded border border-white/25 px-1.5 py-0.5 text-white/70"
         onClick={onShowSettings}
       >
-        ⚙
+        <SettingsIcon className="h-3.5 w-3.5" />
       </button>
     </header>
   );

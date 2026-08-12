@@ -5,6 +5,7 @@ import { GameBoard } from "./GameBoard.js";
 export interface RobotGameProps {
   readonly devTools: boolean;
   readonly peeking: boolean;
+  readonly sound: boolean;
   onLeave(): void;
   onShowSettings(): void;
 }
@@ -15,6 +16,7 @@ export function RobotGame({
   onLeave,
   onShowSettings,
   peeking,
+  sound,
 }: RobotGameProps): React.JSX.Element {
   const session = useLocalSession({ peek: peeking });
   const noun = matchNoun(session.rubber.format);
@@ -31,6 +33,7 @@ export function RobotGame({
       }}
       peeking={peeking}
       session={session}
+      sound={sound}
       onShowSettings={onShowSettings}
     />
   );

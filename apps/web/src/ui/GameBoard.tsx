@@ -3,6 +3,7 @@ import type { Call, Card, DealPhase, DrawReveal, PlayerView } from "@hb/engine";
 import { useEffect, useRef, useState } from "react";
 import { drawPlayout, trickCollectDuration } from "../game/timing.js";
 import type { GameSession } from "../game/session.js";
+import { useGameSounds } from "../game/useGameSounds.js";
 import { AuctionPhase } from "./AuctionPhase.js";
 import { DealComplete } from "./DealComplete.js";
 import { DrawPhase } from "./DrawPhase.js";
@@ -34,12 +35,19 @@ export interface GameBoardProps {
   readonly exit: GameExit | null;
   readonly peeking: boolean;
   readonly session: GameSession;
+  readonly sound: boolean;
   onShowSettings(): void;
 }
 
-/** The cards the follow-suit rule allows right now, or null outside the play phase. */
-function playableCards(view: PlayerView): Card[] | null {
-  if (view.phase !== "play" || view.toAct !== view.me) {
+/**
+ * The cards the follow-suit rule allows right now, or null outside the play
+ * phase — going by the phase this seat is *shown*, not the engine's, since the
+ * engine has already moved on by the time an auction close is still being
+ * held open. The engine's own phase would light these up against whatever the
+ * computer just led, in sync with a screen the player has not reached yet.
+ */
+function playableCards(view: PlayerView, shownPhase: DealPhase): Card[] | null {
+  if (shownPhase !== "play" || view.toAct !== view.me) {
     return null;
   }
   return legalActionsForView(view).flatMap((action) =>
@@ -139,11 +147,14 @@ function finalBeat({
   entered,
   lastDraw,
   left,
+  meIsDeclarer,
   theirCardsShowing,
 }: {
   readonly entered: DealPhase;
   readonly lastDraw: DrawReveal | null;
   readonly left: DealPhase;
+  /** Only meaningful for an auction that just closed. */
+  readonly meIsDeclarer: boolean;
   readonly theirCardsShowing: boolean;
 }): FinalBeat | null {
   // The twenty-sixth draw turn becomes the auction the instant it resolves, and
@@ -161,9 +172,14 @@ function finalBeat({
   // And the auction, which is the same shape with no length to borrow: a sweep
   // and a card 2 can be waited out, a closed auction cannot. The contract lives
   // on in the top bar but the calls that reached it do not, so the record of
-  // how the deal got priced is what vanishes.
+  // how the deal got priced is what vanishes — unless the pass that closed the
+  // auction was this seat's own. That pass already said "done" the instant it
+  // was made, and the leader of the first trick is always declarer's opponent,
+  // so this seat's own closing pass means it leads next regardless — nothing
+  // for a held screen to protect it from. A pass from the other side is the
+  // one that needs a beat, since that is the case where the computer leads.
   if (left === "auction" && entered === "play") {
-    return { kind: "dismissed" };
+    return meIsDeclarer ? { kind: "dismissed" } : null;
   }
   return null;
 }
@@ -198,6 +214,7 @@ function useShownPhase(session: GameSession, peeking: boolean): ShownPhase {
   // rule the draw screen goes by, so the two cannot disagree about whether the
   // turn it is holding the phase open for was animated.
   const theirCardsShowing = peeking && session.opponentHand !== null;
+  const meIsDeclarer = session.view.contract?.declarer === session.view.me;
 
   useEffect(() => {
     const left = previous.current;
@@ -206,7 +223,7 @@ function useShownPhase(session: GameSession, peeking: boolean): ShownPhase {
       return;
     }
 
-    const beat = finalBeat({ entered: actual, lastDraw, left, theirCardsShowing });
+    const beat = finalBeat({ entered: actual, lastDraw, left, meIsDeclarer, theirCardsShowing });
     if (beat === null) {
       return;
     }
@@ -255,12 +272,14 @@ export function GameBoard({
   onShowSettings,
   peeking,
   session,
+  sound,
 }: GameBoardProps): React.JSX.Element {
   const [showingScore, setShowingScore] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const { view } = session;
   const { phase, release } = useShownPhase(session, peeking);
-  const playable = playableCards(view);
+  const playable = playableCards(view, phase);
+  useGameSounds(session, sound);
 
   // Once the match is won there is nothing left to lose by going, so the exit
   // stops asking. Mid-rubber it always asks, including between deals — a

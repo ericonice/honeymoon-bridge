@@ -16,10 +16,10 @@ import type { DealAction, DealState, PlayerId, TableState } from "@hb/engine";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BOT_RELEASE } from "../bot/release.js";
 import { DEFAULT_GAME_EQUITY } from "../bot/bidValue.js";
-import { PSYCH_CREDIT_ON } from "../bot/heuristicBot.js";
+import { DISGUISE_CREDIT_ON } from "../bot/heuristicBot.js";
 import { createSamplingBot } from "../bot/samplingBot.js";
 import { botActionFor } from "./botTurn.js";
-import { boldness, pace, preferredFormat, psychsEnabled, strength } from "./identity.js";
+import { boldness, disguiseEnabled, pace, preferredFormat, strength } from "./identity.js";
 import { reportRobotRubber } from "./records.js";
 import type { GameSession } from "./session.js";
 import { drawPauseBefore, setPacing, trickCollectDuration } from "./timing.js";
@@ -42,8 +42,10 @@ const SAMPLES = 25;
  * The testing settings, turned into the numbers the bot and the screen take.
  *
  * Kept here rather than in `identity.ts` so that what a choice *means* lives
- * beside what uses it. Every "normal" is the value the code would have had
- * anyway, so leaving all three alone is not a configuration.
+ * beside what uses it. "Normal" is still the passthrough in each mapping
+ * below, but it is no longer the shipped default — `identity.ts` now returns
+ * bold, strong and brisk when nothing is stored, so those are the numbers a
+ * fresh install actually plays against.
  */
 function samplesFor(level: ReturnType<typeof strength>): number {
   return level === "strong" ? 60 : level === "weak" ? 6 : SAMPLES;
@@ -129,8 +131,8 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
   const bot = useMemo(
     () =>
       createSamplingBot(createRng(randomSeed()), samplesFor(strength()), {
+        disguiseCredit: disguiseEnabled() ? DISGUISE_CREDIT_ON : 0,
         gameEquity: equityFor(boldness()),
-        psychCredit: psychsEnabled() ? PSYCH_CREDIT_ON : 0,
       }),
     [],
   );
