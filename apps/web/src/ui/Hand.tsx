@@ -8,6 +8,22 @@ import { CardFace } from "./CardFace.js";
 /** Matches the `hand` size in `CardFace`. */
 const CARD_WIDTH = 56;
 
+/**
+ * This component's total resting height, empty or full — the card height
+ * (`h-20`, 80px) plus the row's own top padding (`pt-9`, 36px, which is
+ * headroom for a previewed card's rise and scale, not decoration) plus the
+ * frame's bottom padding (`pb-1`, 4px).
+ *
+ * `GameBoard` holds a placeholder of exactly this height in place of a
+ * genuinely empty hand at the end of play, rather than letting the footer
+ * disappear the instant the last card is played — which is several beats
+ * before the screen actually leaves the play phase, and unmounting it early
+ * that way was a layout jump with a clear board above and empty space below
+ * where the footer used to be. Keep this in sync with the JSX below and with
+ * `GameBoard`'s own footer if either changes.
+ */
+export const HAND_HEIGHT = 80 + 36 + 4;
+
 /** Never squeeze a card's exposed strip below this, or the index becomes unreadable. */
 const MIN_STEP = 18;
 
@@ -210,7 +226,7 @@ export function Hand({ cards, highlight, onPlay, playable }: HandProps): React.J
     // the first card arrives and shifts every row above it.
     return (
       <div className="px-3 pb-1">
-        <div className="flex items-end pt-4">
+        <div className="flex items-end pt-9">
           <p className="flex h-20 w-full items-center justify-center text-sm text-white/50">
             No cards yet
           </p>
@@ -228,7 +244,7 @@ export function Hand({ cards, highlight, onPlay, playable }: HandProps): React.J
         // alone, it shows its own magnifying loupe over whatever the finger
         // is on, which is what was actually cutting the previewed card off,
         // not any layout of ours.
-        className="mx-auto flex w-max touch-none items-end pt-4 select-none [-webkit-touch-callout:none]"
+        className="mx-auto flex w-max touch-none items-end pt-9 select-none [-webkit-touch-callout:none]"
         onPointerCancel={handlePointerCancel}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -247,7 +263,11 @@ export function Hand({ cards, highlight, onPlay, playable }: HandProps): React.J
               aria-label={spokenCardLabel(card)}
               className={[
                 "shrink-0 origin-bottom transition-all duration-150 ease-out",
-                previewed ? "z-10 scale-110 ring-2 ring-inset ring-amber-300" : legal ? "-translate-y-3" : "",
+                previewed
+                  ? "z-10 -translate-y-5 scale-110 ring-2 ring-inset ring-amber-300"
+                  : legal
+                    ? "-translate-y-3"
+                    : "",
                 playable !== null && !legal ? "opacity-40" : "",
               ].join(" ")}
               style={step === undefined ? undefined : { marginLeft: step - CARD_WIDTH }}

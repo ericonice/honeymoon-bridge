@@ -265,6 +265,7 @@ describe("rubber", () => {
     expect(rubber.complete).toBe(true);
     expect(rubber.winner).toBe(0);
     expect(rubber.aboveLine[0]).toBe(700);
+    expect(rubber.matchBonus[0]).toBe(700);
     expect(totalScore(rubber)[0]).toBe(240 + 700);
   });
 
@@ -281,6 +282,7 @@ describe("rubber", () => {
     expect(rubber.complete).toBe(true);
     expect(rubber.gamesWon).toEqual([2, 1]);
     expect(rubber.aboveLine[0]).toBe(500);
+    expect(rubber.matchBonus[0]).toBe(500);
   });
 
   it("refuses to score into a completed rubber", () => {
@@ -307,6 +309,7 @@ describe("a one-game match", () => {
     // 4♠ making is 120 below the line, which is a game on its own.
     const match = applyDealScore(newRubber("game"), score(4, "S", 10));
     expect(match.aboveLine[0]).toBe(300);
+    expect(match.matchBonus[0]).toBe(300);
     expect(totalScore(match)[0]).toBe(120 + 300);
   });
 

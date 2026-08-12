@@ -31,7 +31,7 @@ const GAME_BONUS = 300;
 export type MatchFormat = "game" | "rubber";
 
 export interface RubberState {
-  /** Bonuses, penalties, overtricks and honors. Never counts toward game. */
+  /** Bonuses, penalties, overtricks and honors. Never counts toward game. Includes `matchBonus`. */
   readonly aboveLine: Pair<number>;
   /** Every below-the-line point ever scored, including games already won. */
   readonly belowLineTotal: Pair<number>;
@@ -39,6 +39,13 @@ export interface RubberState {
   /** What it takes to finish. Fixed when the match starts and never changes. */
   readonly format: MatchFormat;
   readonly gamesWon: Pair<number>;
+  /**
+   * 700 or 500 for taking the rubber, 300 for a one-game match, folded into
+   * `aboveLine` the moment the match completes. Kept separately as well so a
+   * UI can show it as its own line rather than a jump in a total nobody
+   * asked "a jump of what?" about.
+   */
+  readonly matchBonus: Pair<number>;
   /** Below-the-line points toward the game currently in progress. Wiped when a game is won. */
   readonly partScore: Pair<number>;
   readonly winner: PlayerId | null;
@@ -51,6 +58,7 @@ export function newRubber(format: MatchFormat = "rubber"): RubberState {
     complete: false,
     format,
     gamesWon: [0, 0],
+    matchBonus: [0, 0],
     partScore: [0, 0],
     winner: null,
   };
@@ -114,11 +122,14 @@ export function applyDealScore(rubber: RubberState, score: DealScore): RubberSta
 
   let complete = false;
   let winner: PlayerId | null = null;
+  const matchBonus: Pair<number> = [rubber.matchBonus[0], rubber.matchBonus[1]];
   for (const player of [0, 1] as const) {
     if (gamesWon[player] === target) {
       complete = true;
       winner = player;
-      aboveLine[player] += bonusFor(rubber.format, gamesWon[player === 0 ? 1 : 0]);
+      const bonus = bonusFor(rubber.format, gamesWon[player === 0 ? 1 : 0]);
+      aboveLine[player] += bonus;
+      matchBonus[player] = bonus;
     }
   }
 
@@ -128,6 +139,7 @@ export function applyDealScore(rubber: RubberState, score: DealScore): RubberSta
     complete,
     format: rubber.format,
     gamesWon,
+    matchBonus,
     partScore,
     winner,
   };

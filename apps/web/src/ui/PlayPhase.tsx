@@ -133,7 +133,7 @@ function TrickReview({
     trick.cards.find((card) => card.by === player);
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/75 px-6">
+    <div className="safe-inset absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/75 px-6">
       <p className="text-sm text-white/60">Trick {view.completedTricks.length}</p>
       <div className="flex items-center gap-8">
         {([view.opponent, view.me] as const).map((player) => {

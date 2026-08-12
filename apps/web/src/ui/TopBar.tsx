@@ -1,9 +1,7 @@
 import type { DealPhase, PlayerView } from "@hb/engine";
-import { ContractText } from "./CardText.js";
 import { RecordIcon, SettingsIcon } from "./icons.js";
 
 export interface TopBarProps {
-  readonly opponentName: string;
   /**
    * The phase being *shown*, which is not always the one the engine is in — the
    * board holds the last turn of the draw and of the play on screen after the
@@ -27,15 +25,12 @@ export interface TopBarProps {
   readonly view: PlayerView;
 }
 
-function Headline({
-  opponentName,
-  phase,
-  view,
-}: {
-  readonly opponentName: string;
-  readonly phase: DealPhase;
-  readonly view: PlayerView;
-}): React.JSX.Element {
+/**
+ * Just the phase, during the draw and the auction. Once a contract exists it
+ * has its own strip below the bar — see `ContractBar` — so there is nothing
+ * left for a headline here to add.
+ */
+function Headline({ phase }: { readonly phase: DealPhase }): React.JSX.Element {
   switch (phase) {
     case "draw": {
       return <>Draw</>;
@@ -44,16 +39,7 @@ function Headline({
       return <>Auction</>;
     }
     case "play": {
-      const contract = view.contract;
-      if (contract === null) {
-        return <>Play</>;
-      }
-      return (
-        <>
-          <ContractText contract={contract} on="dark" />{" "}
-          {contract.declarer === view.me ? "by you" : `by ${opponentName}`}
-        </>
-      );
+      return <>Play</>;
     }
     default: {
       return <>Deal complete</>;
@@ -61,29 +47,14 @@ function Headline({
   }
 }
 
-/**
- * Only the trick count earns a place here. The stock count lives on the deck
- * itself, and how many cards you hold is answered by looking at your hand —
- * during the auction it is always 13, which is no answer at all.
- */
-function detail(phase: DealPhase, view: PlayerView): string | null {
-  if (phase === "play" || phase === "complete") {
-    return `Tricks  ${view.tricksWon[view.me]} – ${view.tricksWon[view.opponent]}`;
-  }
-  return null;
-}
-
 export function TopBar({
   onLeave,
   onShowScore,
   onShowSettings,
   onSkipPhase,
-  opponentName,
   phase,
   view,
 }: TopBarProps): React.JSX.Element {
-  const right = detail(phase, view);
-
   return (
     <header className="flex items-baseline justify-between gap-2 border-b border-white/10 px-4 py-2">
       {onLeave === null ? null : (
@@ -97,10 +68,9 @@ export function TopBar({
         </button>
       )}
       <h1 className="min-w-0 truncate text-base font-semibold text-white">
-        <Headline opponentName={opponentName} phase={phase} view={view} />
+        <Headline phase={phase} />
       </h1>
       <span className="flex-1" />
-      {right === null ? null : <p className="text-sm tabular-nums text-white/60">{right}</p>}
       {onShowScore === null ? null : (
         <button
           type="button"

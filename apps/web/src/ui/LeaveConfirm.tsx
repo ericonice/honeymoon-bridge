@@ -24,7 +24,7 @@ export function LeaveConfirm({
   warning,
 }: LeaveConfirmProps): React.JSX.Element {
   return (
-    <div className="absolute inset-0 z-40 flex flex-col justify-end bg-black/70 px-5 pb-5">
+    <div className="safe-inset absolute inset-0 z-40 flex flex-col justify-end bg-black/70 px-5 pb-5">
       <div className="flex flex-col gap-4 rounded-2xl bg-table-dark px-5 py-5">
         <div>
           <h2 className="text-lg font-semibold">{title}</h2>

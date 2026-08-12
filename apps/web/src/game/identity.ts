@@ -65,24 +65,24 @@ export function setPreferredFormat(format: MatchFormat): void {
  * Whether the computer is allowed to name a suit that isn't necessarily its
  * best one, to avoid always giving its shape away.
  *
- * **Temporary, and here to answer one question.** This used to let the bot
- * claim a suit it did not hold at all — measured against itself, that lie cost
- * about ten times what it earned, landing on the other seat but not nearly
- * enough to pay for the contracts it left the bot stuck playing. It is now
- * floored at three cards, so it can no longer manufacture a suit from nothing;
- * what remains is closer to declining to always announce its best suit. That
- * floored version has not been measured yet, so it stays off by default here
- * too.
+ * **On by default: the computer should be allowed to bid unpredictably.**
+ * This used to let the bot claim a suit it did not hold at all — measured
+ * against itself, that lie cost about ten times what it earned. It is now
+ * floored at three cards, so it can no longer manufacture a suit from
+ * nothing, and gated in `heuristicBot.ts` so the credit only ever applies to
+ * a hand that was bidding minimally anyway — found on a hand where the
+ * un-gated version was talking a 19-count with a six-card suit down to a
+ * one-level opening, which is the failure a flat, unconditional credit
+ * cannot tell apart from the ordinary case it is meant for.
  *
- * And the older question is still open underneath it: none of this settles
+ * The older question is still open underneath it: none of this settles
  * whether the ambiguity works on a *person*, who forms a far stronger belief
  * from an auction than a weighted sampler does and holds it much longer. That
- * is not measurable from here, so it is a switch instead. Once it has been
- * played with, this and the row in Settings should both go: whichever way it
- * lands, the answer belongs in the bot rather than in a preference.
+ * is not measurable from here, so it stays a switch — off is still there for
+ * anyone who would rather play a bot that bids exactly what it holds.
  */
 export function disguiseEnabled(): boolean {
-  return readStored(DISGUISE_KEY) === "on";
+  return readStored(DISGUISE_KEY) !== "off";
 }
 
 export function setDisguiseEnabled(enabled: boolean): void {

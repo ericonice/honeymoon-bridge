@@ -1,13 +1,14 @@
 import { legalActionsForView } from "@hb/engine";
 import type { Call, Card, DealPhase, DrawReveal, PlayerView } from "@hb/engine";
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { drawPlayout, trickCollectDuration } from "../game/timing.js";
 import type { GameSession } from "../game/session.js";
 import { useGameSounds } from "../game/useGameSounds.js";
 import { AuctionPhase } from "./AuctionPhase.js";
+import { ContractBar } from "./ContractBar.js";
 import { DealComplete } from "./DealComplete.js";
 import { DrawPhase } from "./DrawPhase.js";
-import { Hand } from "./Hand.js";
+import { HAND_HEIGHT, Hand } from "./Hand.js";
 import { LeaveConfirm } from "./LeaveConfirm.js";
 import { OpponentPeek } from "./OpponentPeek.js";
 import { PlayPhase } from "./PlayPhase.js";
@@ -216,7 +217,13 @@ function useShownPhase(session: GameSession, peeking: boolean): ShownPhase {
   const theirCardsShowing = peeking && session.opponentHand !== null;
   const meIsDeclarer = session.view.contract?.declarer === session.view.me;
 
-  useEffect(() => {
+  // A layout effect, not a plain one: `actual` having already moved on is
+  // what this render shows unless `held` catches it first, and a plain
+  // effect only runs after the browser has painted that unheld frame — a
+  // real flash of the phase just left showing the phase just reached, gone
+  // as soon as it corrects itself. Layout effects run before paint, so the
+  // correction is never visible to begin with.
+  useLayoutEffect(() => {
     const left = previous.current;
     previous.current = actual;
     if (left === actual) {
@@ -289,7 +296,6 @@ export function GameBoard({
   return (
     <>
       <TopBar
-        opponentName={session.opponentName}
         phase={phase}
         view={view}
         onLeave={
@@ -317,6 +323,8 @@ export function GameBoard({
         }
       />
 
+      <ContractBar opponentName={session.opponentName} phase={phase} view={view} />
+
       {peeking && session.opponentHand !== null ? (
         <OpponentPeek cards={session.opponentHand} />
       ) : null}
@@ -333,23 +341,35 @@ export function GameBoard({
         />
       </main>
 
-      {/* "No cards yet" is true at the start of the draw and a lie at the end
-          of the thirteenth trick, where the hand is empty because all of it has
-          been played. An emptied hand takes its row with it. */}
-      {phase === "complete" || (phase !== "draw" && view.hand.length === 0) ? null : (
+      {/* Held open through the shown phase rather than dropped the instant
+          `view.hand` empties — the last card is played, and so the hand is
+          empty, well before the screen actually leaves "play" for the beat
+          that lets the thirteenth trick be seen. Unmounting the footer on the
+          engine's own timing rather than the shown one was a layout jump with
+          nothing left above to fill the space, ahead of the real transition.
+
+          "No cards yet" is true at the start of the draw and a lie at the end
+          of the thirteenth trick, where the hand is empty because all of it
+          has been played — so that beat gets a blank placeholder, the same
+          height as `Hand`'s own empty state, rather than that text. */}
+      {phase === "complete" ? null : (
         <footer className="border-t border-white/10 pt-1">
-          <Hand
-            cards={view.hand}
-            highlight={session.justTaken}
-            playable={playable}
-            onPlay={
-              playable === null
-                ? null
-                : (card: Card) => {
-                    session.act({ type: "play", card });
-                  }
-            }
-          />
+          {phase !== "draw" && view.hand.length === 0 ? (
+            <div style={{ height: HAND_HEIGHT }} />
+          ) : (
+            <Hand
+              cards={view.hand}
+              highlight={session.justTaken}
+              playable={playable}
+              onPlay={
+                playable === null
+                  ? null
+                  : (card: Card) => {
+                      session.act({ type: "play", card });
+                    }
+              }
+            />
+          )}
         </footer>
       )}
 

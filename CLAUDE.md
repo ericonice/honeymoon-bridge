@@ -507,11 +507,19 @@ is what catches this class of mistake. `bench/strain.ts` settles arguments about
   **None of the old cost/benefit numbers describe this version.** They were measured against a
   mechanic that could bid a void; this one structurally cannot, and the floor removes what made
   those psychs the cheapest and most damaging kind. It has not been refitted against par or against
-  a rubber since, so it stays off by default (`DISGUISE_CREDIT` is 0) pending that, the same as
-  before. What was never settled either way carries over unchanged: whether the disguise pays
-  against a *person*, who forms a much stronger belief from an auction than a weighted sampler does
-  and holds it far longer, is not measurable here — the same category as `DOUBLED_FROM_DOWN`,
-  behavior aimed at a human that only a human can judge.
+  a rubber since, and stayed off by default for a while on that basis — until a session playing
+  against it live found the gap the floor did not close: the credit is flat, so on a hand strong
+  enough that its own honest bidding wanted to jump, the credit could still win the comparison and
+  talk it down to a one-level opening anyway. Found on a 19-count with a six-card AKT-high suit that
+  opened 1♥. `honestlyWeak` in `heuristicBot.ts` closes that: the credit now only applies when the
+  hand's own undisguised bidding would already stop at the cheapest level, so it is a real
+  alternative for a hand that was bidding minimally regardless and never a lever on one that wants
+  to climb. **On by default now** — the computer should be allowed to bid unpredictably; off is
+  still there in Settings for anyone who would rather it bid exactly what it holds. What was never
+  settled either way carries over unchanged: whether the disguise pays against a *person*, who forms
+  a much stronger belief from an auction than a weighted sampler does and holds it far longer, is
+  not measurable here — the same category as `DOUBLED_FROM_DOWN`, behavior aimed at a human that
+  only a human can judge.
 
 - **The bot remembers what it discarded, and it matters in one place rather than two.** Recall is
   handed to `chooseDraw` and `choosePlay` as explicit state by `botActionFor`, never read out of

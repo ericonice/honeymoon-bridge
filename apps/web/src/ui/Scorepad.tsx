@@ -179,7 +179,18 @@ export function Scorepad({
         {rubber.format === "rubber" ? (
           <Summary label="Games won" values={rubber.gamesWon} view={view} />
         ) : null}
-        <Summary label="Toward game" values={rubber.partScore} view={view} />
+        {/* Once the match is complete, the game that finished it wiped both
+            part-scores back to nil–nil — a row that can only read zero at
+            that point is not telling anyone anything. */}
+        {rubber.complete ? (
+          <Summary
+            label={`${rubber.format === "game" ? "Game" : "Rubber"} bonus`}
+            values={rubber.matchBonus}
+            view={view}
+          />
+        ) : (
+          <Summary label="Toward game" values={rubber.partScore} view={view} />
+        )}
         <Summary emphasis label="Total" values={totalScore(rubber)} view={view} />
       </div>
     </div>

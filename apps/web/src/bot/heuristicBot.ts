@@ -77,6 +77,12 @@ const DISGUISE_THIN_FACTOR = 0.5;
  * cannot compute. Hence a single explicit credit, and setting it to zero turns
  * the whole thing off without removing the code.
  *
+ * Also gated by `honestlyWeak` in `bestCall`: a flat credit is only a fair
+ * price for a hand that was bidding minimally anyway. Applied unconditionally,
+ * a hand worth game could be talked down to a level nobody can climb back out
+ * of once the other side passes — found on a hand where the fix was that
+ * flagrant, a 19-count with a six-card AKT-high suit opening 1♥.
+ *
  * Zero for now. The old fitted value (200, about one lie in six) measured a
  * mechanic that could bid a void; it does not describe this one and has not
  * been refitted. See `DISGUISE_CREDIT_ON`.
@@ -306,6 +312,25 @@ function doubleCandidate(
 }
 
 /**
+ * Whether this hand's own honest bidding, before any disguise credit, would
+ * stop at the cheapest level anyway.
+ *
+ * The credit is a free alternative only for a hand that was bidding minimally
+ * regardless — which suit gets named is a wash then, since the level was
+ * never in question. A hand that honestly wants to jump has already answered
+ * that question, and a flat credit is not entitled to talk it back down: one
+ * pass closes the auction, and a hand worth game disguised into a level
+ * nobody can climb back out of is exactly the failure this guards against.
+ */
+function honestlyWeak(view: PlayerView, standing: Standing, gameEquity: number): boolean {
+  const honest = bidCandidates(view, standing, 0, gameEquity).reduce<Candidate | null>(
+    (top, candidate) => (top === null || candidate.value > top.value ? candidate : top),
+    null,
+  );
+  return honest === null || (honest.call.type === "bid" && honest.call.bid.level === 1);
+}
+
+/**
  * Bids what the deal is worth at this score, rather than what the hand can make.
  *
  * Every legal bid is priced in points and compared against the price of passing,
@@ -322,8 +347,10 @@ function bestCall(
   gameEquity: number,
 ): Call {
   const passing = valueOfPassing(view, standing, gameEquity);
+  const effectiveDisguiseCredit =
+    disguiseCredit !== 0 && honestlyWeak(view, standing, gameEquity) ? disguiseCredit : 0;
   const best = [
-    ...bidCandidates(view, standing, disguiseCredit, gameEquity),
+    ...bidCandidates(view, standing, effectiveDisguiseCredit, gameEquity),
     ...doubleCandidate(view, standing, gameEquity),
   ].reduce<
     Candidate | null

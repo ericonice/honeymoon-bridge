@@ -20,13 +20,8 @@ function Rule({
 }
 
 /**
- * A named group of rules, open by default.
- *
- * Collapsible rather than always open so the list of headings reads as a
- * table of contents, but open by default because this overlay is meant to be
- * reached mid-game, for the one rule somebody currently doubts — and that
- * lookup should not cost a tap to open the section before it costs one to
- * find the line.
+ * A named group of rules, collapsed by default so the list of headings reads
+ * as a table of contents rather than a page to scroll past to find one.
  */
 function Section({
   children,
@@ -58,7 +53,7 @@ function Section({
   );
 }
 
-const SECTION_TITLES = ["draw", "auction", "play", "scoring", "app"] as const;
+const SECTION_TITLES = ["draw", "auction", "play", "scoring", "app", "known"] as const;
 type SectionKey = (typeof SECTION_TITLES)[number];
 
 /**
@@ -85,11 +80,12 @@ type SectionKey = (typeof SECTION_TITLES)[number];
  */
 export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
-    app: true,
-    auction: true,
-    draw: true,
-    play: true,
-    scoring: true,
+    app: false,
+    auction: false,
+    draw: false,
+    known: false,
+    play: false,
+    scoring: false,
   });
 
   function toggle(key: SectionKey): void {
@@ -97,7 +93,7 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
   }
 
   return (
-    <div className="absolute inset-0 z-30 flex flex-col bg-table-dark/97">
+    <div className="safe-inset absolute inset-0 z-30 flex flex-col bg-table-dark/97">
       <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto px-5 py-6">
         <div className="w-full max-w-sm">
           <h1 className="text-lg font-semibold">How this differs from bridge</h1>
@@ -193,7 +189,9 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
             A match that is abandoned is not scored and never reaches your record — which also
             means a record cannot be improved by walking out of a game going badly.
           </Rule>
+        </Section>
 
+        <Section title="Known Issues" open={open.known} onToggle={() => toggle("known")}>
           <Rule title="Rotating can flicker, installed">
             Added to your home screen rather than opened in Safari, turning the phone to landscape
             and back can flash for an instant. That is iOS forcing the screen back to portrait, not

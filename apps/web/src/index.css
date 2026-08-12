@@ -91,3 +91,18 @@ button {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
+
+/*
+ * The app's own frame is inset from the notch and the home indicator by
+ * padding in `App.tsx`, but that padding sits on the *content* box. A full-
+ * screen overlay positioned with `absolute inset-0` is not a flow child of
+ * that content box — its containing block is the frame's padding edge, which
+ * is the un-inset screen edge — so it slides straight back under the notch
+ * unless it re-applies the same insets itself.
+ */
+.safe-inset {
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+}
