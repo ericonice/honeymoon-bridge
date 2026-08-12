@@ -165,6 +165,52 @@ function TheirPair({
   );
 }
 
+const TURNS_PER_PLAYER = 13;
+
+/**
+ * Your thirteen turns in the draw, spent one at a time as your hand fills.
+ *
+ * Hand size already counts them — every turn nets exactly one card, kept or
+ * not — so this reads that count rather than tracking a second one. A spent
+ * turn fills its dot solid, the way a card fills a hand; a hollow ring is a
+ * turn still ahead. Shape carries "how many remain" rather than color, since
+ * a hollow ring reads as open at a glance in a way a merely dim dot does
+ * not. Monochrome deliberately: amber appears on exactly one dot, the current
+ * turn, matching the one thing `SeatLabel` uses it for — "it's your move" —
+ * rather than being spent decorating twelve dots that are not.
+ */
+function TurnTrack({
+  active,
+  taken,
+}: {
+  readonly active: boolean;
+  readonly taken: number;
+}): React.JSX.Element {
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: TURNS_PER_PLAYER }, (_, index) => {
+        const spent = index < taken;
+        if (index === taken && active) {
+          return (
+            <motion.span
+              key={index}
+              className="h-1.5 w-1.5 rounded-full bg-amber-300"
+              animate={{ opacity: [0.25, 1, 0.25] }}
+              transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+            />
+          );
+        }
+        return (
+          <span
+            key={index}
+            className={`h-1.5 w-1.5 rounded-full ${spent ? "bg-white/70" : "border border-white/40"}`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function centerIn(container: DOMRect, element: HTMLElement | null): Point | null {
   if (element === null) {
     return null;
@@ -369,10 +415,14 @@ export function DrawPhase({
         </p>
       </div>
 
-      {/* The stock and the discard sit at the edges, clear of the pair below:
-          the deck is the other face-down thing on this screen and must never be
-          what a thumb reaching for card 2 finds first. */}
-      <div className="flex w-full max-w-xs items-start justify-between">
+      {/* Centered like every other pair on this screen, rather than pinned to
+          the true left and right edges: that spread the two piles across the
+          full width with a dead gap between them, out of step with the
+          opponent's pair above and the decision pair below. Close together
+          instead, the way a stock and a waste pile sit side by side on a
+          real table — neither is a tap target, so proximity here is never
+          read as a choice the way it would be for the decision pair below. */}
+      <div className="flex items-start justify-center gap-6">
         <div ref={deckRef}>
           <DrawDeck remaining={view.stockRemaining - (pending === null ? 0 : 1)} />
         </div>
@@ -410,7 +460,10 @@ export function DrawPhase({
         />
       </div>
 
-      <SeatLabel active={decidable} name="You" vulnerable={vulnerable[view.me]} />
+      <div className="flex flex-col items-center gap-1">
+        <SeatLabel active={decidable} name="You" vulnerable={vulnerable[view.me]} />
+        <TurnTrack active={decidable} taken={view.handSizes[view.me]} />
+      </div>
 
       {/* Where cards headed for a hand are aimed: yours pinned to the bottom of
           the app frame, theirs to the top. Anchors rather than the rows

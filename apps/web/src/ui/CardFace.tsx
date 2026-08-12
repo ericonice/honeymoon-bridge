@@ -68,7 +68,12 @@ export function CardBack({ size }: CardBackProps): React.JSX.Element {
   );
 }
 
-/** A card-shaped hole, for a trick slot nobody has played to yet. */
+/**
+ * A card-shaped hole, for a trick slot nobody has played to yet or a discard
+ * pile with nothing in it. Tinted from the card back's own mark color rather
+ * than plain white — faint, but it reads as the same family as the cards
+ * that will eventually sit here, one step past the back itself.
+ */
 export function CardSlot({ size }: CardBackProps): React.JSX.Element {
-  return <span className={`${SIZES[size]} block border-2 border-dashed border-white/15`} />;
+  return <span className={`${SIZES[size]} block border-2 border-dashed border-card-back-mark/25`} />;
 }

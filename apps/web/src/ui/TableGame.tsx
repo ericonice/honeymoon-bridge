@@ -12,6 +12,7 @@ export interface TableGameProps {
   readonly devTools: boolean;
   readonly peeking: boolean;
   readonly sound: boolean;
+  readonly tapToSelect: boolean;
   /** Goes back to the home screen. The seat is given up before this is called. */
   onLeave(): void;
   onShowSettings(): void;
@@ -190,6 +191,7 @@ export function TableGame({
   onShowSettings,
   peeking,
   sound,
+  tapToSelect,
 }: TableGameProps): React.JSX.Element {
   const game = useNetworkSession(code);
 
@@ -245,6 +247,7 @@ export function TableGame({
         peeking={peeking}
         session={session}
         sound={sound}
+        tapToSelect={tapToSelect}
         onShowSettings={onShowSettings}
       />
     </>

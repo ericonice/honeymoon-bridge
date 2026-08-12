@@ -1,9 +1,11 @@
 import type { MatchFormat } from "@hb/engine";
 import { BOT_RELEASE } from "../bot/release.js";
+import type { CardColor } from "../game/cardColor.js";
 import type { Boldness, Pace, Strength } from "../game/identity.js";
 import type { Theme } from "../game/theme.js";
 
 export interface SettingsOverlayProps {
+  readonly cardColor: CardColor;
   readonly devTools: boolean;
   /** Takes effect on the next match; changing it cannot alter one under way. */
   readonly format: MatchFormat;
@@ -23,10 +25,13 @@ export interface SettingsOverlayProps {
   readonly pace: Pace;
   readonly sound: boolean;
   readonly strength: Strength;
+  readonly tapToSelect: boolean;
   onBoldnessChange(next: Boldness): void;
+  onCardColorChange(next: CardColor): void;
   onPaceChange(next: Pace): void;
   onSoundChange(enabled: boolean): void;
   onStrengthChange(next: Strength): void;
+  onTapToSelectChange(enabled: boolean): void;
   readonly theme: Theme;
   onClose(): void;
   onDevToolsChange(enabled: boolean): void;
@@ -132,10 +137,12 @@ function Choice<T extends string>({
  */
 export function SettingsOverlay({
   boldness,
+  cardColor,
   devTools,
   disguise,
   format,
   onBoldnessChange,
+  onCardColorChange,
   onClose,
   onDevToolsChange,
   onDisguiseChange,
@@ -145,12 +152,14 @@ export function SettingsOverlay({
   onShowHelp,
   onSoundChange,
   onStrengthChange,
+  onTapToSelectChange,
   onThemeChange,
   pace,
   peeking,
   playtester,
   sound,
   strength,
+  tapToSelect,
   theme,
 }: SettingsOverlayProps): React.JSX.Element {
   return (
@@ -172,28 +181,20 @@ export function SettingsOverlay({
           </span>
         </button>
 
-        {/* Above the theme because it changes the game rather than the look of
-            it, and it is the one setting somebody might come here to change
-            before sitting down to play. */}
+        {/* The one setting somebody might come here to change before sitting
+            down to play, so it's first. Named as a choice between the two
+            words a player actually needs, rather than a toggle whose "off"
+            position had to be inferred from what "on" said it wasn't. */}
         <div className="w-full max-w-sm">
-          <Toggle
-            label="Play a single game"
-            description="A match ends as soon as somebody reaches 100 below the line, worth 300, instead of running to the best of three games. Nobody is ever vulnerable. At a table with somebody else, one game wins if either of you wants it."
-            on={format === "game"}
-            onChange={(on) => {
-              onFormatChange(on ? "game" : "rubber");
-            }}
-          />
-        </div>
-
-        <div className="w-full max-w-sm">
-          <Toggle
-            label="Hockey theme"
-            description="An arena palette and a face-off card back. Turn it off for the green baize a card game usually comes on."
-            on={theme === "hockey"}
-            onChange={(on) => {
-              onThemeChange(on ? "hockey" : "felt");
-            }}
+          <Choice
+            label="Match length"
+            description="Rubber runs to the best of three games and carries vulnerability once a game is won. A single game ends the moment either side reaches 100 points below the line, worth 300, and nobody is ever vulnerable. At a table with somebody else, one game wins if either of you wants it."
+            value={format}
+            onChange={onFormatChange}
+            options={[
+              { label: "Rubber", value: "rubber" },
+              { label: "Single game", value: "game" },
+            ]}
           />
         </div>
 
@@ -205,6 +206,27 @@ export function SettingsOverlay({
             onChange={onSoundChange}
           />
         </div>
+
+        {/* Only under the theme it was curated for — felt's blue-on-green
+            never had the contrast problem these are picked to solve, so
+            there is nothing yet to offer it. Offered to everyone rather than
+            gated with the theme toggle itself: the theme is still unsettled,
+            but whichever one somebody is on, this is a real preference. */}
+        {theme === "hockey" ? (
+          <div className="w-full max-w-sm">
+            <Choice
+              label="Card back"
+              description="A few options, each checked for contrast against the rink."
+              value={cardColor}
+              onChange={onCardColorChange}
+              options={[
+                { label: "Gold", value: "gold" },
+                { label: "Crimson", value: "crimson" },
+                { label: "Pewter", value: "pewter" },
+              ]}
+            />
+          </div>
+        ) : null}
 
         {playtester ? (
           <div className="w-full max-w-sm rounded-2xl border border-amber-300/30 bg-amber-300/5 p-3">
@@ -226,6 +248,22 @@ export function SettingsOverlay({
             {/* One stack with one gap, so no row can drift out of step with the
                 others as they are added and removed. */}
             <div className="mt-3 space-y-3">
+              <Toggle
+                label="Hockey theme"
+                description="An arena palette and a face-off card back. Turn it off for the green baize a card game usually comes on. Still settling on a look, which is why it's here rather than a permanent preference."
+                on={theme === "hockey"}
+                onChange={(on) => {
+                  onThemeChange(on ? "hockey" : "felt");
+                }}
+              />
+
+              <Toggle
+                label="Noah's tap-to-play"
+                description="Tap a card to raise it, tap it again to play it. Tapping a different card just moves the raise there instead. Off plays a card as soon as you lift your finger from it."
+                on={tapToSelect}
+                onChange={onTapToSelectChange}
+              />
+
               <Toggle
                 label="Let the computer bid unpredictably"
                 description="It will sometimes name a decent suit rather than its objectively best one, so a bid alone can't be read as this hand's exact shape. It will never name a suit with fewer than three cards, and rarely one with only three. Takes effect on the next match."

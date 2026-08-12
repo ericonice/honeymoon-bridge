@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAccount } from "./game/account.js";
+import { applyCardColor, readCardColor, writeCardColor } from "./game/cardColor.js";
 import type { Destination } from "./game/destination.js";
 import { destinationFromWire, HOME, takeDestination } from "./game/destination.js";
 import { readDevTools, writeDevTools } from "./game/devTools.js";
@@ -16,8 +17,10 @@ import {
   setPreferredFormat,
   setSoundEnabled,
   setStrength,
+  setTapToSelectEnabled,
   soundEnabled,
   strength,
+  tapToSelectEnabled,
 } from "./game/identity.js";
 import {
   clearLocationHash,
@@ -107,9 +110,11 @@ export function App(): React.JSX.Element {
   const [level, setLevel] = useState(strength);
   const [speed, setSpeed] = useState(pace);
   const [sound, setSound] = useState(soundEnabled);
+  const [tapToSelect, setTapToSelect] = useState(tapToSelectEnabled);
   // Already on the document by now — main.tsx applies it before the first
   // render — so this is the same value again, for the card back to read.
   const [theme, setTheme] = useState(readTheme);
+  const [cardColor, setCardColor] = useState(readCardColor);
 
   const showSettings = (): void => {
     setShowingSettings(true);
@@ -267,6 +272,7 @@ export function App(): React.JSX.Element {
             devTools={devTools}
             peeking={peeking}
             sound={sound}
+            tapToSelect={tapToSelect}
             onLeave={goHome}
             onShowSettings={showSettings}
           />
@@ -306,6 +312,7 @@ export function App(): React.JSX.Element {
             devTools={devTools}
             peeking={peeking}
             sound={sound}
+            tapToSelect={tapToSelect}
             onLeave={goHome}
             onShowSettings={showSettings}
           />
@@ -341,6 +348,7 @@ export function App(): React.JSX.Element {
         {showingSettings ? (
           <SettingsOverlay
             boldness={bold}
+            cardColor={cardColor}
             devTools={devTools}
             format={format}
             pace={speed}
@@ -349,6 +357,7 @@ export function App(): React.JSX.Element {
             peeking={peeking}
             disguise={disguise}
             sound={sound}
+            tapToSelect={tapToSelect}
             theme={theme}
             onClose={() => {
               setShowingSettings(false);
@@ -374,6 +383,11 @@ export function App(): React.JSX.Element {
               setBoldness(next);
               setBold(next);
             }}
+            onCardColorChange={(next) => {
+              writeCardColor(next);
+              applyCardColor(next);
+              setCardColor(next);
+            }}
             onStrengthChange={(next) => {
               setStrength(next);
               setLevel(next);
@@ -385,6 +399,10 @@ export function App(): React.JSX.Element {
             onSoundChange={(enabled) => {
               setSoundEnabled(enabled);
               setSound(enabled);
+            }}
+            onTapToSelectChange={(enabled) => {
+              setTapToSelectEnabled(enabled);
+              setTapToSelect(enabled);
             }}
             onThemeChange={(next) => {
               writeTheme(next);

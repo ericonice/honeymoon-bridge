@@ -143,6 +143,16 @@ export interface OpponentRecord {
    * never a decision so much as a gap.
    */
   readonly name: string;
+  /**
+   * Groups this row with the same opponent's row in the other format, without
+   * saying who they are beyond that. See `assignOpponentKeys` — it is neither
+   * their account id nor their device token, on purpose: the token reclaims a
+   * seat after a drop, so handing it to another account's client would hand
+   * over a working credential rather than a label. Two rows get the same key
+   * only when they really are the same account or device; nothing about
+   * *which* one is recoverable from it.
+   */
+  readonly opponentKey: string;
   readonly pointsAgainst: number;
   readonly pointsFor: number;
   readonly won: number;
@@ -154,7 +164,13 @@ export interface Records {
   readonly robot: OpponentRecord[];
 }
 
-type Tallied = OpponentRecord & { readonly account: string | null; readonly token: string };
+// `opponentKey` is assigned once the whole set is known — see
+// `assignOpponentKeys` — so it is not part of a row while it is still being
+// tallied.
+export type Tallied = Omit<OpponentRecord, "opponentKey"> & {
+  readonly account: string | null;
+  readonly token: string;
+};
 
 /**
  * Everyone this account has finished a rubber against.
@@ -231,21 +247,45 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
   }
 
   const all = [...tally.values()];
+  const opponentKeys = assignOpponentKeys(all);
 
   return {
     opponents: await withNames(
       env,
       all.filter((entry) => entry.token !== ROBOT_TOKEN),
+      opponentKeys,
     ),
     robot: all
       .filter((entry) => entry.token === ROBOT_TOKEN)
-      .map(strip)
+      .map((entry) => strip(entry, opponentKeys))
       .sort((a, b) => b.lastPlayed - a.lastPlayed),
   };
 }
 
-function strip({ account: _account, token: _token, ...record }: Tallied): OpponentRecord {
-  return record;
+/**
+ * A synthetic id for grouping one opponent's rubber row with their game row
+ * on the client, assigned fresh on every call rather than derived from
+ * anything that outlives this one response. Two rows get the same key only
+ * when they share an account or, lacking one, a device token — but the
+ * identity itself never leaves this function, only which rows matched it.
+ */
+export function assignOpponentKeys(entries: readonly Tallied[]): Map<string, string> {
+  const keys = new Map<string, string>();
+  for (const entry of entries) {
+    const identity = entry.account ?? `token:${entry.token}`;
+    if (!keys.has(identity)) {
+      keys.set(identity, `opponent-${keys.size}`);
+    }
+  }
+  return keys;
+}
+
+function strip(entry: Tallied, keys: Map<string, string>): OpponentRecord {
+  const { account: _account, token: _token, ...record } = entry;
+  const identity = entry.account ?? `token:${entry.token}`;
+  // `keys` was built from the same set this entry came from, so its identity
+  // is always in it.
+  return { ...record, opponentKey: keys.get(identity)! };
 }
 
 /**
@@ -281,7 +321,11 @@ async function currentNamesFor(
   return names;
 }
 
-async function withNames(env: Env, records: readonly Tallied[]): Promise<OpponentRecord[]> {
+async function withNames(
+  env: Env,
+  records: readonly Tallied[],
+  keys: Map<string, string>,
+): Promise<OpponentRecord[]> {
   const names = await currentNamesFor(
     env,
     records.map((r) => r.account),
@@ -289,7 +333,7 @@ async function withNames(env: Env, records: readonly Tallied[]): Promise<Opponen
 
   return records
     .map((record) => ({
-      ...strip(record),
+      ...strip(record, keys),
       name: (record.account === null ? null : names.get(record.account)) ?? record.name,
     }))
     .sort((a, b) => b.lastPlayed - a.lastPlayed);

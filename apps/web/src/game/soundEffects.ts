@@ -180,35 +180,58 @@ function fogHorn(ctx: AudioContext, { delay = 0 }: { readonly delay?: number } =
   }
 }
 
+/**
+ * Runs a sound effect and swallows whatever it throws.
+ *
+ * A cue is decoration layered onto a state change that has already happened —
+ * a card is already played, a rubber already won — so nothing about the game
+ * is still waiting on it, and a phone whose `AudioContext` is in whatever
+ * state a backgrounded tab or an incoming call left it in is not a reason to
+ * take the whole screen down over a sound nobody would have gotten to hear
+ * anyway.
+ */
+function play(effect: (ctx: AudioContext) => void): void {
+  try {
+    effect(context());
+  } catch (error) {
+    console.warn("Sound effect failed:", error);
+  }
+}
+
 /** A draw turn resolving: a short scrape, for a card leaving the stock. */
 export function playDrawResolve(): void {
-  noiseBurst(context(), { duration: 0.07, filterFrequency: 2400, gain: 0.05, q: 0.7 });
+  play((ctx) => {
+    noiseBurst(ctx, { duration: 0.07, filterFrequency: 2400, gain: 0.05, q: 0.7 });
+  });
 }
 
 /** A card landing on a trick — a muffled thud, low where the draw's scrape is bright. */
 export function playCardPlayed(): void {
-  noiseBurst(context(), { duration: 0.05, filterFrequency: 900, filterType: "lowpass", gain: 0.07, q: 0.6 });
+  play((ctx) => {
+    noiseBurst(ctx, { duration: 0.05, filterFrequency: 900, filterType: "lowpass", gain: 0.07, q: 0.6 });
+  });
 }
 
 /** A call landing in the auction — a stick tap, doubles and redoubles a slapshot. */
 export function playCall(call: Call): void {
-  const ctx = context();
-  switch (call.type) {
-    case "bid": {
-      tone(ctx, { decay: 0.08, frequency: 620, gain: 0.06, type: "triangle" });
-      return;
+  play((ctx) => {
+    switch (call.type) {
+      case "bid": {
+        tone(ctx, { decay: 0.08, frequency: 620, gain: 0.06, type: "triangle" });
+        return;
+      }
+      case "pass": {
+        tone(ctx, { decay: 0.07, frequency: 340, gain: 0.04, type: "triangle" });
+        return;
+      }
+      case "double":
+      case "redouble": {
+        noiseBurst(ctx, { duration: 0.09, filterFrequency: 1800, gain: 0.09, q: 0.5 });
+        tone(ctx, { decay: 0.18, frequency: 220, gain: 0.12, glideTo: 70, type: "sine" });
+        return;
+      }
     }
-    case "pass": {
-      tone(ctx, { decay: 0.07, frequency: 340, gain: 0.04, type: "triangle" });
-      return;
-    }
-    case "double":
-    case "redouble": {
-      noiseBurst(ctx, { duration: 0.09, filterFrequency: 1800, gain: 0.09, q: 0.5 });
-      tone(ctx, { decay: 0.18, frequency: 220, gain: 0.12, glideTo: 70, type: "sine" });
-      return;
-    }
-  }
+  });
 }
 
 /**
@@ -223,20 +246,22 @@ export function playCall(call: Call): void {
  * repeat of it.
  */
 export function playContractResult(made: boolean): void {
-  const ctx = context();
-  if (made) {
-    tone(ctx, { decay: 0.16, frequency: 523, gain: 0.09, type: "triangle" });
-    tone(ctx, { decay: 0.16, delay: 0.08, frequency: 659, gain: 0.09, type: "triangle" });
-    tone(ctx, { decay: 0.32, delay: 0.16, frequency: 784, gain: 0.11, type: "triangle" });
-    return;
-  }
-  tone(ctx, { decay: 0.22, frequency: 220, gain: 0.12, glideTo: 90, type: "square" });
-  tone(ctx, { decay: 0.22, delay: 0.26, frequency: 196, gain: 0.09, glideTo: 80, type: "square" });
+  play((ctx) => {
+    if (made) {
+      tone(ctx, { decay: 0.16, frequency: 523, gain: 0.09, type: "triangle" });
+      tone(ctx, { decay: 0.16, delay: 0.08, frequency: 659, gain: 0.09, type: "triangle" });
+      tone(ctx, { decay: 0.32, delay: 0.16, frequency: 784, gain: 0.11, type: "triangle" });
+      return;
+    }
+    tone(ctx, { decay: 0.22, frequency: 220, gain: 0.12, glideTo: 90, type: "square" });
+    tone(ctx, { decay: 0.22, delay: 0.26, frequency: 196, gain: 0.09, glideTo: 80, type: "square" });
+  });
 }
 
 /** The rubber won: the arena fog horn, under a crowd swell that follows it in. */
 export function playRubberWon(): void {
-  const ctx = context();
-  fogHorn(ctx);
-  noiseBurst(ctx, { duration: 1.3, filterFrequency: 1200, gain: 0.05, q: 0.4 });
+  play((ctx) => {
+    fogHorn(ctx);
+    noiseBurst(ctx, { duration: 1.3, filterFrequency: 1200, gain: 0.05, q: 0.4 });
+  });
 }

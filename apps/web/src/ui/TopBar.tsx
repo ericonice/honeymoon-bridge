@@ -56,7 +56,7 @@ export function TopBar({
   view,
 }: TopBarProps): React.JSX.Element {
   return (
-    <header className="flex items-baseline justify-between gap-2 border-b border-white/10 px-4 py-2">
+    <header className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-2">
       {onLeave === null ? null : (
         <button
           type="button"

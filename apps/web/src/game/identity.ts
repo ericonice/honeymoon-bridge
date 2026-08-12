@@ -8,6 +8,7 @@ const STRENGTH_KEY = "hb.strength";
 const PACE_KEY = "hb.pace";
 const PEEK_KEY = "hb.peek";
 const SOUND_KEY = "hb.sound";
+const TAP_TO_SELECT_KEY = "hb.tapToSelect";
 const NICKNAME_KEY = "hb.nickname";
 const TOKEN_KEY = "hb.token";
 
@@ -163,6 +164,22 @@ export function soundEnabled(): boolean {
 
 export function setSoundEnabled(enabled: boolean): void {
   writeStored(SOUND_KEY, enabled ? "on" : "off");
+}
+
+/**
+ * Whether playing a card takes two taps (raise, then play) instead of one.
+ *
+ * Off by default: the one-tap gesture — press, aim, release — is the original
+ * behavior and stays it unless somebody asks for the other one. On, a tap
+ * raises a card instead of playing it; tapping the same, already-raised card
+ * plays it, and tapping a different card just moves the raise there.
+ */
+export function tapToSelectEnabled(): boolean {
+  return readStored(TAP_TO_SELECT_KEY) === "on";
+}
+
+export function setTapToSelectEnabled(enabled: boolean): void {
+  writeStored(TAP_TO_SELECT_KEY, enabled ? "on" : "off");
 }
 
 export function pace(): Pace {

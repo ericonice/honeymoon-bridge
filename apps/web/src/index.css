@@ -5,8 +5,15 @@
    are the hockey theme, which is the default; `html[data-theme="felt"]` below
    puts the original green baize back. */
 @theme {
-  --color-card-back: #0b2a47;
-  --color-card-back-mark: #bfe0ff;
+  /* Gold on ice rather than another shade of blue — a card back this close in
+     hue and lightness to the table it sits on (as a near-navy used to be) has
+     nothing for the eye to separate it by. The felt theme never had this
+     problem: its blue card back sits on a green table, different hue
+     families doing the separating even where the lightness is close. This is
+     the same fix for the same reason, in this theme's own palette — a rink
+     banner's gold rather than more ice. */
+  --color-card-back: #b8860b;
+  --color-card-back-mark: #ffe6a3;
   --color-card-face: #eef3f9;
   /* Jersey ink rather than printer's ink. Red stays unmistakably red: telling
      the two colours apart at a glance is load-bearing in a fanned hand. */
@@ -50,6 +57,20 @@ html[data-theme="felt"] {
   --color-table: #064e3b;
   --color-table-dark: #033024;
   --table-sheen: none;
+}
+
+/* The other two curated card-back options, same contrast reasoning as the
+   default gold above, just elsewhere on the warm side of the table's blue.
+   Crimson sits well clear of `--color-ink-red` so a back is never mistaken
+   for a heart or a diamond glimpsed on the card underneath it. */
+html[data-theme="hockey"][data-card-color="crimson"] {
+  --color-card-back: #7a1f3d;
+  --color-card-back-mark: #ffb3c6;
+}
+
+html[data-theme="hockey"][data-card-color="pewter"] {
+  --color-card-back: #6b6255;
+  --color-card-back-mark: #efe8da;
 }
 
 html,

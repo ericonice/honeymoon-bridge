@@ -11,6 +11,14 @@ export interface OpponentRecord {
   readonly lastPlayed: number;
   readonly lost: number;
   readonly name: string;
+  /**
+   * Groups this row with the same opponent's row in the other format. Not
+   * their account id or device token — see `assignOpponentKeys` on the
+   * server — just enough to tell whether two rows are the same opponent
+   * without saying who that opponent is beyond a display name that could
+   * coincidentally collide with somebody else's.
+   */
+  readonly opponentKey: string;
   readonly pointsAgainst: number;
   readonly pointsFor: number;
   readonly won: number;

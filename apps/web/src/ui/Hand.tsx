@@ -104,20 +104,44 @@ export interface HandProps {
    * move that pick to a different card, and whatever is called out when the
    * finger lifts is what plays. No separate confirmation step: press, aim,
    * release.
+   *
+   * `tapToSelect` keeps that same press-aim-release tracking — a press still
+   * retargets live as it slides, so landing on the card next to the one
+   * already raised is no harder than it ever was — but changes what release
+   * does with it: release plays only if it lands back on the card that was
+   * already raised before this press began; landing on any other card just
+   * moves the raise there, and it stays raised across separate taps instead
+   * of dropping the instant the finger lifts.
    */
   readonly playable: readonly Card[] | null;
   readonly onPlay: ((card: Card) => void) | null;
+  readonly tapToSelect: boolean;
 }
 
-export function Hand({ cards, highlight, onPlay, playable }: HandProps): React.JSX.Element {
+export function Hand({
+  cards,
+  highlight,
+  onPlay,
+  playable,
+  tapToSelect,
+}: HandProps): React.JSX.Element {
   const frameRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const [available, setAvailable] = useState(320);
-  // The card a press currently has raised — set to the nearest legal card on
-  // pointer down, retargeted on pointer move, and whatever it holds when the
-  // pointer lifts is what plays.
+  // The card currently raised — set on pointer down, retargeted live on
+  // pointer move, and whatever it holds when the pointer lifts is what plays
+  // in the default gesture. Under `tapToSelect` it persists between separate
+  // taps instead of dropping on release; what release does with it depends
+  // on `raisedBeforePress`, below.
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const activePointerId = useRef<number | null>(null);
+  // What `previewIndex` held before the press now in progress started —
+  // captured on pointer down, ahead of the live retargeting that follows,
+  // since by pointer up `previewIndex` has already become the release
+  // target and there would be nothing left to compare it against. Only
+  // `tapToSelect` reads this; the default gesture always plays whatever is
+  // raised on release regardless of what was raised before.
+  const raisedBeforePress = useRef<number | null>(null);
 
   // Remeasure on rotation and on the keyboard-driven viewport changes iOS makes.
   useLayoutEffect(() => {
@@ -162,6 +186,17 @@ export function Hand({ cards, highlight, onPlay, playable }: HandProps): React.J
 
   // Only legal cards are candidates, so a press can never raise a card that
   // does nothing on release — the follow-suit rule already ruled it out.
+  //
+  // Distance is measured to the middle of what is actually *visible* of a
+  // card — `steps[index]`, the exposure defined above, or its full width for
+  // the last card, which nothing overlaps — not to the middle of its full
+  // footprint. Once a hand does not fit at full spacing, every card but the
+  // last has most of its width covered by the card in front of it, so the
+  // full-footprint center sits well into that next card's territory. A tap
+  // anywhere on a card's visible sliver would then often measure closer to
+  // that overstated center than to the card's own, and resolve to the card
+  // behind it instead — worse the tighter the overlap, which is exactly where
+  // a precise tap matters most.
   const nearestLegalIndex = (x: number): number | null => {
     let best: number | null = null;
     let bestDistance = Infinity;
@@ -169,7 +204,8 @@ export function Hand({ cards, highlight, onPlay, playable }: HandProps): React.J
       if (!isLegal(card)) {
         return;
       }
-      const distance = Math.abs(x - (lefts[index]! + CARD_WIDTH / 2));
+      const exposed = steps[index] ?? CARD_WIDTH;
+      const distance = Math.abs(x - (lefts[index]! + exposed / 2));
       if (distance < bestDistance) {
         bestDistance = distance;
         best = index;
@@ -191,6 +227,7 @@ export function Hand({ cards, highlight, onPlay, playable }: HandProps): React.J
       return;
     }
     activePointerId.current = event.pointerId;
+    raisedBeforePress.current = previewIndex;
     updatePreview(event.clientX);
   };
 
@@ -206,6 +243,16 @@ export function Hand({ cards, highlight, onPlay, playable }: HandProps): React.J
       return;
     }
     activePointerId.current = null;
+    if (tapToSelect) {
+      // `previewIndex` already holds wherever this press last aimed, tracked
+      // live by the move handler above exactly as the default gesture does —
+      // only what release does with it differs.
+      if (previewIndex !== null && previewIndex === raisedBeforePress.current) {
+        onPlay?.(cards[previewIndex]!);
+        setPreviewIndex(null);
+      }
+      return;
+    }
     if (previewIndex !== null) {
       onPlay?.(cards[previewIndex]!);
     }
@@ -215,7 +262,11 @@ export function Hand({ cards, highlight, onPlay, playable }: HandProps): React.J
   const handlePointerCancel = (event: React.PointerEvent<HTMLDivElement>): void => {
     if (activePointerId.current === event.pointerId) {
       activePointerId.current = null;
-      setPreviewIndex(null);
+      // A cancelled gesture never reaches release, so whatever it was aiming
+      // at should not stick — back to null in the default gesture, back to
+      // whatever was raised before this press in `tapToSelect`, since that
+      // one is not this press's to change.
+      setPreviewIndex(tapToSelect ? raisedBeforePress.current : null);
     }
   };
 
@@ -264,7 +315,14 @@ export function Hand({ cards, highlight, onPlay, playable }: HandProps): React.J
               className={[
                 "shrink-0 origin-bottom transition-all duration-150 ease-out",
                 previewed
-                  ? "z-10 -translate-y-5 scale-110 ring-2 ring-inset ring-amber-300"
+                  ? tapToSelect
+                    // A raise that has to be noticed without a finger still on
+                    // it to draw the eye there — the extra height stays inside
+                    // the row's `pt-9` headroom (24px of lift plus 8px from the
+                    // scale, against 36px available), so the glow and the
+                    // thicker ring are what carry the rest of "very".
+                    ? "z-10 -translate-y-6 scale-110 shadow-lg shadow-amber-400/50 ring-4 ring-inset ring-amber-300"
+                    : "z-10 -translate-y-5 scale-110 ring-2 ring-inset ring-amber-300"
                   : legal
                     ? "-translate-y-3"
                     : "",

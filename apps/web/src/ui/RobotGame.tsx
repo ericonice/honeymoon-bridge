@@ -6,6 +6,7 @@ export interface RobotGameProps {
   readonly devTools: boolean;
   readonly peeking: boolean;
   readonly sound: boolean;
+  readonly tapToSelect: boolean;
   onLeave(): void;
   onShowSettings(): void;
 }
@@ -17,6 +18,7 @@ export function RobotGame({
   onShowSettings,
   peeking,
   sound,
+  tapToSelect,
 }: RobotGameProps): React.JSX.Element {
   const session = useLocalSession({ peek: peeking });
   const noun = matchNoun(session.rubber.format);
@@ -34,6 +36,7 @@ export function RobotGame({
       peeking={peeking}
       session={session}
       sound={sound}
+      tapToSelect={tapToSelect}
       onShowSettings={onShowSettings}
     />
   );

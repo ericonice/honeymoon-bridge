@@ -37,6 +37,7 @@ export interface GameBoardProps {
   readonly peeking: boolean;
   readonly session: GameSession;
   readonly sound: boolean;
+  readonly tapToSelect: boolean;
   onShowSettings(): void;
 }
 
@@ -280,6 +281,7 @@ export function GameBoard({
   peeking,
   session,
   sound,
+  tapToSelect,
 }: GameBoardProps): React.JSX.Element {
   const [showingScore, setShowingScore] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
@@ -361,6 +363,7 @@ export function GameBoard({
               cards={view.hand}
               highlight={session.justTaken}
               playable={playable}
+              tapToSelect={tapToSelect}
               onPlay={
                 playable === null
                   ? null
