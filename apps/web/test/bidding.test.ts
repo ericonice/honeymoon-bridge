@@ -116,6 +116,7 @@ describe("the bidding bot", () => {
 function openingView(myHand: Card[]): PlayerView {
   return {
     auction: [],
+    claim: null,
     completedTricks: [],
     contract: null,
     currentTrick: [],
@@ -127,6 +128,7 @@ function openingView(myHand: Card[]): PlayerView {
     passedOut: false,
     pending: null,
     phase: "auction",
+    revealedHand: null,
     starter: 0,
     stockRemaining: 0,
     toAct: 0,

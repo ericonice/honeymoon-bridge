@@ -142,15 +142,24 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
             negotiation and a lead is just a lead.
           </Rule>
 
-          <Rule title="Every deal is played out">
-            All thirteen tricks, every time. No claiming, no conceding, and no undo. A contract
-            that is obviously going down still has to be played, and the overtricks on a cold one
-            still have to be taken.
+          <Rule title="Every deal is played out, unless it is claimed">
+            All thirteen tricks, or a claim ends it early — see below. Otherwise no conceding and
+            no undo. A contract that is obviously going down still has to be played, and the
+            overtricks on a cold one still have to be taken.
+          </Rule>
+
+          <Rule title="Claiming the rest">
+            On your own turn, you can declare every remaining trick is yours. Your hand is shown
+            the instant you do, and stays shown for the rest of the deal whether or not it is
+            accepted. Against a person, they decide from their own judgment, same as they always
+            could at a real table. Against the computer, it works out the position exactly and is
+            never wrong about it — accepting or denying a claim is not something its difficulty
+            setting touches.
           </Rule>
 
           <Rule title="Honors look after themselves">
-            You never claim them. They are awarded to whoever was holding them when the deal ends,
-            and that includes the defender — so points can arrive for a hand you did not bid.
+            Awarded automatically to whoever was holding them when the deal ends, and that
+            includes the defender — so points can arrive for a hand you did not bid.
           </Rule>
 
           <Rule title="Press near the card, not on it">

@@ -1,11 +1,15 @@
 import { legalActionsForView } from "@hb/engine";
-import type { Call, Card, DealPhase, DrawReveal, PlayerView } from "@hb/engine";
-import { useLayoutEffect, useRef, useState } from "react";
+import type { Call, Card, DealPhase, DrawReveal, PlayerId, PlayerView } from "@hb/engine";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { drawPlayout, trickCollectDuration } from "../game/timing.js";
 import type { GameSession } from "../game/session.js";
 import { useGameSounds } from "../game/useGameSounds.js";
 import { AchievementToast } from "./AchievementToast.js";
 import { AuctionPhase } from "./AuctionPhase.js";
+import { ClaimConfirm } from "./ClaimConfirm.js";
+import { ClaimReveal } from "./ClaimReveal.js";
+import type { ClaimResult } from "./ClaimResultToast.js";
+import { ClaimResultToast } from "./ClaimResultToast.js";
 import { ContractBar } from "./ContractBar.js";
 import { DealComplete } from "./DealComplete.js";
 import { DrawPhase } from "./DrawPhase.js";
@@ -59,12 +63,14 @@ function playableCards(view: PlayerView, shownPhase: DealPhase): Card[] | null {
 }
 
 function CurrentPhase({
+  onClaim,
   onDone,
   onStartPlay,
   peeking,
   phase,
   session,
 }: {
+  readonly onClaim: () => void;
   readonly onDone: (() => void) | null;
   /** Non-null only while the closed auction is waiting to be dismissed. */
   readonly onStartPlay: (() => void) | null;
@@ -111,6 +117,7 @@ function CurrentPhase({
           opponentName={session.opponentName}
           view={view}
           vulnerable={vulnerable}
+          onClaim={onClaim}
         />
       );
     }
@@ -147,12 +154,15 @@ type FinalBeat =
   | { readonly kind: "timed"; readonly ms: number };
 
 function finalBeat({
+  claimedFinish,
   entered,
   lastDraw,
   left,
   meIsDeclarer,
   theirCardsShowing,
 }: {
+  /** True when the deal completed via an accepted claim rather than a 13th trick. */
+  readonly claimedFinish: boolean;
   readonly entered: DealPhase;
   readonly lastDraw: DrawReveal | null;
   readonly left: DealPhase;
@@ -166,11 +176,13 @@ function finalBeat({
   if (left === "draw" && lastDraw !== null) {
     return { kind: "timed", ms: drawPlayout(lastDraw, theirCardsShowing).duration };
   }
-  // The thirteenth trick is the same shape. The deal is complete the moment the
-  // last card lands, so the trick that decides a contract was swept off the
-  // table by the scorepad arriving on top of it.
+  // The thirteenth trick is the same shape — except when a claim ended the deal
+  // early: accepting awards the remaining tricks directly rather than playing
+  // them, so there is no freshly completed trick on the table to sweep, and
+  // holding for one would show whatever partial trick the claim interrupted.
+  // `ClaimResultToast` is what tells the claimant what happened instead.
   if (left === "play" && entered === "complete") {
-    return { kind: "timed", ms: trickCollectDuration() };
+    return claimedFinish ? null : { kind: "timed", ms: trickCollectDuration() };
   }
   // And the auction, which is the same shape with no length to borrow: a sweep
   // and a card 2 can be waited out, a closed auction cannot. The contract lives
@@ -232,7 +244,14 @@ function useShownPhase(session: GameSession, peeking: boolean): ShownPhase {
       return;
     }
 
-    const beat = finalBeat({ entered: actual, lastDraw, left, meIsDeclarer, theirCardsShowing });
+    const beat = finalBeat({
+      claimedFinish: actual === "complete" && session.view.completedTricks.length < 13,
+      entered: actual,
+      lastDraw,
+      left,
+      meIsDeclarer,
+      theirCardsShowing,
+    });
     if (beat === null) {
       return;
     }
@@ -268,6 +287,41 @@ function useShownPhase(session: GameSession, peeking: boolean): ShownPhase {
 }
 
 /**
+ * What just happened to a claim *you* made, the moment it is answered.
+ *
+ * `view.claim` goes from your own seat back to null on both an accept and a
+ * deny, and by then the phase already says which: accepting sets it to
+ * "complete" in the same transition, denying leaves it "play". Scoped to
+ * claims you made — the responder already knows their own answer the instant
+ * they tap it.
+ */
+function useClaimResult(view: PlayerView): { readonly clear: () => void; readonly result: ClaimResult } {
+  const [result, setResult] = useState<ClaimResult>(null);
+  const previousClaim = useRef<PlayerId | null>(view.claim);
+
+  useEffect(() => {
+    const was = previousClaim.current;
+    previousClaim.current = view.claim;
+    if (was === view.me && view.claim === null) {
+      setResult(view.phase === "complete" ? "accepted" : "denied");
+    }
+  }, [view.claim, view.me, view.phase]);
+
+  // Stable across renders on purpose: `ClaimResultToast` restarts its dismiss
+  // timer whenever this identity changes, and play resuming after a denial
+  // re-renders the board often enough that a fresh closure every time kept
+  // the timer perpetually reset instead of ever actually firing.
+  const clear = useCallback(() => {
+    setResult(null);
+  }, []);
+
+  return {
+    clear,
+    result,
+  };
+}
+
+/**
  * The board, for any session.
  *
  * Knows nothing about where the game is running: against the computer it is fed
@@ -286,8 +340,10 @@ export function GameBoard({
 }: GameBoardProps): React.JSX.Element {
   const [showingScore, setShowingScore] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const [confirmingClaim, setConfirmingClaim] = useState(false);
   const { view } = session;
   const { phase, release } = useShownPhase(session, peeking);
+  const claimResult = useClaimResult(view);
   const playable = playableCards(view, phase);
   useGameSounds(session, sound);
 
@@ -339,6 +395,9 @@ export function GameBoard({
           peeking={peeking}
           phase={phase}
           session={session}
+          onClaim={() => {
+            setConfirmingClaim(true);
+          }}
           onDone={settled && exit !== null ? exit.leave : null}
           onStartPlay={release}
         />
@@ -391,6 +450,35 @@ export function GameBoard({
       ) : null}
 
       <AchievementToast unlocked={session.justUnlocked} onDismiss={session.clearUnlocks} />
+      <ClaimResultToast result={claimResult.result} onDismiss={claimResult.clear} />
+
+      {confirmingClaim ? (
+        <ClaimConfirm
+          onCancel={() => {
+            setConfirmingClaim(false);
+          }}
+          onConfirm={() => {
+            session.act({ type: "claim" });
+            setConfirmingClaim(false);
+          }}
+        />
+      ) : null}
+
+      {/* `toAct` moves to whoever is deciding the instant a claim is offered,
+          so this is exactly "a claim is pending and it is mine to answer" —
+          the same seam the rest of the board already reads turns off. */}
+      {view.claim !== null && view.toAct === view.me && view.revealedHand !== null ? (
+        <ClaimReveal
+          cards={view.revealedHand.cards}
+          claimantName={session.opponentName}
+          onAccept={() => {
+            session.act({ type: "claim-response", accept: true });
+          }}
+          onDeny={() => {
+            session.act({ type: "claim-response", accept: false });
+          }}
+        />
+      ) : null}
 
       {confirmingLeave && exit !== null ? (
         <LeaveConfirm

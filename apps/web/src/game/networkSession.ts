@@ -209,6 +209,13 @@ export function useNetworkSession(code: string): NetworkGame {
     socket.current?.close();
   }, [send]);
 
+  // Stable across renders on purpose: `AchievementToast` restarts its dismiss
+  // timer whenever this identity changes, and an inline closure recreated on
+  // every incoming state message would never actually let it expire.
+  const clearUnlocks = useCallback(() => {
+    setJustUnlocked([]);
+  }, []);
+
   return {
     connection,
     dropSocket,
@@ -218,9 +225,7 @@ export function useNetworkSession(code: string): NetworkGame {
     session:
       snapshot === null || table === null || seat === null
         ? null
-        : sessionFrom(snapshot, table, seat, send, justUnlocked, () => {
-            setJustUnlocked([]);
-          }),
+        : sessionFrom(snapshot, table, seat, send, justUnlocked, clearUnlocks),
     table,
   };
 }

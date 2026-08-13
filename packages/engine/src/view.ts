@@ -32,6 +32,8 @@ import type {
  */
 export interface PlayerView {
   readonly auction: readonly AuctionEntry[];
+  /** Mirrors `DealState.claim` — who has an outstanding claim, or null. Public to both seats. */
+  readonly claim: PlayerId | null;
   readonly completedTricks: readonly CompletedTrick[];
   readonly contract: Contract | null;
   readonly currentTrick: readonly PlayedCard[];
@@ -45,6 +47,12 @@ export interface PlayerView {
   /** Card 1 of the current draw turn — present only when it is this player's decision. */
   readonly pending: Card | null;
   readonly phase: DealPhase;
+  /**
+   * The opponent's hand, and only ever the opponent's, once a claim has shown
+   * it — see `DealState.revealed`. Null before any claim this deal, and never
+   * populated with your own hand: you already have that in `hand`.
+   */
+  readonly revealedHand: { readonly by: PlayerId; readonly cards: readonly Card[] } | null;
   readonly starter: PlayerId;
   readonly stockRemaining: number;
   readonly toAct: PlayerId;
@@ -57,6 +65,7 @@ export function viewFor(state: DealState, me: PlayerId): PlayerView {
 
   return {
     auction: state.auction,
+    claim: state.claim,
     completedTricks: state.completedTricks,
     contract: state.contract,
     currentTrick: state.currentTrick,
@@ -68,6 +77,10 @@ export function viewFor(state: DealState, me: PlayerId): PlayerView {
     passedOut: state.passedOut,
     pending: myTurn && state.phase === "draw" ? state.pending : null,
     phase: state.phase,
+    revealedHand:
+      state.revealed !== null && state.revealed !== me
+        ? { by: state.revealed, cards: state.hands[state.revealed] }
+        : null,
     starter: state.starter,
     stockRemaining: state.stock.length + (state.pending === null ? 0 : 1),
     toAct: state.toAct,
@@ -177,9 +190,18 @@ export function legalActionsForView(view: PlayerView): DealAction[] {
       return legalCalls(view.auction, view.me).map((call) => ({ type: "call", call }) as const);
     }
     case "play": {
-      return playableFrom(view.hand, view.currentTrick).map(
-        (card) => ({ type: "play", card }) as const,
-      );
+      if (view.claim !== null) {
+        return [
+          { type: "claim-response", accept: true },
+          { type: "claim-response", accept: false },
+        ];
+      }
+      return [
+        ...playableFrom(view.hand, view.currentTrick).map(
+          (card) => ({ type: "play", card }) as const,
+        ),
+        { type: "claim" },
+      ];
     }
     default: {
       return [];

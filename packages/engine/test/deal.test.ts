@@ -215,7 +215,11 @@ describe("legality from a player view alone", () => {
     const follower = state.toAct;
     const led = state.currentTrick[0]!.card.suit;
     const view = viewFor(state, follower);
-    const cards = legalActionsForView(view).map((action) => (action as { card: Card }).card);
+    // A legal claim is offered alongside every playable card and has no card
+    // of its own — filtered out here since this test is only about follow-suit.
+    const cards = legalActionsForView(view)
+      .filter((action) => action.type === "play")
+      .map((action) => action.card);
 
     if (hasSuit(view.hand, led)) {
       expect(cards.every((card) => card.suit === led)).toBe(true);

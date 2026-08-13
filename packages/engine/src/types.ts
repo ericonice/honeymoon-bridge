@@ -82,6 +82,8 @@ export type DealPhase = "draw" | "auction" | "play" | "complete";
  */
 export interface DealState {
   readonly auction: readonly AuctionEntry[];
+  /** Who has an outstanding, unanswered claim, or null. Cleared by either response. */
+  readonly claim: PlayerId | null;
   readonly completedTricks: readonly CompletedTrick[];
   readonly contract: Contract | null;
   readonly currentTrick: readonly PlayedCard[];
@@ -94,6 +96,13 @@ export interface DealState {
   /** Card 1 of the current draw turn, revealed to `toAct` and awaiting a decision. */
   readonly pending: Card | null;
   readonly phase: DealPhase;
+  /**
+   * Whoever's hand has been shown this deal by a claim. Set the instant a claim
+   * is offered and, unlike `claim`, never cleared by a denial — the cost of a
+   * claim that didn't land is that the hand stays visible for the rest of the
+   * deal. Reset only by a fresh deal.
+   */
+  readonly revealed: PlayerId | null;
   /** Whoever draws first and makes the first call. Alternates deal to deal. */
   readonly starter: PlayerId;
   readonly stock: readonly Card[];
@@ -107,4 +116,12 @@ export interface DealState {
 export type DealAction =
   | { readonly type: "draw-decide"; readonly keep: boolean }
   | { readonly type: "call"; readonly call: Call }
-  | { readonly type: "play"; readonly card: Card };
+  | { readonly type: "play"; readonly card: Card }
+  /**
+   * Declares every remaining trick, on the claimant's own turn to play. Reveals
+   * their hand — see `DealState.revealed` — and hands the decision to the
+   * opponent via `claim-response`. Full claims only; there is no partial claim.
+   */
+  | { readonly type: "claim" }
+  /** The opponent's answer to an outstanding claim. */
+  | { readonly type: "claim-response"; readonly accept: boolean };

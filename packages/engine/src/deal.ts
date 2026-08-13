@@ -19,7 +19,8 @@ import type {
 } from "./types.js";
 
 const HAND_SIZE = 13;
-const TRICKS_PER_DEAL = 13;
+/** Exported so a claim's decision-maker can compute how many tricks remain without a second constant naming the same number. */
+export const TRICKS_PER_DEAL = 13;
 
 export interface StartDealOptions {
   readonly seed: number;
@@ -33,6 +34,7 @@ export function startDeal(options: StartDealOptions): DealState {
 
   return {
     auction: [],
+    claim: null,
     completedTricks: [],
     contract: null,
     currentTrick: [],
@@ -43,6 +45,7 @@ export function startDeal(options: StartDealOptions): DealState {
     passedOut: false,
     pending,
     phase: "draw",
+    revealed: null,
     starter: options.starter,
     stock: deck.slice(1),
     toAct: options.starter,
@@ -67,7 +70,16 @@ export function legalActions(state: DealState, player: PlayerId): DealAction[] {
       return legalCalls(state.auction, player).map((call) => ({ type: "call", call }) as const);
     }
     case "play": {
-      return legalPlays(state, player).map((card) => ({ type: "play", card }) as const);
+      if (state.claim !== null) {
+        return [
+          { type: "claim-response", accept: true },
+          { type: "claim-response", accept: false },
+        ];
+      }
+      return [
+        ...legalPlays(state, player).map((card) => ({ type: "play", card }) as const),
+        { type: "claim" },
+      ];
     }
     default: {
       return [];
@@ -113,6 +125,12 @@ export function applyAction(state: DealState, player: PlayerId, action: DealActi
     }
     case "play": {
       return applyPlay(state, player, action.card);
+    }
+    case "claim": {
+      return applyClaim(state, player);
+    }
+    case "claim-response": {
+      return applyClaimResponse(state, player, action.accept);
     }
   }
 }
@@ -250,6 +268,47 @@ function applyPlay(state: DealState, player: PlayerId, card: Card): DealState {
     trickLeader: completed.winner,
     tricksWon,
   };
+}
+
+/**
+ * Declares every remaining trick. Hands the decision to the opponent by
+ * flipping `toAct` to them, exactly as a call or a draw decision would — the
+ * claimant has nothing left to do until they answer.
+ */
+function applyClaim(state: DealState, player: PlayerId): DealState {
+  if (state.phase !== "play") {
+    throw new Error("Not in the play phase");
+  }
+  if (state.claim !== null) {
+    throw new Error("A claim is already pending");
+  }
+  return { ...state, claim: player, revealed: player, toAct: opponentOf(player) };
+}
+
+/**
+ * The opponent's answer. Accepting awards every trick not yet played to the
+ * claimant directly, rather than playing them out — `scoreDeal` and the
+ * achievements it feeds only ever read `tricksWon`, never `completedTricks`,
+ * so this reaches the identical scored outcome a card-by-card finish would.
+ * Denying resumes play exactly where it left off: `currentTrick` was never
+ * touched by the claim, and `revealed` stays set — the claimant's hand keeps
+ * showing for the rest of this deal, which is the cost of a claim that didn't
+ * land.
+ */
+function applyClaimResponse(state: DealState, player: PlayerId, accept: boolean): DealState {
+  if (state.claim === null) {
+    throw new Error("No claim is pending");
+  }
+  const claimant = state.claim;
+
+  if (!accept) {
+    return { ...state, claim: null, toAct: claimant };
+  }
+
+  const remaining = TRICKS_PER_DEAL - state.completedTricks.length;
+  const tricksWon: Pair<number> = [state.tricksWon[0], state.tricksWon[1]];
+  tricksWon[claimant] += remaining;
+  return { ...state, claim: null, phase: "complete", tricksWon };
 }
 
 function resolveTrick(

@@ -19,6 +19,7 @@ function hand(spec: string): Card[] {
 function viewWith(overrides: Partial<PlayerView>): PlayerView {
   return {
     auction: [],
+    claim: null,
     completedTricks: [],
     contract: { declarer: 0, doubling: "none", level: 3, strain: "NT" },
     currentTrick: [],
@@ -30,6 +31,7 @@ function viewWith(overrides: Partial<PlayerView>): PlayerView {
     passedOut: false,
     pending: null,
     phase: "play",
+    revealedHand: null,
     starter: 0,
     stockRemaining: 0,
     toAct: 0,

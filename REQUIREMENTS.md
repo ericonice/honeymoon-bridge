@@ -190,7 +190,29 @@ Full contract bridge auction once both hands are complete.
 - 13 tricks. Follow suit if able; otherwise play anything. Highest trump wins, else highest
   card of the suit led. Winner of a trick leads to the next.
 - Declarer needs level + 6 tricks (book is 6).
-- **Every deal is played out to all 13 tricks.** No claiming and no conceding.
+- **Every deal is played out to all 13 tricks, unless it is claimed.** No conceding, still, and no
+  undo.
+- **A claim declares every remaining trick, on the claimant's own turn, and is symmetric — either
+  side, not just declarer.** This reverses §4's original "no claiming," once what changed since
+  that call underneath it became clear: a claim in the traditional sense needs dummy on the table,
+  since that is what lets the defense check it before agreeing, and this game has no dummy — both
+  hands stay concealed until a deal ends on its own. So a claim reveals the claimant's *own* hand
+  instead, the moment it is offered, and that hand stays visible for the rest of the deal whichever
+  way the answer goes. That is the whole cost of a claim that does not land, paid regardless of
+  whether the claim was actually right.
+
+  Full claims only — "I take everything left from here" — never partial, and confirmed by a second
+  tap before it is sent: nothing else in the game commits to exposing a concealed hand, so nothing
+  else needs that guard as much as this does.
+
+  Against a person, accepting or denying it is their own judgment call, deliberately not refereed
+  by software — reasoning about what is left from what has already been seen is the skill this
+  game is built around, and a solver deciding it would take that away at exactly the moment it
+  matters most. Against the computer, the double-dummy solver (§2.1, `bot/solver.ts`) decides it
+  instead, and is never wrong: once a claim has revealed the hand there is no hidden information
+  left in the position, which makes this the same kind of question honors or auction legality
+  already are — a rule to get right, not a skill to play at a level. No difficulty setting touches
+  it.
 - **A finished trick is swept toward whoever won it**, then it is gone. The engine resolves a
   trick the instant the second card lands and hands the lead to the winner, so without this the
   trick you just lost would be replaced by the next card before you had read it. The direction of
@@ -288,8 +310,11 @@ distinction the whole rubber turns on.
 - **150** for all five trump honors in one hand.
 - **150** for all four aces in one hand at no-trump.
 - Scored by whichever player holds them, declarer or defender alike.
-- The engine detects and awards honors automatically at the end of the deal; there is no
-  claiming step. Honors will be rarer than in normal bridge, since half the deck is out of play.
+- The engine detects and awards honors automatically at the end of the deal; nobody has to
+  announce holding them, the way honors are traditionally claimed. (A trick claim, §1.6, is an
+  unrelated thing despite the shared word — this is about points for a holding, that is about
+  who wins tricks not yet played.) Honors will be rarer than in normal bridge, since half the deck
+  is out of play.
 
 ---
 
@@ -912,7 +937,7 @@ are shown side by side and never summed into a single record.
 
 - Bidding conventions and alerting (meaningless without a partner — see §1.5).
 - Defensive carding signals, for the same reason.
-- Claiming, conceding, undo.
+- ~~Claiming~~, conceding, undo. **Claiming reversed, see §1.6** — conceding and undo have not.
 - ~~Accounts, authentication~~ — **built after all, and now required to play a person**, see §3.7.
   The reason for the reversal is that per-opponent results need somewhere to attach and a browser
   is not a person; the reason for the second reversal, from optional to required, is that results

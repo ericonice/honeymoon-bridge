@@ -53,6 +53,7 @@ function scoreFor(
 function baseDeal(overrides: Partial<DealState> = {}): DealState {
   return {
     auction: [],
+    claim: null,
     completedTricks: [],
     contract: null,
     currentTrick: [],
@@ -63,6 +64,7 @@ function baseDeal(overrides: Partial<DealState> = {}): DealState {
     passedOut: false,
     pending: null,
     phase: "complete",
+    revealed: null,
     starter: 0,
     stock: [],
     toAct: 0,

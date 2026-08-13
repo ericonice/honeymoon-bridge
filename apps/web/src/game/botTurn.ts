@@ -1,5 +1,6 @@
 import { newRubber, viewFor, vulnerability } from "@hb/engine";
 import type { DealAction, DealState, PlayerId } from "@hb/engine";
+import { shouldAcceptClaim } from "../bot/claimDecision.js";
 import type { Bot, Standing } from "../bot/types.js";
 
 export interface BotTurn {
@@ -30,6 +31,14 @@ export function loveAll(): Standing {
  * `GameSession` keeps it beside: it belongs to the sitting, not to the deal.
  */
 export function botActionFor({ bot, seat, standing, state }: BotTurn): DealAction {
+  // Not a phase of its own — a claim is a sub-state of "play" — so it is
+  // checked ahead of the phase switch below rather than inside it. The bot
+  // never originates a "claim" action itself (§4: human-only for now), so this
+  // is the only claim-related branch `botActionFor` needs.
+  if (state.claim !== null) {
+    return { type: "claim-response", accept: shouldAcceptClaim(state) };
+  }
+
   const view = viewFor(state, seat);
 
   switch (state.phase) {

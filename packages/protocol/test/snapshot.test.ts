@@ -82,11 +82,20 @@ function drawnOut(turns: number): TableState {
   return table;
 }
 
-/** Drives the table with whatever is legal, so every phase gets inspected. */
+/**
+ * Drives the table with whatever is legal, so every phase gets inspected.
+ *
+ * Claim is excluded from what gets picked: it is always the last legal action
+ * during play, so a driver that always takes the last one would claim on the
+ * very first trick, every single deal, and a rubber's worth of ordinary trick
+ * play would never actually run. Claim's own hidden-information behavior gets
+ * its own dedicated tests below instead.
+ */
 function step(table: TableState): TableState {
   const seat = table.deal.toAct;
   const actions: DealAction[] = legalActionsForView(viewFor(table.deal, seat));
-  return applyTableAction(table, seat, actions[actions.length - 1]!);
+  const ordinary = actions.filter((action) => action.type !== "claim");
+  return applyTableAction(table, seat, (ordinary[ordinary.length - 1] ?? actions[0])!);
 }
 
 describe("what a seat is sent", () => {
@@ -165,5 +174,81 @@ describe("what a seat is sent", () => {
 
     const snapshot = snapshotFor(table, 0);
     expect(JSON.parse(JSON.stringify(snapshot))).toEqual(snapshot);
+  });
+});
+
+/**
+ * A claim is the one deliberate exception to everything above: the claimant's
+ * hand is genuinely sent to the opponent. These tests exist to keep that
+ * exception narrow and explicit rather than trusting the generic fuzz test
+ * above to notice it — that test never claims at all, on purpose (see `step`).
+ */
+describe("a claim", () => {
+  function intoPlay(seed: number): TableState {
+    let table = startTable({ seed, starter: 0 });
+    while (table.deal.phase !== "play") {
+      table = step(table);
+    }
+    return table;
+  }
+
+  it("reveals the claimant's hand to the opponent's snapshot, and only there", () => {
+    let table = intoPlay(30);
+    const claimant = table.deal.toAct;
+    const opponent = opponentOf(claimant);
+
+    table = applyTableAction(table, claimant, { type: "claim" });
+
+    const opponentSnapshot = snapshotFor(table, opponent);
+    expect(opponentSnapshot.view.claim).toBe(claimant);
+    expect(opponentSnapshot.view.revealedHand).toEqual({
+      by: claimant,
+      cards: table.deal.hands[claimant],
+    });
+
+    // Nothing else leaks alongside it — the revealed hand is the only thing
+    // this adds on top of what was already allowed.
+    const forbidden = forbiddenFor(table, opponent);
+    for (const card of table.deal.hands[claimant]) {
+      forbidden.delete(cardId(card));
+    }
+    const leaked = cardsWithin(opponentSnapshot)
+      .map(cardId)
+      .filter((id) => forbidden.has(id));
+    expect(leaked).toEqual([]);
+
+    // The claimant's own snapshot gains nothing new — they already have their
+    // hand in `view.hand`.
+    expect(snapshotFor(table, claimant).view.revealedHand).toBeNull();
+  });
+
+  it("keeps the hand visible after a denial, for the rest of this deal only", () => {
+    let table = intoPlay(31);
+    const claimant = table.deal.toAct;
+    const opponent = opponentOf(claimant);
+
+    table = applyTableAction(table, claimant, { type: "claim" });
+    table = applyTableAction(table, opponent, { type: "claim-response", accept: false });
+
+    expect(snapshotFor(table, opponent).view.revealedHand).toEqual({
+      by: claimant,
+      cards: table.deal.hands[claimant],
+    });
+
+    const next = nextDeal(table, 999);
+    expect(snapshotFor(next, opponent).view.revealedHand).toBeNull();
+  });
+
+  it("completes the deal on acceptance, with nothing left to hide", () => {
+    let table = intoPlay(32);
+    const claimant = table.deal.toAct;
+    const opponent = opponentOf(claimant);
+
+    table = applyTableAction(table, claimant, { type: "claim" });
+    table = applyTableAction(table, opponent, { type: "claim-response", accept: true });
+
+    expect(table.deal.phase).toBe("complete");
+    expect(() => snapshotFor(table, claimant)).not.toThrow();
+    expect(() => snapshotFor(table, opponent)).not.toThrow();
   });
 });

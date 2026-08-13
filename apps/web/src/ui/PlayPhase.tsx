@@ -10,6 +10,8 @@ export interface PlayPhaseProps {
   /** The trick that has just resolved, still lying on the table. */
   readonly lastTrick: CompletedTrick | null;
   readonly opponentName: string;
+  /** Opens the claim confirmation. Absent claim entirely offers nothing to open. */
+  readonly onClaim: () => void;
   readonly view: PlayerView;
   readonly vulnerable: Pair<boolean>;
 }
@@ -110,6 +112,17 @@ function instruction(view: PlayerView): string | null {
 }
 
 /**
+ * A claim in progress reads as neither a lead nor a follow — `toAct` has
+ * moved to whoever is deciding it, so without this the claimant would see
+ * nothing at all where "your lead"/"follow suit" would otherwise be, and a
+ * claim they just made would look identical to an ordinary turn they are
+ * waiting out.
+ */
+function claimStatus(view: PlayerView): string | null {
+  return view.claim === view.me ? "Waiting for them to decide" : null;
+}
+
+/**
  * The last completed trick, on demand.
  *
  * Both cards were played face up and both players saw them, so this reveals
@@ -164,7 +177,13 @@ function TrickReview({
   );
 }
 
-export function PlayPhase({ lastTrick, opponentName, view, vulnerable }: PlayPhaseProps): React.JSX.Element {
+export function PlayPhase({
+  lastTrick,
+  onClaim,
+  opponentName,
+  view,
+  vulnerable,
+}: PlayPhaseProps): React.JSX.Element {
   const [reviewing, setReviewing] = useState(false);
 
   const trick = tableTrick(view, lastTrick);
@@ -199,8 +218,12 @@ export function PlayPhase({ lastTrick, opponentName, view, vulnerable }: PlayPha
         {result === null ? null : (
           <p className="text-center text-sm font-medium text-white/80">{result}</p>
         )}
-        {instruction(view) === null ? null : (
-          <p className="text-center text-sm text-white/50">{instruction(view)}</p>
+        {claimStatus(view) === null ? (
+          instruction(view) === null ? null : (
+            <p className="text-center text-sm text-white/50">{instruction(view)}</p>
+          )
+        ) : (
+          <p className="text-center text-sm text-amber-200/70">{claimStatus(view)}</p>
         )}
       </div>
 
@@ -211,16 +234,31 @@ export function PlayPhase({ lastTrick, opponentName, view, vulnerable }: PlayPha
       />
       <SeatLabel active={yourTurn} name="You" vulnerable={vulnerable[view.me]} />
 
-      <button
-        type="button"
-        className="mt-2 rounded-lg border border-white/25 px-3 py-1.5 text-xs text-white/70 disabled:opacity-25"
-        disabled={lastTrick === null}
-        onClick={() => {
-          setReviewing(true);
-        }}
-      >
-        Show last trick
-      </button>
+      <div className="mt-2 flex gap-2">
+        <button
+          type="button"
+          className="rounded-lg border border-white/25 px-3 py-1.5 text-xs text-white/70 disabled:opacity-25"
+          disabled={lastTrick === null}
+          onClick={() => {
+            setReviewing(true);
+          }}
+        >
+          Show last trick
+        </button>
+
+        {/* Only offered on your own turn, with nothing already pending — a
+            claim while one is outstanding is not a second call to make, it is
+            the other player's, and `ClaimReveal` is where that happens. */}
+        {yourTurn && view.claim === null ? (
+          <button
+            type="button"
+            className="rounded-lg border border-amber-300/40 px-3 py-1.5 text-xs text-amber-200/80"
+            onClick={onClaim}
+          >
+            Claim the rest
+          </button>
+        ) : null}
+      </div>
 
       {reviewing && lastTrick !== null ? (
         <TrickReview
