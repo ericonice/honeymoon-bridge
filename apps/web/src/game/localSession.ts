@@ -1,10 +1,12 @@
 import {
   applyTableAction,
   createRng,
+  dealFacts,
   drawRevealFor,
   nextDeal,
   ownDrawPairFor,
   randomSeed,
+  rubberFacts,
   sortHand,
   startTable,
   summarize,
@@ -18,6 +20,7 @@ import { BOT_RELEASE } from "../bot/release.js";
 import { DEFAULT_GAME_EQUITY } from "../bot/bidValue.js";
 import { DISGUISE_CREDIT_ON } from "../bot/heuristicBot.js";
 import { createSamplingBot } from "../bot/samplingBot.js";
+import { useAchievementTracker } from "./achievements.js";
 import { botActionFor } from "./botTurn.js";
 import { boldness, disguiseEnabled, pace, preferredFormat, strength } from "./identity.js";
 import { reportRobotRubber } from "./records.js";
@@ -208,6 +211,21 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
   }, [table]);
 
   const summary = summarize(table);
+  const achievements = useAchievementTracker();
+
+  // Evaluated the instant a deal completes, whether or not the rubber it
+  // belongs to ever does — an abandoned rubber still banks the hands played
+  // inside it. `deal` is a fresh object every time `nextDeal` deals, so
+  // comparing identity is enough to catch exactly the one transition into
+  // "complete" without a separate counter to keep in step with the rubber.
+  const processedDeal = useRef<DealState | null>(null);
+  useEffect(() => {
+    if (deal.phase !== "complete" || processedDeal.current === deal) {
+      return;
+    }
+    processedDeal.current = deal;
+    achievements.applyDeal(dealFacts(deal, summary.score, summary.vulnerable), HUMAN);
+  }, [achievements, deal, summary.score, summary.vulnerable]);
 
   // Reported the moment the rubber is won rather than when the player taps on,
   // because tapping on is optional: closing the tab on a won rubber is a
@@ -227,7 +245,8 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
       pointsAgainst: points[OPPONENT],
       won: summary.rubber.winner === HUMAN,
     });
-  }, [summary.history.length, summary.rubber]);
+    achievements.applyRubber(rubberFacts(summary), HUMAN);
+  }, [achievements, summary.history.length, summary.rubber]);
 
   // A new rubber is a new thing to report. `nextDeal` starts one once the last
   // was won, which is the only way past a completed rubber.
@@ -239,9 +258,11 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
 
   return {
     act,
+    clearUnlocks: achievements.clear,
     history: summary.history,
     justTaken:
       deal.phase === "draw" ? (deal.hands[HUMAN][deal.hands[HUMAN].length - 1] ?? null) : null,
+    justUnlocked: achievements.justUnlocked,
     lastDraw: drawRevealFor(deal, HUMAN),
     lastTrick: deal.completedTricks[deal.completedTricks.length - 1] ?? null,
     nextDeal: advance,

@@ -1,4 +1,4 @@
-import type { DealAction, MatchFormat, Pair, PlayerId } from "@hb/engine";
+import type { DealAction, MatchFormat, Pair, PlayerId, Unlock } from "@hb/engine";
 import type { SessionSnapshot } from "./snapshot.js";
 
 /** How a seat is identified across a dropped socket. */
@@ -103,4 +103,12 @@ export type ServerMessage =
       readonly table: TableInfo;
     }
   /** A refused action, a full table, an unknown code. Never fatal on its own. */
-  | { readonly type: "error"; readonly message: string };
+  | { readonly type: "error"; readonly message: string }
+  /**
+   * Achievements this seat — and only this seat — just unlocked.
+   *
+   * Sent to one socket, never broadcast: an unlock can say something about the
+   * hand that earned it (Two-Suiter, most obviously), so it is exactly as
+   * private as the hand itself and must never reach the other seat.
+   */
+  | { readonly type: "achievements"; readonly unlocked: readonly Unlock[] };

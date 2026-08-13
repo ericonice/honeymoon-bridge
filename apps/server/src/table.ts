@@ -1,8 +1,17 @@
 import { DurableObject } from "cloudflare:workers";
-import { applyTableAction, nextDeal, startTable, summarize, totalScore } from "@hb/engine";
-import type { MatchFormat, PlayerId, TableState } from "@hb/engine";
+import {
+  applyTableAction,
+  dealFacts,
+  nextDeal,
+  rubberFacts,
+  startTable,
+  summarize,
+  totalScore,
+} from "@hb/engine";
+import type { MatchFormat, PlayerId, TableState, TableSummary, Unlock } from "@hb/engine";
 import { snapshotFor } from "@hb/protocol";
 import type { ClientMessage, Seating, ServerMessage, TableInfo } from "@hb/protocol";
+import { applyDealAchievements, applyRubberAchievements } from "./achievements.js";
 import { accountFor, verifySession } from "./auth.js";
 import { dealSeed } from "./codes.js";
 import type { Env } from "./env.js";
@@ -39,6 +48,15 @@ interface SeatRecord {
 
 interface Stored {
   readonly code: string;
+  /**
+   * Whether the deal on the table has already had its achievements applied.
+   *
+   * A deal completing is one action; nothing stops a client resending it, and
+   * unlike a one-shot unlock (deduped by its own primary key) the running
+   * counters behind Hands Played/Won/Lost have no such protection on their
+   * own. Reset alongside `ready` whenever a fresh deal is dealt.
+   */
+  readonly dealAchievementsApplied: boolean;
   /** Who has asked to move on from the finished deal. Cleared when it is dealt. */
   readonly ready: [boolean, boolean];
   /**
@@ -86,6 +104,7 @@ export class Table extends DurableObject<Env> {
     const stored = await this.ctx.storage.get<Stored>("table");
     this.#cached = stored ?? {
       code: "",
+      dealAchievementsApplied: false,
       ready: [false, false],
       recorded: false,
       seats: [null, null],
@@ -264,7 +283,15 @@ export class Table extends DurableObject<Env> {
       return;
     }
 
-    await this.#save({ ...stored, recorded: await this.#recordIfWon(stored, next), table: next });
+    const summary = summarize(next);
+    const recorded = await this.#recordIfWon(stored, summary);
+    await this.#applyAchievements(stored, next, summary);
+    await this.#save({
+      ...stored,
+      dealAchievementsApplied: next.deal.phase === "complete",
+      recorded,
+      table: next,
+    });
     await this.#broadcast();
   }
 
@@ -276,13 +303,13 @@ export class Table extends DurableObject<Env> {
    * action the engine had already accepted — losing the game to save the record
    * of it.
    */
-  async #recordIfWon(stored: Stored, next: TableState): Promise<boolean> {
+  async #recordIfWon(stored: Stored, summary: TableSummary): Promise<boolean> {
     const [first, second] = stored.seats;
     if (stored.recorded || first === null || second === null) {
       return stored.recorded;
     }
 
-    const { history, rubber } = summarize(next);
+    const { history, rubber } = summary;
     if (!rubber.complete || rubber.winner === null) {
       return false;
     }
@@ -320,6 +347,61 @@ export class Table extends DurableObject<Env> {
     }
   }
 
+  /**
+   * Applies whichever achievements this action just earned, for both seats.
+   *
+   * Guarded on `stored`'s pre-action flags rather than on `next`, so a deal or
+   * rubber already handled is never double-counted even if the same action
+   * were somehow delivered twice — see `dealAchievementsApplied` and, for the
+   * rubber branch, the same `recorded` flag `#recordIfWon` already keeps.
+   */
+  async #applyAchievements(stored: Stored, next: TableState, summary: TableSummary): Promise<void> {
+    const [first, second] = stored.seats;
+    if (first === null || second === null) {
+      return;
+    }
+    const seats: readonly [SeatRecord, SeatRecord] = [first, second];
+
+    if (next.deal.phase === "complete" && !stored.dealAchievementsApplied) {
+      const facts = dealFacts(next.deal, summary.score, summary.vulnerable);
+      await this.#pushAchievements(seats, (player) =>
+        applyDealAchievements(this.env, seats[player].accountId, facts, player, Date.now()),
+      );
+    }
+
+    if (!stored.recorded && summary.rubber.complete && summary.rubber.winner !== null) {
+      const facts = rubberFacts(summary);
+      await this.#pushAchievements(seats, (player) =>
+        applyRubberAchievements(this.env, seats[player].accountId, facts, player, Date.now()),
+      );
+    }
+  }
+
+  /**
+   * Runs `apply` for both seats and sends whatever it unlocked to that seat's
+   * own socket, and only that seat's — an unlock can say something about the
+   * hand that earned it, so it is exactly as private as the hand itself.
+   */
+  async #pushAchievements(
+    seats: readonly [SeatRecord, SeatRecord],
+    apply: (player: PlayerId) => Promise<readonly Unlock[]>,
+  ): Promise<void> {
+    for (const player of SEATS) {
+      const unlocked = await apply(player);
+      if (unlocked.length === 0) {
+        continue;
+      }
+      const ws = this.#socketFor(player);
+      if (ws !== null) {
+        this.#send(ws, { type: "achievements", unlocked });
+      }
+    }
+  }
+
+  #socketFor(seat: PlayerId): WebSocket | null {
+    return this.ctx.getWebSockets().find((ws) => this.#seatOf(ws) === seat) ?? null;
+  }
+
   async #nextDeal(ws: WebSocket): Promise<void> {
     const stored = await this.#load();
     const seat = this.#seatOf(ws);
@@ -344,6 +426,9 @@ export class Table extends DurableObject<Env> {
 
     await this.#save({
       ...stored,
+      // A fresh deal has had no achievements applied to it yet, whatever the
+      // last one's flag said.
+      dealAchievementsApplied: false,
       ready: [false, false],
       // `nextDeal` starts a fresh rubber when the last one was won, so whatever
       // was recorded belongs to a rubber that is now over.

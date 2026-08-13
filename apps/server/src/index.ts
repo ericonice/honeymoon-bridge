@@ -1,4 +1,5 @@
-import type { MatchFormat } from "@hb/engine";
+import type { DealFacts, MatchFormat, Pair, PlayerId, RubberFacts, Tier } from "@hb/engine";
+import { achievementsFor, applyDealAchievements, applyRubberAchievements } from "./achievements.js";
 import {
   accountFor,
   isPlaytester,
@@ -129,6 +130,128 @@ function robotRubberFrom(body: unknown): RobotRubber | null {
     pointsAgainst,
     won: value.won,
   };
+}
+
+function tierOrNull(input: unknown): Tier | null | undefined {
+  if (input === null || input === "bronze" || input === "silver" || input === "gold") {
+    return input;
+  }
+  return undefined;
+}
+
+function tierPair(input: unknown): Pair<Tier | null> | null {
+  if (!Array.isArray(input) || input.length !== 2) {
+    return null;
+  }
+  const a = tierOrNull(input[0]);
+  const b = tierOrNull(input[1]);
+  return a === undefined || b === undefined ? null : [a, b];
+}
+
+function boolPair(input: unknown): Pair<boolean> | null {
+  if (
+    !Array.isArray(input) ||
+    input.length !== 2 ||
+    typeof input[0] !== "boolean" ||
+    typeof input[1] !== "boolean"
+  ) {
+    return null;
+  }
+  return [input[0], input[1]];
+}
+
+/** A per-player count from a single deal: at most one per draw turn, thirteen turns each. */
+function countPair(input: unknown): Pair<number> | null {
+  const valid = (n: unknown): n is number =>
+    typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 13;
+  if (!Array.isArray(input) || input.length !== 2 || !valid(input[0]) || !valid(input[1])) {
+    return null;
+  }
+  return [input[0], input[1]];
+}
+
+function playerId(input: unknown): PlayerId | null {
+  return input === 0 || input === 1 ? input : null;
+}
+
+function playerIdOrNull(input: unknown): PlayerId | null | undefined {
+  if (input === null) {
+    return null;
+  }
+  return input === 0 || input === 1 ? input : undefined;
+}
+
+/**
+ * Reads a reported deal's achievement facts, or nothing.
+ *
+ * Taken on the client's word for a robot game, same as `robotRubberFrom` — the
+ * shape is bounded and typed, not verified, since nothing here saw the deal.
+ */
+function dealFactsFrom(body: unknown): { facts: DealFacts; player: PlayerId } | null {
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+  const value = body as Record<string, unknown>;
+  const player = playerId(value.player);
+  const raw = value.facts;
+  if (player === null || typeof raw !== "object" || raw === null) {
+    return null;
+  }
+  const f = raw as Record<string, unknown>;
+
+  const handWonBy = playerIdOrNull(f.handWonBy);
+  const insultTier = tierPair(f.insultTier);
+  const rejections = countPair(f.rejections);
+  const setTier = tierPair(f.setTier);
+  const slamTier = tierPair(f.slamTier);
+  const twoSuited = boolPair(f.twoSuited);
+  if (
+    handWonBy === undefined ||
+    insultTier === null ||
+    rejections === null ||
+    setTier === null ||
+    slamTier === null ||
+    twoSuited === null ||
+    typeof f.nobodyWantedIt !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    facts: {
+      handWonBy,
+      insultTier,
+      nobodyWantedIt: f.nobodyWantedIt,
+      rejections,
+      setTier,
+      slamTier,
+      twoSuited,
+    },
+    player,
+  };
+}
+
+/** Reads a reported rubber's achievement facts, or nothing. Same trust model as `dealFactsFrom`. */
+function rubberFactsFrom(body: unknown): { facts: RubberFacts; player: PlayerId } | null {
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+  const value = body as Record<string, unknown>;
+  const player = playerId(value.player);
+  const raw = value.facts;
+  if (player === null || typeof raw !== "object" || raw === null) {
+    return null;
+  }
+  const f = raw as Record<string, unknown>;
+
+  const comebackWinner = playerIdOrNull(f.comebackWinner);
+  const sweepWinner = playerIdOrNull(f.sweepWinner);
+  const wonRubber = playerIdOrNull(f.wonRubber);
+  if (comebackWinner === undefined || sweepWinner === undefined || wonRubber === undefined) {
+    return null;
+  }
+
+  return { facts: { comebackWinner, sweepWinner, wonRubber }, player };
 }
 
 /** How long to wait, in words, for a message somebody is about to read. */
@@ -416,6 +539,60 @@ export default {
         Date.now(),
       );
       return json(request, { ok: true }, 201);
+    }
+
+    // The badge list and running counters behind it, for the Achievements
+    // screen. Behind a session for the same reason as `/api/results`.
+    if (url.pathname === "/api/achievements" && request.method === "GET") {
+      const accountId = await accountFromRequest(request, env, Date.now());
+      if (accountId === null) {
+        return json(request, { error: "Not signed in" }, 401);
+      }
+      return json(request, await achievementsFor(env, accountId));
+    }
+
+    // A robot deal's achievement facts, reported the instant it completes so
+    // an abandoned rubber still banks the hands played inside it. Self-reported
+    // and taken on trust for the same reason `/api/results/robot` is — there is
+    // no server in a robot game to have witnessed it.
+    if (url.pathname === "/api/achievements/deal" && request.method === "POST") {
+      const accountId = await accountFromRequest(request, env, Date.now());
+      if (accountId === null) {
+        return json(request, { error: "Not signed in" }, 401);
+      }
+      const parsed = dealFactsFrom(await request.json().catch(() => null));
+      if (parsed === null) {
+        return json(request, { error: "Not a deal report" }, 400);
+      }
+      const unlocked = await applyDealAchievements(
+        env,
+        accountId,
+        parsed.facts,
+        parsed.player,
+        Date.now(),
+      );
+      return json(request, { unlocked }, 201);
+    }
+
+    // A robot rubber's achievement facts — Take the Rubber, Down But Not Out,
+    // Marathon — reported once it completes, same trust model as the deal route.
+    if (url.pathname === "/api/achievements/rubber" && request.method === "POST") {
+      const accountId = await accountFromRequest(request, env, Date.now());
+      if (accountId === null) {
+        return json(request, { error: "Not signed in" }, 401);
+      }
+      const parsed = rubberFactsFrom(await request.json().catch(() => null));
+      if (parsed === null) {
+        return json(request, { error: "Not a rubber report" }, 400);
+      }
+      const unlocked = await applyRubberAchievements(
+        env,
+        accountId,
+        parsed.facts,
+        parsed.player,
+        Date.now(),
+      );
+      return json(request, { unlocked }, 201);
     }
 
     // The queue. One object for everyone, since matchmaking is the one thing

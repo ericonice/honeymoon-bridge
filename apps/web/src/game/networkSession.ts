@@ -1,5 +1,5 @@
 import { opponentOf } from "@hb/engine";
-import type { DealAction, PlayerId } from "@hb/engine";
+import type { DealAction, PlayerId, Unlock } from "@hb/engine";
 import type { ClientMessage, ServerMessage, SessionSnapshot, TableInfo } from "@hb/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { storedSession } from "./account.js";
@@ -34,6 +34,8 @@ function sessionFrom(
   table: TableInfo,
   seat: PlayerId,
   send: (message: ClientMessage) => void,
+  justUnlocked: readonly Unlock[],
+  clearUnlocks: () => void,
 ): GameSession {
   const them = table.seats[opponentOf(seat)];
 
@@ -41,8 +43,10 @@ function sessionFrom(
     act: (action: DealAction) => {
       send({ type: "action", action });
     },
+    clearUnlocks,
     history: snapshot.history,
     justTaken: snapshot.justTaken,
+    justUnlocked,
     lastDraw: snapshot.lastDraw,
     lastTrick: snapshot.lastTrick,
     nextDeal: () => {
@@ -85,6 +89,10 @@ export function useNetworkSession(code: string): NetworkGame {
   const [table, setTable] = useState<TableInfo | null>(null);
   const [seat, setSeat] = useState<PlayerId | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Already decided by the server — see `Table#applyAchievements` — so this
+  // only ever accumulates and clears what arrives, unlike the robot game's
+  // own local evaluation.
+  const [justUnlocked, setJustUnlocked] = useState<readonly Unlock[]>([]);
 
   const socket = useRef<WebSocket | null>(null);
   const attempt = useRef(0);
@@ -131,6 +139,10 @@ export function useNetworkSession(code: string): NetworkGame {
         const message = JSON.parse(event.data) as ServerMessage;
         if (message.type === "error") {
           setError(message.message);
+          return;
+        }
+        if (message.type === "achievements") {
+          setJustUnlocked((current) => [...current, ...message.unlocked]);
           return;
         }
         setError(null);
@@ -206,7 +218,9 @@ export function useNetworkSession(code: string): NetworkGame {
     session:
       snapshot === null || table === null || seat === null
         ? null
-        : sessionFrom(snapshot, table, seat, send),
+        : sessionFrom(snapshot, table, seat, send, justUnlocked, () => {
+            setJustUnlocked([]);
+          }),
     table,
   };
 }

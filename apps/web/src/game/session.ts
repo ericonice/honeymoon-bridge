@@ -6,6 +6,7 @@ import type {
   Pair,
   PlayerView,
   RubberState,
+  Unlock,
 } from "@hb/engine";
 
 // These describe what one seat is entitled to see and how a rubber is recorded,
@@ -41,6 +42,16 @@ export interface GameSession {
    * "what did I just gain?" and shows nothing that is not already on screen.
    */
   readonly justTaken: Card | null;
+  /**
+   * Achievements unlocked since the last `clearUnlocks`, oldest first.
+   *
+   * Not part of what the server calls a snapshot — a reconnect resending the
+   * same state must not replay an old unlock as a new one — so this is kept
+   * beside the session rather than inside it: computed live, deal by deal, in
+   * the robot game, and accumulated from the server's own pushes over a
+   * network, where it is already decided.
+   */
+  readonly justUnlocked: readonly Unlock[];
   /** The draw turn that just resolved, or null before the first one. */
   readonly lastDraw: DrawReveal | null;
   /** The resolved trick still lying on the table, until the next card is played. */
@@ -79,6 +90,8 @@ export interface GameSession {
   /** True whenever the deal is waiting on the other player rather than on you. */
   readonly waitingOnOpponent: boolean;
   act(action: DealAction): void;
+  /** Dismisses whatever is in `justUnlocked`, once it has been shown. */
+  clearUnlocks(): void;
   /**
    * True once you have asked to move on and the other player has not.
    *

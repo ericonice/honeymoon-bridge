@@ -7,6 +7,7 @@ describe("where somebody was going before they were asked to sign in", () => {
     const places: Destination[] = [
       { kind: "home" },
       { kind: "queue" },
+      { kind: "robot" },
       { code: "ABCDEF", kind: "table" },
     ];
     for (const place of places) {

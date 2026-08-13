@@ -38,6 +38,18 @@ export function robotResultUrl(): string {
   return `${ORIGIN}/api/results/robot`;
 }
 
+export function achievementsUrl(): string {
+  return `${ORIGIN}/api/achievements`;
+}
+
+export function dealAchievementsUrl(): string {
+  return `${ORIGIN}/api/achievements/deal`;
+}
+
+export function rubberAchievementsUrl(): string {
+  return `${ORIGIN}/api/achievements/rubber`;
+}
+
 export function tableSocketUrl(code: string): string {
   // Same origin, other scheme: ws for http, wss for https.
   return `${ORIGIN.replace(/^http/, "ws")}/api/tables/${code}/ws`;

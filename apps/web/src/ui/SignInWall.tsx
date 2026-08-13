@@ -27,7 +27,7 @@ function asking(destination: Destination): { readonly body: string; readonly tit
   switch (destination.kind) {
     case "home": {
       return {
-        body: "Playing against another person needs an account, so a game can be recorded against the person you played rather than against a browser. The game against the computer never does.",
+        body: "Playing against another person needs an account, so a game can be recorded against the person you played rather than against a browser.",
         title: "Sign in",
       };
     }
@@ -35,6 +35,12 @@ function asking(destination: Destination): { readonly body: string; readonly tit
       return {
         body: "Finding an opponent needs an account. It is how the result ends up on your record against them afterwards, which is the only reason it is asked for.",
         title: "Sign in to find an opponent",
+      };
+    }
+    case "robot": {
+      return {
+        body: "Signed in once, on this device, so achievements and your record have somewhere to attach. After that the game against the computer still needs no server and no network to play — this is the only part of it that does.",
+        title: "Sign in to play",
       };
     }
     case "table": {

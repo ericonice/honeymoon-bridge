@@ -13,6 +13,7 @@ const DESTINATION_KEY = "hb.after-signin";
 export type Destination =
   | { readonly kind: "home" }
   | { readonly kind: "queue" }
+  | { readonly kind: "robot" }
   | { readonly kind: "table"; readonly code: string };
 
 export const HOME: Destination = { kind: "home" };
@@ -25,6 +26,9 @@ export function destinationToWire(destination: Destination): string | null {
     }
     case "queue": {
       return "queue";
+    }
+    case "robot": {
+      return "robot";
     }
     case "table": {
       return `table/${destination.code}`;
@@ -46,6 +50,9 @@ export function destinationFromWire(raw: string | null): Destination | null {
   }
   if (raw === "queue") {
     return { kind: "queue" };
+  }
+  if (raw === "robot") {
+    return { kind: "robot" };
   }
   // Shape only. Whether those six characters name a table anybody can sit at
   // is the server's question, and it is asked when the socket opens.

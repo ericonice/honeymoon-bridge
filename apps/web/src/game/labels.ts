@@ -1,4 +1,4 @@
-import type { Call, Card, MatchFormat, Rank, Strain, Suit } from "@hb/engine";
+import type { AchievementId, Call, Card, MatchFormat, Rank, Strain, Suit, Tier } from "@hb/engine";
 
 /**
  * What to call the thing being played, given how long it runs.
@@ -82,4 +82,97 @@ export function callLabel(call: Call): string {
       return `${call.bid.level}${strainSymbol(call.bid.strain)}`;
     }
   }
+}
+
+/** One achievement family: its name, what it is for, and what earns each tier it has. */
+export interface AchievementInfo {
+  readonly description: string;
+  readonly name: string;
+  readonly tiers: Partial<Record<Tier, string>>;
+}
+
+/** Display order for the Achievements screen — roughly rarest and most eventful first. */
+export const ACHIEVEMENT_ORDER: readonly AchievementId[] = [
+  "slam",
+  "insult",
+  "axe",
+  "take-the-rubber",
+  "down-but-not-out",
+  "nobody-wanted-it",
+  "two-suiter",
+  "against-the-odds",
+  "marathon",
+  "hands-played",
+  "hands-won",
+  "hands-lost",
+];
+
+export const ACHIEVEMENTS: Record<AchievementId, AchievementInfo> = {
+  "against-the-odds": {
+    description: "Take card 2 sight-unseen, lifetime.",
+    name: "Against the Odds",
+    tiers: { bronze: "50 times", gold: "5,000 times", silver: "500 times" },
+  },
+  axe: {
+    description: "Set a contract.",
+    name: "The Axe",
+    tiers: { bronze: "Down 3", gold: "Down 7", silver: "Down 5" },
+  },
+  "down-but-not-out": {
+    description: "Win a rubber after losing its first game.",
+    name: "Down But Not Out",
+    tiers: { bronze: "Done it" },
+  },
+  "hands-lost": {
+    description: "Lose a hand, declaring or defending, lifetime.",
+    name: "Hands Lost",
+    tiers: { bronze: "50 hands", gold: "1,000 hands", silver: "250 hands" },
+  },
+  "hands-played": {
+    description: "Play a hand through to a result, lifetime.",
+    name: "Hands Played",
+    tiers: { bronze: "50 hands", gold: "1,000 hands", silver: "250 hands" },
+  },
+  "hands-won": {
+    description: "Win a hand, declaring or defending, lifetime.",
+    name: "Hands Won",
+    tiers: { bronze: "50 hands", gold: "1,000 hands", silver: "250 hands" },
+  },
+  insult: {
+    description: "Make a contract they doubled.",
+    name: "The Insult",
+    tiers: { bronze: "Doubled", gold: "Redoubled, vulnerable", silver: "Redoubled" },
+  },
+  marathon: {
+    description: "Play rubbers to the end, lifetime.",
+    name: "Marathon",
+    tiers: { bronze: "10 rubbers", gold: "200 rubbers", silver: "50 rubbers" },
+  },
+  "nobody-wanted-it": {
+    description: "Be dealt a hand that gets passed out.",
+    name: "Nobody Wanted It",
+    tiers: { bronze: "Done it" },
+  },
+  slam: {
+    description: "Bid and make a slam.",
+    name: "Slam",
+    tiers: { bronze: "Small slam", gold: "Grand slam, vulnerable", silver: "Grand slam" },
+  },
+  "take-the-rubber": {
+    description: "Win a rubber.",
+    name: "Take the Rubber",
+    tiers: { bronze: "Won it", silver: "Won it two games to none" },
+  },
+  "two-suiter": {
+    description: "Be dealt a hand confined to two suits or fewer.",
+    name: "Two-Suiter",
+    tiers: { bronze: "Done it" },
+  },
+};
+
+export function tierLabel(tier: Tier): string {
+  if (tier === "gold") {
+    return "Gold";
+  }
+  return tier === "silver" ? "Silver" : "Bronze";
 }

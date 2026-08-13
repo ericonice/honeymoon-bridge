@@ -74,3 +74,15 @@ export function RecordIcon({
     </Glyph>
   );
 }
+
+export function AchievementIcon({
+  className = "h-6 w-6",
+}: { readonly className?: string } = {}): React.JSX.Element {
+  return (
+    <Glyph className={className}>
+      <path d="M8 4h8v5.2a4 4 0 0 1-8 0V4Z" />
+      <path d="M8 5.5H5.6a1.4 1.4 0 0 0-1.4 1.4v.6a3 3 0 0 0 3 3H8M16 5.5h2.4a1.4 1.4 0 0 1 1.4 1.4v.6a3 3 0 0 1-3 3H16" />
+      <path d="M12 13.2v3.4M9.4 20h5.2M10.4 16.6h3.2v1.5a1.6 1.6 0 0 1-1.6 1.6h0a1.6 1.6 0 0 1-1.6-1.6z" />
+    </Glyph>
+  );
+}

@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { drawPlayout, trickCollectDuration } from "../game/timing.js";
 import type { GameSession } from "../game/session.js";
 import { useGameSounds } from "../game/useGameSounds.js";
+import { AchievementToast } from "./AchievementToast.js";
 import { AuctionPhase } from "./AuctionPhase.js";
 import { ContractBar } from "./ContractBar.js";
 import { DealComplete } from "./DealComplete.js";
@@ -388,6 +389,8 @@ export function GameBoard({
           }}
         />
       ) : null}
+
+      <AchievementToast unlocked={session.justUnlocked} onDismiss={session.clearUnlocks} />
 
       {confirmingLeave && exit !== null ? (
         <LeaveConfirm

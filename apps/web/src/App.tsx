@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAccount } from "./game/account.js";
+import { storedSession, useAccount } from "./game/account.js";
 import { applyCardColor, readCardColor, writeCardColor } from "./game/cardColor.js";
 import type { Destination } from "./game/destination.js";
 import { destinationFromWire, HOME, takeDestination } from "./game/destination.js";
@@ -30,6 +30,7 @@ import {
 } from "./game/serverUrl.js";
 import { applyTheme, readTheme, ThemeContext, writeTheme } from "./game/theme.js";
 import { AccountScreen } from "./ui/AccountScreen.js";
+import { Achievements } from "./ui/Achievements.js";
 import { HelpOverlay } from "./ui/HelpOverlay.js";
 import { Home } from "./ui/Home.js";
 import { Record } from "./ui/Record.js";
@@ -51,6 +52,7 @@ import { TableGame } from "./ui/TableGame.js";
  */
 type Screen =
   | { readonly kind: "account" }
+  | { readonly kind: "achievements" }
   | { readonly kind: "home" }
   | { readonly kind: "record" }
   | { readonly kind: "redeem"; readonly to: Destination | null; readonly token: string }
@@ -146,6 +148,11 @@ export function App(): React.JSX.Element {
         setScreen({ kind: "searching" });
         return;
       }
+      case "robot": {
+        setLocationCode(null);
+        setScreen({ kind: "robot" });
+        return;
+      }
       case "table": {
         setLocationCode(destination.code);
         setScreen({ code: destination.code, kind: "table" });
@@ -210,6 +217,17 @@ export function App(): React.JSX.Element {
           />
         );
       }
+      case "achievements": {
+        return (
+          <Achievements
+            signedIn={account.account !== null}
+            onBack={goHome}
+            onSignIn={() => {
+              setScreen({ destination: HOME, kind: "signin" });
+            }}
+          />
+        );
+      }
       case "home": {
         return (
           <Home
@@ -223,10 +241,20 @@ export function App(): React.JSX.Element {
               setScreen({ code, kind: "table" });
             }}
             onPlayComputer={() => {
+              // Playing the computer needs an account too now, but never the
+              // network to use one already held — a stored session is enough
+              // to go straight in, whether or not the server can confirm it.
+              if (storedSession() === null) {
+                setScreen({ destination: { kind: "robot" }, kind: "signin" });
+                return;
+              }
               setScreen({ kind: "robot" });
             }}
             onShowAccount={() => {
               setScreen({ kind: "account" });
+            }}
+            onShowAchievements={() => {
+              setScreen({ kind: "achievements" });
             }}
             onShowRecord={() => {
               setScreen({ kind: "record" });
