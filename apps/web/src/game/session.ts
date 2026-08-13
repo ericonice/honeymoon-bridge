@@ -84,6 +84,20 @@ export interface GameSession {
   readonly rubber: RubberState;
   /** Present once the deal is complete and was not passed out. */
   readonly score: DealScore | null;
+  /**
+   * A trick has resolved and is waiting on `dismissTrick` before either side
+   * may lead the next one.
+   *
+   * The engine hands the winner `toAct` the instant a trick resolves, with no
+   * regard for whether either seat has actually seen it yet — without this, a
+   * fast tap (yours, or the computer's own next lead) could start a new trick
+   * before the last one had finished arriving on screen, and there is nothing
+   * left to show the old one *as* once that happens. Always false over a
+   * network: nothing there paces a real opponent's move on your behalf, so
+   * holding your own side of it would only ever be a screen with no effect on
+   * the game underneath.
+   */
+  readonly trickAwaitingDismissal: boolean;
   readonly view: PlayerView;
   /** Vulnerability as it stood for the deal in progress or just finished. */
   readonly vulnerable: Pair<boolean>;
@@ -92,6 +106,8 @@ export interface GameSession {
   act(action: DealAction): void;
   /** Dismisses whatever is in `justUnlocked`, once it has been shown. */
   clearUnlocks(): void;
+  /** Clears `trickAwaitingDismissal`, once the resolved trick has been seen. */
+  dismissTrick(): void;
   /**
    * True once you have asked to move on and the other player has not.
    *

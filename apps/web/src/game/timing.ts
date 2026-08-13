@@ -11,10 +11,21 @@ import type { DrawReveal } from "@hb/engine";
  * This is the first knob to reach for if the 26-turn draw phase drags.
  */
 export const DRAW_TIMING = {
-  /** A card's travel time from the stock to a hand or to the discard. */
+  /** A card's travel time from the stock to the choice pair. */
   flight: 420,
   /** How long your own card 2 is held face up, to be read, before it leaves. */
   hold: 900,
+  /**
+   * Card 1's own trip from the choice pair to the hand or the discard, once
+   * the decision is made.
+   *
+   * Slower than `flight` on purpose. Card 2's own two legs share the timing
+   * of a hold either side of them, which is what carries the sense of
+   * something happening — card 1 has no hold to lean on, so at `flight`'s
+   * own speed it had nothing to slow it down and read as a flick rather
+   * than a card actually leaving.
+   */
+  discard: 700,
   /** Breathing room once the cards have landed. */
   settle: 180,
   /**
@@ -47,14 +58,58 @@ export function setPacing(multiplier: number): void {
   pacing = multiplier;
 }
 
-/** How long a resolved draw turn takes to play out end to end. */
+/**
+ * The multiplier itself, for anything that builds a flight's own `hold` or
+ * `travel` directly from `DRAW_TIMING` rather than going through
+ * `drawTurnDuration`.
+ *
+ * Those two have to agree: a flight's React-level cleanup already scales by
+ * `pacing` here, and if the animation it is timing does not scale the same
+ * way, "brisk" — the shipped default — cleans a flight up mid-hold, before
+ * the leg that carries it away from where it was just read has even started.
+ * Read on every flight actually built, not cached, for the same reason
+ * `pacing` itself is a setting rather than a constant: it can change between
+ * one turn and the next.
+ */
+export function currentPacing(): number {
+  return pacing;
+}
+
+/**
+ * Any other module's own millisecond constant, scaled by the current pacing.
+ *
+ * `drawTurnDuration` and `drawPauseBefore` already fold `pacing` in themselves
+ * — they are read fresh on every turn for the same reason `pacing` is a
+ * setting rather than a constant, so there is nothing left for a caller to
+ * scale a second time. This is for the timings that live outside this module
+ * — trick collection, the bot's thinking pauses — so the one setting still
+ * reaches every clock in the game rather than stopping at the draw phase.
+ */
+export function paced(ms: number): number {
+  return ms * pacing;
+}
+
+/**
+ * How long a resolved draw turn takes to play out end to end.
+ *
+ * A reveal spends `flight` twice, not once: card 2 travels from the choice
+ * pair to where it turns face up, sits through `hold`, and only then travels
+ * on to the discard — two legs either side of the hold, exactly as
+ * `CardFlight` itself now spends it. Without a reveal, neither card has a
+ * hold to lean on, so both travel at `discard`'s slower, unaided speed
+ * instead. Either way, short a card's own real travel time here would clear
+ * the flight away before it had finished — the very bug scaling `hold` and
+ * `travel` by pacing was fixing, reopened from the other side whenever a
+ * flight's own duration changes without this changing to match.
+ */
 export function drawTurnDuration(animated: boolean, holdsReveal: boolean): number {
   if (!animated) {
     return DRAW_TIMING.think * pacing;
   }
-  return (
-    ((holdsReveal ? DRAW_TIMING.hold : 0) + DRAW_TIMING.flight + DRAW_TIMING.settle) * pacing
-  );
+  if (holdsReveal) {
+    return (DRAW_TIMING.hold + DRAW_TIMING.flight * 2 + DRAW_TIMING.settle) * pacing;
+  }
+  return (DRAW_TIMING.discard + DRAW_TIMING.settle) * pacing;
 }
 
 /** How a resolved draw turn plays out on screen. */
@@ -110,18 +165,27 @@ export function drawPlayout(reveal: DrawReveal, theirCardsShowing: boolean): Dra
  * How a finished trick is cleared away.
  *
  * The engine resolves a trick the instant the second card lands and hands the
- * lead to the winner, so without this the trick you just lost would be replaced
- * by the next card before you had read it.
+ * lead to the winner, so without `GameSession.trickAwaitingDismissal` nothing
+ * would stop the next card from landing on top of it before it had even been
+ * read. That gate is what makes `hold` safe to be a plain wait again rather
+ * than a tap requirement: a tap still skips it early for anyone who would
+ * rather move on, but nobody has to make one just to keep the deal going —
+ * making that mandatory turned out to be worse than the problem it fixed,
+ * thirteen tricks' worth of required taps a deal.
  */
 export const TRICK_TIMING = {
-  /** How long the finished trick sits face up before it is collected. */
-  hold: 900,
-  /** Breathing room once it has gone. */
-  settle: 150,
-  /** The sweep toward whoever won it. */
+  /** How long a resolved trick sits before it sweeps itself away. */
+  hold: 1400,
+  /**
+   * How long a played card takes to travel from a hand to its slot on the
+   * table. A first guess, like the draw's own `flight` — the existing 700ms
+   * pause before the opponent's reply (`PAUSE_MS.play` in `localSession.ts`)
+   * comfortably covers it, so nothing else needed to change to make room for it.
+   * Slower than that flight on purpose: this one now has real distance to
+   * cover from the opponent's hand, and started out reading as a flick rather
+   * than a card leaving somewhere.
+   */
+  play: 450,
+  /** The sweep toward whoever won it, once dismissed. */
   sweep: 400,
 };
-
-export function trickCollectDuration(): number {
-  return TRICK_TIMING.hold + TRICK_TIMING.sweep + TRICK_TIMING.settle;
-}

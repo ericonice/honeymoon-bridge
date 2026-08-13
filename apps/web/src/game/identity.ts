@@ -98,8 +98,9 @@ export function setDisguiseEnabled(enabled: boolean): void {
  * optimum flatters overbidding in a way that will not transfer to a person. How
  * strong the computer should be is not a measurement at all — more sampling is
  * always better play and says nothing about whether the result is worth
- * sitting down to. And the pace of the draw is twenty-six turns of the same
- * decision, which either reads as deliberate or as waiting, and no number
+ * sitting down to. And the pace of the game — the draw's own twenty-six turns
+ * of the same decision, and the beat a trick sits collected before the next
+ * one starts — either reads as deliberate or as waiting, and no number
  * produced from a bench has an opinion about which.
  *
  * All three are temporary. When each has an answer it belongs in the code as a

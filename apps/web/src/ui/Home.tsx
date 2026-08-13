@@ -205,19 +205,25 @@ export function Home({
         <p className="mt-1 text-sm text-white/55">Contract bridge for two.</p>
       </div>
 
+      {/* Above every choice rather than among them, now that §3.7 makes this
+          the thing standing between somebody and half of what the screen
+          below offers. Its own margin instead of the choices' shared `gap-3`
+          keeps it from reading as one more item in that list. */}
+      <div className="mt-6">
+        <Identity
+          account={account}
+          checking={checkingAccount}
+          onShowAccount={onShowAccount}
+          onSignIn={onSignIn}
+        />
+      </div>
+
       <div className="flex flex-col gap-3 py-6">
         <Choice
           primary
           label="Play the computer"
           description="On this device. Works offline, and needs nobody else."
           onClick={onPlayComputer}
-        />
-
-        <Identity
-          account={account}
-          checking={checkingAccount}
-          onShowAccount={onShowAccount}
-          onSignIn={onSignIn}
         />
 
         <Choice

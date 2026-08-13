@@ -1,17 +1,37 @@
 import { cardId } from "@hb/engine";
 import type { CompletedTrick, Pair, PlayedCard, PlayerId, PlayerView } from "@hb/engine";
 import { motion } from "framer-motion";
-import { useState } from "react";
-import { TRICK_TIMING } from "../game/timing.js";
-import { CardFace, CardSlot } from "./CardFace.js";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { paced, TRICK_TIMING } from "../game/timing.js";
+import { CardBack, CardFace, CardSlot } from "./CardFace.js";
+import { CardFlight, centerIn, centerInFromRect } from "./CardFlight.js";
+import type { Flight } from "./CardFlight.js";
 import { SeatLabel } from "./SeatLabel.js";
 
 export interface PlayPhaseProps {
+  /**
+   * Where the card most recently played by this seat left from, captured by
+   * whoever handled the tap — the hand has already lost the DOM node for it
+   * by the time this screen would otherwise go looking.
+   */
+  readonly handOriginRef: React.RefObject<DOMRect | null>;
   /** The trick that has just resolved, still lying on the table. */
   readonly lastTrick: CompletedTrick | null;
   readonly opponentName: string;
-  /** Opens the claim confirmation. Absent claim entirely offers nothing to open. */
-  readonly onClaim: () => void;
+  /**
+   * Clears `GameSession.trickAwaitingDismissal`, once an ordinary trick has
+   * finished sweeping itself away — on its own after `TRICK_TIMING.hold`, or
+   * sooner if tapped. Not called at all for the deal's last trick — `release`
+   * is what that fires instead.
+   */
+  onDismissTrick(): void;
+  /**
+   * Non-null only while this is the deal's last trick, held open rather than
+   * already showing the score. It sweeps away exactly like any other trick —
+   * on its own, or on a tap — and then calls this instead of `onDismissTrick`
+   * — the same beat, spent leaving the phase rather than staying in it.
+   */
+  readonly release: (() => void) | null;
   readonly view: PlayerView;
   readonly vulnerable: Pair<boolean>;
 }
@@ -44,16 +64,18 @@ function tableTrick(view: PlayerView, lastTrick: CompletedTrick | null): TableTr
 
 function Slot({
   played,
+  slotRef,
   sweepTo,
   trickKey,
 }: {
   readonly played: PlayedCard | undefined;
+  readonly slotRef: React.RefObject<HTMLDivElement | null>;
   /** Null while the trick is still in progress; otherwise the direction it is collected in. */
   readonly sweepTo: number | null;
   readonly trickKey: string;
 }): React.JSX.Element {
   return (
-    <div className="relative h-24 w-16">
+    <div ref={slotRef} className="relative h-24 w-16">
       <CardSlot size="table" />
       {played === undefined ? null : (
         <motion.div
@@ -61,21 +83,19 @@ function Slot({
           // fresh elements and the collection animation replays every time.
           key={`${trickKey}-${cardId(played.card)}`}
           className="absolute inset-0"
-          initial={{ opacity: 0, scale: 0.9, y: 0 }}
+          // No mount animation: this only ever appears once its own flight
+          // has already arrived solid — see `CardFlight`'s `fade: false` —
+          // so fading it in again on top of that would be the same blink a
+          // second time, just moved from the flight's end to this one's start.
+          initial={false}
           animate={
             sweepTo === null
               ? { opacity: 1, scale: 1, y: 0 }
-              : { opacity: [1, 1, 0], scale: [1, 1, 0.8], y: [0, 0, sweepTo] }
+              : { opacity: 0, scale: 0.8, y: sweepTo }
           }
-          transition={
-            sweepTo === null
-              ? { duration: 0.18, ease: "easeOut" }
-              : {
-                  duration: (TRICK_TIMING.hold + TRICK_TIMING.sweep) / 1000,
-                  ease: "easeIn",
-                  times: [0, TRICK_TIMING.hold / (TRICK_TIMING.hold + TRICK_TIMING.sweep), 1],
-                }
-          }
+          {...(sweepTo === null
+            ? {}
+            : { transition: { duration: paced(TRICK_TIMING.sweep) / 1000, ease: "easeIn" } })}
         >
           <CardFace card={played.card} size="table" />
         </motion.div>
@@ -84,13 +104,53 @@ function Slot({
   );
 }
 
-/** What just happened, or null if nothing has yet. */
-function resultLine(view: PlayerView, trick: TableTrick | null, opponentName: string): string | null {
-  if (trick === null || trick.winner === null) {
-    return null;
+/**
+ * Their hand, as a row of backs rather than nothing at all.
+ *
+ * A played card used to leave from an invisible point sitting right on top of
+ * the seat label — barely any distance from the slot it was headed to, which
+ * read as a flick rather than a card leaving a hand. This gives it an actual
+ * hand to leave from, sized to how many cards are still in it, and doubles as
+ * the flight's origin: `centerIn` addresses the whole row, not any one card in
+ * it, so which of the thirteen just left is never something the animation
+ * could be read for.
+ */
+function OpponentHand({
+  count,
+  rowRef,
+}: {
+  readonly count: number;
+  readonly rowRef: React.RefObject<HTMLDivElement | null>;
+}): React.JSX.Element {
+  return (
+    <div ref={rowRef} className="flex h-10 items-center justify-center">
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className={index > 0 ? "-ml-4" : ""}>
+          <CardBack size="mini" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The card most recently played, and by whom — or null before the first one.
+ *
+ * The engine resolves a trick the instant its second card lands, so a card
+ * that just completed one is never sitting in `currentTrick`: it has already
+ * moved into the newest `completedTricks` entry. `leader` says who led that
+ * trick, so whichever of its two cards was played by the *other* seat is the
+ * one that just landed.
+ */
+function justPlayed(view: PlayerView): PlayedCard | null {
+  if (view.currentTrick.length === 1) {
+    return view.currentTrick[0]!;
   }
-  const who = trick.winner === view.me ? "You" : opponentName;
-  return `${who} won trick ${view.completedTricks.length}`;
+  if (view.currentTrick.length === 0 && view.completedTricks.length > 0) {
+    const last = view.completedTricks[view.completedTricks.length - 1]!;
+    return last.cards.find((played) => played.by !== last.leader) ?? null;
+  }
+  return null;
 }
 
 /**
@@ -122,77 +182,51 @@ function claimStatus(view: PlayerView): string | null {
   return view.claim === view.me ? "Waiting for them to decide" : null;
 }
 
-/**
- * The last completed trick, on demand.
- *
- * Both cards were played face up and both players saw them, so this reveals
- * nothing private — it is the paper game's right to look back at the trick just
- * played. Deliberately only the most recent one: the full history is in the
- * view, and showing it would turn a game where memory is the point into a
- * reference table.
- */
-function TrickReview({
-  onClose,
-  opponentName,
-  trick,
-  view,
-}: {
-  readonly onClose: () => void;
-  readonly opponentName: string;
-  readonly trick: CompletedTrick;
-  readonly view: PlayerView;
-}): React.JSX.Element {
-  const played = (player: PlayerId): PlayedCard | undefined =>
-    trick.cards.find((card) => card.by === player);
-
-  return (
-    <div className="safe-inset absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black/75 px-6">
-      <p className="text-sm text-white/60">Trick {view.completedTricks.length}</p>
-      <div className="flex items-center gap-8">
-        {([view.opponent, view.me] as const).map((player) => {
-          const card = played(player);
-          return (
-            <div key={player} className="flex flex-col items-center gap-2">
-              <p className="text-xs text-white/50">{player === view.me ? "You" : opponentName}</p>
-              {card === undefined ? (
-                <CardSlot size="table" />
-              ) : (
-                <CardFace card={card.card} size="table" />
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <p className="text-base font-semibold">
-        {trick.winner === view.me ? "You won it" : `${opponentName} won it`}
-      </p>
-      <button
-        type="button"
-        className="rounded-xl bg-white px-6 py-3 text-base font-semibold text-stone-900"
-        onClick={onClose}
-      >
-        Close
-      </button>
-    </div>
-  );
-}
-
 export function PlayPhase({
+  handOriginRef,
   lastTrick,
-  onClaim,
+  onDismissTrick,
   opponentName,
+  release,
   view,
   vulnerable,
 }: PlayPhaseProps): React.JSX.Element {
-  const [reviewing, setReviewing] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const opponentHandRef = useRef<HTMLDivElement>(null);
+  const opponentSlotRef = useRef<HTMLDivElement>(null);
+  const mySlotRef = useRef<HTMLDivElement>(null);
+  const [flights, setFlights] = useState<readonly Flight[]>([]);
+  // Whichever seat's card is still in the air. The slot it is headed for
+  // must not show that seat's card until this clears — the slot's own reveal
+  // used to run on its own fixed 180ms regardless of the flight above it, so
+  // once the flight took longer than that the real card was sitting there,
+  // fully arrived, well before the thing that was supposed to bring it did.
+  const [pendingBy, setPendingBy] = useState<PlayerId | null>(null);
+  // Set once a resolved trick starts sweeping itself away — on its own after
+  // `TRICK_TIMING.hold`, or the moment it is tapped if that comes first.
+  // Requiring the tap was tried and cost more than the early-vanish bug it
+  // fixed: thirteen required taps a deal, every one of them a chance to feel
+  // like busywork on a trick nobody needed a second look at.
+  const [sweeping, setSweeping] = useState(false);
+  const sweepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Whatever this screen mounted showing — mid-deal on a reconnect, same as a
+  // fresh one — is not a card that just landed, so the first run only records
+  // it rather than replaying it.
+  const mountedAt = useRef<number | null>(null);
 
   const trick = tableTrick(view, lastTrick);
   const cards = trick?.cards ?? [];
-  const resolved = trick !== null && trick.winner !== null;
-  const result = resultLine(view, trick, opponentName);
+  // The engine resolves a trick — and so `trick.winner` — the instant its
+  // second card lands in state, which is well before that card is done
+  // arriving on screen. `pendingBy` is what makes this wait for the arrival
+  // rather than the resolution: sweeping a trick still visibly in flight
+  // would have nothing correct to sweep.
+  const resolved = trick !== null && trick.winner !== null && pendingBy === null;
 
-  // Both cards travel the same way — toward whoever took them.
-  const sweepTo = !resolved ? null : trick.winner === view.me ? SWEEP_DISTANCE : -SWEEP_DISTANCE;
+  // Both cards travel the same way — toward whoever took them — but only
+  // once the wait is actually over, however it ended. Before that, a
+  // resolved trick just sits there.
+  const sweepTo = !sweeping || trick === null ? null : trick.winner === view.me ? SWEEP_DISTANCE : -SWEEP_DISTANCE;
 
   const trickKey = `${view.completedTricks.length}-${resolved ? "done" : "live"}`;
 
@@ -201,75 +235,148 @@ export function PlayPhase({
   const live = view.phase === "play";
   const yourTurn = live && view.toAct === view.me;
 
+  // Strictly increasing by exactly one a card, whichever seat played it and
+  // however the engine just filed it away — see `justPlayed`.
+  const playedCount = view.completedTricks.length * 2 + view.currentTrick.length;
+
+  useLayoutEffect(() => {
+    // A new card landing is always the far side of a dismissed trick, mine or
+    // theirs — never something still waiting on a tap of its own.
+    setSweeping(false);
+
+    if (mountedAt.current === null) {
+      mountedAt.current = playedCount;
+      return;
+    }
+
+    const container = containerRef.current;
+    const played = justPlayed(view);
+    if (container === null || played === null) {
+      return;
+    }
+
+    const mine = played.by === view.me;
+    const bounds = container.getBoundingClientRect();
+    const to = centerIn(bounds, mine ? mySlotRef.current : opponentSlotRef.current);
+    // Yours leaves from wherever it actually sat in your hand — captured by
+    // whoever handled the tap, since the hand has already lost that card by
+    // now. Theirs is never anything more specific than the row of backs as a
+    // whole — see `OpponentHand`.
+    const from = mine
+      ? centerInFromRect(bounds, handOriginRef.current)
+      : centerIn(bounds, opponentHandRef.current);
+    if (to === null || from === null) {
+      return;
+    }
+
+    const key = `${playedCount}-${cardId(played.card)}`;
+    const travel = paced(TRICK_TIMING.play);
+    setPendingBy(played.by);
+    setFlights([
+      {
+        card: played.card,
+        delay: 0,
+        fade: false,
+        from,
+        hold: 0,
+        key,
+        size: "table",
+        to,
+        travel,
+        via: null,
+      },
+    ]);
+
+    const timer = setTimeout(() => {
+      setPendingBy(null);
+      setFlights([]);
+    }, travel);
+    return () => {
+      clearTimeout(timer);
+    };
+    // Only a new card landing matters; re-running on anything else would
+    // replay a flight for one that already has.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playedCount]);
+
+  // Sweeps a resolved trick away, then hands the beat on to whichever of
+  // `release`/`onDismissTrick` is this trick's to fire — see their own doc
+  // comments for which and why. Shared by the hold timer below and a tap,
+  // since either is just a different reason the wait is over.
+  function startSweep(): void {
+    if (!resolved || sweeping) {
+      return;
+    }
+    setSweeping(true);
+    sweepTimer.current = setTimeout(() => {
+      sweepTimer.current = null;
+      if (release !== null) {
+        release();
+      } else {
+        onDismissTrick();
+      }
+    }, paced(TRICK_TIMING.sweep));
+  }
+
+  // The ordinary way out: nobody has to do anything, once a trick has had its
+  // stage time. A tap during this window just cuts it short.
+  useEffect(() => {
+    if (!resolved) {
+      return;
+    }
+    const timer = setTimeout(startSweep, paced(TRICK_TIMING.hold));
+    return () => {
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolved]);
+
+  useEffect(() => {
+    return () => {
+      if (sweepTimer.current !== null) {
+        clearTimeout(sweepTimer.current);
+      }
+    };
+  }, []);
+
   return (
-    <div className="relative flex flex-1 flex-col items-center justify-center gap-3">
+    <div
+      ref={containerRef}
+      className="relative flex flex-1 flex-col items-center justify-center gap-3"
+      onClick={startSweep}
+    >
       <SeatLabel
         active={live && !yourTurn}
         name={opponentName}
         vulnerable={vulnerable[view.opponent]}
       />
+      <OpponentHand count={view.handSizes[view.opponent]} rowRef={opponentHandRef} />
       <Slot
-        played={cards.find((played) => played.by === view.opponent)}
+        played={pendingBy === view.opponent ? undefined : cards.find((played) => played.by === view.opponent)}
+        slotRef={opponentSlotRef}
         sweepTo={sweepTo}
         trickKey={trickKey}
       />
 
       <div className="flex min-h-10 flex-col items-center justify-center">
-        {result === null ? null : (
-          <p className="text-center text-sm font-medium text-white/80">{result}</p>
-        )}
-        {claimStatus(view) === null ? (
-          instruction(view) === null ? null : (
-            <p className="text-center text-sm text-white/50">{instruction(view)}</p>
-          )
-        ) : (
+        {claimStatus(view) !== null ? (
           <p className="text-center text-sm text-amber-200/70">{claimStatus(view)}</p>
-        )}
+        ) : instruction(view) !== null ? (
+          <p className="text-center text-sm text-white/50">{instruction(view)}</p>
+        ) : null}
       </div>
 
       <Slot
-        played={cards.find((played) => played.by === view.me)}
+        played={pendingBy === view.me ? undefined : cards.find((played) => played.by === view.me)}
+        slotRef={mySlotRef}
         sweepTo={sweepTo}
         trickKey={trickKey}
       />
       <SeatLabel active={yourTurn} name="You" vulnerable={vulnerable[view.me]} />
 
-      <div className="mt-2 flex gap-2">
-        <button
-          type="button"
-          className="rounded-lg border border-white/25 px-3 py-1.5 text-xs text-white/70 disabled:opacity-25"
-          disabled={lastTrick === null}
-          onClick={() => {
-            setReviewing(true);
-          }}
-        >
-          Show last trick
-        </button>
-
-        {/* Only offered on your own turn, with nothing already pending — a
-            claim while one is outstanding is not a second call to make, it is
-            the other player's, and `ClaimReveal` is where that happens. */}
-        {yourTurn && view.claim === null ? (
-          <button
-            type="button"
-            className="rounded-lg border border-amber-300/40 px-3 py-1.5 text-xs text-amber-200/80"
-            onClick={onClaim}
-          >
-            Claim the rest
-          </button>
-        ) : null}
-      </div>
-
-      {reviewing && lastTrick !== null ? (
-        <TrickReview
-          opponentName={opponentName}
-          trick={lastTrick}
-          view={view}
-          onClose={() => {
-            setReviewing(false);
-          }}
-        />
-      ) : null}
+      {flights.map((flight) => (
+        <CardFlight key={flight.key} flight={flight} />
+      ))}
     </div>
   );
 }

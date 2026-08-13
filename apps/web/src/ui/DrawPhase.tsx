@@ -2,12 +2,12 @@ import { cardId } from "@hb/engine";
 import type { Card, DrawChoice, Pair, PlayerView } from "@hb/engine";
 import { motion } from "framer-motion";
 import { useLayoutEffect, useRef, useState } from "react";
-import { DRAW_TIMING, drawPlayout } from "../game/timing.js";
+import { DRAW_TIMING, currentPacing, drawPlayout } from "../game/timing.js";
 import type { DrawPair, DrawReveal } from "../game/session.js";
-import { CardBack, CardFace } from "./CardFace.js";
+import { CardBack, CardFace, CardSlot } from "./CardFace.js";
 import type { CardSize } from "./CardFace.js";
-import { DrawFlight } from "./DrawFlight.js";
-import type { Flight, Point } from "./DrawFlight.js";
+import { CardFlight, centerIn } from "./CardFlight.js";
+import type { Flight, Point } from "./CardFlight.js";
 import { DiscardPile, DrawDeck } from "./DrawPiles.js";
 import { SeatLabel } from "./SeatLabel.js";
 
@@ -89,12 +89,27 @@ function OpponentLine({
  */
 function ChoiceCard({
   card,
+  empty,
   label,
   onTake,
   slotRef,
 }: {
   /** Null shows a back: card 2 always, and card 1 until it is yours to see. */
   readonly card: Card | null;
+  /**
+   * The slot has nothing of its own to show right now, either because this
+   * turn's flight from the stock is still in the air or because its cards
+   * have already left for the hand or the discard — an empty outline either
+   * way, on the same reasoning `PlayPhase` suppresses a slot's static content
+   * while its card is mid-flight: there must never be a card sitting here
+   * *and* one flying over it, in either direction, at once. A settled turn's
+   * card 2 is the case a flag for only the *arriving* half would have
+   * missed — without covering the *departed* half too, the slot fell back to
+   * a plain card back the instant a card was taken, reading as an unseen
+   * card still sitting there rather than as the empty slot it actually was
+   * until the next turn's own flight landed.
+   */
+  readonly empty: boolean;
   /** What taking this card does, or null when the turn is not yours. */
   readonly label: string | null;
   readonly onTake: (() => void) | null;
@@ -111,16 +126,22 @@ function ChoiceCard({
         onClick={onTake ?? undefined}
       >
         <div ref={slotRef}>
-          {card === null ? (
+          {empty ? (
+            <CardSlot size="table" />
+          ) : card === null ? (
             <CardBack size="table" />
           ) : (
             <motion.div
-              // Keyed on the card, so turning over each new card 1 is its own
-              // moment rather than a silent swap.
+              // Keyed on the card, so a new card 1 is its own element rather
+              // than a silent swap.
               key={cardId(card)}
-              initial={{ opacity: 0, scale: 0.9 }}
+              // No mount animation: this only ever appears once its own
+              // flight from the stock has already arrived solid — see the
+              // deal-in effect's `fade: false` — so fading it in again on
+              // top of that would be the same blink `PlayPhase`'s `Slot`
+              // already had, just moved to this screen instead.
+              initial={false}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
             >
               <CardFace card={card} size="table" />
             </motion.div>
@@ -211,15 +232,17 @@ function TurnTrack({
   );
 }
 
-function centerIn(container: DOMRect, element: HTMLElement | null): Point | null {
-  if (element === null) {
-    return null;
-  }
-  const rect = element.getBoundingClientRect();
-  return {
-    x: rect.left - container.left + rect.width / 2,
-    y: rect.top - container.top + rect.height / 2,
-  };
+/**
+ * Where a card actually sits in the hand below, once `Hand` has it.
+ *
+ * The engine hands back the new sorted hand the instant a turn resolves, so
+ * by the time this runs `Hand` has already re-rendered with the kept card in
+ * its real, sorted slot — this only has to find it. A generic point under
+ * the table would fly the card to the right neighborhood; this flies it to
+ * the exact card it is about to become.
+ */
+function findHandSlot(id: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[data-card-id="${id}"]`);
 }
 
 /**
@@ -256,6 +279,21 @@ export function DrawPhase({
   const mineRef = useRef<HTMLDivElement>(null);
   const [flights, setFlights] = useState<readonly Flight[]>([]);
   const [settling, setSettling] = useState(false);
+  // Mirrors `settling`, synchronously. The turn-resolution effect below and
+  // the deal-in effect further down both react to the same turn changing at
+  // once, and a `setSettling(true)` inside the first is not visible to the
+  // second within that same commit — state updates apply on a later render,
+  // so the deal-in effect read whatever `settling` had been *before* this
+  // transition and started right on top of it, showing this seat's new card
+  // while the turn that had just resolved — the computer's own choice, on
+  // its turn — was still supposed to be holding the board still. A ref
+  // mutates immediately, so whichever effect runs second within the commit
+  // — always the deal-in effect, since it is declared after — sees it.
+  const settlingRef = useRef(false);
+  // Set while this turn's own two cards are still travelling from the stock
+  // to the choice pair — see the deal-in effect below.
+  const [dealArriving, setDealArriving] = useState(false);
+  const [dealFlights, setDealFlights] = useState<readonly Flight[]>([]);
 
   const pending = view.pending;
   const turn = lastDraw?.turn ?? 0;
@@ -266,7 +304,19 @@ export function DrawPhase({
   // still — yours here, and the computer's in the pair above.
   const shown = settling ? null : pending;
   const theirShown = settling ? null : peekPending;
-  const decidable = shown !== null;
+  // Not decidable mid-flight either: tapping a card still in the air would
+  // resolve a turn the board has not finished dealing.
+  const decidable = shown !== null && !dealArriving;
+  // Nothing of this turn's own to show at the choice pair, in any of three
+  // ways: still travelling in from the stock, already gone to the hand or
+  // the discard, or — the computer's own turn, `pending` null throughout —
+  // never dealt to this seat in the first place. Without the third, the
+  // choice pair fell back to two plain card backs for as long as the
+  // computer was deciding, which are not this seat's cards to half-show;
+  // nobody's card 2 looks any different from an empty slot, but a real card
+  // back sitting there reads as *something* left over from a turn already
+  // gone. See `ChoiceCard`'s own doc comment for why the other two apply.
+  const slotEmpty = dealArriving || settling || pending === null;
 
   // Keyed on the turn number alone, deliberately: one flight per resolved turn,
   // replayed never. Re-running it on any other change would re-show a card the
@@ -281,15 +331,30 @@ export function DrawPhase({
     const pair = pairFor(lastDraw, mine, peekLastDraw);
     const playout = drawPlayout(lastDraw, !mine && showingTheirCards && pair !== null);
     const timers: ReturnType<typeof setTimeout>[] = [];
+    // `playout.duration` — this flight's own React-level cleanup — already
+    // scales by pacing, so the flight itself has to travel at the same
+    // scaled speed or the cleanup fires mid-flight: for a keep, mid-hold,
+    // before the leg that carries card 2 away from where it was just read
+    // has even started.
+    const pacing = currentPacing();
+    // Card 2's own two legs either side of the hold on a keep; every other
+    // straight trip out of the choice pair uses `discardTravel` instead —
+    // see `DRAW_TIMING.discard`'s own doc comment for why a flight with
+    // nothing to hold for needs the slower, dedicated speed.
+    const flightTravel = DRAW_TIMING.flight * pacing;
+    const discardTravel = DRAW_TIMING.discard * pacing;
+    const hold = DRAW_TIMING.hold * pacing;
 
     // Whoever just went, the board is busy until their turn has played out, and
     // no card 1 turns over while it is. Set for your own turn too: the engine
     // deals the computer its card the instant you tap, and without this it
     // turned face up over your own two cards still travelling.
     setSettling(true);
+    settlingRef.current = true;
     timers.push(
       setTimeout(() => {
         setSettling(false);
+        settlingRef.current = false;
       }, playout.duration),
     );
 
@@ -299,7 +364,15 @@ export function DrawPhase({
     const size: CardSize = mine ? "table" : "mini";
     const bounds = container.getBoundingClientRect();
     const discard = centerIn(bounds, discardRef.current);
-    const hand = centerIn(bounds, mine ? mineRef.current : opponentRef.current);
+    // Yours flies to the slot it is actually about to occupy; the opponent's
+    // is never shown sorted (or shown at all, without a peek), so a fixed
+    // anchor is all there is to aim at. Falling back to that anchor if `pair`
+    // is somehow unavailable too — nothing downstream cares which point this
+    // was, only that a flight either has one or does not run at all.
+    const hand = centerIn(
+      bounds,
+      mine ? (pair === null ? null : findHandSlot(cardId(pair.taken))) ?? mineRef.current : opponentRef.current,
+    );
     const one = centerIn(bounds, mine ? oneRef.current : theirOneRef.current);
     const two = centerIn(bounds, mine ? twoRef.current : theirTwoRef.current);
 
@@ -324,21 +397,28 @@ export function DrawPhase({
         {
           card: cardOne,
           delay: 0,
+          fade: true,
           from: one,
           hold: 0,
           key: `${turn}-one`,
           size,
           to: kept ? hand : discard,
+          travel: discardTravel,
           via: null,
         },
         {
           card: cardTwo,
           delay: 0,
+          fade: true,
           from: two,
-          hold: playout.holdsReveal ? DRAW_TIMING.hold : 0,
+          hold: playout.holdsReveal ? hold : 0,
           key: `${turn}-two`,
           size,
           to: kept ? discard : hand,
+          // Only a keep's card 2 gets a hold to lean on, so only it earns
+          // `flightTravel`'s quicker, hold-carried legs; rejecting straight
+          // to the hand is exactly as unaided as card 1's own trip.
+          travel: playout.holdsReveal ? flightTravel : discardTravel,
           // Card 2 on a keep turns face up where it already lies and stays
           // there long enough to read. It is the only chance to see it.
           via: playout.holdsReveal ? two : null,
@@ -359,6 +439,94 @@ export function DrawPhase({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [turn]);
+
+  // This turn's own two cards, leaving the stock for the choice pair — the
+  // half of the trip the pair above never showed, since it only ever
+  // animated a turn's *end*. Fires again for every new card 1, including the
+  // very first of the deal: unlike the resolved-turn flight above, there is
+  // no reconnect to guard against replaying, since nothing here is a replay
+  // of a decision already made.
+  //
+  // Depends on the card's *id*, not `pending` itself: that object is rebuilt
+  // fresh from engine state on every render, whether or not this turn's card
+  // actually changed, and depending on it directly re-ran this effect on
+  // every one of those incidental renders. There is deliberately no ref
+  // guarding against a repeat run on top of the id dependency, either — one
+  // was tried, to skip a run already done for this card, and it is what
+  // actually broke: the ref survives React's dev-mode double-invoke of a new
+  // effect (mount, cleanup, mount again, to catch a missing cleanup), so the
+  // second mount saw its own guard already set by the first and returned
+  // without rescheduling the timer that mount's cleanup had just canceled —
+  // `dealArriving` stuck at true forever, every time, in dev. The plain
+  // effect below has the same shape and no such guard, and re-running its
+  // whole body twice is harmless; that is the pattern to match, not improve on.
+  const pendingKey = pending === null ? null : cardId(pending);
+  useLayoutEffect(() => {
+    // `settlingRef`, not `settling`: see its own doc comment for why the
+    // state variable is a render behind within the very commit that most
+    // needs it current — the one where the previous turn has *just*
+    // resolved and this seat's next card is already sitting in `pending`.
+    if (settlingRef.current || pending === null || pendingKey === null) {
+      return;
+    }
+
+    const container = containerRef.current;
+    if (container === null) {
+      return;
+    }
+    const bounds = container.getBoundingClientRect();
+    const deck = centerIn(bounds, deckRef.current);
+    const one = centerIn(bounds, oneRef.current);
+    const two = centerIn(bounds, twoRef.current);
+    if (deck === null || one === null || two === null) {
+      return;
+    }
+
+    // Scaled the same way the resolved-turn flight above is, and for the
+    // same reason: this effect's own cleanup fires on this same number, so
+    // the flight has to travel at that scaled speed or the cleanup lands
+    // mid-flight.
+    const travel = DRAW_TIMING.flight * currentPacing();
+
+    setDealArriving(true);
+    setDealFlights([
+      {
+        card: pending,
+        delay: 0,
+        fade: false,
+        from: deck,
+        hold: 0,
+        key: `${pendingKey}-deal-one`,
+        size: "table",
+        to: one,
+        travel,
+        via: null,
+      },
+      {
+        card: null,
+        delay: 0,
+        fade: false,
+        from: deck,
+        hold: 0,
+        key: `${pendingKey}-deal-two`,
+        size: "table",
+        to: two,
+        travel,
+        via: null,
+      },
+    ]);
+
+    const timer = setTimeout(() => {
+      setDealArriving(false);
+      setDealFlights([]);
+    }, travel);
+    return () => {
+      clearTimeout(timer);
+    };
+    // Only a newly dealt card matters; re-running on anything else would
+    // replay a flight for a turn already sitting on screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingKey, settling]);
 
   return (
     <div
@@ -436,6 +604,7 @@ export function DrawPhase({
       <div className="flex items-start justify-center gap-8">
         <ChoiceCard
           card={shown}
+          empty={slotEmpty}
           label={decidable ? "Keep" : null}
           slotRef={oneRef}
           onTake={
@@ -448,6 +617,7 @@ export function DrawPhase({
         />
         <ChoiceCard
           card={null}
+          empty={slotEmpty}
           label={decidable ? "Take unseen" : null}
           slotRef={twoRef}
           onTake={
@@ -473,7 +643,10 @@ export function DrawPhase({
       <div ref={opponentRef} className="absolute top-0 left-1/2 h-0 w-0" />
 
       {flights.map((flight) => (
-        <DrawFlight key={flight.key} flight={flight} />
+        <CardFlight key={flight.key} flight={flight} />
+      ))}
+      {dealFlights.map((flight) => (
+        <CardFlight key={flight.key} flight={flight} />
       ))}
     </div>
   );

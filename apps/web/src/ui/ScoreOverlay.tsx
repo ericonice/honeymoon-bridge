@@ -1,5 +1,6 @@
 import type { Pair, PlayerView, RubberState } from "@hb/engine";
 import type { DealRecord } from "../game/session.js";
+import { Overlay } from "./Overlay.js";
 import { Scorepad } from "./Scorepad.js";
 
 export interface ScoreOverlayProps {
@@ -45,22 +46,9 @@ export function ScoreOverlay({
   vulnerable,
 }: ScoreOverlayProps): React.JSX.Element {
   return (
-    <div className="safe-inset absolute inset-0 z-30 flex flex-col bg-table-dark/97">
-      <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-5 py-6">
-        <Scorepad history={history} opponentName={opponentName} rubber={rubber} view={view} />
-        <p className="w-full max-w-sm pt-3 text-xs text-white/50">
-          {vulnerabilityLine(view, vulnerable, opponentName)}
-        </p>
-      </div>
-      <div className="px-5 pb-5">
-        <button
-          type="button"
-          className="w-full rounded-xl bg-white px-4 py-3.5 text-base font-semibold text-stone-900"
-          onClick={onClose}
-        >
-          Close
-        </button>
-      </div>
-    </div>
+    <Overlay title="Score" onClose={onClose}>
+      <Scorepad history={history} opponentName={opponentName} rubber={rubber} view={view} />
+      <p className="pt-3 text-xs text-white/50">{vulnerabilityLine(view, vulnerable, opponentName)}</p>
+    </Overlay>
   );
 }

@@ -296,8 +296,8 @@ export function SettingsOverlay({
               />
 
               <Choice
-                label="How fast the draw runs"
-                description="Twenty-six turns of the same decision, which either reads as deliberate or as waiting. Nothing but playing it can say which."
+                label="How fast the game runs"
+                description="The draw's twenty-six turns, and how long a trick sits collected before the next one starts — one pace for both, which either reads as deliberate or as waiting. Nothing but playing it can say which."
                 value={pace}
                 onChange={onPaceChange}
                 options={[

@@ -25,7 +25,7 @@ import { botActionFor } from "./botTurn.js";
 import { boldness, disguiseEnabled, pace, preferredFormat, strength } from "./identity.js";
 import { reportRobotRubber } from "./records.js";
 import type { GameSession } from "./session.js";
-import { drawPauseBefore, setPacing, trickCollectDuration } from "./timing.js";
+import { drawPauseBefore, paced, setPacing } from "./timing.js";
 
 export const HUMAN: PlayerId = 0;
 export const OPPONENT: PlayerId = 1;
@@ -78,7 +78,20 @@ function pacingFor(level: ReturnType<typeof pace>): number {
  */
 const PAUSE_MS = {
   auction: 800,
+  /** Following a card this seat just led — the ordinary "computer is thinking" beat. */
   play: 700,
+  /**
+   * Leading the next trick, right after winning the one before it.
+   *
+   * `TRICK_TIMING.hold` and `.sweep` already spent a beat of their own on that
+   * trick — 1.8s — before this ever runs, since the scheduling effect below
+   * waits on `awaitingDismissal` clearing first. Stacking the ordinary 700ms
+   * "thinking" pause on top of that read as a stall rather than a beat: the
+   * trick already had its moment on screen, and the sweep toward the winner is
+   * itself the announcement that a new one is starting. This is just the
+   * breathing room between that sweep landing and the next card leaving.
+   */
+  lead: 200,
 };
 
 function pauseBefore(state: DealState, peek: boolean): number {
@@ -87,13 +100,13 @@ function pauseBefore(state: DealState, peek: boolean): number {
       return drawPauseBefore(drawRevealFor(state, HUMAN), peek);
     }
     case "auction": {
-      return PAUSE_MS.auction;
+      return paced(PAUSE_MS.auction);
     }
     default: {
-      // A trick the opponent has just won is still being collected on screen;
-      // it must finish before they lead to the next one.
-      const trickJustResolved = state.currentTrick.length === 0 && state.completedTricks.length > 0;
-      return trickJustResolved ? trickCollectDuration() : PAUSE_MS.play;
+      // An empty current trick means this seat just won the last one and is
+      // leading the next — see `PAUSE_MS.lead` for why that gets a shorter
+      // pause than an ordinary follow.
+      return paced(state.currentTrick.length === 0 ? PAUSE_MS.lead : PAUSE_MS.play);
     }
   }
 }
@@ -142,7 +155,14 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
   // Read once, when the match starts. Changing the setting mid-match would move
   // the goalposts on a sitting already under way.
   const [table, setTable] = useState<TableState>(() =>
-    startTable({ format: preferredFormat(), seed: randomSeed(), starter: HUMAN }),
+    startTable({
+      format: preferredFormat(),
+      seed: randomSeed(),
+      // Randomized rather than always the human: every deal after this one
+      // already alternates who starts — see `nextDeal` — so this is the only
+      // starter in the entire match that was ever fixed rather than earned.
+      starter: randomSeed() % 2 === 0 ? HUMAN : OPPONENT,
+    }),
   );
 
   // Read on every render rather than once: unlike the bot, which would be two
@@ -153,8 +173,31 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
   const { deal } = table;
   const waitingOnBot = deal.toAct === OPPONENT && deal.phase !== "complete";
 
+  // Set the instant a trick resolves, however either seat gets there, and
+  // cleared only by `dismissTrick` — see `GameSession.trickAwaitingDismissal`
+  // for what this is guarding against. Compared against the *previous* count
+  // rather than reacting to any change in it, since a new deal's count resets
+  // to zero too, and that is not a trick anyone needs to be shown.
+  const [awaitingDismissal, setAwaitingDismissal] = useState(false);
+  const previousTrickCount = useRef(deal.completedTricks.length);
   useEffect(() => {
-    if (!waitingOnBot) {
+    const previous = previousTrickCount.current;
+    previousTrickCount.current = deal.completedTricks.length;
+    if (deal.completedTricks.length > previous) {
+      setAwaitingDismissal(true);
+    }
+  }, [deal.completedTricks.length]);
+
+  const dismissTrick = useCallback(() => {
+    setAwaitingDismissal(false);
+  }, []);
+
+  useEffect(() => {
+    // A trick just resolved and has not been dismissed: this seat's own next
+    // play is refused by `act` below regardless, but nothing there stops the
+    // computer's *own* move — this is what does, so its next lead cannot
+    // start before this seat has actually seen the trick it is leading past.
+    if (!waitingOnBot || awaitingDismissal) {
       return;
     }
 
@@ -175,7 +218,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     return () => {
       clearTimeout(timer);
     };
-  }, [bot, deal, peek, table, waitingOnBot]);
+  }, [awaitingDismissal, bot, deal, peek, table, waitingOnBot]);
 
   const act = useCallback((action: DealAction) => {
     setTable((current) =>
@@ -259,6 +302,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
   return {
     act,
     clearUnlocks: achievements.clear,
+    dismissTrick,
     history: summary.history,
     justTaken:
       deal.phase === "draw" ? (deal.hands[HUMAN][deal.hands[HUMAN].length - 1] ?? null) : null,
@@ -279,6 +323,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     rubber: summary.rubber,
     score: summary.score,
     skipPhase,
+    trickAwaitingDismissal: awaitingDismissal,
     view: viewFor(deal, HUMAN),
     vulnerable: summary.vulnerable,
     waitingOnOpponent: waitingOnBot,

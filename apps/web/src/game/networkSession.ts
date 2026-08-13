@@ -44,6 +44,10 @@ function sessionFrom(
       send({ type: "action", action });
     },
     clearUnlocks,
+    // Nothing here paces the other seat's move on this seat's behalf — see
+    // `GameSession.trickAwaitingDismissal` — so holding this side of a resolved
+    // trick would be a screen with no effect on the game underneath it.
+    dismissTrick: () => {},
     history: snapshot.history,
     justTaken: snapshot.justTaken,
     justUnlocked,
@@ -62,6 +66,7 @@ function sessionFrom(
     score: snapshot.score,
     // Not on offer: the server decides what a seat may do and would refuse it.
     skipPhase: null,
+    trickAwaitingDismissal: false,
     view: snapshot.view,
     vulnerable: snapshot.vulnerable,
     waitingOnOpponent: snapshot.view.toAct !== snapshot.view.me,

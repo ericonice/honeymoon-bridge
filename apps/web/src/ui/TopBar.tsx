@@ -19,7 +19,14 @@ export interface TopBarProps {
   readonly onLeave: (() => void) | null;
   /** Dev-only shortcut past the phase in progress. Null when it is not on offer. */
   readonly onSkipPhase: (() => void) | null;
-  /** Opens the rubber scorepad. Null on the screen that already shows it. */
+  /**
+   * Opens the rubber scorepad. Null on the screen that already shows it in full.
+   *
+   * The same icon-square weight and the same bar as Settings, on every phase
+   * that offers it — one invocation for a "check something without leaving"
+   * action rather than a different widget in a different place depending on
+   * what phase happens to be showing.
+   */
   readonly onShowScore: (() => void) | null;
   onShowSettings(): void;
   readonly view: PlayerView;
@@ -71,17 +78,6 @@ export function TopBar({
         <Headline phase={phase} />
       </h1>
       <span className="flex-1" />
-      {onShowScore === null ? null : (
-        <button
-          type="button"
-          aria-label="Show the score"
-          className="flex items-center gap-1 rounded border border-white/25 px-2 py-0.5 text-xs whitespace-nowrap text-white/70"
-          onClick={onShowScore}
-        >
-          <RecordIcon className="h-3.5 w-3.5" />
-          score
-        </button>
-      )}
 
       {/* Deliberately present in a deployed build and switched off by default —
           see `readDevTools`. The caller decides whether it is on offer. */}
@@ -95,7 +91,20 @@ export function TopBar({
         </button>
       ) : null}
 
-      {/* Last, so it keeps the same place whatever else the bar is showing. */}
+      {/* Score and Settings are the same kind of control — a check you can make
+          without leaving the screen you're on — so they share the same icon-
+          square weight and sit together, last, so they keep the same place
+          whatever else the bar is showing. */}
+      {onShowScore === null ? null : (
+        <button
+          type="button"
+          aria-label="Show the score"
+          className="rounded border border-white/25 px-1.5 py-0.5 text-white/70"
+          onClick={onShowScore}
+        >
+          <RecordIcon className="h-3.5 w-3.5" />
+        </button>
+      )}
       <button
         type="button"
         aria-label="Settings"

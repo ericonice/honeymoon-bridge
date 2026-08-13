@@ -3,6 +3,7 @@ import type { Card } from "@hb/engine";
 import { motion } from "framer-motion";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { spokenCardLabel } from "../game/labels.js";
+import { DRAW_TIMING, currentPacing } from "../game/timing.js";
 import { CardFace } from "./CardFace.js";
 
 /** Matches the `hand` size in `CardFace`. */
@@ -301,7 +302,12 @@ export function Hand({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       >
+        {/* Scaled the same way the draw's own flight is, so the hand
+            finishes parting exactly as the new card arrives regardless of
+            pacing — see `currentPacing`'s own doc comment for why a flight
+            and whatever times itself off it both have to agree on this. */}
         {cards.map((card, index) => {
+          const flightDuration = DRAW_TIMING.flight * currentPacing();
           const legal = isLegal(card);
           const previewed = previewIndex === index;
           const isNew = highlight !== null && sameCard(highlight, card);
@@ -312,8 +318,12 @@ export function Hand({
               key={cardId(card)}
               type="button"
               aria-label={spokenCardLabel(card)}
+              // Read by the draw screen to find where a newly kept card
+              // actually lands, so its flight can aim there instead of a
+              // generic point — see `DrawPhase`'s `findHandSlot`.
+              data-card-id={cardId(card)}
               className={[
-                "shrink-0 origin-bottom transition-all duration-150 ease-out",
+                "shrink-0 origin-bottom",
                 previewed
                   ? tapToSelect
                     // A raise that has to be noticed without a finger still on
@@ -323,12 +333,26 @@ export function Hand({
                     // thicker ring are what carry the rest of "very".
                     ? "z-10 -translate-y-6 scale-110 shadow-lg shadow-amber-400/50 ring-4 ring-inset ring-amber-300"
                     : "z-10 -translate-y-5 scale-110 ring-2 ring-inset ring-amber-300"
-                  : legal
+                  // Only worth raising when it actually separates legal cards
+                  // from illegal ones — an unrestricted lead has no illegal
+                  // cards to separate them from, so every card would rise the
+                  // same 12px together, which reads as the whole hand
+                  // twitching rather than as any one card being called out.
+                  : restrictedByRule && legal
                     ? "-translate-y-3"
                     : "",
                 playable !== null && !legal ? "opacity-40" : "",
               ].join(" ")}
-              style={step === undefined ? undefined : { marginLeft: step - CARD_WIDTH }}
+              // Two speeds sharing one element: a press has to feel instant, so
+              // the raise/glow/fade stay quick regardless of what else is going
+              // on. `margin-left` is what makes room for a card landing
+              // mid-hand during the draw, so it gets the flight's own duration
+              // instead — the hand finishes parting right as the new card
+              // arrives, rather than snapping open well before or after it.
+              style={{
+                transition: `transform 150ms ease-out, box-shadow 150ms ease-out, opacity 150ms ease-out, margin-left ${flightDuration}ms ease-out`,
+                ...(step === undefined ? {} : { marginLeft: step - CARD_WIDTH }),
+              }}
               disabled={!legal || onPlay === null}
               onClick={(event) => {
                 // A press is handled entirely by the row's own pointer

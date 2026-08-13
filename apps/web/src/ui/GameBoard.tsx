@@ -1,11 +1,12 @@
-import { legalActionsForView } from "@hb/engine";
+import { cardId, legalActionsForView } from "@hb/engine";
 import type { Call, Card, DealPhase, DrawReveal, PlayerId, PlayerView } from "@hb/engine";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { drawPlayout, trickCollectDuration } from "../game/timing.js";
+import { drawPlayout } from "../game/timing.js";
 import type { GameSession } from "../game/session.js";
 import { useGameSounds } from "../game/useGameSounds.js";
 import { AchievementToast } from "./AchievementToast.js";
 import { AuctionPhase } from "./AuctionPhase.js";
+import { BiddingOverlay } from "./BiddingOverlay.js";
 import { ClaimConfirm } from "./ClaimConfirm.js";
 import { ClaimReveal } from "./ClaimReveal.js";
 import type { ClaimResult } from "./ClaimResultToast.js";
@@ -14,9 +15,11 @@ import { ContractBar } from "./ContractBar.js";
 import { DealComplete } from "./DealComplete.js";
 import { DrawPhase } from "./DrawPhase.js";
 import { HAND_HEIGHT, Hand } from "./Hand.js";
+import { LastTrickOverlay } from "./LastTrickOverlay.js";
 import { LeaveConfirm } from "./LeaveConfirm.js";
 import { OpponentPeek } from "./OpponentPeek.js";
 import { PlayPhase } from "./PlayPhase.js";
+import { PlayToolbar } from "./PlayToolbar.js";
 import { ScoreOverlay } from "./ScoreOverlay.js";
 import { TopBar } from "./TopBar.js";
 
@@ -52,6 +55,12 @@ export interface GameBoardProps {
  * engine has already moved on by the time an auction close is still being
  * held open. The engine's own phase would light these up against whatever the
  * computer just led, in sync with a screen the player has not reached yet.
+ *
+ * Not blocked by `GameSession.trickAwaitingDismissal`, on purpose: a tap on a
+ * card in hand is already the deliberate "I have seen enough, move on" a tap
+ * on the table would have been, so it plays immediately rather than asking
+ * for that as a separate motion first — see the `onPlay` that dismisses
+ * alongside it.
  */
 function playableCards(view: PlayerView, shownPhase: DealPhase): Card[] | null {
   if (shownPhase !== "play" || view.toAct !== view.me) {
@@ -63,16 +72,18 @@ function playableCards(view: PlayerView, shownPhase: DealPhase): Card[] | null {
 }
 
 function CurrentPhase({
-  onClaim,
+  handOriginRef,
+  onDismissTrick,
   onDone,
   onStartPlay,
   peeking,
   phase,
   session,
 }: {
-  readonly onClaim: () => void;
+  readonly handOriginRef: React.RefObject<DOMRect | null>;
+  onDismissTrick(): void;
   readonly onDone: (() => void) | null;
-  /** Non-null only while the closed auction is waiting to be dismissed. */
+  /** Non-null only while the closed auction — or the deal's last trick — is waiting to be dismissed. */
   readonly onStartPlay: (() => void) | null;
   readonly peeking: boolean;
   readonly phase: DealPhase;
@@ -113,11 +124,13 @@ function CurrentPhase({
     case "play": {
       return (
         <PlayPhase
+          handOriginRef={handOriginRef}
           lastTrick={lastTrick}
           opponentName={session.opponentName}
+          release={onStartPlay}
           view={view}
           vulnerable={vulnerable}
-          onClaim={onClaim}
+          onDismissTrick={onDismissTrick}
         />
       );
     }
@@ -176,13 +189,15 @@ function finalBeat({
   if (left === "draw" && lastDraw !== null) {
     return { kind: "timed", ms: drawPlayout(lastDraw, theirCardsShowing).duration };
   }
-  // The thirteenth trick is the same shape — except when a claim ended the deal
-  // early: accepting awards the remaining tricks directly rather than playing
-  // them, so there is no freshly completed trick on the table to sweep, and
-  // holding for one would show whatever partial trick the claim interrupted.
-  // `ClaimResultToast` is what tells the claimant what happened instead.
+  // The thirteenth trick is the same shape as a closed auction — dismissed by
+  // hand rather than timed, now that every trick is — except when a claim
+  // ended the deal early: accepting awards the remaining tricks directly
+  // rather than playing them, so there is no freshly completed trick on the
+  // table to look at, and holding for one would show whatever partial trick
+  // the claim interrupted. `ClaimResultToast` is what tells the claimant what
+  // happened instead.
   if (left === "play" && entered === "complete") {
-    return claimedFinish ? null : { kind: "timed", ms: trickCollectDuration() };
+    return claimedFinish ? null : { kind: "dismissed" };
   }
   // And the auction, which is the same shape with no length to borrow: a sweep
   // and a card 2 can be waited out, a closed auction cannot. The contract lives
@@ -253,6 +268,13 @@ function useShownPhase(session: GameSession, peeking: boolean): ShownPhase {
       theirCardsShowing,
     });
     if (beat === null) {
+      // Also clears whatever an *earlier* transition was holding: a shortcut
+      // can reach this phase before that hold's own timer ever fires, and its
+      // cleanup then cancels that timer without anything else left to clear
+      // `held` — the phase this seat is shown would otherwise stick on
+      // whatever it left, forever, with the engine already long past it.
+      setHeld(null);
+      setDismissable(false);
       return;
     }
 
@@ -281,6 +303,17 @@ function useShownPhase(session: GameSession, peeking: boolean): ShownPhase {
       ? () => {
           setDismissable(false);
           setHeld(null);
+          // The deal's last trick still sets `trickAwaitingDismissal` — the
+          // completed-trick count that flag watches does not know which
+          // trick ends a deal — but this hook's own `release` is what stands
+          // in for `onDismissTrick` here, since there is no next trick
+          // within *this* deal for the flag to be guarding a lead against.
+          // Left uncleared, it stays stuck true into the next deal: that
+          // deal's count starts back at 0, which is a decrease rather than
+          // the increase the flag watches for, so nothing ever notices and
+          // clears it there either — and if the computer is first to act in
+          // that new deal, it never will.
+          session.dismissTrick();
         }
       : null,
   };
@@ -339,6 +372,8 @@ export function GameBoard({
   tapToSelect,
 }: GameBoardProps): React.JSX.Element {
   const [showingScore, setShowingScore] = useState(false);
+  const [showingBidding, setShowingBidding] = useState(false);
+  const [showingLastTrick, setShowingLastTrick] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [confirmingClaim, setConfirmingClaim] = useState(false);
   const { view } = session;
@@ -346,6 +381,22 @@ export function GameBoard({
   const claimResult = useClaimResult(view);
   const playable = playableCards(view, phase);
   useGameSounds(session, sound);
+  // Captured the instant a card is tapped, before `session.act` removes it
+  // from the hand — `PlayPhase` reads this once to aim that card's flight,
+  // rather than the fixed point it would otherwise have nothing better than.
+  const handOriginRef = useRef<DOMRect | null>(null);
+
+  // The engine's own phase, not the shown one: the toolbar is still on screen
+  // for the beat that holds the thirteenth trick after the engine has already
+  // moved on, and claiming a deal that is already over is not a real option.
+  // `trickAwaitingDismissal` too — offering it the instant a won trick's
+  // `toAct` lands is the same early tap `playableCards` guards against, just
+  // spent on a claim instead of a lead.
+  const claimable =
+    view.phase === "play" &&
+    view.toAct === view.me &&
+    view.claim === null &&
+    !session.trickAwaitingDismissal;
 
   // Once the match is won there is nothing left to lose by going, so the exit
   // stops asking. Mid-rubber it always asks, including between deals — a
@@ -366,7 +417,8 @@ export function GameBoard({
                   setConfirmingLeave(true);
                 }
         }
-        // The score screen already shows the scorepad in full.
+        // The complete screen already shows the scorepad in full, so a
+        // button that opens the same thing again is not a real option there.
         onShowScore={
           phase === "complete"
             ? null
@@ -382,7 +434,12 @@ export function GameBoard({
         }
       />
 
-      <ContractBar opponentName={session.opponentName} phase={phase} view={view} />
+      <ContractBar
+        opponentName={session.opponentName}
+        phase={phase}
+        rubber={session.rubber}
+        view={view}
+      />
 
       {peeking && session.opponentHand !== null ? (
         <OpponentPeek cards={session.opponentHand} />
@@ -392,16 +449,35 @@ export function GameBoard({
         {/* Offered only on the screen that ends a match, where "done" is a real
             answer rather than a way out of something unfinished. */}
         <CurrentPhase
+          handOriginRef={handOriginRef}
           peeking={peeking}
           phase={phase}
           session={session}
-          onClaim={() => {
-            setConfirmingClaim(true);
-          }}
+          onDismissTrick={session.dismissTrick}
           onDone={settled && exit !== null ? exit.leave : null}
           onStartPlay={release}
         />
       </main>
+
+      {/* Just above the hand rather than under the top bar — see `PlayToolbar`
+          for why. It supplies its own top border as the divider between the
+          table above and the footer below, so the footer skips drawing one
+          on this phase — see the footer's own class below. */}
+      {phase === "play" ? (
+        <PlayToolbar
+          claimable={claimable}
+          lastTrickAvailable={session.lastTrick !== null}
+          onClaim={() => {
+            setConfirmingClaim(true);
+          }}
+          onShowBidding={() => {
+            setShowingBidding(true);
+          }}
+          onShowLastTrick={() => {
+            setShowingLastTrick(true);
+          }}
+        />
+      ) : null}
 
       {/* Held open through the shown phase rather than dropped the instant
           `view.hand` empties — the last card is played, and so the hand is
@@ -415,7 +491,7 @@ export function GameBoard({
           has been played — so that beat gets a blank placeholder, the same
           height as `Hand`'s own empty state, rather than that text. */}
       {phase === "complete" ? null : (
-        <footer className="border-t border-white/10 pt-1">
+        <footer className={phase === "play" ? "pt-1" : "border-t border-white/10 pt-1"}>
           {phase !== "draw" && view.hand.length === 0 ? (
             <div style={{ height: HAND_HEIGHT }} />
           ) : (
@@ -428,7 +504,17 @@ export function GameBoard({
                 playable === null
                   ? null
                   : (card: Card) => {
+                      // Read before `session.act`, which is what removes this
+                      // very card from the hand — a moment later there is no
+                      // element left here to measure.
+                      const el = document.querySelector<HTMLElement>(
+                        `[data-card-id="${cardId(card)}"]`,
+                      );
+                      handOriginRef.current = el?.getBoundingClientRect() ?? null;
                       session.act({ type: "play", card });
+                      // A harmless no-op unless a resolved trick was still
+                      // sitting there — see `playableCards`.
+                      session.dismissTrick();
                     }
               }
             />
@@ -445,6 +531,27 @@ export function GameBoard({
           vulnerable={session.vulnerable}
           onClose={() => {
             setShowingScore(false);
+          }}
+        />
+      ) : null}
+
+      {showingBidding ? (
+        <BiddingOverlay
+          opponentName={session.opponentName}
+          view={view}
+          onClose={() => {
+            setShowingBidding(false);
+          }}
+        />
+      ) : null}
+
+      {showingLastTrick && session.lastTrick !== null ? (
+        <LastTrickOverlay
+          opponentName={session.opponentName}
+          trick={session.lastTrick}
+          view={view}
+          onClose={() => {
+            setShowingLastTrick(false);
           }}
         />
       ) : null}
