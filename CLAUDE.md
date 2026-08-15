@@ -545,6 +545,41 @@ is what catches this class of mistake. `bench/strain.ts` settles arguments about
   little changes almost no decisions; removing impossible cards changes what the solver is
   answering.**
 
+- **Two-suited hands were underbid, traced to two separate bugs in `rawTricks`, both fixed and
+  measured.** Found from two real games where the bot opened a 6-4 and a 5-4-2-2 monster at the one
+  level instead of jumping toward game. The first diagnostic — bucketing `bench/calibrate.ts`'s bias
+  by second-suit length — showed a real trend a strain-only breakdown could not see, but it turned
+  out to be a noisy proxy for two different, more specific conditions underneath it.
+
+  The first bug: a side suit's winners were counted the same way a *defender's* are, capped at two
+  regardless of honors held. That cap is correct for defense — a defender's third-round winner needs
+  the first two rounds gone first, and by then the lead is often elsewhere — but a declaring side
+  suit headed by an unbroken AKQ cashes all three, guaranteed, nothing outranks them. Reusing the
+  defensive cap silently priced every such side suit as if it were AK. Fixed by crediting the third
+  card of a run beyond what the cap already gives (`runOutTricks`'s `extraRun`), gated to declaring
+  only and discounted by the same "has the trump suit cleared them" probability that already gated
+  the run-out credit, since a side suit's third round *can* still be ruffed under a trump contract
+  even though nothing outranks it — only no-trump gets it undiscounted. Checked against a purpose-
+  built bucket (does a side suit hold an unbroken run of three or more): bias went from a large
+  systematic miss to +0.03 over the population that actually has this shape.
+
+  The second, smaller bug: a void side suit got zero credit, full stop. `trumpTricks` already prices
+  every one of this hand's own trump cards regardless of which trick each ends up winning — cashed
+  in its own suit or spent ruffing elsewhere is the same one trick to that count, so there was nothing
+  to double-charge. What was missing is the *other* side: the opponent's own cards in a suit this
+  hand holds none of, which simply win for them uncontested unless something ruffs them away. Fixed
+  with a flat credit (`voidRuffTricks`, fitted to `bench/calibrate.ts`'s own `shortest side` bucket),
+  scaled down for a short trump suit that runs out too soon to ruff much of anything. Bias on that
+  bucket went from -0.47 to -0.12 over 79 hands.
+
+  Together: r² on "declaring, best strain only" moved from 0.498 to 0.511, and the two real hands
+  that started this improved 0.68 and 0.79 tricks respectively against measured par. Both fixes are
+  declaring-only by design — `bench/calibrate.ts`'s defending buckets never showed either pattern,
+  and `rawHandValue`'s draw-phase valuation (a different question, covered by the open thread below)
+  is untouched. This is the same part of the model that produced the "no hand can ever prefer
+  no-trump" regression once before; both fixes were checked against that test and against the full
+  bucketed bias, not just the overall number, on the way in.
+
 - **Turn clock.** None in v1. Revisit if the 26-turn draw phase drags.
 
 ### Testing on a phone

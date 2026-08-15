@@ -1,6 +1,6 @@
-import { STRAINS, applyAction, createRng, opponentOf, startDeal } from "@hb/engine";
+import { STRAINS, SUITS, applyAction, createRng, opponentOf, startDeal } from "@hb/engine";
 import type { Card, Pair, PlayerId, Strain } from "@hb/engine";
-import { defenseFromRaw, rawTricks, tricksFromRaw } from "../src/bot/evaluate.js";
+import { cardsIn, defenseFromRaw, rawTricks, topRun, tricksFromRaw } from "../src/bot/evaluate.js";
 import { createHeuristicBot } from "../src/bot/heuristicBot.js";
 import { solve } from "../src/bot/solver.js";
 import { botActionFor, loveAll } from "../src/game/botTurn.js";
@@ -25,6 +25,8 @@ import { botActionFor, loveAll } from "../src/game/botTurn.js";
  */
 
 interface Observation {
+  /** The hand this observation's raw and par were computed from — for the shape breakdown. */
+  readonly hand: readonly Card[];
   readonly par: number;
   readonly raw: number;
   /** Whether this hand was declaring the strain or defending against it. */
@@ -70,8 +72,9 @@ function observationsFrom(deals: number): Observation[] {
           trick: [],
         }).tricks;
         observations.push({
+          hand: hands[declarer],
           par: tricks[declarer],
-          raw: rawTricks({ hand: hands[declarer], strain }),
+          raw: rawTricks({ declaring: true, hand: hands[declarer], strain }),
           role: "declare",
           strain,
         });
@@ -82,10 +85,16 @@ function observationsFrom(deals: number): Observation[] {
         // *they* are long in, which is disproportionately one this hand is short
         // in, so an unconditional fit is systematically too optimiztic about
         // defending against the contracts that really turn up.
-        const declarerRaw = rawTricks({ hand: hands[declarer], strain });
+        //
+        // Passing declaring:true here too matters: it is the same question
+        // `estimatedTricks` asks when the bidder chooses a strain, so leaving it
+        // off would pick a different "declarer's choice" than the bidder actually
+        // would.
+        const declarerRaw = rawTricks({ declaring: true, hand: hands[declarer], strain });
         if (declarerRaw > chosenRaw) {
           chosenRaw = declarerRaw;
           chosen = {
+            hand: hands[defender],
             par: tricks[defender],
             raw: rawTricks({ hand: hands[defender], strain }),
             role: "defend",
@@ -168,7 +177,103 @@ function report(
       `    ${strain.padEnd(3)} ${strainBias >= 0 ? "+" : ""}${strainBias.toFixed(2)}  over ${group.length}`,
     );
   }
+
+  // A single affine fit minimizes error averaged over every hand, which is
+  // exactly what lets it hide a bias that grows with the hand rather than with
+  // the strain: an outlier hand's error washes out in the mean the same way an
+  // outlier deal does. Bucketing by raw — a stand-in for "how strong is this
+  // hand" — is what a strain-only breakdown structurally cannot show.
+  const BUCKETS = 4;
+  const byStrength = [...observations].sort((a, b) => a.raw - b.raw);
+  const bucketSize = Math.ceil(byStrength.length / BUCKETS);
+  for (let index = 0; index < BUCKETS; index++) {
+    const group = byStrength.slice(index * bucketSize, (index + 1) * bucketSize);
+    if (group.length === 0) {
+      continue;
+    }
+    const range = `${group[0]!.raw.toFixed(1)}-${group[group.length - 1]!.raw.toFixed(1)}`;
+    const bucketBias =
+      group.reduce((total, one) => total + (predict(one.raw) - one.par), 0) / group.length;
+    console.log(
+      `    raw ${range.padEnd(11)} ${bucketBias >= 0 ? "+" : ""}${bucketBias.toFixed(2)}  over ${group.length}`,
+    );
+  }
+
+  // Raw is one scalar, so a 6-3-2-2 hand and a 5-4-2-2 hand can land on the
+  // same raw with the strength split differently across suits — a bias tied to
+  // that split would wash out in the raw buckets above the same way a strain
+  // bias washes out of the overall average. The second-longest suit is what
+  // tells them apart: a hand with a real second suit can win length tricks
+  // there too, on top of whatever raw already credited its first suit.
+  for (let length = 0; length <= 6; length++) {
+    const group = observations.filter((one) => {
+      const actual = secondSuitLength(one.hand);
+      return length === 6 ? actual >= 6 : actual === length;
+    });
+    if (group.length === 0) {
+      continue;
+    }
+    const shapeBias =
+      group.reduce((total, one) => total + (predict(one.raw) - one.par), 0) / group.length;
+    console.log(
+      `    2nd suit ${length}${length === 6 ? "+" : " "}       ${shapeBias >= 0 ? "+" : ""}${shapeBias.toFixed(2)}  over ${group.length}`,
+    );
+  }
+
+  // A short side suit is where a spare trump can ruff a loser instead of
+  // conceding it — a mechanism nowhere in `rawTricks` for any strain. If that
+  // is what the second-suit-length trend above is actually tracking (a longer
+  // second suit usually means a shorter third or fourth one), it should show
+  // up keyed directly on shortness rather than on the unrelated suit's length.
+  for (let length = 0; length <= 3; length++) {
+    const group = observations.filter((one) => {
+      const actual = shortestSideSuit(one.hand, one.strain);
+      return length === 3 ? actual >= 3 : actual === length;
+    });
+    if (group.length === 0) {
+      continue;
+    }
+    const shortBias =
+      group.reduce((total, one) => total + (predict(one.raw) - one.par), 0) / group.length;
+    console.log(
+      `    shortest side ${length}${length === 3 ? "+" : " "}   ${shortBias >= 0 ? "+" : ""}${shortBias.toFixed(2)}  over ${group.length}`,
+    );
+  }
+
+  // Second-suit length is a proxy, and a noisy one: most five-card suits are
+  // 87654, not AKQ54, so the bucket above is mostly hands `extraRun` never
+  // touches at all, diluting whatever it does to the ones it does. This is the
+  // condition it actually keys on — an unbroken run of three or more honors
+  // sitting in a suit other than the one being bid — asked directly instead of
+  // through a length that only sometimes implies it.
+  for (const has of [false, true]) {
+    const group = observations.filter((one) => hasLongSideRun(one.hand, one.strain) === has);
+    if (group.length === 0) {
+      continue;
+    }
+    const runBias =
+      group.reduce((total, one) => total + (predict(one.raw) - one.par), 0) / group.length;
+    console.log(
+      `    3+ side run ${has ? "yes" : "no "} ${runBias >= 0 ? "+" : ""}${runBias.toFixed(2)}  over ${group.length}`,
+    );
+  }
   console.log("");
+}
+
+/** Length of the second-longest suit — the shape a single raw scalar cannot distinguish. */
+function secondSuitLength(hand: readonly Card[]): number {
+  const lengths = SUITS.map((suit) => cardsIn(hand, suit).length).sort((a, b) => b - a);
+  return lengths[1] ?? 0;
+}
+
+/** Whether some suit other than `strain` holds an unbroken run of three or more from the ace. */
+function hasLongSideRun(hand: readonly Card[], strain: Strain): boolean {
+  return SUITS.some((suit) => suit !== strain && topRun(cardsIn(hand, suit)) >= 3);
+}
+
+/** The shortest suit other than `strain` — a proxy for spare-trump ruffing potential. */
+function shortestSideSuit(hand: readonly Card[], strain: Strain): number {
+  return Math.min(...SUITS.filter((suit) => suit !== strain).map((suit) => cardsIn(hand, suit).length));
 }
 
 function run(deals: number): void {

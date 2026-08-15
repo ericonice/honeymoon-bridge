@@ -101,7 +101,7 @@ function surplusOver(missing: number, count: number, bid: boolean): number {
  * missing card. AKQ draws three; AK32 draws two, because the queen is missing
  * and the small cards have to fight for themselves.
  */
-function topRun(cards: readonly Card[]): number {
+export function topRun(cards: readonly Card[]): number {
   const ranks = new Set(cards.map((card) => card.rank));
   let run = 0;
   while (ranks.has((14 - run) as Rank)) {
@@ -228,7 +228,7 @@ export function defensiveTricks(hand: readonly Card[]): number {
  * approximate rather than the line through it being wrong. `bench/calibrate.ts`
  * re-measures all of this; re-measure rather than reason about it.
  */
-const CALIBRATION = { intercept: 3.66, slope: 0.735 };
+const CALIBRATION = { intercept: 3.68, slope: 0.708 };
 
 /**
  * `bid` says the opponent has named this strain during the auction, which makes
@@ -238,7 +238,7 @@ const CALIBRATION = { intercept: 3.66, slope: 0.735 };
  * it to both would count the same inference twice.
  */
 export function estimatedTricks(hand: readonly Card[], strain: Strain, bid = false): number {
-  return tricksFromRaw(rawTricks({ bid, hand, strain }));
+  return tricksFromRaw(rawTricks({ bid, declaring: true, hand, strain }));
 }
 
 /** The calibration on its own, for a raw count already taken. Refitting measures this directly. */
@@ -260,7 +260,7 @@ export function tricksFromRaw(raw: number): number {
  * every sacrifice beats passing and two bots talk each other up to the seven
  * level. Fitted the same way as the other, against par from the defending seat.
  */
-const DEFENSE_CALIBRATION = { intercept: 1.96, slope: 0.858 };
+const DEFENSE_CALIBRATION = { intercept: 2.01, slope: 0.826 };
 
 export function defenseFromRaw(raw: number): number {
   return DEFENSE_CALIBRATION.intercept + DEFENSE_CALIBRATION.slope * raw;
@@ -276,6 +276,17 @@ type Winners = (cards: readonly Card[]) => number;
 export interface RawTricksOptions {
   /** The opponent has named this strain, so they are longer in it than chance. */
   readonly bid?: boolean;
+  /**
+   * Whether this is a declarer's estimate rather than a defender's or the
+   * draw-phase valuation's. Gates the third-or-later card of an unbroken run
+   * (`runOutTricks`'s `extraRun`) — `quickTricks` caps at two by design for a
+   * defender, whose third-round winner needs the first two rounds gone first
+   * and by then the lead is often elsewhere, and `potentialTricks` is asking a
+   * different question again for a hand still being drawn. A declarer with
+   * the lead has neither problem, so this is off by default and only
+   * `estimatedTricks` turns it on.
+   */
+  readonly declaring?: boolean;
   readonly hand: readonly Card[];
   readonly strain: Strain;
   readonly winners?: Winners;
@@ -283,41 +294,103 @@ export interface RawTricksOptions {
 
 /** Winners the hand can point at, before calibration. Exported so the fit can be re-measured. */
 export function rawTricks(options: RawTricksOptions): number {
-  const { bid = false, hand, strain, winners = quickTricks } = options;
+  const { bid = false, declaring = false, hand, strain, winners = quickTricks } = options;
 
   if (strain === "NT") {
     // No-trump names no suit, so a bid of it says nothing about where their
     // length lies and there is nothing here to condition on.
     return SUITS.reduce(
-      (total, suit) => total + noTrumpTricks(cardsIn(hand, suit), winners, false),
+      (total, suit) => total + runOutTricks(cardsIn(hand, suit), winners, false, 1, declaring),
       0,
     );
   }
 
-  // Side suits are counted on their winners alone, with no credit for length.
-  // That is not an oversight: length only cashes if nobody ruffs it, which is
-  // exactly what a trump contract puts at risk and what no-trump does not. This
-  // asymmetry is what lets a balanced hand prefer no-trump at all.
+  const trumps = cardsIn(hand, strain);
+
+  // A side suit's length only cashes once nothing is left to ruff it, so its
+  // run-out credit is the same one no-trump gets, discounted by the chance
+  // this hand's own trump run has already drawn theirs. `trumpsDrawn` is that
+  // chance — reusing `exhaustedBy` on the trump suit itself, the same
+  // question `trumpTricks` below asks of it. A short or honor-thin trump suit
+  // rarely clears them in time, so a balanced hand still gets next to nothing
+  // here; this only pays out once the trump suit is genuinely doing the
+  // clearing, which is what lets a balanced hand still prefer no-trump.
+  const trumpsDrawn = exhaustedBy(SUIT_LENGTH - trumps.length, topRun(trumps), bid);
   const side = SUITS.reduce(
-    (total, suit) => (suit === strain ? total : total + winners(cardsIn(hand, suit))),
+    (total, suit) =>
+      suit === strain
+        ? total
+        : total + runOutTricks(cardsIn(hand, suit), winners, false, trumpsDrawn, declaring),
     0,
   );
-  return trumpTricks(cardsIn(hand, strain), bid) + side;
+  const ruffs = declaring ? voidRuffTricks(hand, strain, trumps.length) : 0;
+  return trumpTricks(trumps, bid) + side + ruffs;
 }
 
 /**
- * Tricks a suit produces at no-trump: its winners, plus the cards underneath
- * them for the share of deals in which the opponent has already run out.
+ * What a void side suit steals from the *opponent's* length in it, rather
+ * than from anything of this hand's own.
  *
- * AK4 is worth about 2.3 rather than 2 — the four is dead whenever they hold
- * three or more, and alive when they do not, which is often enough to matter
- * across four suits. Counting only the certain cards is what left no-trump
- * chronically undervalued.
+ * `trumpTricks` above already prices every one of this hand's trump cards
+ * regardless of which trick each ends up winning — cashed in its own suit or
+ * spent ruffing elsewhere is the same one trick to that count, so nothing
+ * here double-charges it. What that count cannot see is the *other* side:
+ * the opponent's own cards in a suit this hand holds none of, which would
+ * simply win for them at no cost, lose instead whenever the lead runs into a
+ * hand that can still ruff it. `VOID_RUFF_CREDIT` is a flat stand-in for how
+ * much of that a void is typically worth; `trumpLength / 3` is the one thing
+ * this scales on — the fewer trumps behind the void, the sooner they run out
+ * and the less of it ever gets ruffed. Only for a declaring hand: the
+ * `shortest side` bucket in `bench/calibrate.ts` did not show the same
+ * pattern on defense, so this is not applied there.
  */
-function noTrumpTricks(cards: readonly Card[], winners: Winners, bid: boolean): number {
+const VOID_RUFF_CREDIT = 0.65;
+
+function voidRuffTricks(hand: readonly Card[], strain: Strain, trumpLength: number): number {
+  return SUITS.reduce((total, suit) => {
+    if (suit === strain || cardsIn(hand, suit).length > 0) {
+      return total;
+    }
+    return total + VOID_RUFF_CREDIT * Math.min(1, trumpLength / 3);
+  }, 0);
+}
+
+/**
+ * A suit's certain winners, plus two things beyond them a declarer can also
+ * bank on — scaled by `discount`, the chance nothing is left to ruff either
+ * one even once it is high.
+ *
+ * The first is the cards underneath the winners, for the share of deals in
+ * which the opponent has already run out: at no-trump `discount` is always 1,
+ * so AK4 is worth about 2.3 rather than 2 unconditionally — the four is dead
+ * whenever they hold three or more, alive when they do not, which is often
+ * enough to matter across four suits. Counting only the certain cards is what
+ * left no-trump chronically undervalued.
+ *
+ * The second, gated by `declaring`, is the third-or-later card of an unbroken
+ * run beyond what `winners` already caps at two: AKQ cashes all three,
+ * guaranteed, regardless of how the other ten cards split, because nothing
+ * outranks them — a defender's cap at two exists for a different reason (the
+ * lead is usually gone by the third round) and does not apply here. What does
+ * apply is the same risk the run-out credit already prices: a side suit's
+ * third round *can* be ruffed under a trump contract even though nothing
+ * outranks it, so `extraRun` takes the same `discount` the run-out credit
+ * does, and only no-trump — where nothing ruffs at all — gets it in full.
+ */
+function runOutTricks(
+  cards: readonly Card[],
+  winners: Winners,
+  bid: boolean,
+  discount: number,
+  declaring: boolean,
+): number {
   const run = topRun(cards);
+  const safe = winners(cards);
+  const extraRun = declaring ? Math.max(0, run - safe) : 0;
   const beneath = cards.length - run;
-  return winners(cards) + RUNOUT * beneath * exhaustedBy(SUIT_LENGTH - cards.length, run, bid);
+  return (
+    safe + discount * (extraRun + RUNOUT * beneath * exhaustedBy(SUIT_LENGTH - cards.length, run, bid))
+  );
 }
 
 /**
