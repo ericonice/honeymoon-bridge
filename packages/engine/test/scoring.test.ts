@@ -285,6 +285,37 @@ describe("rubber", () => {
     expect(rubber.matchBonus[0]).toBe(500);
   });
 
+  it("names the winner by final points, not by who reached two games first", () => {
+    let rubber = newRubber();
+    rubber = applyDealScore(rubber, score(4, "S", 10));
+    // A defended, doubled, vulnerable four down costs the declaring side 1100
+    // above the line and touches neither side's game count.
+    rubber = applyDealScore(rubber, score(4, "S", 6, { doubling: "doubled", vulnerable: true }));
+    rubber = applyDealScore(rubber, score(4, "S", 10));
+
+    expect(rubber.complete).toBe(true);
+    expect(rubber.gamesWon).toEqual([2, 0]);
+    expect(totalScore(rubber)).toEqual([940, 1100]);
+    // Swept the games and still not the winner: 1100 collected on defense
+    // outweighs even an unopposed 700 bonus.
+    expect(rubber.winner).toBe(1);
+  });
+
+  it("falls back to the side that reached two games when the final points tie exactly", () => {
+    let rubber = newRubber();
+    rubber = applyDealScore(rubber, score(4, "S", 10));
+    rubber = applyDealScore(rubber, {
+      aboveLine: [0, 940],
+      belowLine: [0, 0],
+      detail: score(1, "NT", 7).detail,
+    });
+    rubber = applyDealScore(rubber, score(4, "S", 10));
+
+    expect(rubber.complete).toBe(true);
+    expect(totalScore(rubber)).toEqual([940, 940]);
+    expect(rubber.winner).toBe(0);
+  });
+
   it("refuses to score into a completed rubber", () => {
     let rubber = newRubber();
     rubber = applyDealScore(rubber, score(4, "S", 10));

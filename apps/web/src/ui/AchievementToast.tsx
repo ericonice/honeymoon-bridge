@@ -20,7 +20,9 @@ export interface AchievementToastProps {
  *
  * Centered and modal rather than a corner banner that vanishes on its own
  * timer: a title earned mid-hand is easy to miss out of the corner of an eye,
- * so this blocks the table until it is tapped away.
+ * so this blocks the table until it is tapped away. Tapping the backdrop or
+ * the unlock itself dismisses it, but neither reads as a control, so there is
+ * also an explicit Dismiss button for anyone looking for one.
  */
 export function AchievementToast({
   onDismiss,
@@ -59,6 +61,14 @@ export function AchievementToast({
             </span>
           </button>
         ))}
+
+        <button
+          type="button"
+          className="rounded-xl border border-white/25 px-4 py-3 text-center text-sm text-white/70"
+          onClick={onDismiss}
+        >
+          Dismiss
+        </button>
       </div>
     </div>
   );

@@ -48,6 +48,15 @@ export interface RubberState {
   readonly matchBonus: Pair<number>;
   /** Below-the-line points toward the game currently in progress. Wiped when a game is won. */
   readonly partScore: Pair<number>;
+  /**
+   * Whoever has the higher final total once the rubber is complete, bonus
+   * included — not whoever reached the game count that ended it. The two
+   * almost always agree, since the bonus is large enough to cover an
+   * ordinary deficit, but a side that spent the rubber defending well enough
+   * to bank a stack of undertrick penalties can still outscore a side that
+   * quietly closed out its games, and when that happens this is the other
+   * side. See `winnerFor`.
+   */
   readonly winner: PlayerId | null;
 }
 
@@ -86,8 +95,9 @@ export function totalScore(rubber: RubberState): Pair<number> {
 /**
  * Folds one deal's score into the rubber: below-the-line points accumulate as a
  * part-score until they reach 100, which wins a game and redraws the line for
- * both sides. Two games wins the rubber, worth 700 if the loser has no game and
- * 500 otherwise.
+ * both sides. Two games ends the rubber and banks its bonus — 700 if the loser
+ * never got a game, 500 otherwise — for whichever side got there; see
+ * `winnerFor` for who that bonus then makes the rubber's `winner`.
  */
 export function applyDealScore(rubber: RubberState, score: DealScore): RubberState {
   if (rubber.complete) {
@@ -121,17 +131,18 @@ export function applyDealScore(rubber: RubberState, score: DealScore): RubberSta
   const target = rubber.format === "game" ? 1 : 2;
 
   let complete = false;
-  let winner: PlayerId | null = null;
+  let gameWinner: PlayerId | null = null;
   const matchBonus: Pair<number> = [rubber.matchBonus[0], rubber.matchBonus[1]];
   for (const player of [0, 1] as const) {
     if (gamesWon[player] === target) {
       complete = true;
-      winner = player;
+      gameWinner = player;
       const bonus = bonusFor(rubber.format, gamesWon[player === 0 ? 1 : 0]);
       aboveLine[player] += bonus;
       matchBonus[player] = bonus;
     }
   }
+  const winner = gameWinner === null ? null : winnerFor(aboveLine, belowLineTotal, gameWinner);
 
   return {
     aboveLine,
@@ -151,4 +162,21 @@ function bonusFor(format: MatchFormat, opponentGames: number): number {
     return GAME_BONUS;
   }
   return opponentGames === 0 ? 700 : 500;
+}
+
+/**
+ * The higher final total, bonus included — `gameWinner` only breaks a tie.
+ *
+ * A tie needs the two totals to land on the exact same number, which nothing
+ * forces to be impossible, and `winner` has no way to say "nobody" — every
+ * other reader of it treats a complete rubber as having one. Falling back to
+ * whoever reached the game count is as good a way to break it as any other,
+ * since at that point nothing else distinguishes them.
+ */
+function winnerFor(aboveLine: Pair<number>, belowLineTotal: Pair<number>, gameWinner: PlayerId): PlayerId {
+  const totals: Pair<number> = [aboveLine[0] + belowLineTotal[0], aboveLine[1] + belowLineTotal[1]];
+  if (totals[0] === totals[1]) {
+    return gameWinner;
+  }
+  return totals[0] > totals[1] ? 0 : 1;
 }

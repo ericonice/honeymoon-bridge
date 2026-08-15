@@ -287,6 +287,20 @@ Doubled contracts double the trick score; redoubled quadruple it.
 - Overtricks: undoubled, the normal trick value each. Doubled: **100** each non-vulnerable,
   **200** each vulnerable. Redoubled: **200** / **400**.
 
+**Winning the rubber and being ahead in it are two different questions, and this app answers
+with the second.** Two games ends the rubber and hands out its bonus to whichever side got
+there — there is no other sensible stopping rule, and nothing above changes it. But which side
+the app calls the *winner* is decided afterward, by comparing the two final totals with that
+bonus already folded in, not by which side reached two games. The two agree almost every time,
+since the bonus is large enough to cover an ordinary deficit — but a side that spent the rubber
+defending well enough to bank a stack of undertrick penalties, or was dealt the honors, can
+outscore a side that quietly closed out two games, and when that happens the higher total is the
+winner even though the other side ended the rubber. This can happen on a clean two-games-to-none
+sweep, not only a narrow two-to-one. A tie in final points — which needs the two totals to land
+on the exact same number — falls back to whichever side reached two games, since a winner still
+has to be named. This is the rule a finished rubber's win/loss is recorded by, in §3.7's record and
+in the game's own "you won" screen alike; both read the same field.
+
 **Undertricks (scored by the defender, above the line)**
 
 | | Non-vulnerable | Vulnerable |

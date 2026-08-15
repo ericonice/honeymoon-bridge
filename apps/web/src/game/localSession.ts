@@ -188,6 +188,22 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     }
   }, [deal.completedTricks.length]);
 
+  // The auction closing is the same shape as a trick resolving, for the one
+  // case that leaves the bot on turn: this seat declaring, which makes the
+  // bot the opening leader. `GameBoard`'s own held screen already makes a
+  // human tap through that beat before the contract scrolls away — but
+  // without this, that tap gated nothing here, and the bot's first card
+  // could be chosen, and its sound played, while the contract was still
+  // being shown.
+  const previousPhase = useRef(deal.phase);
+  useEffect(() => {
+    const previous = previousPhase.current;
+    previousPhase.current = deal.phase;
+    if (previous === "auction" && deal.phase === "play" && deal.contract?.declarer === HUMAN) {
+      setAwaitingDismissal(true);
+    }
+  }, [deal.contract, deal.phase]);
+
   const dismissTrick = useCallback(() => {
     setAwaitingDismissal(false);
   }, []);
