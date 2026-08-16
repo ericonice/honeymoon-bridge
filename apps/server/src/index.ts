@@ -181,6 +181,13 @@ function playerIdOrNull(input: unknown): PlayerId | null | undefined {
   return input === 0 || input === 1 ? input : undefined;
 }
 
+function handsPlayedOrNull(input: unknown): number | null | undefined {
+  if (input === null) {
+    return null;
+  }
+  return typeof input === "number" && Number.isInteger(input) && input >= 0 ? input : undefined;
+}
+
 /**
  * Reads a reported deal's achievement facts, or nothing.
  *
@@ -245,13 +252,19 @@ function rubberFactsFrom(body: unknown): { facts: RubberFacts; player: PlayerId 
   const f = raw as Record<string, unknown>;
 
   const comebackWinner = playerIdOrNull(f.comebackWinner);
+  const handsPlayed = handsPlayedOrNull(f.handsPlayed);
   const sweepWinner = playerIdOrNull(f.sweepWinner);
   const wonRubber = playerIdOrNull(f.wonRubber);
-  if (comebackWinner === undefined || sweepWinner === undefined || wonRubber === undefined) {
+  if (
+    comebackWinner === undefined ||
+    handsPlayed === undefined ||
+    sweepWinner === undefined ||
+    wonRubber === undefined
+  ) {
     return null;
   }
 
-  return { facts: { comebackWinner, sweepWinner, wonRubber }, player };
+  return { facts: { comebackWinner, handsPlayed, sweepWinner, wonRubber }, player };
 }
 
 /** How long to wait, in words, for a message somebody is about to read. */

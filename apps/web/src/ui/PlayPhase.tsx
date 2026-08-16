@@ -1,14 +1,22 @@
 import { cardId } from "@hb/engine";
-import type { CompletedTrick, Pair, PlayedCard, PlayerId, PlayerView } from "@hb/engine";
+import type { Card, CompletedTrick, DealScore, Pair, PlayedCard, PlayerId, PlayerView } from "@hb/engine";
 import { motion } from "framer-motion";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { paced, TRICK_TIMING } from "../game/timing.js";
 import { CardBack, CardFace, CardSlot } from "./CardFace.js";
 import { CardFlight, centerIn, centerInFromRect } from "./CardFlight.js";
 import type { Flight } from "./CardFlight.js";
+import { Hand } from "./Hand.js";
+import { DealResultHeadline } from "./ScoreRows.js";
 import { SeatLabel } from "./SeatLabel.js";
 
 export interface PlayPhaseProps {
+  /**
+   * This deal's score, shown alongside `revealedHands` — see
+   * `DealResultHeadline`. Null on anything shorter than a full scored deal,
+   * which is exactly when `revealedHands` is null too.
+   */
+  readonly dealScore: DealScore | null;
   /**
    * Where the card most recently played by this seat left from, captured by
    * whoever handled the tap — the hand has already lost the DOM node for it
@@ -17,7 +25,25 @@ export interface PlayPhaseProps {
   readonly handOriginRef: React.RefObject<DOMRect | null>;
   /** The trick that has just resolved, still lying on the table. */
   readonly lastTrick: CompletedTrick | null;
+  /**
+   * Taken instead of `release`, once both hands are showing, for any deal
+   * that does not also finish the rubber — see `GameBoard`. Deals straight
+   * into the next hand rather than a screen with one more button on it,
+   * since there is nothing left this one has to say that revealing both
+   * hands and this deal's own result did not already say. Null when the
+   * rubber just finished with this deal, where the next thing to decide is
+   * a new rubber rather than a new hand, and that stays its own screen.
+   */
+  readonly onContinue: (() => void) | null;
   readonly opponentName: string;
+  /**
+   * True once the other player has asked to move on and you have not —
+   * the mirror of `waitingToContinue`, shown here for the same reason
+   * `DealComplete` used to show it: without it, a hand you are still
+   * looking at reads the same whether or not somebody is sitting there
+   * waiting on you. Always false against the computer.
+   */
+  readonly opponentWaitingToContinue: boolean;
   /**
    * Clears `GameSession.trickAwaitingDismissal`, once an ordinary trick has
    * finished sweeping itself away — on its own after `TRICK_TIMING.hold`, or
@@ -28,12 +54,43 @@ export interface PlayPhaseProps {
   /**
    * Non-null only while this is the deal's last trick, held open rather than
    * already showing the score. It sweeps away exactly like any other trick —
-   * on its own, or on a tap — and then calls this instead of `onDismissTrick`
-   * — the same beat, spent leaving the phase rather than staying in it.
+   * on its own, or on a tap — and then calls this instead of `onDismissTrick`.
+   * Once hands are revealed, `onContinue` is what a tap fires instead of this
+   * whenever it is on offer — see its own doc comment for when it is not.
    */
   readonly release: (() => void) | null;
+  /**
+   * Both hands as they stood for this deal, once the last one is known —
+   * see `finishedHandsFor`. Null until then, and always null for a claimed
+   * finish, which never has a complete pair to show.
+   *
+   * Shown in exactly the spot each hand has occupied all game: the
+   * opponent's own row here, face up instead of face down, and this seat's
+   * own in the footer below (`GameBoard`'s to fill in, not this component's
+   * — the footer is never this component's to draw). This is also what the
+   * trick slots and `PlayToolbar` clear away for, once it starts showing —
+   * see `onHandsSettled` — since neither has anything left to be about.
+   *
+   * Held back from view until the last trick has actually swept away.
+   * Showing both at once, before the table had cleared, read as the reveal
+   * arriving ahead of the trick it was supposedly waiting on.
+   */
+  readonly revealedHands: Pair<readonly Card[]> | null;
+  /**
+   * Fires exactly once the deal's last trick has cleared away and
+   * `revealedHands` starts actually being shown in this seat's own row.
+   * `GameBoard` uses it to hold the footer's reveal to the same instant —
+   * two reveals that started at different times would not read as one.
+   */
+  onHandsSettled?(): void;
   readonly view: PlayerView;
   readonly vulnerable: Pair<boolean>;
+  /**
+   * True once you have asked to move on and the other player has not.
+   * Always false against the computer, which has nothing to read and
+   * nobody to keep waiting.
+   */
+  readonly waitingToContinue: boolean;
 }
 
 interface TableTrick {
@@ -105,7 +162,8 @@ function Slot({
 }
 
 /**
- * Their hand, as a row of backs rather than nothing at all.
+ * Their hand, as a row of backs rather than nothing at all — or, once
+ * `revealed` is given, that same row turned face up.
  *
  * A played card used to leave from an invisible point sitting right on top of
  * the seat label — barely any distance from the slot it was headed to, which
@@ -114,14 +172,34 @@ function Slot({
  * the flight's origin: `centerIn` addresses the whole row, not any one card in
  * it, so which of the thirteen just left is never something the animation
  * could be read for.
+ *
+ * `revealed` is the same row rather than a second one: by the deal's last
+ * trick this hand is down to nothing, so the count-of-backs it would
+ * otherwise show is empty anyway. Filling it with the full thirteen, face up,
+ * in the exact spot that had just been counting down to zero, is what makes
+ * the reveal read as more of the same screen rather than a new one.
+ *
+ * At `Hand`'s own size, not `mini` — the same component the footer's own
+ * thirteen use, non-interactive, so both hands read at the same size rather
+ * than the opponent's coming out smaller and harder to read than the one
+ * already on screen.
  */
 function OpponentHand({
   count,
+  revealed,
   rowRef,
 }: {
   readonly count: number;
+  readonly revealed: readonly Card[] | null;
   readonly rowRef: React.RefObject<HTMLDivElement | null>;
 }): React.JSX.Element {
+  if (revealed !== null) {
+    return (
+      <div ref={rowRef} className="w-full">
+        <Hand cards={revealed} highlight={null} onPlay={null} playable={null} tapToSelect={false} />
+      </div>
+    );
+  }
   return (
     <div ref={rowRef} className="flex h-10 items-center justify-center">
       {Array.from({ length: count }, (_, index) => (
@@ -183,13 +261,19 @@ function claimStatus(view: PlayerView): string | null {
 }
 
 export function PlayPhase({
+  dealScore,
   handOriginRef,
   lastTrick,
+  onContinue,
   onDismissTrick,
+  onHandsSettled,
   opponentName,
+  opponentWaitingToContinue,
   release,
+  revealedHands,
   view,
   vulnerable,
+  waitingToContinue,
 }: PlayPhaseProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const opponentHandRef = useRef<HTMLDivElement>(null);
@@ -208,6 +292,10 @@ export function PlayPhase({
   // fixed: thirteen required taps a deal, every one of them a chance to feel
   // like busywork on a trick nobody needed a second look at.
   const [sweeping, setSweeping] = useState(false);
+  // Only meaningful once `revealedHands` is showing: true once this trick's
+  // own sweep has finished clearing it away, so a further tap knows there is
+  // nothing left to sweep and reads as leaving the reveal instead.
+  const [swept, setSwept] = useState(false);
   const sweepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Whatever this screen mounted showing — mid-deal on a reconnect, same as a
   // fresh one — is not a card that just landed, so the first run only records
@@ -243,6 +331,7 @@ export function PlayPhase({
     // A new card landing is always the far side of a dismissed trick, mine or
     // theirs — never something still waiting on a tap of its own.
     setSweeping(false);
+    setSwept(false);
 
     if (mountedAt.current === null) {
       mountedAt.current = playedCount;
@@ -303,6 +392,11 @@ export function PlayPhase({
   // `release`/`onDismissTrick` is this trick's to fire — see their own doc
   // comments for which and why. Shared by the hold timer below and a tap,
   // since either is just a different reason the wait is over.
+  //
+  // While hands are being revealed, sweeping is as far as this takes it:
+  // `handleTap` is what actually leaves from there. The deal's last trick
+  // still clears itself away on its own stage time, same as any other — it
+  // is only the reveal sitting behind it that a tap, not a timer, ends.
   function startSweep(): void {
     if (!resolved || sweeping) {
       return;
@@ -310,12 +404,41 @@ export function PlayPhase({
     setSweeping(true);
     sweepTimer.current = setTimeout(() => {
       sweepTimer.current = null;
+      if (revealedHands !== null) {
+        setSwept(true);
+        onHandsSettled?.();
+        return;
+      }
       if (release !== null) {
         release();
       } else {
         onDismissTrick();
       }
     }, paced(TRICK_TIMING.sweep));
+  }
+
+  // What a tap on the table means: cut the current wait short, whichever wait
+  // that is. Before this trick has swept, that is `startSweep`'s to decide,
+  // same as ever. Once it has — only reachable while hands are being
+  // revealed, since every other trick's sweep already left by this point —
+  // it is this seat saying it has seen enough of both hands, which
+  // `onContinue` takes straight into the next one wherever that is on offer.
+  // Already having said so once is not a second tap's to say again.
+  function handleTap(): void {
+    if (revealedHands !== null && swept) {
+      if (waitingToContinue) {
+        return;
+      }
+      if (onContinue !== null) {
+        onContinue();
+      } else if (release !== null) {
+        release();
+      } else {
+        onDismissTrick();
+      }
+      return;
+    }
+    startSweep();
   }
 
   // The ordinary way out: nobody has to do anything, once a trick has had its
@@ -343,36 +466,71 @@ export function PlayPhase({
     <div
       ref={containerRef}
       className="relative flex flex-1 flex-col items-center justify-center gap-3"
-      onClick={startSweep}
+      onClick={handleTap}
     >
       <SeatLabel
         active={live && !yourTurn}
         name={opponentName}
         vulnerable={vulnerable[view.opponent]}
       />
-      <OpponentHand count={view.handSizes[view.opponent]} rowRef={opponentHandRef} />
-      <Slot
-        played={pendingBy === view.opponent ? undefined : cards.find((played) => played.by === view.opponent)}
-        slotRef={opponentSlotRef}
-        sweepTo={sweepTo}
-        trickKey={trickKey}
+      <OpponentHand
+        count={view.handSizes[view.opponent]}
+        revealed={swept ? (revealedHands?.[view.opponent] ?? null) : null}
+        rowRef={opponentHandRef}
       />
+      {/* The trick slots are only worth looking at while there is something
+          in them or about to be — once hands are revealed there is nothing
+          left to hold a slot open for, so they simply stop rendering rather
+          than sitting there empty. */}
+      {swept && revealedHands !== null ? null : (
+        <Slot
+          played={pendingBy === view.opponent ? undefined : cards.find((played) => played.by === view.opponent)}
+          slotRef={opponentSlotRef}
+          sweepTo={sweepTo}
+          trickKey={trickKey}
+        />
+      )}
 
-      <div className="flex min-h-10 flex-col items-center justify-center">
+      <div className="flex min-h-10 flex-col items-center justify-center gap-2">
         {claimStatus(view) !== null ? (
           <p className="text-center text-sm text-amber-200/70">{claimStatus(view)}</p>
         ) : instruction(view) !== null ? (
           <p className="text-center text-sm text-white/50">{instruction(view)}</p>
+        ) : revealedHands !== null && dealScore !== null ? (
+          <>
+            <DealResultHeadline
+              opponentName={opponentName}
+              score={dealScore}
+              view={view}
+              vulnerable={vulnerable}
+            />
+            <p className="text-center text-sm text-white/50">
+              {waitingToContinue ? `Waiting for ${opponentName}…` : "Tap to continue"}
+            </p>
+            {/* The mirror of the line above — without it, a hand somebody
+                else is still sitting on reads the same as one nobody is. */}
+            {opponentWaitingToContinue && !waitingToContinue ? (
+              <p className="text-center text-xs text-white/40">{opponentName} is ready</p>
+            ) : null}
+          </>
         ) : null}
       </div>
 
-      <Slot
-        played={pendingBy === view.me ? undefined : cards.find((played) => played.by === view.me)}
-        slotRef={mySlotRef}
-        sweepTo={sweepTo}
-        trickKey={trickKey}
-      />
-      <SeatLabel active={yourTurn} name="You" vulnerable={vulnerable[view.me]} />
+      {swept && revealedHands !== null ? null : (
+        <Slot
+          played={pendingBy === view.me ? undefined : cards.find((played) => played.by === view.me)}
+          slotRef={mySlotRef}
+          sweepTo={sweepTo}
+          trickKey={trickKey}
+        />
+      )}
+      {/* Labels whose hand is below it — meaningful for the opponent's, up
+          top, since that hand only just turned face up. Not for this one:
+          it has sat in the same footer all game, and by the time hands are
+          revealed there is no active turn left for the dot to mean either. */}
+      {swept && revealedHands !== null ? null : (
+        <SeatLabel active={yourTurn} name="You" vulnerable={vulnerable[view.me]} />
+      )}
 
       {flights.map((flight) => (
         <CardFlight key={flight.key} flight={flight} />

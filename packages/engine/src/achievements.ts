@@ -17,6 +17,7 @@ export type AchievementId =
   | "insult"
   | "marathon"
   | "nobody-wanted-it"
+  | "sitzfleisch"
   | "slam"
   | "take-the-rubber"
   | "two-suiter";
@@ -148,6 +149,8 @@ export function dealFacts(
 export interface RubberFacts {
   /** The winner, if they lost the rubber's own first game to get there. */
   readonly comebackWinner: PlayerId | null;
+  /** Every deal of the rubber, including redeals of a passed-out hand. Null until it completes. */
+  readonly handsPlayed: number | null;
   /** The winner, if the rubber was swept two games to none. */
   readonly sweepWinner: PlayerId | null;
   /** The winner, if the rubber completed just now. */
@@ -162,7 +165,7 @@ export function rubberFacts(summary: TableSummary): RubberFacts {
   // Rubber and Marathon are about rubbers specifically; nothing here fires for
   // a `game`-format match at all.
   if (rubber.format !== "rubber" || !rubber.complete || rubber.winner === null) {
-    return { comebackWinner: null, sweepWinner: null, wonRubber: null };
+    return { comebackWinner: null, handsPlayed: null, sweepWinner: null, wonRubber: null };
   }
 
   const winner = rubber.winner;
@@ -171,8 +174,14 @@ export function rubberFacts(summary: TableSummary): RubberFacts {
   const firstGameWinner = history.find((deal) => deal.wonGameBy !== null)?.wonGameBy ?? null;
   const comebackWinner = firstGameWinner !== null && firstGameWinner !== winner ? winner : null;
 
-  return { comebackWinner, sweepWinner, wonRubber: winner };
+  return { comebackWinner, handsPlayed: history.length, sweepWinner, wonRubber: winner };
 }
+
+/** Deals in a single rubber past which it counts as a Sitzfleisch marathon. */
+const SITZFLEISCH_HANDS = 20;
+
+/** A rubber won in exactly this many hands is the fastest a rubber can finish — both games made outright. */
+const QUICK_RUBBER_HANDS = 2;
 
 /** The achievements backed by a running lifetime counter rather than a one-shot event. */
 export type CounterKey = "against-the-odds" | "hands-lost" | "hands-played" | "hands-won" | "marathon";
@@ -327,8 +336,14 @@ export function rubberUnlocks(
   if (facts.sweepWinner === player) {
     candidates.push({ achievement: "take-the-rubber", tier: "silver" });
   }
+  if (facts.sweepWinner === player && facts.handsPlayed === QUICK_RUBBER_HANDS) {
+    candidates.push({ achievement: "take-the-rubber", tier: "gold" });
+  }
   if (facts.comebackWinner === player) {
     candidates.push({ achievement: "down-but-not-out", tier: "bronze" });
+  }
+  if (facts.wonRubber === player && (facts.handsPlayed ?? 0) > SITZFLEISCH_HANDS) {
+    candidates.push({ achievement: "sitzfleisch", tier: "bronze" });
   }
 
   const counted = bumpAll(progress, [["marathon", 1]]);

@@ -164,6 +164,34 @@ export function revealsUnseenCard(reveal: DrawReveal): boolean {
 }
 
 /**
+ * Both hands as they stood for this deal, once every card is public.
+ *
+ * Every card either player held was played face up to a trick, so laying out
+ * `completedTricks` by `by` adds nothing beyond what already crossed the
+ * wire — it is not a fourth omission-to-worry-about alongside the three in
+ * `PlayerView`'s own doc comment, just those same cards regrouped.
+ *
+ * Null for anything short of a full thirteen tricks — in particular, an
+ * accepted claim ends the deal with cards still in a hand, and from the
+ * claimant's own view the defender's unplayed hand is never sent at all (see
+ * `revealedHand`). A denied claim that got played out to the end is not
+ * short: `completedTricks` reaches thirteen the same as a deal with no claim
+ * in it ever did.
+ */
+export function finishedHandsFor(view: PlayerView): Pair<readonly Card[]> | null {
+  if (view.completedTricks.length !== 13) {
+    return null;
+  }
+  const hands: [Card[], Card[]] = [[], []];
+  for (const trick of view.completedTricks) {
+    for (const played of trick.cards) {
+      hands[played.by].push(played.card);
+    }
+  }
+  return [sortHand(hands[0]), sortHand(hands[1])];
+}
+
+/**
  * The actions a player may take, decided from their own view alone.
  *
  * `legalActions` answers the same question but needs the privileged state. This

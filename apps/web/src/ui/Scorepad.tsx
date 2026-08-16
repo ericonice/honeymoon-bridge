@@ -1,5 +1,4 @@
-import { totalScore } from "@hb/engine";
-import type { Pair, PlayerId, PlayerView, RubberState } from "@hb/engine";
+import type { PlayerId, PlayerView, RubberState } from "@hb/engine";
 import { matchNoun } from "../game/labels.js";
 import type { DealRecord } from "../game/session.js";
 import { ContractText } from "./CardText.js";
@@ -11,7 +10,10 @@ export interface ScorepadProps {
   readonly view: PlayerView;
 }
 
-const CELL = "w-14 text-right tabular-nums";
+// w-14 used to be enough, until "Computer" — eight characters, and the one
+// name every robot game actually shows here — started clipping to "Comput…"
+// at exactly that width.
+const CELL = "w-16 text-right tabular-nums";
 
 function Columns({ opponentName }: { readonly opponentName: string }): React.JSX.Element {
   return (
@@ -121,32 +123,12 @@ function GameLine({
   );
 }
 
-function Summary({
-  label,
-  values,
-  view,
-  emphasis,
-}: {
-  readonly emphasis?: boolean;
-  readonly label: string;
-  readonly values: Pair<number>;
-  readonly view: PlayerView;
-}): React.JSX.Element {
-  return (
-    <div
-      className={`flex items-baseline justify-between gap-2 py-1 ${
-        emphasis === true ? "font-semibold" : ""
-      }`}
-    >
-      <span className="text-white/70">{label}</span>
-      <span className="flex gap-2">
-        <span className={CELL}>{values[view.me]}</span>
-        <span className={`${CELL} text-white/60`}>{values[view.opponent]}</span>
-      </span>
-    </div>
-  );
-}
-
+/**
+ * The scorepad proper: every deal, in order. The rubber-wide totals used to
+ * be ruled in underneath, the way a paper scorepad foots its own columns —
+ * removed once `ContractBar` started showing that same standing all the
+ * time, which made repeating it here the same numbers said twice.
+ */
 export function Scorepad({
   history,
   opponentName,
@@ -172,27 +154,6 @@ export function Scorepad({
           </div>
         ))
       )}
-
-      <div className="mt-2 border-t border-white/20 pt-2">
-        {/* Games won is always nil–nil in a single game, since winning one ends
-            the match. A row that can only ever read zero is not a score. */}
-        {rubber.format === "rubber" ? (
-          <Summary label="Games won" values={rubber.gamesWon} view={view} />
-        ) : null}
-        {/* Once the match is complete, the game that finished it wiped both
-            part-scores back to nil–nil — a row that can only read zero at
-            that point is not telling anyone anything. */}
-        {rubber.complete ? (
-          <Summary
-            label={`${rubber.format === "game" ? "Game" : "Rubber"} bonus`}
-            values={rubber.matchBonus}
-            view={view}
-          />
-        ) : (
-          <Summary label="Toward game" values={rubber.partScore} view={view} />
-        )}
-        <Summary emphasis label="Total" values={totalScore(rubber)} view={view} />
-      </div>
     </div>
   );
 }

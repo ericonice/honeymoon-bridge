@@ -1,5 +1,5 @@
 import type { DealPhase, PlayerView } from "@hb/engine";
-import { RecordIcon, SettingsIcon } from "./icons.js";
+import { SettingsIcon } from "./icons.js";
 
 export interface TopBarProps {
   /**
@@ -19,15 +19,6 @@ export interface TopBarProps {
   readonly onLeave: (() => void) | null;
   /** Dev-only shortcut past the phase in progress. Null when it is not on offer. */
   readonly onSkipPhase: (() => void) | null;
-  /**
-   * Opens the rubber scorepad. Null on the screen that already shows it in full.
-   *
-   * The same icon-square weight and the same bar as Settings, on every phase
-   * that offers it — one invocation for a "check something without leaving"
-   * action rather than a different widget in a different place depending on
-   * what phase happens to be showing.
-   */
-  readonly onShowScore: (() => void) | null;
   onShowSettings(): void;
   readonly view: PlayerView;
 }
@@ -56,7 +47,6 @@ function Headline({ phase }: { readonly phase: DealPhase }): React.JSX.Element {
 
 export function TopBar({
   onLeave,
-  onShowScore,
   onShowSettings,
   onSkipPhase,
   phase,
@@ -91,20 +81,6 @@ export function TopBar({
         </button>
       ) : null}
 
-      {/* Score and Settings are the same kind of control — a check you can make
-          without leaving the screen you're on — so they share the same icon-
-          square weight and sit together, last, so they keep the same place
-          whatever else the bar is showing. */}
-      {onShowScore === null ? null : (
-        <button
-          type="button"
-          aria-label="Show the score"
-          className="rounded border border-white/25 px-1.5 py-0.5 text-white/70"
-          onClick={onShowScore}
-        >
-          <RecordIcon className="h-3.5 w-3.5" />
-        </button>
-      )}
       <button
         type="button"
         aria-label="Settings"

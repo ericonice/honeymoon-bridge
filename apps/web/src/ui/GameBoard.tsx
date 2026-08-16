@@ -1,5 +1,5 @@
-import { cardId, legalActionsForView } from "@hb/engine";
-import type { Call, Card, DealPhase, DrawReveal, PlayerId, PlayerView } from "@hb/engine";
+import { cardId, finishedHandsFor, legalActionsForView } from "@hb/engine";
+import type { Call, Card, DealPhase, DrawReveal, Pair, PlayerId, PlayerView } from "@hb/engine";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { drawPlayout } from "../game/timing.js";
 import type { GameSession } from "../game/session.js";
@@ -75,18 +75,24 @@ function CurrentPhase({
   handOriginRef,
   onDismissTrick,
   onDone,
+  onHandsSettled,
   onStartPlay,
   peeking,
   phase,
+  revealedHands,
   session,
 }: {
   readonly handOriginRef: React.RefObject<DOMRect | null>;
   onDismissTrick(): void;
   readonly onDone: (() => void) | null;
+  /** See `PlayPhase`'s own prop of the same name. */
+  onHandsSettled(): void;
   /** Non-null only while the closed auction — or the deal's last trick — is waiting to be dismissed. */
   readonly onStartPlay: (() => void) | null;
   readonly peeking: boolean;
   readonly phase: DealPhase;
+  /** See `PlayPhase`'s own prop of the same name. */
+  readonly revealedHands: Pair<readonly Card[]> | null;
   readonly session: GameSession;
 }): React.JSX.Element {
   const { history, lastDraw, lastTrick, nextDeal, rubber, score, view, vulnerable } = session;
@@ -124,13 +130,29 @@ function CurrentPhase({
     case "play": {
       return (
         <PlayPhase
+          dealScore={score}
           handOriginRef={handOriginRef}
           lastTrick={lastTrick}
+          // Null exactly when this deal also finished the rubber — see the
+          // prop's own doc comment for why that one stays its own screen
+          // rather than folding into this same tap.
+          onContinue={
+            rubber.complete
+              ? null
+              : () => {
+                  session.dismissTrick();
+                  nextDeal();
+                }
+          }
           opponentName={session.opponentName}
+          opponentWaitingToContinue={session.opponentWaitingToContinue}
           release={onStartPlay}
+          revealedHands={revealedHands}
           view={view}
           vulnerable={vulnerable}
+          waitingToContinue={session.waitingToContinue}
           onDismissTrick={onDismissTrick}
+          onHandsSettled={onHandsSettled}
         />
       );
     }
@@ -355,6 +377,32 @@ function useClaimResult(view: PlayerView): { readonly clear: () => void; readonl
 }
 
 /**
+ * Whether the footer owes its own reveal yet — see `PlayPhase`'s
+ * `onHandsSettled`, which is what actually flips this. Reset the moment the
+ * engine reaches "complete" for a fresh deal, so a stale `true` left over
+ * from the last one cannot make this deal's footer jump ahead of its own
+ * last trick clearing away.
+ */
+function useHandsSettled(view: PlayerView): { markSettled(): void; readonly settled: boolean } {
+  const [settled, setSettled] = useState(false);
+  const previous = useRef(view.phase);
+
+  useEffect(() => {
+    const left = previous.current;
+    previous.current = view.phase;
+    if (left !== "complete" && view.phase === "complete") {
+      setSettled(false);
+    }
+  }, [view.phase]);
+
+  const markSettled = useCallback(() => {
+    setSettled(true);
+  }, []);
+
+  return { markSettled, settled };
+}
+
+/**
  * The board, for any session.
  *
  * Knows nothing about where the game is running: against the computer it is fed
@@ -379,6 +427,17 @@ export function GameBoard({
   const { view } = session;
   const { phase, release } = useShownPhase(session, peeking);
   const claimResult = useClaimResult(view);
+  const handsSettled = useHandsSettled(view);
+  // Null until the engine's own phase — not the shown one — is complete, so
+  // this is already showing throughout the last-trick hold, the same beat
+  // `PlayPhase` is still on screen for. Also null for a claimed finish: see
+  // `finishedHandsFor`.
+  const revealedHands = view.phase === "complete" ? finishedHandsFor(view) : null;
+  // True once both hands are actually showing rather than merely available —
+  // see `useHandsSettled`. `PlayToolbar` and the footer both key off this: a
+  // claim button, a bidding recap, both hands' cards laid bare — none of it
+  // is still this deal's to offer once there is no more deal left to act on.
+  const showingRevealedHands = revealedHands !== null && handsSettled.settled;
   const playable = playableCards(view, phase);
   useGameSounds(session, sound);
   // Captured the instant a card is tapped, before `session.act` removes it
@@ -417,15 +476,6 @@ export function GameBoard({
                   setConfirmingLeave(true);
                 }
         }
-        // The complete screen already shows the scorepad in full, so a
-        // button that opens the same thing again is not a real option there.
-        onShowScore={
-          phase === "complete"
-            ? null
-            : () => {
-                setShowingScore(true);
-              }
-        }
         onShowSettings={onShowSettings}
         onSkipPhase={
           devTools && view.phase !== "complete" && session.skipPhase !== null
@@ -435,35 +485,34 @@ export function GameBoard({
       />
 
       <ContractBar
+        handsPlayed={session.history.length}
         opponentName={session.opponentName}
         phase={phase}
         rubber={session.rubber}
         view={view}
+        // The complete screen already shows the scorepad in full, so a
+        // button that opens the same thing again is not a real option there.
+        onShowScore={
+          phase === "complete"
+            ? null
+            : () => {
+                setShowingScore(true);
+              }
+        }
       />
 
-      {peeking && session.opponentHand !== null ? (
-        <OpponentPeek cards={session.opponentHand} />
-      ) : null}
+      {/* Just below the scoring section rather than just above the hand: the
+          deal these options act on is exactly what `ContractBar` is
+          reporting on, so the two sit together instead of the toolbar
+          floating next to the footer it has nothing to do with. It no
+          longer needs to double as the divider between the table and the
+          footer below — the footer draws that border itself now, on every
+          phase, rather than only when this was there to supply it.
 
-      <main className="flex min-h-0 flex-1 flex-col">
-        {/* Offered only on the screen that ends a match, where "done" is a real
-            answer rather than a way out of something unfinished. */}
-        <CurrentPhase
-          handOriginRef={handOriginRef}
-          peeking={peeking}
-          phase={phase}
-          session={session}
-          onDismissTrick={session.dismissTrick}
-          onDone={settled && exit !== null ? exit.leave : null}
-          onStartPlay={release}
-        />
-      </main>
-
-      {/* Just above the hand rather than under the top bar — see `PlayToolbar`
-          for why. It supplies its own top border as the divider between the
-          table above and the footer below, so the footer skips drawing one
-          on this phase — see the footer's own class below. */}
-      {phase === "play" ? (
+          Withheld once both hands are revealed: claiming, checking the
+          bidding, glancing at the last trick are all things to do about a
+          deal still in progress, and this one no longer is. */}
+      {phase === "play" && !showingRevealedHands ? (
         <PlayToolbar
           claimable={claimable}
           lastTrickAvailable={session.lastTrick !== null}
@@ -479,6 +528,26 @@ export function GameBoard({
         />
       ) : null}
 
+      {peeking && session.opponentHand !== null ? (
+        <OpponentPeek cards={session.opponentHand} />
+      ) : null}
+
+      <main className="flex min-h-0 flex-1 flex-col">
+        {/* Offered only on the screen that ends a match, where "done" is a real
+            answer rather than a way out of something unfinished. */}
+        <CurrentPhase
+          handOriginRef={handOriginRef}
+          peeking={peeking}
+          phase={phase}
+          revealedHands={revealedHands}
+          session={session}
+          onDismissTrick={session.dismissTrick}
+          onDone={settled && exit !== null ? exit.leave : null}
+          onHandsSettled={handsSettled.markSettled}
+          onStartPlay={release}
+        />
+      </main>
+
       {/* Held open through the shown phase rather than dropped the instant
           `view.hand` empties — the last card is played, and so the hand is
           empty, well before the screen actually leaves "play" for the beat
@@ -489,10 +558,29 @@ export function GameBoard({
           "No cards yet" is true at the start of the draw and a lie at the end
           of the thirteenth trick, where the hand is empty because all of it
           has been played — so that beat gets a blank placeholder, the same
-          height as `Hand`'s own empty state, rather than that text. */}
+          height as `Hand`'s own empty state, rather than that text.
+
+          The reveal is the one exception, and needs no change to *when* the
+          footer shows: the shown phase is still "play" for the whole
+          last-trick hold that carries it, exactly like any other trick. Only
+          *what* it shows changes — this seat's own thirteen as they stood at
+          the start of the deal, in the same spot the now-empty `view.hand`
+          would otherwise leave blank. Held back until `handsSettled.settled`
+          on top of `revealedHands` itself, so it does not appear until the
+          last trick has actually cleared away — see `useHandsSettled`. Before
+          that it falls through to the ordinary blank placeholder below,
+          which is already exactly right: the hand is empty either way. */}
       {phase === "complete" ? null : (
-        <footer className={phase === "play" ? "pt-1" : "border-t border-white/10 pt-1"}>
-          {phase !== "draw" && view.hand.length === 0 ? (
+        <footer className="border-t border-white/10 pt-1">
+          {showingRevealedHands ? (
+            <Hand
+              cards={revealedHands[view.me]}
+              highlight={null}
+              onPlay={null}
+              playable={null}
+              tapToSelect={tapToSelect}
+            />
+          ) : phase !== "draw" && view.hand.length === 0 ? (
             <div style={{ height: HAND_HEIGHT }} />
           ) : (
             <Hand

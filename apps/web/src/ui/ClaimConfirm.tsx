@@ -19,10 +19,7 @@ export function ClaimConfirm({ onCancel, onConfirm }: ClaimConfirmProps): React.
       <div className="flex flex-col gap-4 rounded-2xl bg-table-dark px-5 py-5">
         <div>
           <h2 className="text-lg font-semibold">Claim the rest?</h2>
-          <p className="mt-1 text-sm text-white/55">
-            You are declaring every remaining trick is yours. Your hand is shown the instant you
-            do — and stays shown for the rest of this deal, whether or not they agree.
-          </p>
+          <p className="mt-1 text-sm text-white/55">Are you sure?</p>
         </div>
         <button
           type="button"

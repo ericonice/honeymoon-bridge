@@ -249,6 +249,7 @@ describe("rubber facts", () => {
     const summary = summaryWith(newRubber(), [record(0)]);
     expect(rubberFacts(summary)).toEqual({
       comebackWinner: null,
+      handsPlayed: null,
       sweepWinner: null,
       wonRubber: null,
     });
@@ -289,9 +290,17 @@ describe("rubber facts", () => {
 
     expect(rubberFacts(summary)).toEqual({
       comebackWinner: null,
+      handsPlayed: null,
       sweepWinner: null,
       wonRubber: null,
     });
+  });
+
+  it("counts every deal of the rubber, including the one that just finished it", () => {
+    const rubber: RubberState = { ...newRubber(), complete: true, gamesWon: [2, 0], winner: 0 };
+    const summary = summaryWith(rubber, [record(0), record(0)]);
+
+    expect(rubberFacts(summary).handsPlayed).toBe(2);
   });
 });
 
@@ -381,20 +390,77 @@ describe("dealUnlocks", () => {
 
 describe("rubberUnlocks", () => {
   it("unlocks nothing while the rubber has not completed", () => {
-    const facts = { comebackWinner: null, sweepWinner: null, wonRubber: null };
+    const facts = { comebackWinner: null, handsPlayed: null, sweepWinner: null, wonRubber: null };
     expect(rubberUnlocks(NOTHING_HELD, facts, 0)).toEqual({ counters: {}, unlocked: [] });
   });
 
   it("unlocks both take-the-rubber tiers at once on a sweep", () => {
-    const facts = { comebackWinner: null, sweepWinner: 0 as PlayerId, wonRubber: 0 as PlayerId };
+    const facts = {
+      comebackWinner: null,
+      handsPlayed: 5,
+      sweepWinner: 0 as PlayerId,
+      wonRubber: 0 as PlayerId,
+    };
     const update = rubberUnlocks(NOTHING_HELD, facts, 0);
 
     expect(update.unlocked).toContainEqual({ achievement: "take-the-rubber", tier: "bronze" });
     expect(update.unlocked).toContainEqual({ achievement: "take-the-rubber", tier: "silver" });
+    expect(update.unlocked).not.toContainEqual({ achievement: "take-the-rubber", tier: "gold" });
+  });
+
+  it("also unlocks gold when the sweep took exactly two hands", () => {
+    const facts = {
+      comebackWinner: null,
+      handsPlayed: 2,
+      sweepWinner: 0 as PlayerId,
+      wonRubber: 0 as PlayerId,
+    };
+    const update = rubberUnlocks(NOTHING_HELD, facts, 0);
+
+    expect(update.unlocked).toContainEqual({ achievement: "take-the-rubber", tier: "gold" });
+  });
+
+  it("does not unlock gold for a sweep that took more than two hands", () => {
+    const facts = {
+      comebackWinner: null,
+      handsPlayed: 4,
+      sweepWinner: 0 as PlayerId,
+      wonRubber: 0 as PlayerId,
+    };
+    const update = rubberUnlocks(NOTHING_HELD, facts, 0);
+
+    expect(update.unlocked).not.toContainEqual({ achievement: "take-the-rubber", tier: "gold" });
+  });
+
+  it("unlocks sitzfleisch for the winner of a rubber that ran past 20 hands", () => {
+    const facts = {
+      comebackWinner: null,
+      handsPlayed: 21,
+      sweepWinner: null,
+      wonRubber: 0 as PlayerId,
+    };
+    const winner = rubberUnlocks(NOTHING_HELD, facts, 0);
+    const loser = rubberUnlocks(NOTHING_HELD, facts, 1);
+
+    expect(winner.unlocked).toContainEqual({ achievement: "sitzfleisch", tier: "bronze" });
+    expect(loser.unlocked).not.toContainEqual({ achievement: "sitzfleisch", tier: "bronze" });
+  });
+
+  it("does not unlock sitzfleisch at exactly 20 hands", () => {
+    const facts = {
+      comebackWinner: null,
+      handsPlayed: 20,
+      sweepWinner: null,
+      wonRubber: 0 as PlayerId,
+    };
+    expect(rubberUnlocks(NOTHING_HELD, facts, 0).unlocked).not.toContainEqual({
+      achievement: "sitzfleisch",
+      tier: "bronze",
+    });
   });
 
   it("always bumps marathon, win or lose", () => {
-    const facts = { comebackWinner: null, sweepWinner: null, wonRubber: 0 as PlayerId };
+    const facts = { comebackWinner: null, handsPlayed: null, sweepWinner: null, wonRubber: 0 as PlayerId };
 
     expect(rubberUnlocks(NOTHING_HELD, facts, 0).counters.marathon).toBe(1);
     expect(rubberUnlocks(NOTHING_HELD, facts, 1).counters.marathon).toBe(1);

@@ -3,11 +3,21 @@ import type { DealPhase, Pair, PlayerView, RubberState } from "@hb/engine";
 import { ContractText } from "./CardText.js";
 
 export interface ContractBarProps {
+  /** Deals played so far this rubber, including the one in progress. */
+  readonly handsPlayed: number;
   readonly opponentName: string;
   /** Shown phase, same lag as `TopBar` — see its own doc for why. */
   readonly phase: DealPhase;
   readonly rubber: RubberState;
   readonly view: PlayerView;
+  /**
+   * Opens the rubber scorepad. Null on the screen that already shows it in
+   * full. Makes the whole strip a button rather than adding an icon to it —
+   * the same "tap the thing itself" this app already reaches for elsewhere
+   * (`PlayPhase`'s own screen, `Overlay`'s backdrop) rather than a separate
+   * control competing for room in an already narrow bar.
+   */
+  onShowScore: (() => void) | null;
 }
 
 // Same width as `Scorepad`'s own cell — wide enough for "Computer" to sit
@@ -45,19 +55,25 @@ function StandingRow({
 }
 
 /**
- * The rubber standing — total, toward game, and games won — the same three
- * numbers `Scorepad` shows at the foot of the full scorepad, not the
- * itemized per-deal breakdown above them.
+ * The rubber standing — total, part score and games won.
  *
- * All three rather than just the total: the total is the one number that
- * always moves, but it was tried alone first and read as incomplete on its
- * own — toward game is what actually changes what a hand is worth bidding,
- * and games won is how close the rubber itself is to being over, and neither
- * is derivable from the total without doing the arithmetic in your head.
+ * Part score is `rubber.partScore`, not `rubber.belowLineTotal`: on a real
+ * scorepad, winning a game rules a fresh line and the next game's
+ * below-the-line entries start again from zero underneath it, so the number
+ * that means something right now is the live, resettable part score, not the
+ * rubber's lifetime sum of every game's below-the-line points. It is also the
+ * bridge term for exactly this — an incomplete below-the-line score not yet
+ * amounting to a game — rather than this app's own former "toward game"
+ * framing, which said the same number without the term a bridge player
+ * already has for it. The above-the-line total lives one tap away, in the
+ * full scorepad `onShowScore` opens, rather than crowding a fourth row into
+ * a strip this narrow.
  *
- * Games won is omitted in a single game, the same reasoning `Scorepad` uses
- * for its own row: winning one ends the match, so it can only ever read
- * nil–nil, and a row that can only read zero is not a score.
+ * Games won is kept alongside for the same reason it always was: it is how
+ * close the rubber itself is to being over, which the other two numbers do
+ * not say on their own. Omitted in a single game, the same reasoning
+ * `Scorepad` uses for its own row: winning one ends the match, so it can only
+ * ever read nil–nil, and a row that can only read zero is not a score.
  *
  * Below `TopBar` rather than behind its Score button, on every phase that
  * still has bidding ahead of it — that dependency is true throughout the
@@ -67,19 +83,31 @@ function StandingRow({
  * above would just be the same numbers said twice.
  */
 function StandingLines({
+  handsPlayed,
   opponentName,
   rubber,
   view,
 }: {
+  readonly handsPlayed: number;
   readonly opponentName: string;
   readonly rubber: RubberState;
   readonly view: PlayerView;
 }): React.JSX.Element {
+  // `handsPlayed` counts deals already scored into the rubber, which is one
+  // short of the hand actually on the table until this one is scored into it
+  // too — `view.phase`, the engine's own, says which side of that it is on.
+  // Read off the engine's phase rather than the shown one on purpose: during
+  // the hands reveal the shown phase still lags at "play", but the deal
+  // behind it is already scored, and this should already read as the count
+  // that includes it rather than overshoot by counting the next one too.
+  const handNumber = view.phase === "complete" ? handsPlayed : handsPlayed + 1;
+
   return (
     <div className="text-xs">
+      <p className="pb-0.5 text-white/40">Hand #: {handNumber}</p>
       <StandingHeader opponentName={opponentName} />
       <StandingRow label="Total" values={totalScore(rubber)} view={view} />
-      <StandingRow label="Toward game" values={rubber.partScore} view={view} />
+      <StandingRow label="Part score" values={rubber.partScore} view={view} />
       {rubber.format === "rubber" ? (
         <StandingRow label="Games won" values={rubber.gamesWon} view={view} />
       ) : null}
@@ -99,6 +127,8 @@ function StandingLines({
  * that room was sometimes only "2NT by…".
  */
 export function ContractBar({
+  handsPlayed,
+  onShowScore,
   opponentName,
   phase,
   rubber,
@@ -116,10 +146,10 @@ export function ContractBar({
     return null;
   }
 
-  return (
-    <div className="border-b border-white/10 bg-white/5 px-4 py-1.5 text-sm">
+  const content = (
+    <>
       {phase === "complete" ? null : (
-        <StandingLines opponentName={opponentName} rubber={rubber} view={view} />
+        <StandingLines handsPlayed={handsPlayed} opponentName={opponentName} rubber={rubber} view={view} />
       )}
       {contract === null ? null : (
         <p className={`flex items-baseline justify-between gap-2 ${phase === "complete" ? "" : "mt-1"}`}>
@@ -132,6 +162,21 @@ export function ContractBar({
           </span>
         </p>
       )}
-    </div>
+    </>
+  );
+
+  if (onShowScore === null) {
+    return <div className="border-b border-white/10 bg-white/5 px-4 py-1.5 text-sm">{content}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label="Show the score"
+      className="w-full border-b border-white/10 bg-white/5 px-4 py-1.5 text-left text-sm"
+      onClick={onShowScore}
+    >
+      {content}
+    </button>
   );
 }

@@ -20,9 +20,10 @@ export interface PlayToolbarProps {
 /**
  * What there is to do about the deal in progress — Bidding and Last trick are
  * only meaningful once play has started, and Claim only during it, so all
- * three live in a strip just above the hand, where a thumb already is. Score
- * is not in this strip: it applies on every phase, not just this one, so it
- * lives with Settings in the top bar instead — see `TopBar`.
+ * three live in a strip just below the scoring section, where the deal they
+ * act on is already the subject. Score is not in this strip: it applies on
+ * every phase, not just this one, so it stays where `ContractBar` already
+ * puts it, a tap on the bar itself, rather than a fourth button here.
  */
 export function PlayToolbar({
   claimable,

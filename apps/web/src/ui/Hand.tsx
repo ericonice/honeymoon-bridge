@@ -349,8 +349,21 @@ export function Hand({
               // mid-hand during the draw, so it gets the flight's own duration
               // instead — the hand finishes parting right as the new card
               // arrives, rather than snapping open well before or after it.
+              //
+              // That transition is draw-only, on purpose: `playable` is null
+              // throughout the draw and never null during play, so `steps`
+              // changing at the start of a trick — a new suit led, a
+              // different set of cards now legal — snaps instantly rather
+              // than gliding. `nearestLegalIndex` reads `steps` the instant it
+              // changes, and a tap during a glide was being hit-tested against
+              // where a card was headed rather than where it still visually
+              // sat — a raised card's wider hit band, claimed before the card
+              // had actually moved into it.
               style={{
-                transition: `transform 150ms ease-out, box-shadow 150ms ease-out, opacity 150ms ease-out, margin-left ${flightDuration}ms ease-out`,
+                transition:
+                  playable === null
+                    ? `transform 150ms ease-out, box-shadow 150ms ease-out, opacity 150ms ease-out, margin-left ${flightDuration}ms ease-out`
+                    : "transform 150ms ease-out, box-shadow 150ms ease-out, opacity 150ms ease-out",
                 ...(step === undefined ? {} : { marginLeft: step - CARD_WIDTH }),
               }}
               disabled={!legal || onPlay === null}

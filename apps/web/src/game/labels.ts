@@ -99,6 +99,7 @@ export const ACHIEVEMENT_ORDER: readonly AchievementId[] = [
   "take-the-rubber",
   "down-but-not-out",
   "nobody-wanted-it",
+  "sitzfleisch",
   "two-suiter",
   "against-the-odds",
   "marathon",
@@ -153,6 +154,11 @@ export const ACHIEVEMENTS: Record<AchievementId, AchievementInfo> = {
     name: "Nobody Wanted It",
     tiers: { bronze: "Done it" },
   },
+  sitzfleisch: {
+    description: "Win a rubber that runs long, hand after hand.",
+    name: "Sitzfleisch",
+    tiers: { bronze: "More than 20 hands" },
+  },
   slam: {
     description: "Bid and make a slam.",
     name: "Slam",
@@ -161,7 +167,11 @@ export const ACHIEVEMENTS: Record<AchievementId, AchievementInfo> = {
   "take-the-rubber": {
     description: "Win a rubber.",
     name: "Take the Rubber",
-    tiers: { bronze: "Won it", silver: "Won it two games to none" },
+    tiers: {
+      bronze: "Won it",
+      gold: "Won it in two hands",
+      silver: "Won it two games to none",
+    },
   },
   "two-suiter": {
     description: "Be dealt a hand confined to two suits or fewer.",
