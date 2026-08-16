@@ -1,8 +1,10 @@
 import type { MatchFormat } from "@hb/engine";
+import { useState } from "react";
 import { BOT_RELEASE } from "../bot/release.js";
 import type { CardColor } from "../game/cardColor.js";
 import type { Boldness, Pace, Strength } from "../game/identity.js";
 import type { Theme } from "../game/theme.js";
+import { HandLogsOverlay } from "./HandLogsOverlay.js";
 
 export interface SettingsOverlayProps {
   readonly cardColor: CardColor;
@@ -162,6 +164,8 @@ export function SettingsOverlay({
   tapToSelect,
   theme,
 }: SettingsOverlayProps): React.JSX.Element {
+  const [showingHandLogs, setShowingHandLogs] = useState(false);
+
   return (
     <div className="safe-inset absolute inset-0 z-30 flex flex-col bg-table-dark/97">
       <div className="flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto px-5 py-6">
@@ -324,6 +328,21 @@ export function SettingsOverlay({
                 on={devTools}
                 onChange={onDevToolsChange}
               />
+
+              {/* Raw for now — see `HandLogsOverlay`. What a later pass will
+                  actually assess the bot against, not a preference. */}
+              <button
+                type="button"
+                className="w-full rounded-xl border border-white/15 px-4 py-3 text-left"
+                onClick={() => {
+                  setShowingHandLogs(true);
+                }}
+              >
+                <span className="block text-base font-medium">Logged hands</span>
+                <span className="mt-0.5 block text-xs text-white/55">
+                  Every robot-game deal reported so far, raw.
+                </span>
+              </button>
             </div>
           </div>
         ) : null}
@@ -355,6 +374,14 @@ export function SettingsOverlay({
           Close
         </button>
       </div>
+
+      {showingHandLogs ? (
+        <HandLogsOverlay
+          onClose={() => {
+            setShowingHandLogs(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

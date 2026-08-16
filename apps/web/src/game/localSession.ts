@@ -22,6 +22,7 @@ import { DISGUISE_CREDIT_ON } from "../bot/heuristicBot.js";
 import { createSamplingBot } from "../bot/samplingBot.js";
 import { useAchievementTracker } from "./achievements.js";
 import { botActionFor } from "./botTurn.js";
+import { reportHandLog } from "./handLog.js";
 import { boldness, disguiseEnabled, pace, preferredFormat, strength } from "./identity.js";
 import { reportRobotRubber } from "./records.js";
 import type { GameSession } from "./session.js";
@@ -284,6 +285,22 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     }
     processedDeal.current = deal;
     achievements.applyDeal(dealFacts(deal, summary.score, summary.vulnerable), HUMAN);
+
+    // Nothing to log for a passed-out deal: no contract, no play, nothing a
+    // later solver-based assessment could do anything with.
+    if (!deal.passedOut && deal.contract !== null && deal.initialHands !== null) {
+      void reportHandLog({
+        auction: deal.auction,
+        boldness: boldness(),
+        botVersion: BOT_RELEASE.version,
+        completedTricks: deal.completedTricks,
+        contract: deal.contract,
+        disguise: disguiseEnabled(),
+        initialHands: deal.initialHands,
+        strength: strength(),
+        tricksWon: deal.tricksWon,
+      });
+    }
   }, [achievements, deal, summary.score, summary.vulnerable]);
 
   // Reported the moment the rubber is won rather than when the player taps on,

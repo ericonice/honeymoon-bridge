@@ -1,4 +1,4 @@
-import type { DealFacts, MatchFormat, Pair, PlayerId, RubberFacts, Tier } from "@hb/engine";
+import type { Contract, DealFacts, MatchFormat, Pair, PlayerId, RubberFacts, Tier } from "@hb/engine";
 import { achievementsFor, applyDealAchievements, applyRubberAchievements } from "./achievements.js";
 import {
   accountFor,
@@ -16,6 +16,8 @@ import {
 } from "./auth.js";
 import { inviteCode, isInviteCode } from "./codes.js";
 import type { Env } from "./env.js";
+import { handLogsFor, recordHandLog } from "./handLogs.js";
+import type { HandLog } from "./handLogs.js";
 import { recentMatchesFor, recordRubber, recordsFor, resetRecord, ROBOT_TOKEN } from "./results.js";
 
 export { Lobby } from "./lobby.js";
@@ -265,6 +267,209 @@ function rubberFactsFrom(body: unknown): { facts: RubberFacts; player: PlayerId 
   }
 
   return { facts: { comebackWinner, handsPlayed, sweepWinner, wonRubber }, player };
+}
+
+const SUITS = new Set(["C", "D", "H", "S"]);
+const STRAINS = new Set(["C", "D", "H", "S", "NT"]);
+const DOUBLINGS = new Set(["none", "doubled", "redoubled"]);
+
+function cardOrNull(input: unknown): unknown {
+  if (typeof input !== "object" || input === null) {
+    return undefined;
+  }
+  const value = input as Record<string, unknown>;
+  const rank = value.rank;
+  if (
+    typeof rank !== "number" ||
+    !Number.isInteger(rank) ||
+    rank < 2 ||
+    rank > 14 ||
+    typeof value.suit !== "string" ||
+    !SUITS.has(value.suit)
+  ) {
+    return undefined;
+  }
+  return { rank, suit: value.suit };
+}
+
+function handOrNull(input: unknown): unknown {
+  if (!Array.isArray(input) || input.length !== 13) {
+    return undefined;
+  }
+  const cards = input.map(cardOrNull);
+  return cards.some((card) => card === undefined) ? undefined : cards;
+}
+
+function callOrNull(input: unknown): unknown {
+  if (typeof input !== "object" || input === null) {
+    return undefined;
+  }
+  const value = input as Record<string, unknown>;
+  if (value.type === "pass" || value.type === "double" || value.type === "redouble") {
+    return { type: value.type };
+  }
+  if (value.type === "bid" && typeof value.bid === "object" && value.bid !== null) {
+    const bid = value.bid as Record<string, unknown>;
+    if (
+      typeof bid.level === "number" &&
+      Number.isInteger(bid.level) &&
+      bid.level >= 1 &&
+      bid.level <= 7 &&
+      typeof bid.strain === "string" &&
+      STRAINS.has(bid.strain)
+    ) {
+      return { type: "bid", bid: { level: bid.level, strain: bid.strain } };
+    }
+  }
+  return undefined;
+}
+
+/** At most one call a turn, and this game's auction is never anywhere near this long. */
+const MAX_AUCTION_LENGTH = 200;
+
+function auctionOrNull(input: unknown): unknown {
+  if (!Array.isArray(input) || input.length > MAX_AUCTION_LENGTH) {
+    return undefined;
+  }
+  const entries = input.map((entry) => {
+    if (typeof entry !== "object" || entry === null) {
+      return undefined;
+    }
+    const value = entry as Record<string, unknown>;
+    const by = playerId(value.by);
+    const call = callOrNull(value.call);
+    return by === null || call === undefined ? undefined : { by, call };
+  });
+  return entries.some((entry) => entry === undefined) ? undefined : entries;
+}
+
+function contractOrNull(input: unknown): Contract | undefined {
+  if (typeof input !== "object" || input === null) {
+    return undefined;
+  }
+  const value = input as Record<string, unknown>;
+  const declarer = playerId(value.declarer);
+  if (
+    declarer === null ||
+    typeof value.doubling !== "string" ||
+    !DOUBLINGS.has(value.doubling) ||
+    typeof value.level !== "number" ||
+    !Number.isInteger(value.level) ||
+    value.level < 1 ||
+    value.level > 7 ||
+    typeof value.strain !== "string" ||
+    !STRAINS.has(value.strain)
+  ) {
+    return undefined;
+  }
+  return {
+    declarer,
+    doubling: value.doubling as Contract["doubling"],
+    level: value.level as Contract["level"],
+    strain: value.strain as Contract["strain"],
+  };
+}
+
+/** A trick is two cards here, never four — see `REQUIREMENTS.md` §1. */
+function completedTricksOrNull(input: unknown): unknown {
+  if (!Array.isArray(input) || input.length > 13) {
+    return undefined;
+  }
+  const tricks = input.map((trick) => {
+    if (typeof trick !== "object" || trick === null) {
+      return undefined;
+    }
+    const value = trick as Record<string, unknown>;
+    const leader = playerId(value.leader);
+    const winner = playerId(value.winner);
+    if (leader === null || winner === null || !Array.isArray(value.cards) || value.cards.length > 2) {
+      return undefined;
+    }
+    const cards = value.cards.map((played: unknown) => {
+      if (typeof played !== "object" || played === null) {
+        return undefined;
+      }
+      const p = played as Record<string, unknown>;
+      const by = playerId(p.by);
+      const card = cardOrNull(p.card);
+      return by === null || card === undefined ? undefined : { by, card };
+    });
+    return cards.some((card: unknown) => card === undefined)
+      ? undefined
+      : { cards, leader, winner };
+  });
+  return tricks.some((trick) => trick === undefined) ? undefined : tricks;
+}
+
+const BOLDNESS = new Set(["bold", "cautious", "normal"]);
+const STRENGTHS = new Set(["normal", "strong", "weak"]);
+
+/**
+ * Reads a reported robot-game deal, or nothing.
+ *
+ * Same trust model as `robotRubberFrom` — there is no server in a robot game
+ * to have witnessed it, so this is bounded and typed rather than verified.
+ * `initialHands` is checked at exactly thirteen cards each: unlike the
+ * generous bounds elsewhere, that is not a policy choice, it is what a dealt
+ * hand is.
+ */
+function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+  const value = body as Record<string, unknown>;
+
+  const auction = auctionOrNull(value.auction);
+  const completedTricks = completedTricksOrNull(value.completedTricks);
+  const contract = contractOrNull(value.contract);
+  const hand0 = handOrNull(value.initialHands0);
+  const hand1 = handOrNull(value.initialHands1);
+  const tricksWon = countPair(value.tricksWon);
+  if (
+    auction === undefined ||
+    completedTricks === undefined ||
+    contract === undefined ||
+    hand0 === undefined ||
+    hand1 === undefined ||
+    tricksWon === null ||
+    typeof value.deviceToken !== "string" ||
+    value.deviceToken === "" ||
+    typeof value.botVersion !== "number" ||
+    !Number.isInteger(value.botVersion) ||
+    value.botVersion < 0 ||
+    value.botVersion > 1000 ||
+    typeof value.boldness !== "string" ||
+    !BOLDNESS.has(value.boldness) ||
+    typeof value.strength !== "string" ||
+    !STRENGTHS.has(value.strength) ||
+    typeof value.disguise !== "boolean"
+  ) {
+    return null;
+  }
+
+  const log: HandLog = {
+    auction: auction as HandLog["auction"],
+    boldness: value.boldness,
+    botVersion: value.botVersion,
+    completedTricks: completedTricks as HandLog["completedTricks"],
+    contract,
+    deviceToken: value.deviceToken,
+    disguise: value.disguise,
+    initialHands: [hand0, hand1] as HandLog["initialHands"],
+    strength: value.strength,
+    tricksWon,
+  };
+
+  return {
+    dealJson: JSON.stringify({
+      auction: log.auction,
+      completedTricks: log.completedTricks,
+      contract: log.contract,
+      initialHands: log.initialHands,
+      tricksWon: log.tricksWon,
+    }),
+    log,
+  };
 }
 
 /** How long to wait, in words, for a message somebody is about to read. */
@@ -552,6 +757,40 @@ export default {
         Date.now(),
       );
       return json(request, { ok: true }, 201);
+    }
+
+    // A completed robot-game deal — both hands, the auction, every trick —
+    // logged for later assessment against the double-dummy solver, the same
+    // way `bench/par.ts` already assesses synthetic ones. Same trust model as
+    // `/api/results/robot`: no server was in the loop to have watched this
+    // deal, and an account is never required to log one.
+    if (url.pathname === "/api/hands/log" && request.method === "POST") {
+      const parsed = handLogFrom(await request.json().catch(() => null));
+      if (parsed === null) {
+        return json(request, { error: "Not a hand log" }, 400);
+      }
+
+      const accountId = await accountFromRequest(request, env, Date.now());
+      await recordHandLog(env, parsed.log, accountId, parsed.dealJson, Date.now());
+      return json(request, { ok: true }, 201);
+    }
+
+    // The logged deals themselves, for looking at what a later assessment
+    // pass will actually see. Every hand anyone has played against the
+    // computer, not just the asker's own, so this is not the same kind of
+    // thing `/api/results` is — gated to the playtesters list rather than to
+    // an ordinary session, and a 404 rather than a 401 for anyone else, same
+    // reasoning as `/api/auth/dev`: a route that says "not authorized" has
+    // admitted it exists.
+    if (url.pathname === "/api/hands" && request.method === "GET") {
+      const accountId = await accountFromRequest(request, env, Date.now());
+      const account = accountId === null ? null : await accountFor(env, accountId);
+      if (account === null || !isPlaytester(env, account.email)) {
+        return json(request, { error: "Not found" }, 404);
+      }
+      const requested = Number(url.searchParams.get("limit"));
+      const limit = Number.isInteger(requested) && requested > 0 && requested <= 200 ? requested : 50;
+      return json(request, { hands: await handLogsFor(env, limit) });
     }
 
     // The badge list and running counters behind it, for the Achievements

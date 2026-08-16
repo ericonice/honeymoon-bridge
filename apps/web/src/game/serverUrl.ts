@@ -50,6 +50,14 @@ export function rubberAchievementsUrl(): string {
   return `${ORIGIN}/api/achievements/rubber`;
 }
 
+export function handLogUrl(): string {
+  return `${ORIGIN}/api/hands/log`;
+}
+
+export function handsUrl(): string {
+  return `${ORIGIN}/api/hands`;
+}
+
 export function tableSocketUrl(code: string): string {
   // Same origin, other scheme: ws for http, wss for https.
   return `${ORIGIN.replace(/^http/, "ws")}/api/tables/${code}/ws`;
