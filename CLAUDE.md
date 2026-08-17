@@ -45,11 +45,38 @@ npm run bench:head      --workspace @hb/web -- 120 25   # two card-play policies
 npm run bench:calibrate --workspace @hb/web -- 400      # refit the estimates against par
 npm run bench:auction   --workspace @hb/web -- 12       # why the bidder bid that
 npm run bench:strain    --workspace @hb/web -- "S:AK4 H:AK4 D:A43 C:AK32"
+
+# Deals a person actually played, from the hand log. Not generated — pass the file.
+npx vite-node bench/hands.ts hands.json         # from apps/web; add v=2 for one version
 ```
+
+`bench/hands.ts` reports **per bot version and never pools**, which is the whole reason
+`bot/release.ts` exists and is exactly what this bench did wrong at first. The version is
+only the coarse axis, though — strength, boldness and the disguise change the play too,
+and the shipped boldness changed with v2 — so each block prints its own configuration
+census whenever it holds more than one. Its replay section is the exception and is
+deliberately not split: it asks what *today's* bidder would say, so who bid at the time
+has no bearing on the answer.
+
+`bench/rubber.ts` takes flags after the counts: `nodouble` restores the old
+five-level-only reference, `equity=N` sets what the challenger prices a game at, and
+`vs=N` replaces the reference with **this same bidder** at a different trust weight.
+That last one is not a variant, it is the answer to a question the legacy reference
+cannot answer — see "the instrument decided this one" below.
 
 `par` and `head` take minutes and report every 25 deals; `rubber`, `calibrate` and `auction` finish
 in seconds. **Piping any of them through `grep` or `tail` re-buffers stdout and hides the progress
 until the end**, which makes a working run and a wedged one look identical.
+
+**The reference bidder must be able to hurt you, and for a long time it could not.**
+`bench/rubber.ts`'s reference doubled only from the five level. Recorded games showed
+the bot's eight worst deals were doubled contracts, **six of them at the four level**,
+carrying 78% of a 205-point-a-deal deficit — and every one of those six was invisible
+to the bench. The reference now doubles off the *solver*, from down two, because a
+heuristic doubler shares the estimator's blind spots and so fails to punish exactly
+the hands the estimator misreads. It is a bench-level intercept rather than a `Bot`,
+and it is handed the `DealState`: no bot may ever reach the solver for a seat that is
+thinking, so an oracle structurally cannot be one.
 
 **Bidding can only be measured by `bench/rubber.ts`.** Everything else plays deals at love all,
 where a bidder has no part-score to protect, no game to stretch for and nothing to sacrifice
@@ -272,7 +299,7 @@ cannot ship when the others can.
 exercise reconnection deliberately rather than hoping. Nothing persists a rubber across a refresh
 in the robot game. And the play screen still has none of the polish the draw screen got.
 
-**The bot is versioned, from v1 Angela James.** `bot/release.ts` holds it; versions are numbered from
+**The bot is versioned, from v1 Angela James; v2 Bobby Orr is current.** `bot/release.ts` holds it; versions are numbered from
 one and named alphabetically after hockey players, so a list of them reads in the order they
 existed — Angela James, Bobby Orr, Cammi Granato, Doug Harvey, Eddie Shore, Frank Mahovlich,
 Gordie Howe, Hayley Wickenheiser, Igor Larionov, Jean Béliveau. **The name appears
@@ -403,6 +430,80 @@ fitted knob and it is touchy: at 1.0 no-trump is over-valued by 1.3 tricks, at 0
 bid at all. **`bench/calibrate.ts` reports bias per strain, and that is the number to watch** — a
 bias that differs by strain is one a single affine calibration structurally cannot remove, and it
 is what catches this class of mistake. `bench/strain.ts` settles arguments about a single hand.
+
+**The first recorded games found the bot losing badly, and the cause was one bug.** Fifty logged
+robot deals, analyzed by `bench/hands.ts` — the pass the hand logging was built for. The bot was
+**205 ± 65 points a deal down**, 32 deals to 18. Card play was not the problem: it threw away 0.46
+tricks a deal against the person's 0.22, which is worth tens of points, not hundreds. Eight deals
+were, all of them contracts it declared and got doubled in, carrying 8,000 of the 10,250-point
+deficit. The other 42 were roughly level.
+
+The bug: **`estimateFor` blended the level they claimed into the value of *their* contract and threw
+it away when pricing its own.** On a hand where the person had bid 4♥, the bot simultaneously
+believed they took ten tricks and that it took eight and a half in 4NT — and bid on the flattering
+half of a contradiction. `bidValue.ts` then priced that as down two, a cheap sacrifice against
+conceding a game. **The pricing was never wrong; the estimate was six tricks too high.** One
+function now answers "how many tricks does the declarer of this contract take" for both halves of
+the decision, which is what stops the two diverging again.
+
+**And the instrument decided this one, against the idea.** The obvious fix — trust their bid
+symmetrically, at the same 0.75 — fixed all eight recorded disasters and *lost* 200 points a rubber.
+That looked like the reference overclaiming, so the bench grew a `vs=` mode that plays the bidder
+against **itself** at a different weight. Against a bidder as honest as its own, trusting their bid
+is actively harmful: −47 at 0.25, −248 at 0.5, −354 at 0.75. The margin loss was real, not an
+artifact. The reason is that trick counts are **not additive across strains** — a hand pair can be
+11 tricks in hearts for one seat and 10 in clubs for the other — so "they claim ten, therefore I
+hold three" is sound arithmetic only inside their own strain, and the cross-strain step is
+guesswork. The weight ships at **0.25**, a wash in points that still avoids one more real disaster,
+and gated to level three and up: a one-level bid is a floor rather than an estimate, and reading it
+as a claim about seven tricks is what turned a bidder that competed into one that folded.
+
+**What actually fixed the disasters was upstream, in `rawTricks`.** No-trump was over-valued by
+**+1.22 tricks over 800 hands** — the largest per-strain bias in the model, against +0.06 to +0.15
+for the suits. The missing term: with no dummy and no partner, **a suit this hand cannot stop is run
+to the end, and every trick of it forces a discard from exactly the winners the model has just
+finished counting.** A winner is only worth counting if the hand gets to cash it. `RACE_COST` prices
+that, and the trend it was fitted to is about as clean as this file gets — bias against par ran
++0.31, +0.86, +1.25, +1.98, +3.07 as the unstopped length went from two or fewer up to six or more.
+The race term alone cut the bot's doubled disasters by **56%** and fixed four of the eight recorded
+hands on its own; r² went 0.401 to 0.448 and average error 1.57 to 1.51.
+
+Charging the *whole* race was the mistake, and it failed exactly the way the trump-honor fix once
+did: no-trump went from best strain on 41 hands in 800 to **one**, while every bias column stayed
+healthy. `RACE_FREE` fixes it — every hand has a shortest suit, a flat 4-3-3-3 already expects about
+0.9 cards of race, and that much is inside the fitted intercept because the intercept was fitted
+over hands that all had it. **Only the excess over an ordinary hand's race is a reason to prefer a
+trump contract.** Which is the same discovery the rest of the model keeps making: never the level of
+a quantity, always the departure from what an average hand holds.
+
+`bench/calibrate.ts` now also reports **what the strain choice costs against par**, because
+over-debiting a denomination does not show up as bias — it shows up as a denomination that stops
+being bid, and the handful that survive look fine. Reported as a trick shortfall rather than an
+agreement rate, since par ties constantly and "did it pick *the* best strain" is mostly a question
+about an arbitrary tie-break.
+
+**Two knobs were revisited once the reference could punish, and only one moved.** `bold` maps to a
+game equity of 550 and was the fresh-install default, chosen above the measured optimum precisely
+because the old reference barely doubled. Against one that does, bold is worth nothing in points
+(+612 a rubber against +635) and walks into 45% more doubled disasters, so **the default is now
+normal** — the setting stays for anyone who wants a bolder opponent. `DOUBLED_FROM_DOWN` is the
+opposite outcome and worth recording as such: it was flagged here as unmeasurable, it is measurable
+now, and measurement says it barely matters (+633 against +635, wrecks 71 against 80, both inside
+noise). **Left at 2.** A constant changed on noise is worse than one left alone on judgement.
+
+**What the log was missing, and now records.** Vulnerability and the rubber standing the deal was
+*bid* at — without it every point figure above is a love-all approximation and the bot's actual call
+cannot be replayed at all, since `bidValue` prices everything against the standing. And the seed,
+the starter and the draw turns, which make the deal exactly reproducible: `initialHands` is what the
+draw *produced*, so 26 of a deal's 52 decisions were unmeasurable. The seed is kept in a ref in
+`localSession` rather than on `DealState`, because a field holding one inside the deal is a leak
+waiting for somebody to forget to strip it from `viewFor`; it is safe to send only because the deal
+is over. All four are **optional** server-side, for the same reason `botVersion` is: the service
+worker keeps old builds in circulation, and a deal somebody played is worth recording whether or not
+their client knew to send them.
+
+Deliberately *not* logged: what the bot thought. It is version-specific, it bloats the record, and
+it is recomputable from a replayable deal. Log the deal, replay the bidder.
 
 ### Open threads
 
@@ -579,6 +680,23 @@ is what catches this class of mistake. `bench/strain.ts` settles arguments about
   is untouched. This is the same part of the model that produced the "no hand can ever prefer
   no-trump" regression once before; both fixes were checked against that test and against the full
   bucketed bias, not just the overall number, on the way in.
+
+- **Three of the eight recorded disasters survive, and they are a different bug.** Deals 31, 33 and
+  39 in the log: the bot bids 4♦ on `D:AJ987543` and 4♥ on `H:A1096532`, both estimated near nine
+  tricks against a par of six and seven. Neither is an auction-reading failure — the trust weight
+  only just tips them either way — it is `trumpTricks` over-valuing a long suit with thin honors.
+  Eight diamonds to the AJ is not eight tricks when the opponent holds KQ10, and nothing in the
+  model asks. Same shape as the no-trump race gap, and it wants the same treatment: a bucket in
+  `bench/calibrate.ts` keyed on trump length against trump top-run, measured before anything is
+  changed.
+
+- **No-trump is chosen on 13 hands in 800 where par ranks it joint-best on 169.** The race term is
+  not costing tricks — the strain choice's shortfall against par *improved*, 0.15 to 0.12 — but it
+  may be costing points, and the trick metric structurally cannot see that: 3NT is worth game where
+  4♣ at the same nine tricks is not. `bidValue.ts` prices in points and should catch it, but the
+  estimate it is handed is now about 0.6 tricks lower for no-trump, so the comparison starts behind.
+  Worth a bench that scores strain choice in points rather than in tricks before touching
+  `RACE_FREE`.
 
 - **Turn clock.** None in v1. Revisit if the 26-turn draw phase drags.
 

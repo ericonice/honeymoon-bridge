@@ -299,10 +299,11 @@ export function rawTricks(options: RawTricksOptions): number {
   if (strain === "NT") {
     // No-trump names no suit, so a bid of it says nothing about where their
     // length lies and there is nothing here to condition on.
-    return SUITS.reduce(
+    const suits = SUITS.reduce(
       (total, suit) => total + runOutTricks(cardsIn(hand, suit), winners, false, 1, declaring),
       0,
     );
+    return suits - (declaring ? RACE_COST * raceLength(hand) : 0);
   }
 
   const trumps = cardsIn(hand, strain);
@@ -325,6 +326,77 @@ export function rawTricks(options: RawTricksOptions): number {
   );
   const ruffs = declaring ? voidRuffTricks(hand, strain, trumps.length) : 0;
   return trumpTricks(trumps, bid) + side + ruffs;
+}
+
+/**
+ * What losing the race costs at no-trump, per card of it.
+ *
+ * The one thing the rest of this file counts as though it were free: a winner is
+ * only worth counting if the hand gets to cash it. With no dummy and no partner,
+ * a suit this hand cannot stop is run to the end, and each trick of it forces a
+ * discard from exactly the winners `runOutTricks` has just finished adding up.
+ * Under a trump contract that cannot happen — the hand ruffs and takes the lead
+ * back — which is why this is the no-trump branch only, and why it is the term
+ * that lets a hand prefer a suit contract for a reason other than length.
+ *
+ * Measured before it was written, and the trend is about as clean as this file
+ * gets: bias against par over 800 declaring-in-no-trump hands ran +0.31, +0.86,
+ * +1.25, +1.98, +3.07 as the unstopped length went from two or fewer up to six or
+ * more. A single affine calibration cannot remove that, because it is a bias in
+ * one strain and the calibration serves all five — which is precisely what
+ * `bench/calibrate.ts`'s per-strain breakdown exists to catch, and it had been
+ * reading +1.22 on no-trump for some time.
+ *
+ * Fitted against those buckets. The tail is worse than any bucket mean suggests,
+ * because the damage compounds — six cards of a suit run against a singleton is
+ * six of this hand's winners thrown away, not one — but this is an estimate over
+ * hands rather than a reading of one deal, so it prices the average race and the
+ * distribution below is what keeps it honest about the spread.
+ */
+const RACE_COST = 0.85;
+
+/**
+ * The race every hand runs, which is already paid for.
+ *
+ * Charging the whole of `raceLength` was wrong and failed loudly: no-trump went
+ * from the best strain on 41 hands in 800 to *one*, which is the same collapse
+ * the trump-honor fix caused from the other direction and the reason
+ * `bench/calibrate.ts` now counts how often each strain is chosen rather than only
+ * how biased it is. Every hand has a shortest suit, so every hand loses some
+ * race; a flat 4-3-3-3 already expects about 0.9 cards of it. That much is inside
+ * the fitted intercept, because the intercept was fitted over hands that all had
+ * it. Only the excess over an ordinary hand's race is a reason to prefer a trump
+ * contract, and only the excess is charged here.
+ *
+ * Which is the same shape as the discovery underneath the whole model: what
+ * matters is never the level of a quantity but how far this hand departs from
+ * what an average one holds.
+ */
+const RACE_FREE = 0.9;
+
+/**
+ * How far the opponent's longest suit outruns this hand's holding in it, averaged
+ * over how that suit can lie.
+ *
+ * The max over suits rather than the sum: they only get one run before the lead
+ * comes back, so it is the worst suit that decides the race and the others are
+ * already priced by their own run-out credit. This hand's shortest suit is
+ * therefore usually the answer — a 4-4-4-1 hand has twelve cards outstanding
+ * opposite its singleton and they hold four of them on average, so three cash.
+ *
+ * `surplusOver` is already exactly this expectation — "how many of theirs are
+ * left once `count` of mine have drawn what they can" — asked with this hand's
+ * own length as the count. It is taken over the whole distribution rather than
+ * off the mean holding for the reason the rest of this file keeps rediscovering:
+ * `max(0, …)` is not linear, so averaging the holding first and subtracting after
+ * would price the deals where they are short as though they still cost something.
+ */
+function raceLength(hand: readonly Card[]): number {
+  const worst = SUITS.reduce((longest, suit) => {
+    const mine = cardsIn(hand, suit).length;
+    return Math.max(longest, surplusOver(SUIT_LENGTH - mine, mine, false));
+  }, 0);
+  return Math.max(0, worst - RACE_FREE);
 }
 
 /**

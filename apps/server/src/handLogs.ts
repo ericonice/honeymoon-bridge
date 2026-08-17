@@ -1,4 +1,15 @@
-import type { AuctionEntry, Card, CompletedTrick, Contract, Level, Pair, PlayerId, Strain } from "@hb/engine";
+import type {
+  AuctionEntry,
+  Card,
+  CompletedTrick,
+  Contract,
+  DrawTurnRecord,
+  Level,
+  Pair,
+  PlayerId,
+  RubberState,
+  Strain,
+} from "@hb/engine";
 import type { Env } from "./env.js";
 
 /** A completed robot-game deal, as the browser that played it saw it. */
@@ -10,9 +21,20 @@ export interface HandLog {
   readonly contract: Contract;
   readonly deviceToken: string;
   readonly disguise: boolean;
+  /** Absent from a build that predates them — see `handLogFrom`. */
+  readonly drawTurns?: readonly DrawTurnRecord[];
   readonly initialHands: Pair<readonly Card[]>;
+  readonly seed?: number;
+  readonly standing?: HandLogStanding;
+  readonly starter?: PlayerId;
   readonly strength: string;
   readonly tricksWon: Pair<number>;
+}
+
+/** The score a deal was bid at. Nothing about a call can be replayed without it. */
+export interface HandLogStanding {
+  readonly rubber: RubberState;
+  readonly vulnerable: Pair<boolean>;
 }
 
 /**
@@ -67,7 +89,11 @@ export interface HandLogDeal {
   readonly auction: readonly AuctionEntry[];
   readonly completedTricks: readonly CompletedTrick[];
   readonly contract: Contract;
+  readonly drawTurns?: readonly DrawTurnRecord[];
   readonly initialHands: Pair<readonly Card[]>;
+  readonly seed?: number;
+  readonly standing?: HandLogStanding;
+  readonly starter?: PlayerId;
   readonly tricksWon: Pair<number>;
 }
 

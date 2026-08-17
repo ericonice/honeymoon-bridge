@@ -1,5 +1,5 @@
 import { currentDoubling, lastBidEntry, legalActionsForView } from "@hb/engine";
-import type { Call, Card, Contract, PlayerView, Rng, Strain } from "@hb/engine";
+import type { Bid, Call, Card, Contract, PlayerView, Rng, Strain } from "@hb/engine";
 import { DEFAULT_GAME_EQUITY, expectedValue } from "./bidValue.js";
 import { chooseCard } from "./cardPlay.js";
 import { shouldKeepCard } from "./drawDecision.js";
@@ -27,6 +27,56 @@ const BOOK = 6;
  * neither did it alone.
  */
 const THEIR_BID_WEIGHT = 0.75;
+
+/**
+ * The same trust, applied to the contract this seat is proposing for itself.
+ *
+ * Separate from `THEIR_BID_WEIGHT` because the inference is a step longer and so
+ * a step weaker: their claim is about *their* strain, and reaching this hand's
+ * proposed strain from it goes through this hand's own read of the difference
+ * between the two. Same evidence, more of it guessed.
+ *
+ * That this was zero for so long is the whole of a bug worth remembering. The
+ * bidder blended their claim into the value of *their* contract and threw it away
+ * when pricing its own, so on a hand where they had bid 4♥ it simultaneously
+ * believed they took ten tricks and that it took eight and a half — and bid on
+ * the flattering half of a contradiction. Recorded games showed eight doubled
+ * disasters carrying 78% of a 205-point-a-deal deficit, and every one of them was
+ * this: 4NT over 4♥ holding ♥87, priced as down two, actually down eight.
+ *
+ * The pricing was never wrong. `bidValue.ts` correctly rated a contract it
+ * expected to fail by two as a cheap sacrifice against conceding a game. It was
+ * handed an estimate six tricks too high.
+ *
+ * **Low rather than symmetric, and that was the measurement's decision rather
+ * than a guess.** At 0.75 all eight recorded disasters go away and the bot loses
+ * 200 points a rubber; `bench/rubber.ts`'s `vs=` mode, which plays this bidder
+ * against itself at a different weight, says the loss is real and not the legacy
+ * reference overclaiming — −47 at 0.25, −248 at 0.5, −354 at 0.75. See
+ * `impliedByTheirBid` for why the inference is weaker than it looks. What actually
+ * fixed the disasters was `RACE_COST` in `evaluate.ts`, upstream of all of this;
+ * 0.25 is what is left over once the estimate itself is no longer lying, and it
+ * buys one more of the eight for no measurable cost.
+ */
+const THEIR_BID_ON_OWN_WEIGHT = 0.25;
+
+/**
+ * The level below which their bid is a floor rather than an estimate, and so says
+ * nothing about what is left for this hand.
+ *
+ * Nobody bids 4♥ for fun, so a four-level bid is close to a real claim about ten
+ * tricks. A one-level bid is not a claim about seven — it is whatever was cheap
+ * enough to be worth saying, and a hand worth nine tricks opens 1♥ just as
+ * readily as a hand worth seven. Reading it as a point estimate is what made the
+ * inference cost 200 points a rubber before this gate existed: it dragged the
+ * bot's own estimate down after every minimum opening the other seat made, and
+ * turned a bidder that competed into one that folded.
+ *
+ * Three because that is where the recorded disasters started. Every one of the
+ * eight was a bid over a three-, four- or six-level contract; none followed a
+ * one- or two-level bid.
+ */
+const THEIR_BID_MIN_LEVEL = 3;
 
 /**
  * Cards in a suit below which naming it is not a disguise but an outright lie.
@@ -99,17 +149,24 @@ const DISGUISE_CREDIT = 0;
 export const DISGUISE_CREDIT_ON = 200;
 
 /**
- * The dials Settings can move while their right values are still open.
+ * The dials that can be moved while their right values are still open.
  *
- * Testing only. Each of these has a fitted or reasoned default in the code, and
- * exists here because the question it answers is about a person rather than
- * about the cards — see `identity.ts`.
+ * Testing only. Each of these has a fitted or reasoned default in the code. The
+ * first two are here because the question they answer is about a person rather
+ * than about the cards, and Settings exposes them — see `identity.ts`. The third
+ * is not a Settings dial and never should be: it is here so a bench can play one
+ * value against another in the same run, which is the only way to ask whether
+ * trusting the other seat's bid helps against a bidder that is not the legacy
+ * reference. Fitting it against a reference that overclaims answers a different
+ * question, and answers it wrongly.
  */
 export interface BotTuning {
   /** What naming a suit that isn't necessarily this hand's best one is worth. Zero is off. */
   readonly disguiseCredit?: number;
   /** What a game in hand is worth, in points. */
   readonly gameEquity?: number;
+  /** How far to trust their bid when pricing this seat's own contract. */
+  readonly theirBidOnOwnWeight?: number;
 }
 
 /**
@@ -179,6 +236,62 @@ function standingContract(view: PlayerView): Contract | null {
   };
 }
 
+/** This hand's own read of a strain, discounted in any strain they have named. */
+function ownEstimate(view: PlayerView, strain: Strain): number {
+  return estimatedTricks(view.hand, strain, strainsTheyBid(view).has(strain));
+}
+
+/**
+ * The highest bid the opponent has made, which is their strongest claim.
+ *
+ * The highest rather than the latest, because that is the one that says the most
+ * about their hand; where they are the same bid, as they usually are, it makes no
+ * difference.
+ */
+function theirHighestBid(view: PlayerView): Bid | null {
+  let best: Bid | null = null;
+  for (const entry of view.auction) {
+    if (entry.by === view.opponent && entry.call.type === "bid") {
+      if (best === null || entry.call.bid.level > best.level) {
+        best = entry.call.bid;
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * How many tricks this hand has left in a strain of its own, taken from the level
+ * they chose rather than from its own thirteen cards.
+ *
+ * There are thirteen tricks. If their bid claims nine of them in hearts, this
+ * hand holds four in hearts — that part is arithmetic rather than evaluation, and
+ * it is the strongest single piece of evidence in the auction, because it is the
+ * only one chosen by somebody who could see the cards it describes.
+ *
+ * Reaching a *different* strain from there needs one step of this hand's own
+ * judgement: whatever it thinks no-trump is worth over hearts, it adds to what
+ * their bid left it in hearts. **That step is the weak link, and measurement says
+ * so.** Trick counts are not additive across strains — the same two hands can be
+ * worth eleven tricks in hearts to one seat and ten in clubs to the other — so
+ * the thirteen-trick arithmetic above is sound only inside the strain they named,
+ * and everything this function does to leave that strain is an approximation.
+ * Which is why `THEIR_BID_ON_OWN_WEIGHT` ships low: played against a bidder as
+ * honest as this one, trusting the whole inference costs 354 points a rubber.
+ *
+ * Null when they have not bid or bid only cheaply, since a bid below
+ * `THEIR_BID_MIN_LEVEL` is a floor rather than a claim and there is nothing to
+ * infer from it.
+ */
+function impliedByTheirBid(view: PlayerView, strain: Strain): number | null {
+  const claim = theirHighestBid(view);
+  if (claim === null || claim.level < THEIR_BID_MIN_LEVEL) {
+    return null;
+  }
+  const mineInTheirs = ownEstimate(view, claim.strain);
+  return TRICKS - (claim.level + BOOK) + (ownEstimate(view, strain) - mineInTheirs);
+}
+
 /**
  * Tricks the declarer of a contract is expected to take.
  *
@@ -190,9 +303,13 @@ function standingContract(view: PlayerView): Contract | null {
  * The level they chose says how many they believe they hold. Both are evidence,
  * and the weighting between them was measured rather than assumed.
  */
-function estimateFor(contract: Contract, view: PlayerView): number {
+function estimateFor(contract: Contract, { theirBidOnOwnWeight, view }: CallContext): number {
   if (contract.declarer === view.me) {
-    return estimatedTricks(view.hand, contract.strain, strainsTheyBid(view).has(contract.strain));
+    const own = ownEstimate(view, contract.strain);
+    const implied = impliedByTheirBid(view, contract.strain);
+    return implied === null
+      ? own
+      : (1 - theirBidOnOwnWeight) * own + theirBidOnOwnWeight * implied;
   }
 
   // Two pieces of evidence about a hand this seat cannot see, and they are
@@ -212,6 +329,21 @@ interface Candidate {
 }
 
 /**
+ * Everything a call is decided from, in one shape.
+ *
+ * These used to be four positional parameters threaded through five functions,
+ * which is how the estimate came to be computed two different ways in two of
+ * them — a fifth was the point at which that stopped being tolerable.
+ */
+interface CallContext {
+  readonly disguiseCredit: number;
+  readonly gameEquity: number;
+  readonly standing: Standing;
+  readonly theirBidOnOwnWeight: number;
+  readonly view: PlayerView;
+}
+
+/**
  * What passing is worth: whatever the auction already stands at, played out.
  *
  * Zero when nothing has been bid, because passing then costs and gains nothing
@@ -220,18 +352,15 @@ interface Candidate {
  * play a vulnerable game is not a neutral outcome to be compared against zero,
  * it is a large negative, and a contract that goes down cheaply can beat it.
  */
-function valueOfPassing(
-  view: PlayerView,
-  standing: Standing,
-  gameEquity: number,
-): number {
+function valueOfPassing(context: CallContext): number {
+  const { gameEquity, standing, view } = context;
   const contract = standingContract(view);
   if (contract === null) {
     return 0;
   }
   return expectedValue({
     contract,
-    estimate: estimateFor(contract, view),
+    estimate: estimateFor(contract, context),
     exposedToDouble: false,
     gameEquity,
     hand: view.hand,
@@ -240,14 +369,15 @@ function valueOfPassing(
   });
 }
 
-function bidCandidates(
-  view: PlayerView,
-  standing: Standing,
-  disguiseCredit: number,
-  gameEquity: number,
-): Candidate[] {
-  const theirs = strainsTheyBid(view);
-
+/**
+ * Note that the estimate comes from `estimateFor` rather than from
+ * `estimatedTricks` directly. It used to call the latter, which is how this and
+ * the price of passing came to read the auction differently — one function
+ * answering "how many tricks does the declarer of this contract take" is what
+ * keeps the two halves of a competitive decision consistent with each other.
+ */
+function bidCandidates(context: CallContext, disguiseCredit: number): Candidate[] {
+  const { gameEquity, standing, view } = context;
   return callsFor(view).flatMap((call) => {
     if (call.type !== "bid") {
       return [];
@@ -264,7 +394,7 @@ function bidCandidates(
         value:
           expectedValue({
             contract,
-            estimate: estimatedTricks(view.hand, call.bid.strain, theirs.has(call.bid.strain)),
+            estimate: estimateFor(contract, context),
             exposedToDouble: true,
             gameEquity,
             hand: view.hand,
@@ -285,11 +415,8 @@ function bidCandidates(
  * double is simply the same contract worth more in both directions. It stops
  * being a special case at the moment the bot can estimate what it beats them by.
  */
-function doubleCandidate(
-  view: PlayerView,
-  standing: Standing,
-  gameEquity: number,
-): Candidate[] {
+function doubleCandidate(context: CallContext): Candidate[] {
+  const { gameEquity, standing, view } = context;
   const contract = standingContract(view);
   if (contract === null || !callsFor(view).some((call) => call.type === "double")) {
     return [];
@@ -300,7 +427,7 @@ function doubleCandidate(
       call: { type: "double" },
       value: expectedValue({
         contract: doubled,
-        estimate: estimateFor(doubled, view),
+        estimate: estimateFor(doubled, context),
         exposedToDouble: false,
         gameEquity,
         hand: view.hand,
@@ -322,8 +449,8 @@ function doubleCandidate(
  * pass closes the auction, and a hand worth game disguised into a level
  * nobody can climb back out of is exactly the failure this guards against.
  */
-function honestlyWeak(view: PlayerView, standing: Standing, gameEquity: number): boolean {
-  const honest = bidCandidates(view, standing, 0, gameEquity).reduce<Candidate | null>(
+function honestlyWeak(context: CallContext): boolean {
+  const honest = bidCandidates(context, 0).reduce<Candidate | null>(
     (top, candidate) => (top === null || candidate.value > top.value ? candidate : top),
     null,
   );
@@ -340,21 +467,18 @@ function honestlyWeak(view: PlayerView, standing: Standing, gameEquity: number):
  * down beats letting them score a game, and there is no reason to jump to the
  * top of what the hand can make when the extra level costs more than it returns.
  */
-function bestCall(
-  view: PlayerView,
-  standing: Standing,
-  disguiseCredit: number,
-  gameEquity: number,
-): Call {
-  const passing = valueOfPassing(view, standing, gameEquity);
+function bestCall(context: CallContext): Call {
+  const { disguiseCredit, view } = context;
+  const passing = valueOfPassing(context);
   const effectiveDisguiseCredit =
-    disguiseCredit !== 0 && honestlyWeak(view, standing, gameEquity) ? disguiseCredit : 0;
+    disguiseCredit !== 0 && honestlyWeak(context) ? disguiseCredit : 0;
   const best = [
-    ...bidCandidates(view, standing, effectiveDisguiseCredit, gameEquity),
-    ...doubleCandidate(view, standing, gameEquity),
-  ].reduce<
-    Candidate | null
-  >((top, candidate) => (top === null || candidate.value > top.value ? candidate : top), null);
+    ...bidCandidates(context, effectiveDisguiseCredit),
+    ...doubleCandidate(context),
+  ].reduce<Candidate | null>(
+    (top, candidate) => (top === null || candidate.value > top.value ? candidate : top),
+    null,
+  );
 
   if (best !== null && best.value > passing) {
     return best.call;
@@ -373,6 +497,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
   const fallback = createRandomBot(rng);
   const disguiseCredit = tuning.disguiseCredit ?? DISGUISE_CREDIT;
   const gameEquity = tuning.gameEquity ?? DEFAULT_GAME_EQUITY;
+  const theirBidOnOwnWeight = tuning.theirBidOnOwnWeight ?? THEIR_BID_ON_OWN_WEIGHT;
 
   return {
     // Shown to the player wherever the other seat is named, so it reads as an
@@ -380,7 +505,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
     name: "Computer",
 
     chooseCall(view: PlayerView, standing: Standing): Call {
-      return bestCall(view, standing, disguiseCredit, gameEquity);
+      return bestCall({ disguiseCredit, gameEquity, standing, theirBidOnOwnWeight, view });
     },
 
     chooseDraw(view: PlayerView, remembered: readonly Card[]): boolean {

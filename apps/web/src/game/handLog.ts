@@ -1,4 +1,13 @@
-import type { AuctionEntry, Card, CompletedTrick, Contract, Pair } from "@hb/engine";
+import type {
+  AuctionEntry,
+  Card,
+  CompletedTrick,
+  Contract,
+  DrawTurnRecord,
+  Pair,
+  PlayerId,
+  RubberState,
+} from "@hb/engine";
 import { storedSession } from "./account.js";
 import type { Boldness, Strength } from "./identity.js";
 import { playerToken } from "./identity.js";
@@ -12,7 +21,23 @@ export interface HandLog {
   readonly completedTricks: readonly CompletedTrick[];
   readonly contract: Contract;
   readonly disguise: boolean;
+  /** Which card each seat took on each draw turn — public, and half the deal. */
+  readonly drawTurns: readonly DrawTurnRecord[];
   readonly initialHands: Pair<readonly Card[]>;
+  /**
+   * The seed the deal was dealt from, which with `starter` reconstructs the
+   * stock and so makes the draw phase replayable.
+   *
+   * `initialHands` is what the draw *produced*, so on its own it leaves 26 of a
+   * deal's 52 decisions unmeasurable — the half where the hands are built. Safe
+   * to send only because the deal is over: a seed in flight during a deal would
+   * hand the whole stock order to anyone watching, which is why nothing carries
+   * one until now.
+   */
+  readonly seed: number;
+  /** The rubber and vulnerability the deal was bid at, which decides what a call was worth. */
+  readonly standing: { readonly rubber: RubberState; readonly vulnerable: Pair<boolean> };
+  readonly starter: PlayerId;
   readonly strength: Strength;
   readonly tricksWon: Pair<number>;
 }
@@ -43,8 +68,12 @@ export async function reportHandLog(log: HandLog): Promise<void> {
         contract: log.contract,
         deviceToken: playerToken(),
         disguise: log.disguise,
+        drawTurns: log.drawTurns,
         initialHands0: log.initialHands[0],
         initialHands1: log.initialHands[1],
+        seed: log.seed,
+        standing: log.standing,
+        starter: log.starter,
         strength: log.strength,
         tricksWon: log.tricksWon,
       }),

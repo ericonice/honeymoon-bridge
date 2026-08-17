@@ -32,6 +32,11 @@ interface Observation {
   /** Whether this hand was declaring the strain or defending against it. */
   readonly role: "declare" | "defend";
   readonly strain: Strain;
+  /**
+   * The other hand. Not used by the fit — needed only to ask what this hand
+   * could not stop, which is a fact about the pair rather than about either.
+   */
+  readonly theirs: readonly Card[];
 }
 
 interface Fit {
@@ -77,6 +82,7 @@ function observationsFrom(deals: number): Observation[] {
           raw: rawTricks({ declaring: true, hand: hands[declarer], strain }),
           role: "declare",
           strain,
+          theirs: hands[defender],
         });
 
         // Defense gets one observation per deal, not five, and it is the strain
@@ -99,6 +105,7 @@ function observationsFrom(deals: number): Observation[] {
             raw: rawTricks({ hand: hands[defender], strain }),
             role: "defend",
             strain,
+            theirs: hands[declarer],
           };
         }
       }
@@ -257,6 +264,27 @@ function report(
       `    3+ side run ${has ? "yes" : "no "} ${runBias >= 0 ? "+" : ""}${runBias.toFixed(2)}  over ${group.length}`,
     );
   }
+
+  // No-trump only, and keyed on the one thing `rawTricks` has no term for at
+  // all: with no dummy, a suit this hand cannot stop is cashed to the end, and
+  // every trick of it forces a discard from the winners this hand was counting.
+  // A hand's winners are only worth counting if it gets to cash them, and the
+  // model counts them as though it always does.
+  const noTrump = observations.filter((one) => one.strain === "NT");
+  for (let gap = 2; gap <= 6; gap++) {
+    const group = noTrump.filter((one) => {
+      const actual = unstoppedLength(one.hand, one.theirs);
+      return gap === 6 ? actual >= 6 : gap === 2 ? actual <= 2 : actual === gap;
+    });
+    if (group.length === 0) {
+      continue;
+    }
+    const raceBias =
+      group.reduce((total, one) => total + (predict(one.raw) - one.par), 0) / group.length;
+    console.log(
+      `    NT unstopped ${gap === 2 ? "≤2" : gap === 6 ? "6+" : `${gap} `} ${raceBias >= 0 ? "+" : ""}${raceBias.toFixed(2)}  over ${group.length}`,
+    );
+  }
   console.log("");
 }
 
@@ -271,9 +299,73 @@ function hasLongSideRun(hand: readonly Card[], strain: Strain): boolean {
   return SUITS.some((suit) => suit !== strain && topRun(cardsIn(hand, suit)) >= 3);
 }
 
+/**
+ * How long the other hand's best suit runs past this hand's holding in it.
+ *
+ * The length of the race, in no-trump. Six here means they cash six tricks in a
+ * suit this hand has nothing left in, and this hand throws six cards away doing
+ * it — which is why the damage is not one trick per unstopped card but closer to
+ * two, and why averaging over a bucket understates the tail so badly.
+ */
+function unstoppedLength(hand: readonly Card[], theirs: readonly Card[]): number {
+  let worst = 0;
+  for (const suit of SUITS) {
+    worst = Math.max(worst, cardsIn(theirs, suit).length - cardsIn(hand, suit).length);
+  }
+  return worst;
+}
+
 /** The shortest suit other than `strain` — a proxy for spare-trump ruffing potential. */
 function shortestSideSuit(hand: readonly Card[], strain: Strain): number {
   return Math.min(...SUITS.filter((suit) => suit !== strain).map((suit) => cardsIn(hand, suit).length));
+}
+
+/**
+ * What the evaluation's choice of strain costs, against the strain par preferred.
+ *
+ * The guard that a bias breakdown structurally cannot be: over-debiting a
+ * denomination does not show up as bias, it shows up as a denomination that stops
+ * being bid, and the bias on the handful that survive looks healthy. That is how
+ * the trump-honor fix failed once — afterwards no hand in 800 preferred no-trump
+ * and every bias column was fine.
+ *
+ * Reported as a shortfall in tricks rather than as a count of agreements, because
+ * par ties constantly: several strains routinely take the same number of tricks,
+ * so "did it pick *the* best one" is mostly a question about an arbitrary
+ * tie-break, while "how many tricks did its choice cost" is not. `joint-best`
+ * counts every strain tied at the top, which is why the columns sum to more than
+ * the hands.
+ */
+function strainChoice(declaring: readonly Observation[]): void {
+  const picked = new Map<Strain, number>();
+  const tiedBest = new Map<Strain, number>();
+  const shortfall: number[] = [];
+
+  for (let index = 0; index + STRAINS.length <= declaring.length; index += STRAINS.length) {
+    const group = declaring.slice(index, index + STRAINS.length);
+    const chosen = group.reduce((top, one) => (one.raw > top.raw ? one : top));
+    const bestPar = Math.max(...group.map((one) => one.par));
+    picked.set(chosen.strain, (picked.get(chosen.strain) ?? 0) + 1);
+    for (const one of group) {
+      if (one.par === bestPar) {
+        tiedBest.set(one.strain, (tiedBest.get(one.strain) ?? 0) + 1);
+      }
+    }
+    shortfall.push(bestPar - chosen.par);
+  }
+
+  const hands = shortfall.length;
+  const mean = shortfall.reduce((total, one) => total + one, 0) / Math.max(1, hands);
+  console.log(`Strain choice against par — ${hands} hands`);
+  console.log(`  costs ${mean.toFixed(2)} tricks per hand against picking the par-best strain`);
+  console.log(`  picked a strain par ranked joint-best on ${((100 * shortfall.filter((one) => one === 0).length) / Math.max(1, hands)).toFixed(0)}%`);
+  for (const strain of STRAINS) {
+    console.log(
+      `    ${strain.padEnd(3)} chosen ${String(picked.get(strain) ?? 0).padStart(4)}, ` +
+        `joint-best by par ${String(tiedBest.get(strain) ?? 0).padStart(4)}`,
+    );
+  }
+  console.log("");
 }
 
 function run(deals: number): void {
@@ -284,6 +376,7 @@ function run(deals: number): void {
   const declaring = observations.filter((one) => one.role === "declare");
   const defending = observations.filter((one) => one.role === "defend");
 
+  strainChoice(declaring);
   report("Declaring, every strain", declaring, tricksFromRaw);
   report("Declaring, best strain only", bestStrainOnly(declaring), tricksFromRaw);
   // No best-strain cut for defense: the defender does not pick the strain, so

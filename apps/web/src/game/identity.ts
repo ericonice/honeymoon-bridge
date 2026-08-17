@@ -110,9 +110,20 @@ export type Boldness = "bold" | "cautious" | "normal";
 export type Strength = "normal" | "strong" | "weak";
 export type Pace = "brisk" | "normal" | "slow";
 
+/**
+ * Normal by default, where this used to be bold.
+ *
+ * Bold exists because a reference bidder that barely doubles rewards
+ * overbidding, so the bench's measured optimum sat above what would survive a
+ * person. The reference doubles off the solver now, and against it bold is worth
+ * nothing in points (+612 a rubber against +635) while walking into 45% more of
+ * the doubled disasters that recorded play showed were the whole of the deficit.
+ * The setting stays — somebody may want a bolder opponent — but it is no longer
+ * what a fresh install gets.
+ */
 export function boldness(): Boldness {
   const stored = readStored(BOLDNESS_KEY);
-  return stored === "cautious" || stored === "normal" ? stored : "bold";
+  return stored === "cautious" || stored === "bold" ? stored : "normal";
 }
 
 export function setBoldness(next: Boldness): void {

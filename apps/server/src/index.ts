@@ -413,6 +413,57 @@ const STRENGTHS = new Set(["normal", "strong", "weak"]);
  * generous bounds elsewhere, that is not a policy choice, it is what a dealt
  * hand is.
  */
+/**
+ * A draw-turn record, or nothing. Twenty-six of them, one per turn of the draw.
+ *
+ * Public information — which of the two cards each seat took, never which cards
+ * they were — so there is nothing here a client could not already see.
+ */
+function drawTurnsOrNull(input: unknown): unknown {
+  if (!Array.isArray(input) || input.length > 26) {
+    return undefined;
+  }
+  const valid = input.every(
+    (turn) =>
+      typeof turn === "object" &&
+      turn !== null &&
+      playerId((turn as Record<string, unknown>).by) !== null &&
+      ((turn as Record<string, unknown>).choice === "kept-first" ||
+        (turn as Record<string, unknown>).choice === "took-second"),
+  );
+  return valid ? input : undefined;
+}
+
+function booleanPair(input: unknown): Pair<boolean> | null {
+  if (!Array.isArray(input) || input.length !== 2) {
+    return null;
+  }
+  return typeof input[0] === "boolean" && typeof input[1] === "boolean"
+    ? [input[0], input[1]]
+    : null;
+}
+
+/**
+ * The standing a deal was bid at, bounded rather than verified.
+ *
+ * `vulnerable` is checked because it is two booleans and there is no reason not
+ * to. The rubber behind it is a nested engine structure and is stored as it
+ * arrives — the same trust model as everything else here, since a robot game has
+ * no server to have witnessed it and nothing downstream of this is authoritative
+ * about anybody's score.
+ */
+function standingOrNull(input: unknown): NonNullable<HandLog["standing"]> | undefined {
+  if (typeof input !== "object" || input === null) {
+    return undefined;
+  }
+  const value = input as Record<string, unknown>;
+  const vulnerable = booleanPair(value.vulnerable);
+  if (vulnerable === null || typeof value.rubber !== "object" || value.rubber === null) {
+    return undefined;
+  }
+  return { rubber: value.rubber as NonNullable<HandLog["standing"]>["rubber"], vulnerable };
+}
+
 function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
   if (typeof body !== "object" || body === null) {
     return null;
@@ -425,6 +476,20 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
   const hand0 = handOrNull(value.initialHands0);
   const hand1 = handOrNull(value.initialHands1);
   const tricksWon = countPair(value.tricksWon);
+
+  // Everything below is optional, for the same reason `botVersion` is tolerated
+  // missing: the service worker keeps older builds in circulation, and a deal
+  // somebody played is worth recording whether or not their client knew to send
+  // the seed it was dealt from. A log without them is simply one the draw phase
+  // cannot be replayed from.
+  const drawTurns = drawTurnsOrNull(value.drawTurns);
+  const standing = standingOrNull(value.standing);
+  const starter = playerId(value.starter);
+  const seed =
+    typeof value.seed === "number" && Number.isInteger(value.seed) && value.seed >= 0
+      ? value.seed
+      : null;
+
   if (
     auction === undefined ||
     completedTricks === undefined ||
@@ -458,6 +523,12 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
     initialHands: [hand0, hand1] as HandLog["initialHands"],
     strength: value.strength,
     tricksWon,
+    ...(drawTurns === undefined
+      ? {}
+      : { drawTurns: drawTurns as NonNullable<HandLog["drawTurns"]> }),
+    ...(seed === null ? {} : { seed }),
+    ...(standing === undefined ? {} : { standing }),
+    ...(starter === null ? {} : { starter }),
   };
 
   return {
@@ -467,6 +538,10 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
       contract: log.contract,
       initialHands: log.initialHands,
       tricksWon: log.tricksWon,
+      ...(log.drawTurns === undefined ? {} : { drawTurns: log.drawTurns }),
+      ...(log.seed === undefined ? {} : { seed: log.seed }),
+      ...(log.standing === undefined ? {} : { standing: log.standing }),
+      ...(log.starter === undefined ? {} : { starter: log.starter }),
     }),
     log,
   };

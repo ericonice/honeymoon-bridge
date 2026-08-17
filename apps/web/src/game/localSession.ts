@@ -153,12 +153,23 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
       }),
     [],
   );
+  /**
+   * The seed the deal on the table was dealt from, kept for the hand log.
+   *
+   * Deliberately here rather than on `DealState`, which is the shape `viewFor`
+   * projects from: a seed reconstructs the entire stock order, so a field holding
+   * one inside the deal would be a leak waiting for somebody to forget to strip
+   * it. This is the browser's own record of what it dealt, and it goes to the
+   * server only once the deal is over and there is nothing left to spoil.
+   */
+  const dealSeed = useRef(randomSeed());
+
   // Read once, when the match starts. Changing the setting mid-match would move
   // the goalposts on a sitting already under way.
   const [table, setTable] = useState<TableState>(() =>
     startTable({
       format: preferredFormat(),
-      seed: randomSeed(),
+      seed: dealSeed.current,
       // Randomized rather than always the human: every deal after this one
       // already alternates who starts — see `nextDeal` — so this is the only
       // starter in the entire match that was ever fixed rather than earned.
@@ -264,9 +275,10 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
   }, [bot, table]);
 
   const advance = useCallback(() => {
+    dealSeed.current = randomSeed();
     // `randomSeed` is not pure, so the deal is dealt out here rather than
     // inside an updater React may call more than once.
-    const dealt = nextDeal(table, randomSeed());
+    const dealt = nextDeal(table, dealSeed.current);
     setTable(dealt);
   }, [table]);
 
@@ -296,7 +308,18 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
         completedTricks: deal.completedTricks,
         contract: deal.contract,
         disguise: disguiseEnabled(),
+        drawTurns: deal.drawTurns,
         initialHands: deal.initialHands,
+        seed: dealSeed.current,
+        // The score the deal was *bid* at, which is not the score it left
+        // behind. Without it a replayed auction is a different decision from
+        // the one that was taken — `bidValue` prices every call against the
+        // standing, so a part-score or a game in hand changes the answer.
+        standing: {
+          rubber: table.rubberBefore,
+          vulnerable: summary.vulnerable,
+        },
+        starter: deal.starter,
         strength: strength(),
         tricksWon: deal.tricksWon,
       });

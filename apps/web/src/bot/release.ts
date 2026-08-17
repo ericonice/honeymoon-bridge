@@ -28,6 +28,6 @@ export interface BotRelease {
 }
 
 export const BOT_RELEASE: BotRelease = {
-  name: "Angela James",
-  version: 1,
+  name: "Bobby Orr",
+  version: 2,
 };
