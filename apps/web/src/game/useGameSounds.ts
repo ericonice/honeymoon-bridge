@@ -18,7 +18,25 @@ import {
  * everything that happened while it was muted, and mounting mid-match (a
  * network reconnect) does not fire one either.
  */
-export function useGameSounds(session: GameSession, enabled: boolean): void {
+export interface GameSounds {
+  readonly enabled: boolean;
+  readonly session: GameSession;
+  /**
+   * True once the final score screen is actually on screen, which is later than
+   * the rubber being won.
+   *
+   * The two look like the same moment and are not. `rubber.complete` flips the
+   * instant the last deal is scored, while the board is still holding the last
+   * trick and revealing both hands — so the horn used to sound over the end of
+   * the play rather than over the result, several seconds before anything said
+   * who had won. The board decides when that screen appears (`useShownPhase`
+   * holds the phase open for a beat, or until a tap), so it has to be the board
+   * that says when, rather than this hook guessing at the same delay.
+   */
+  readonly showingFinalScore: boolean;
+}
+
+export function useGameSounds({ enabled, session, showingFinalScore }: GameSounds): void {
   const { lastDraw, rubber, score, view } = session;
   const auction = view.auction;
 
@@ -61,11 +79,15 @@ export function useGameSounds(session: GameSession, enabled: boolean): void {
     hadScore.current = score !== null;
   }, [enabled, score]);
 
-  const hadRubber = useRef(rubber.complete);
+  // Keyed on the screen rather than on the rubber, so the horn lands with the
+  // headline that says who won. `rubber.complete` is still what makes it a
+  // *rubber* horn — `showingFinalScore` is only ever true alongside it — but it
+  // is no longer what decides the moment.
+  const hadFinalScore = useRef(showingFinalScore);
   useEffect(() => {
-    if (enabled && rubber.complete && !hadRubber.current) {
+    if (enabled && showingFinalScore && !hadFinalScore.current) {
       playRubberWon();
     }
-    hadRubber.current = rubber.complete;
-  }, [enabled, rubber.complete]);
+    hadFinalScore.current = showingFinalScore;
+  }, [enabled, showingFinalScore]);
 }

@@ -439,7 +439,14 @@ export function GameBoard({
   // is still this deal's to offer once there is no more deal left to act on.
   const showingRevealedHands = revealedHands !== null && handsSettled.settled;
   const playable = playableCards(view, phase);
-  useGameSounds(session, sound);
+  // The *shown* phase, not the engine's: `DealComplete` is what carries the
+  // "You win the rubber" headline, and it is not on screen until the hold over
+  // the last trick releases. See `GameSounds.showingFinalScore`.
+  useGameSounds({
+    enabled: sound,
+    session,
+    showingFinalScore: phase === "complete" && session.rubber.complete,
+  });
   // Captured the instant a card is tapped, before `session.act` removes it
   // from the hand — `PlayPhase` reads this once to aim that card's flight,
   // rather than the fixed point it would otherwise have nothing better than.
