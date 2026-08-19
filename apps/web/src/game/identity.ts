@@ -139,20 +139,37 @@ export function setDisguiseEnabled(enabled: boolean): void {
  *
  * Each is a number the benches cannot choose. What a game in hand is worth was
  * fitted against a reference bidder that barely doubles, so its measured
- * optimum flatters overbidding in a way that will not transfer to a person. How
- * strong the computer should be is not a measurement at all — more sampling is
- * always better play and says nothing about whether the result is worth
- * sitting down to. And the pace of the game — the draw's own twenty-six turns
- * of the same decision, and the beat a trick sits collected before the next
- * one starts — either reads as deliberate or as waiting, and no number
- * produced from a bench has an opinion about which.
+ * optimum flatters overbidding in a way that will not transfer to a person. And
+ * how strong the computer should be is not a measurement at all — more sampling
+ * is always better play and says nothing about whether the result is worth
+ * sitting down to.
  *
- * All three are temporary. When each has an answer it belongs in the code as a
+ * Both are temporary. When each has an answer it belongs in the code as a
  * constant, and the row should go.
+ *
+ * There were three. The pace of the game was the third, and it is the one that
+ * got its answer: see `Pace` below.
  */
 export type Boldness = "bold" | "cautious" | "normal";
 export type Strength = "normal" | "strong" | "weak";
-export type Pace = "brisk" | "normal" | "slow";
+
+/**
+ * How fast the game runs, and the one of those three questions that is settled.
+ *
+ * It was in the testing panel because whether twenty-six turns of the same
+ * decision read as deliberate or as waiting is not something a bench has an
+ * opinion about — only playing it could say. Playing it said **fast**, which is
+ * what it already defaulted to, so there is nothing left to decide.
+ *
+ * The row stays and moves into the ordinary settings, which is not a
+ * contradiction: the *question* is answered, and what remains is an ordinary
+ * preference. It matters more now than it did, because the game is being shared
+ * outside the family and the fastest pace is not the right one for somebody
+ * meeting the draw phase for the first time — the walkthrough now runs against
+ * exactly that person, and they should be able to slow the board down while they
+ * read it. Behind the playtester flag they could not.
+ */
+export type Pace = "fast" | "normal" | "slow";
 
 /**
  * Normal by default, where this used to be bold.
@@ -240,7 +257,9 @@ export function setTapToSelectEnabled(enabled: boolean): void {
 
 export function pace(): Pace {
   const stored = readStored(PACE_KEY);
-  return stored === "normal" || stored === "slow" ? stored : "brisk";
+  // Anything unrecognized is fast, which also carries the old "brisk" spelling of
+  // this same setting across without a migration: it named the same speed.
+  return stored === "normal" || stored === "slow" ? stored : "fast";
 }
 
 export function setPace(next: Pace): void {

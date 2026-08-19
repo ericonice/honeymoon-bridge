@@ -66,7 +66,7 @@ export function setPacing(multiplier: number): void {
  *
  * Those two have to agree: a flight's React-level cleanup already scales by
  * `pacing` here, and if the animation it is timing does not scale the same
- * way, "brisk" — the shipped default — cleans a flight up mid-hold, before
+ * way, "fast" — the shipped default — cleans a flight up mid-hold, before
  * the leg that carries it away from where it was just read has even started.
  * Read on every flight actually built, not cached, for the same reason
  * `pacing` itself is a setting rather than a constant: it can change between

@@ -56,7 +56,7 @@ const SAMPLES = 25;
  * Kept here rather than in `identity.ts` so that what a choice *means* lives
  * beside what uses it. "Normal" is still the passthrough in each mapping
  * below, but it is no longer the shipped default — `identity.ts` now returns
- * bold, strong and brisk when nothing is stored, so those are the numbers a
+ * bold, strong and fast when nothing is stored, so those are the numbers a
  * fresh install actually plays against.
  */
 function samplesFor(level: ReturnType<typeof strength>): number {
@@ -74,7 +74,7 @@ function equityFor(level: ReturnType<typeof boldness>): number {
 }
 
 function pacingFor(level: ReturnType<typeof pace>): number {
-  return level === "brisk" ? 0.6 : level === "slow" ? 1.5 : 1;
+  return level === "fast" ? 0.6 : level === "slow" ? 1.5 : 1;
 }
 
 /**

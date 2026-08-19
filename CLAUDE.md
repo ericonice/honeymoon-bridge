@@ -634,11 +634,22 @@ it is recomputable from a replayable deal. Log the deal, replay the bidder.
   recording, in the read-out rather than in the experiment. Note `rawHandValue` is used by the draw
   decision and nothing else, so none of this touches the bidder, the card play or the calibration.
 
-- **Draw-phase pacing is unsettled.** The layout and the animation are now specified
-  (`REQUIREMENTS.md` §1.3) and built, but the durations in `game/timing.ts` are first guesses. A
-  turn costs roughly 0.6s to 1.5s of animation depending on the choice, times 26. Whether that
-  reads as deliberate or as waiting is the open question, and it is the whole reason the thing
-  went onto a phone this early.
+- **Draw-phase pacing is settled: fast.** This was the longest-standing open question here — the
+  durations in `game/timing.ts` were first guesses, a turn costs roughly 0.6s to 1.5s of animation
+  times 26, and whether that reads as deliberate or as waiting is not something a bench has an
+  opinion about. It is the whole reason the thing went onto a phone this early, and playing it is
+  what answered it: **fast**, the 0.6 multiplier, which is what it had defaulted to all along.
+
+  So the `Pace` row graduated out of the testing panel into the ordinary settings, which is not a
+  contradiction — the *question* is closed and an ordinary preference is what is left. It earns its
+  place out there because the game is now shared beyond the family: the fastest pace is not the right
+  one for somebody meeting the draw for the first time, which is exactly who the walkthrough is for,
+  and behind the playtester flag they could not have reached it. `"brisk"` was renamed `"fast"` to
+  match what the row says; `pace()` treats anything unrecognized as fast, so the old spelling carries
+  across without a migration.
+
+  Two of the three "settings that exist to answer a question" remain — `boldness` and `strength` —
+  and the note on them in `identity.ts` still says what has to happen when each gets its answer.
 - **How much should the bot remember?** Discards are not shown, so recall is part of the game and a
   perfect-memory bot has a real edge. The `Bot` interface must therefore take "what this bot
   remembers seeing" as explicit state handed to it, never read from engine state directly — which

@@ -112,8 +112,8 @@ table, so the animation is that pair resolving rather than two cards arriving fr
   beat first so their card 1 could be told from card 2 — the reasoning being that destinations
   carry the choice. In the hand it read as ceremony. Their hand grows by one either way, the deck
   drops by two, and a line of text says what they did in words; two face-down cards traveling added
-  none of that and cost about a second on each of their thirteen turns, on the phase whose open
-  question is whether it drags. It is now a pause long enough to register, with something visibly
+  none of that and cost about a second on each of their thirteen turns, on the phase whose pacing was
+  the longest-running open question here. It is now a pause long enough to register, with something visibly
   moving so the game does not look stopped.
 
   **With the setting that shows the robot's cards turned on, their turn plays out exactly as yours
@@ -891,7 +891,7 @@ your own discard from two seconds ago, and the lift animates it face up if they 
 The cost, which is a real one and not yet judged: you do not get to watch them consider the card
 sitting there. Restoring that means holding the top's *previous* value through a turn rather than
 hiding it, and giving the computer a beat before it acts — which lengthens every one of its thirteen
-turns on the phase whose open question is whether it drags.
+turns on a phase that is only tolerable at speed.
 
 The other two choices stay words, with the choice picked out rather than left to be read. That
 asymmetry is deliberate: kept-the-face-up-card and took-the-unseen-card both put an unknown stock
@@ -909,6 +909,23 @@ way, and every deal of a rubber is played under one game.
 **Not offered in a networked game yet.** It is a local preference and a table would have to negotiate
 it between two seats the way `formatFor` negotiates length. The engine and the wire shape both carry
 it; nothing on the server turns it on.
+
+### 3.6c Game Speed
+
+One pace governs the draw's twenty-six turns and the beat a finished trick sits before the next one
+starts, as a single multiplier over `game/timing.ts` — they are one budget rather than two settings,
+since the pause before the opponent acts is derived from the animation it has to wait out.
+
+**Fast by default, and that is now an answer rather than a guess.** Whether twenty-six repetitions of
+one decision read as deliberate or as waiting was the longest-running open question in this project —
+it is why the draw screen went onto a phone as early as it did — and no bench has an opinion about it.
+Playing it settled it: fast, which is what it had defaulted to all along.
+
+**The control is an ordinary setting, not a testing one.** It sat behind the playtester flag while it
+was still a question. Closing the question does not delete the row, because what is left is a real
+preference — and it matters more now the game is shared beyond the family, since the fastest pace is
+not the right one for somebody meeting the draw for the first time. That is precisely who §1.3a's
+walkthrough is written for, and behind the flag they could not have reached it.
 
 ### 3.7 Accounts and Sign-in
 

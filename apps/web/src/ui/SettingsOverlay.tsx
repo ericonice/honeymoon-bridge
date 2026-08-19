@@ -226,6 +226,28 @@ export function SettingsOverlay({
           />
         </div>
 
+        {/* Out of the testing panel, where it sat while it was still a question —
+            twenty-six turns of the same decision either read as deliberate or as
+            waiting, and no bench has an opinion about which. Playing it answered
+            fast, which is what it already defaulted to, so the question is closed
+            and what is left is an ordinary preference. It belongs out here now that
+            the game is shared beyond the family: the fastest pace is not the right
+            one for somebody meeting the draw for the first time, which is exactly
+            who the walkthrough is for. */}
+        <div className="w-full max-w-sm">
+          <Choice
+            label="Game speed"
+            description="How fast the draw's twenty-six turns play out, and how long a finished trick sits before the next one starts — one pace for both. Fast is the default; slower is worth a try while you are still learning the draw."
+            value={pace}
+            onChange={onPaceChange}
+            options={[
+              { label: "Fast", value: "fast" },
+              { label: "Normal", value: "normal" },
+              { label: "Slow", value: "slow" },
+            ]}
+          />
+        </div>
+
         <div className="w-full max-w-sm">
           <Toggle
             label="Sound"
@@ -320,18 +342,6 @@ export function SettingsOverlay({
                   { label: "Weaker", value: "weak" },
                   { label: "Normal", value: "normal" },
                   { label: "Stronger", value: "strong" },
-                ]}
-              />
-
-              <Choice
-                label="How fast the game runs"
-                description="The draw's twenty-six turns, and how long a trick sits collected before the next one starts — one pace for both, which either reads as deliberate or as waiting. Nothing but playing it can say which."
-                value={pace}
-                onChange={onPaceChange}
-                options={[
-                  { label: "Brisk", value: "brisk" },
-                  { label: "Normal", value: "normal" },
-                  { label: "Slow", value: "slow" },
                 ]}
               />
 
