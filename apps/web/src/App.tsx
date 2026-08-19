@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { storedSession, useAccount } from "./game/account.js";
+import { useAccount } from "./game/account.js";
 import { applyCardColor, readCardColor, writeCardColor } from "./game/cardColor.js";
 import type { Destination } from "./game/destination.js";
 import { destinationFromWire, HOME, takeDestination } from "./game/destination.js";
@@ -247,13 +247,13 @@ export function App(): React.JSX.Element {
               setScreen({ code, kind: "table" });
             }}
             onPlayComputer={() => {
-              // Playing the computer needs an account too now, but never the
-              // network to use one already held — a stored session is enough
-              // to go straight in, whether or not the server can confirm it.
-              if (storedSession() === null) {
-                setScreen({ destination: { kind: "robot" }, kind: "signin" });
-                return;
-              }
+              // Nothing gates this, per §3.7. The game against the computer needs no
+              // account, no server and no network, and it is what somebody sees
+              // before deciding whether this is worth handing over an email address
+              // for — so asking first is asking at the one moment there is nothing
+              // yet to answer with. It gated on a stored session for a while, which
+              // also had the home screen promising "the computer never asks"
+              // directly above a button that then asked.
               setScreen({ kind: "robot" });
             }}
             onShowAccount={() => {
