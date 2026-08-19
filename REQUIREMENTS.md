@@ -149,6 +149,53 @@ table, so the animation is that pair resolving rather than two cards arriving fr
 - **The reveal is never re-viewable.** It plays once, at the moment of the turn, and cannot be
   replayed, scrubbed or scrolled back to. Recalling it is the player's problem — that is the point.
 
+### 1.3a Learning the Draw
+
+The auction and the play are ordinary bridge, and the one surprise in either — a single pass closing
+the auction — is stated on the screen where it happens. **The draw is the part of this game that
+exists nowhere else, so it is the only part with a walkthrough.**
+
+**A tour, then two notes — because naming the screen and teaching the rules are different jobs.**
+
+The **tour** runs on the first turn: four spotlight steps, everything dimmed but one region at a time,
+naming the opponent's hand, the two piles, the cards on offer, and the hand you are building. It
+exists because roughly half the draw screen carries no label at all. The three cards do say "Last
+discard", "Face up" and "Unseen" — but the row of face-down cards along the top does not say whose it
+is, the piles do not say why they matter, and the row of dots above your own name, which is your
+thirteen turns, says nothing whatever. A tour is exactly the right instrument for that and the wrong
+one for anything else.
+
+The **notes** then land on the second and third turns, each about something that has just happened:
+what became of the card you threw, and that half the deck never appears. They are notes rather than
+tour steps precisely because there is nothing to point at — "the card you threw is gone" is a fact
+about a place on the screen that deliberately does not exist. The first of them differs by draw style,
+because under a three-card draw a discard is *not* gone: the opponent gets first refusal, which is the
+more useful thing to learn.
+
+**Not a carousel before the board.** A slideshow shown before anybody has seen a table is forgotten by
+the time it matters: the draw is twenty-six repetitions of one decision, and somebody who has not
+understood it by turn one has twenty-five more turns of not understanding it. It is also why it stops
+after three turns — the mechanic does not change, so there is nothing left to say.
+
+**Every step is skippable, and skipping abandons the notes too.** Somebody who has said they do not
+want to be shown the screen does not want two more notes about it.
+
+**Inside a real deal, not a scripted one.** Every deal teaches the mechanic identically, so a
+hand-picked seed would buy nothing — it would only be needed to teach *strategy*, which is a
+different and far larger job. Nothing is forced and no choice is wrong; the board simply holds the
+decision until the note is dismissed, with the cards left unmarked and unlabelled so they read as
+"not yet" rather than as a tap being ignored.
+
+A caption never covers what it is describing: the tour's sits below its cutout when the cutout is in
+the top half of the screen and above it when it is in the bottom, and the two notes sit at the top,
+over the opponent's furniture, since neither is about anything up there. A walkthrough obscuring the
+thing it explains is the one way it can be worse than none.
+
+**Against the computer only.** At a table the other player would be sitting watching somebody read,
+with nothing to tell them why the game had stopped. And it is **replayable from the rules screen**
+rather than a one-shot: a walkthrough somebody can lose by tapping through it too fast is worse than
+none, and the person most likely to want it back is somebody returning after a long time away.
+
 ### 1.4 Information Model
 
 Precise definition of who knows what, because the server enforces this and the robot

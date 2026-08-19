@@ -333,6 +333,26 @@ address *and* code, with five attempts before the outstanding codes for that add
 The general lesson is worth more than the bug: anything that leaves the app and comes back cannot
 be assumed to come back to the same app, and desktop Chrome will insist that it does.
 
+**There is a walkthrough now, and it covers the draw and nothing else** (`REQUIREMENTS.md` §1.3a).
+A four-step spotlight **tour** on the first turn, then two **notes** on the second and third, because
+the auction and the play are ordinary bridge while the draw exists nowhere else.
+
+The tour and the notes do different jobs, and it was built as notes alone first, which was wrong: the
+notes explain the *rules* while the tour names the *screen*, and roughly half the draw screen carries
+no label — the opponent's hand row does not say whose it is, and the turn-track dots say nothing at
+all. The counter-argument, that a tour would restate the labels the three cards already have, is true
+of those three cards and false of everything else on the board. The notes stay notes because there is
+nothing for them to point at: "the card you threw is gone" is a fact about a place that deliberately
+does not exist.
+
+Not a scripted deal either — every deal teaches the mechanic identically, and a hand-picked seed is
+only needed to teach strategy. Robot game only, since at a table the other seat would be watching
+somebody read with no idea why. `walkthrough.ts` holds the copy; `Spotlight` does the cutout with one
+element and a 9999px `box-shadow` spread rather than four bands agreeing on a rect. `DrawPhase` keys
+the notes off `handSizes[me] + 1`, and a gap in the numbering would mean a walkthrough that never
+completes and so restarts every deal — there is a test for that. Done is stored when the *tour*
+finishes rather than the last note, so walking it and then leaving does not earn a second tour.
+
 **The bot bids, draws and plays.** What each part does is written up in `REQUIREMENTS.md` §2.1.
 
 **There is a double-dummy solver now, and it changed how everything here is measured.**

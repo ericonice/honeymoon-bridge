@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { resetWalkthrough } from "../game/walkthrough.js";
 
 export interface HelpOverlayProps {
   /**
@@ -85,6 +86,9 @@ type SectionKey = (typeof SECTION_TITLES)[number];
  * in an auction.
  */
 export function HelpOverlay({ onClose, openDiscard }: HelpOverlayProps): React.JSX.Element {
+  // Local, and only so the button can say it worked. The armed state itself lives in
+  // storage, where the draw screen reads it on its next mount.
+  const [walkthroughArmed, setWalkthroughArmed] = useState(false);
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
     app: false,
     auction: false,
@@ -225,7 +229,30 @@ export function HelpOverlay({ onClose, openDiscard }: HelpOverlayProps): React.J
         </Section>
       </div>
 
-      <div className="px-5 pb-5">
+      <div className="flex flex-col gap-2 px-5 pb-5">
+        {/* Above Close, because it is the thing somebody who came here confused
+            actually wants: the draw explained on the board rather than on this page.
+            Offered whether or not it has been seen — a walkthrough you can lose by
+            tapping through it too fast is worse than none, and the person most likely
+            to want it back is somebody returning after a year away. */}
+        <button
+          type="button"
+          className="w-full rounded-xl border border-white/15 px-4 py-3 text-left"
+          onClick={() => {
+            resetWalkthrough();
+            setWalkthroughArmed(true);
+          }}
+        >
+          <span className="block text-base font-medium">
+            {walkthroughArmed ? "Walkthrough is on for the next deal" : "Walk me through the draw"}
+          </span>
+          <span className="mt-0.5 block text-xs text-white/55">
+            {walkthroughArmed
+              ? "Three notes on the board itself, starting with your next deal against the computer."
+              : "Three short notes on the board itself, on the turns they matter. The draw is the part of this game that exists nowhere else."}
+          </span>
+        </button>
+
         <button
           type="button"
           className="w-full rounded-xl bg-white px-4 py-3.5 text-base font-semibold text-stone-900"

@@ -46,6 +46,8 @@ export interface GameBoardProps {
   readonly session: GameSession;
   readonly sound: boolean;
   readonly tapToSelect: boolean;
+  /** Whether a first-time player is walked through the draw — see `walkthrough.ts`. */
+  readonly walkthrough: boolean;
   onShowSettings(): void;
 }
 
@@ -81,6 +83,7 @@ function CurrentPhase({
   phase,
   revealedHands,
   session,
+  walkthrough,
 }: {
   readonly handOriginRef: React.RefObject<DOMRect | null>;
   onDismissTrick(): void;
@@ -94,6 +97,8 @@ function CurrentPhase({
   /** See `PlayPhase`'s own prop of the same name. */
   readonly revealedHands: Pair<readonly Card[]> | null;
   readonly session: GameSession;
+  /** See `GameBoardProps`. */
+  readonly walkthrough: boolean;
 }): React.JSX.Element {
   const { history, lastDraw, lastTrick, nextDeal, rubber, score, view, vulnerable } = session;
 
@@ -108,6 +113,7 @@ function CurrentPhase({
           showingTheirCards={peeking && session.opponentHand !== null}
           vulnerable={vulnerable}
           view={view}
+          walkthrough={walkthrough}
           onDecide={(take) => {
             session.act({ type: "draw-decide", take });
           }}
@@ -418,6 +424,7 @@ export function GameBoard({
   session,
   sound,
   tapToSelect,
+  walkthrough,
 }: GameBoardProps): React.JSX.Element {
   const [showingScore, setShowingScore] = useState(false);
   const [showingBidding, setShowingBidding] = useState(false);
@@ -548,6 +555,7 @@ export function GameBoard({
           phase={phase}
           revealedHands={revealedHands}
           session={session}
+          walkthrough={walkthrough}
           onDismissTrick={session.dismissTrick}
           onDone={settled && exit !== null ? exit.leave : null}
           onHandsSettled={handsSettled.markSettled}

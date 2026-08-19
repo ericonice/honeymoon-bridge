@@ -1,14 +1,18 @@
 import { cardId } from "@hb/engine";
 import type { Card, DrawChoice, DrawTake, Pair, PlayerView } from "@hb/engine";
 import { motion } from "framer-motion";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DRAW_TIMING, currentPacing, drawPlayout } from "../game/timing.js";
+import { completeWalkthrough, drawLessons, drawTour, walkthroughDone } from "../game/walkthrough.js";
+import type { TourTarget } from "../game/walkthrough.js";
 import type { DrawReveal, DrawSpend } from "../game/session.js";
 import { CardBack, CardFace, CardSlot } from "./CardFace.js";
 import type { CardSize } from "./CardFace.js";
 import { CardFlight, centerIn } from "./CardFlight.js";
 import type { Flight, Point } from "./CardFlight.js";
 import { CardText } from "./CardText.js";
+import { DrawLessonNote } from "./DrawLessonNote.js";
+import { Spotlight } from "./Spotlight.js";
 import { DiscardPile, DrawDeck } from "./DrawPiles.js";
 import { SeatLabel } from "./SeatLabel.js";
 
@@ -30,6 +34,12 @@ export interface DrawPhaseProps {
    */
   readonly showingTheirCards: boolean;
   readonly view: PlayerView;
+  /**
+   * Whether to walk a first-time player through the draw — see `walkthrough.ts`.
+   * False at a table with somebody else, who would be sitting there waiting while
+   * one player read three notes.
+   */
+  readonly walkthrough: boolean;
   onDecide(take: DrawTake): void;
 }
 
@@ -318,6 +328,21 @@ function TurnTrack({
 }
 
 /**
+ * Whether two rects describe the same box.
+ *
+ * A `DOMRect` is a fresh object every time one is measured, so setting it into state
+ * unconditionally is a state change on every measurement whether or not anything
+ * moved. Guarding on the values means a stray extra render cannot start the effect
+ * that sets it looping against itself — which is the failure this is here to make
+ * structurally impossible rather than merely absent.
+ */
+function sameRect(a: DOMRect | null, b: DOMRect): boolean {
+  return (
+    a !== null && a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height
+  );
+}
+
+/**
  * Where a card actually sits in the hand below, once `Hand` has it.
  *
  * The engine hands back the new sorted hand the instant a turn resolves, so
@@ -399,6 +424,7 @@ export function DrawPhase({
   showingTheirCards,
   view,
   vulnerable,
+  walkthrough,
 }: DrawPhaseProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const deckRef = useRef<HTMLDivElement>(null);
@@ -409,6 +435,11 @@ export function DrawPhase({
   const theirOneRef = useRef<HTMLDivElement>(null);
   const theirTwoRef = useRef<HTMLDivElement>(null);
   const mineRef = useRef<HTMLDivElement>(null);
+  // The regions the tour points at. Three of them no flight ever needed a handle on.
+  const theirHandRef = useRef<HTMLDivElement>(null);
+  const pilesRef = useRef<HTMLDivElement>(null);
+  const choicesRef = useRef<HTMLDivElement>(null);
+  const youRef = useRef<HTMLDivElement>(null);
   const [flights, setFlights] = useState<readonly Flight[]>([]);
   const [settling, setSettling] = useState(false);
   // Mirrors `settling`, synchronously. The turn-resolution effect below and
@@ -429,6 +460,31 @@ export function DrawPhase({
 
   const pending = view.pending;
 
+  /**
+   * How far through the walkthrough this deal is.
+   *
+   * Started only if this is a game where a walkthrough makes sense *and* the device
+   * has not been through one. Read once, on mount — which is once per draw phase, so
+   * resetting it from the rules screen takes effect on the next deal rather than
+   * appearing on top of the one being played.
+   */
+  const theirHandSize = view.handSizes[view.opponent];
+  /**
+   * Memoized, and not as an optimization.
+   *
+   * These build fresh objects on every call, so calling them during render made the
+   * current step a *new object identity* every time — and the effect below, which
+   * depends on the step and sets state, then re-ran on every render it had itself
+   * caused. An infinite render loop, and only ever while the tour was actually on
+   * screen, which is why it reached a real device: the walkthrough is the one thing
+   * here that cannot be exercised by the test suite.
+   */
+  const lessons = useMemo(() => drawLessons(view.rules.openDiscard), [view.rules.openDiscard]);
+  const tour = useMemo(() => drawTour(view.rules.openDiscard), [view.rules.openDiscard]);
+  const [teaching, setTeaching] = useState(() => walkthrough && !walkthroughDone());
+  const [tourStep, setTourStep] = useState(0);
+  const [taught, setTaught] = useState(0);
+  const [tourRect, setTourRect] = useState<DOMRect | null>(null);
   const turn = lastDraw?.turn ?? 0;
 
   // The engine hands each seat its card 1 the instant the other's turn
@@ -448,9 +504,24 @@ export function DrawPhase({
   const mineToAct = shown !== null;
   /** Whether this deal offers a third card: the top of the discard pile. */
   const openDiscard = view.rules.openDiscard;
+  // The lesson due on this turn, if any. Keyed off the hand's own size rather than a
+  // second count of turns taken: every turn nets exactly one card, kept or not, so
+  // the hand *is* the count. Held back until the turn is actually this seat's, so a
+  // note never lands on top of the computer thinking.
+  const due = lessons[taught];
+  const lesson =
+    teaching && mineToAct && due !== undefined && due.turn === view.handSizes[view.me] + 1
+      ? due
+      : null;
+  // The tour runs once, on the first turn and before any lesson: it names the parts
+  // of the screen the lessons then talk about.
+  const step = teaching && mineToAct && view.handSizes[view.me] === 0 ? tour[tourStep] : undefined;
   // Not decidable mid-flight, though: tapping a card still in the air would
-  // resolve a turn the board has not finished dealing.
-  const decidable = mineToAct && !dealArriving;
+  // resolve a turn the board has not finished dealing. Nor while a lesson of the
+  // walkthrough is up — the cards then sit there unmarked and unlabelled, which
+  // reads as "not yet" rather than as a tap that was ignored.
+  const decidable =
+    mineToAct && !dealArriving && lesson === null && step === undefined;
   // The pile is a choice only under the rule, only on your turn, and only once there
   // is something on it — every turn but the first.
   const takeableDiscard = decidable && openDiscard && view.discardTop !== null;
@@ -464,6 +535,51 @@ export function DrawPhase({
   // back sitting there reads as *something* left over from a turn already
   // gone. See `ChoiceCard`'s own doc comment for why the other two apply.
   const slotEmpty = dealArriving || settling || pending === null;
+
+  /**
+   * The rect the current tour step points at, measured after layout.
+   *
+   * Re-measured on every step rather than once, because the board keeps moving under
+   * it — the opponent's hand row grows a card a turn and the piles change thickness.
+   * `getBoundingClientRect` is already in viewport coordinates, which is what
+   * `Spotlight` wants and why the hand can be found by query while everything else
+   * comes from a ref.
+   */
+  useLayoutEffect(() => {
+    if (step === undefined) {
+      return;
+    }
+    const anchor: Record<TourTarget, HTMLElement | null> = {
+      choices: choicesRef.current,
+      opponent: theirHandRef.current,
+      piles: pilesRef.current,
+      you: youRef.current,
+    };
+    const element = anchor[step.target];
+    if (element === null) {
+      setTourRect(null);
+      return;
+    }
+    const box = element.getBoundingClientRect();
+    if (step.target !== "you") {
+      setTourRect((current) => (sameRect(current, box) ? current : box));
+      return;
+    }
+    // The hand itself is rendered by `GameBoard`, below this screen, so the last step
+    // takes in whatever of it is on the page as well as the turn track — the two
+    // together are "the hand you are building", and pointing at the dots alone would
+    // be pointing at the smaller half.
+    const cards = [...document.querySelectorAll<HTMLElement>("[data-card-id]")];
+    const bottom = cards.reduce((low, card) => Math.max(low, card.getBoundingClientRect().bottom), box.bottom);
+    const whole = new DOMRect(box.left, box.top, box.width, bottom - box.top);
+    setTourRect((current) => (sameRect(current, whole) ? current : whole));
+    // Primitives only, deliberately. Depending on the step *object* is what looped
+    // this effect against itself, and `target` plus the step number is the whole of
+    // what it actually reads. Their hand's size is in here because the row the first
+    // step points at grows a card a turn, so a rect measured before it grew would be
+    // the wrong shape.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourStep, step?.target, theirHandSize]);
 
   // Keyed on the turn number alone, deliberately: one flight per resolved turn,
   // replayed never. Re-running it on any other change would re-show a card the
@@ -693,7 +809,7 @@ export function DrawPhase({
           // and 12px for each one that overlaps it. The row still visibly grows
           // a card a turn, which is the point of it, but the box holding it
           // never changes, so nothing above or below is nudged by the growing.
-          <div className="flex h-10 w-43 items-center justify-center">
+          <div ref={theirHandRef} className="flex h-10 w-43 items-center justify-center">
             {view.handSizes[view.opponent] === 0 ? (
               <span className="text-xs text-white/30">no cards yet</span>
             ) : (
@@ -757,7 +873,7 @@ export function DrawPhase({
           phone, and it lines the pile up as a third card when it is not the same kind
           of object: it is a standing pile with a count on it that happens to have a
           takeable card on top. */}
-      <div className="flex items-start justify-center gap-6">
+      <div ref={pilesRef} className="flex items-start justify-center gap-6">
         <DrawDeck
           remaining={view.stockRemaining - (pending === null ? 0 : 1)}
           stackRef={deckRef}
@@ -798,7 +914,7 @@ export function DrawPhase({
           it is takeable from where it lies rather than being copied down here, and a
           copy would have to fly back to the pile every time it went untaken,
           animating a card that never moved. */}
-      <div className="flex items-start justify-center gap-8">
+      <div ref={choicesRef} className="flex items-start justify-center gap-8">
         <ChoiceCard
           card={shown}
           empty={slotEmpty}
@@ -827,7 +943,7 @@ export function DrawPhase({
         />
       </div>
 
-      <div className="flex flex-col items-center gap-1">
+      <div ref={youRef} className="flex flex-col items-center gap-1">
         <SeatLabel active={decidable} name="You" vulnerable={vulnerable[view.me]} />
         <TurnTrack active={decidable} taken={view.handSizes[view.me]} />
       </div>
@@ -838,6 +954,45 @@ export function DrawPhase({
           depend on whether the thing it flies towards is currently on screen. */}
       <div ref={mineRef} className="absolute bottom-0 left-1/2 h-0 w-0" />
       <div ref={opponentRef} className="absolute top-0 left-1/2 h-0 w-0" />
+
+      {step === undefined ? null : (
+        <Spotlight
+          body={step.body}
+          index={tourStep}
+          rect={tourRect}
+          steps={tour.length}
+          title={step.title}
+          onNext={() => {
+            const next = tourStep + 1;
+            setTourStep(next);
+            // Marked done when the *tour* finishes rather than when the last note is
+            // dismissed. The tour is the substantial half, and somebody who walks it
+            // and then leaves the deal should not be walked round the screen again.
+            // The two notes still play out in this session.
+            if (next >= tour.length) {
+              completeWalkthrough();
+            }
+          }}
+          // Skipping abandons the whole walkthrough, notes included. Somebody who has
+          // said they do not want to be shown the screen does not want two more notes
+          // about it, and it is offered again from the rules screen either way.
+          onSkip={() => {
+            setTeaching(false);
+            completeWalkthrough();
+          }}
+        />
+      )}
+
+      {lesson === null ? null : (
+        <DrawLessonNote
+          key={lesson.turn}
+          lesson={lesson}
+          remaining={lessons.length - taught}
+          onDone={() => {
+            setTaught(taught + 1);
+          }}
+        />
+      )}
 
       {flights.map((flight) => (
         <CardFlight key={flight.key} flight={flight} />

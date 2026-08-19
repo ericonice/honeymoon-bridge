@@ -248,6 +248,9 @@ export function TableGame({
         session={session}
         sound={sound}
         tapToSelect={tapToSelect}
+        // Never at a table: the walkthrough holds the board while it is read, and the
+        // other seat has no way to know why nothing is happening.
+        walkthrough={false}
         onShowSettings={onShowSettings}
       />
     </>

@@ -37,6 +37,9 @@ export function RobotGame({
       session={session}
       sound={sound}
       tapToSelect={tapToSelect}
+      // Only here. At a table the other player would be sitting watching somebody
+      // read three notes, and the draw phase has no clock to protect them with.
+      walkthrough
       onShowSettings={onShowSettings}
     />
   );
