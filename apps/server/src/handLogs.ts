@@ -3,6 +3,7 @@ import type {
   Card,
   CompletedTrick,
   Contract,
+  DealRules,
   DrawTurnRecord,
   Level,
   Pair,
@@ -24,6 +25,8 @@ export interface HandLog {
   /** Absent from a build that predates them — see `handLogFrom`. */
   readonly drawTurns?: readonly DrawTurnRecord[];
   readonly initialHands: Pair<readonly Card[]>;
+  /** Absent from a build that predates the house rules; absent means the base game. */
+  readonly rules?: DealRules;
   readonly seed?: number;
   readonly standing?: HandLogStanding;
   readonly starter?: PlayerId;
@@ -91,6 +94,7 @@ export interface HandLogDeal {
   readonly contract: Contract;
   readonly drawTurns?: readonly DrawTurnRecord[];
   readonly initialHands: Pair<readonly Card[]>;
+  readonly rules?: DealRules;
   readonly seed?: number;
   readonly standing?: HandLogStanding;
   readonly starter?: PlayerId;

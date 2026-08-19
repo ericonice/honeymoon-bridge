@@ -45,6 +45,7 @@ npm run bench:head      --workspace @hb/web -- 120 25   # two card-play policies
 npm run bench:calibrate --workspace @hb/web -- 400      # refit the estimates against par
 npm run bench:auction   --workspace @hb/web -- 12       # why the bidder bid that
 npm run bench:strain    --workspace @hb/web -- "S:AK4 H:AK4 D:A43 C:AK32"
+npm run bench:draw      --workspace @hb/web -- 300 open # draw policies; `open` runs the variant
 
 # Deals a person actually played, from the hand log. Not generated — pass the file.
 npx vite-node bench/hands.ts hands.json         # from apps/web; add v=2 for one version
@@ -201,6 +202,14 @@ from ordinary bridge:
   and no carding signals — the auction is pure competitive negotiation. Do not add Stayman.
 - **Every deal is played to all 13 tricks.** No claim, no concede, no undo.
 - **Honors are in**, awarded automatically to whichever player holds them, defender included.
+- **There is one optional house rule, and `DealRules` is where variants live.** The open discard
+  (`REQUIREMENTS.md` §3.6b, "Draw style" in Settings, which offers two cards or three) lays the top of
+  the discard pile face up and lets a turn take it instead of either of its own two cards — so the same turn throws both of them, and the pile still nets one
+  card a turn. Off by default: §1 is the game and every number in this file was measured under it.
+  Rules travel on `DealState` and are carried forward by `nextDeal`, so the reducer can answer "is
+  this legal" from the state alone and a rubber is played under one game. The property that makes it
+  legible: turns alternate and every turn covers the pile with a card the acting player threw, so the
+  card on offer is *always* the opponent's last discard.
 - Rubber scoring, not Chicago or duplicate. Vulnerability comes from having won a game.
 
 ## Conventions
@@ -518,6 +527,92 @@ it is recomputable from a replayable deal. Log the deal, replay the bidder.
   honors, not length: twelve turns remain to build a suit and no turn at all can manufacture an
   ace. Crediting early length made the bot keep filler over honors. A test asserting it keeps a
   queen on turn one failed first and was right; overriding it would have shipped the regression.
+
+- **The open discard is built, off by default, and entirely unmeasured.** It exists because the draw
+  phase has no interaction in it: a turn spends two stock cards whichever card is taken, so nothing
+  either player does changes what the other is offered, and 26 of a deal's 52 decisions are two games
+  of solitaire side by side. `bench/draw.ts open` plays the whole bench under it and reports how often
+  the third option is actually taken — 25% of the challenger's turns — which per the rule above is the
+  first thing to establish and the *only* thing established so far. What is not: whether it reduces
+  luck, which is the whole reason it was built. The metric that would say so is not the existing
+  margin against a deliberately poor reference; it is how much of the outcome survives holding the
+  policy fixed, and no bench here measures that yet.
+
+  Two things it needs before it can be judged. **`chooseTake` does not price the gift** — rejecting a
+  card now hands it to the opponent, and only that one of the three choices has a priceable cost, since
+  the other two give away a card 2 the decision has not seen. Weighting it would be a constant nothing
+  has measured, so it is left alone. And **the bot sees the pile but is told to forget it**: under this
+  rule a seat with perfect recall ends the deal knowing the other hand exactly, so forgetting stops
+  being a difficulty lever that is merely *available* and becomes one that has to be built. It is
+  handed its own discards and nothing it only watched cross the pile.
+
+- **`DEFENSE_SHARE` is why the draw stopped passing up aces, and it was found by watching rather than
+  by measuring.** Playing the three-card draw turned up the bot declining a visible ace. The cause was
+  not the new rule: `rawHandValue` valued a growing hand purely as *declarer in its best strain*, and
+  by that measure a low card added to an already-long suit beats an ace — an extra trump is a winner
+  **and** one fewer trump left in the other hand, which `trumpTricks` prices at about 1.33 against an
+  ace's flat 1.00. Right about a spade contract, silent about the deal somebody else plays, where the
+  sixth spade is worth nothing and the ace is still a trick. So a growing hand is now valued as a blend
+  of declaring and defending, and an ace scores in both terms where a low trump scores in one.
+
+  **Fitted to the behavior, not to the metric, and the doc comment carries the table.** Over ~3,700
+  part-built hands offered an ace, refusals ran 5.25% at weight 0 and 0.97% at 0.3 — and the column
+  that decided it is *how many of those refusals had an honor as card 1*, which goes 24% → 100% between
+  0.2 and 0.3. At 0.3 no low card ever beats an ace and every remaining refusal is a king or queen
+  filling out a holding the hand already has, which was right all along. Above 0.3 nothing improves.
+
+  **In hand quality it is worth nothing: +0.04 ± 0.10 tricks against the same policy at weight 0.**
+  Expected, and the reason is now familiar — it flips 1.3% of draw decisions, which are by construction
+  the ones already on a knife edge, the same shape as the recall finding. It ships because passing up a
+  visible ace looks broken to somebody watching, which is a reason no trick metric can see. Do not
+  quote the margin as evidence for it; the fit is the two-column table.
+
+  **One card crosses the hidden-information line for this, and only one.** `drawRevealFor` now names
+  the card the *opponent* took when they lifted it off the open pile — it was face up when they took
+  it, `viewFor` had been sending it to that seat as `discardTop` the turn before, so declining to name
+  it would be hiding a card the player had been staring at. Their card 1 and card 2 stay theirs. The
+  protocol walker caught the widening the moment it landed, which is what it is for, and permits it on
+  exactly the terms this seat's own last discard is permitted: only while that turn is the one that
+  just resolved. There is a test asserting it stops being sent once the seat draws again — a
+  permission that outlived its reveal would be a running list of cards in the other hand.
+
+  **The three choices ended up in one row, and that is where they should have started.** The pile is
+  the third slot of the choice row on a three-card draw — the pile *itself*, not a copy of its top
+  card, because a copy has to fly back to the pile whenever it goes untaken and so has to lie about a
+  card that never moved. All three share one `ChoiceSlot` shell, which is what makes them line up:
+  the pile carrying its own wrapper sat higher and narrower than the cards beside it, and three things
+  that nearly line up say less than two that do. Labels name the card rather than the action — "Face
+  up", "Unseen", "Theirs" — since the row already says *take one*. This overrules §1.3 on where the
+  discard pile sits, on that section's own stated reason: it sat beside the stock because neither was a
+  tap target, and that stopped being true. It goes back there on a two-card draw.
+
+  **Two layout things that were tried and rejected, so they are not tried again.** Shrinking both piles
+  to a small stack with the count beside them buys back about 120px of phone height for the third
+  choice, and the deck's count really is derivable from the `TurnTrack` and the opponent's hand row —
+  but the count *printed across the card* is what a player actually looks at, and at a third the size
+  there is nowhere to print it. The piles stay full size. What did survive from that pass is merging the
+  opponent's seat label into the commentary line: their name had been on screen twice in adjacent
+  bands, and the label now carries only what a sentence cannot say.
+
+  **Three UI bugs from that reveal, and the second is the one worth remembering.** The amber mark on a
+  takeable card was a single pale ring, invisible against the one ground it has to work on — the
+  near-white card face — so it is two layers now, a translucent-black gap and then the amber, which
+  needs to know nothing about the per-theme table color or its sheen. The commentary line lost the
+  space before its emphasized phrase and read "took theunseen card", because the `p` holding it is a
+  **flex container**: every child is a flex item and whitespace at an item's edge is trimmed like a
+  block's, so the sentence has to be one inline `span` for its own spaces to survive — `{" "}` does not
+  help, since a whitespace-only node between two items is discarded outright. And the pile-lift
+  animation reported `animated` correctly and still drew nothing, because the flight guard demanded
+  endpoints from `TheirPair`, which is only mounted with the computer's cards showing: the flight was
+  dropped in exactly the configuration anybody plays in and worked in the one used to develop it.
+  `test/drawPlayout.test.ts` pins the pure half; the guard now resolves points per leg.
+
+  `bench/draw.ts` grew `vs=N` for this — the same policy at a different weight, because against
+  `alwaysKeep` both weights win hugely and the difference between them drowns. Its disagreement counter
+  now compares against **the reference actually in play**; hardwired to `alwaysKeep` it reported 70% of
+  decisions changed when the real answer was 1.3%, which is the same instrument failure this file keeps
+  recording, in the read-out rather than in the experiment. Note `rawHandValue` is used by the draw
+  decision and nothing else, so none of this touches the bidder, the card play or the calibration.
 
 - **Draw-phase pacing is unsettled.** The layout and the animation are now specified
   (`REQUIREMENTS.md` §1.3) and built, but the durations in `game/timing.ts` are first guesses. A

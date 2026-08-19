@@ -1,8 +1,8 @@
 import { currentDoubling, lastBidEntry, legalActionsForView } from "@hb/engine";
-import type { Bid, Call, Card, Contract, PlayerView, Rng, Strain } from "@hb/engine";
+import type { Bid, Call, Card, Contract, DrawTake, PlayerView, Rng, Strain } from "@hb/engine";
 import { DEFAULT_GAME_EQUITY, expectedValue } from "./bidValue.js";
 import { chooseCard } from "./cardPlay.js";
-import { shouldKeepCard } from "./drawDecision.js";
+import { chooseTake } from "./drawDecision.js";
 import { cardsIn, defendingTricks, estimatedTricks } from "./evaluate.js";
 import { createRandomBot } from "./randomBot.js";
 import type { Bot, Standing } from "./types.js";
@@ -508,10 +508,15 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
       return bestCall({ disguiseCredit, gameEquity, standing, theirBidOnOwnWeight, view });
     },
 
-    chooseDraw(view: PlayerView, remembered: readonly Card[]): boolean {
+    chooseDraw(view: PlayerView, remembered: readonly Card[]): DrawTake {
       return view.pending === null
         ? fallback.chooseDraw(view, remembered)
-        : shouldKeepCard(view.hand, view.pending, remembered);
+        : chooseTake({
+            discardTop: view.discardTop,
+            first: view.pending,
+            hand: view.hand,
+            remembered,
+          });
     },
 
     choosePlay(view: PlayerView, remembered: readonly Card[]): Card {

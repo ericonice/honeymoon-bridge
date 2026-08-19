@@ -60,9 +60,10 @@ function forbiddenFor(table: TableState, seat: PlayerId): Set<string> {
   const theirCardOne = deal.pending !== null && deal.toAct !== seat ? [deal.pending] : [];
 
   const justDrew = deal.drawTurns[deal.drawTurns.length - 1]?.by === seat;
-  const ownDiscards = justDrew ? mine.slice(0, Math.max(0, mine.length - 1)) : mine;
+  const spent = deal.lastDraws[seat]?.discarded.length ?? 1;
+  const ownDiscards = justDrew ? mine.slice(0, Math.max(0, mine.length - spent)) : mine;
 
-  return new Set(
+  const forbidden = new Set(
     [
       ...deal.hands[them],
       ...deal.stock,
@@ -71,13 +72,32 @@ function forbiddenFor(table: TableState, seat: PlayerId): Set<string> {
       ...ownDiscards,
     ].map(cardId),
   );
+
+  if (deal.rules.openDiscard) {
+    // Two cards `openDiscard` moves to the permitted side, and only two. The first
+    // is the face-up top of the pile, which both seats can read off the table.
+    if (deal.phase === "draw" && deal.discardTop !== null) {
+      forbidden.delete(cardId(deal.discardTop.card));
+    }
+    // The second is the card the opponent has just lifted off that pile — the same
+    // card, one turn later, now in their hand. It is permitted on exactly the terms
+    // this seat's own last discard is: only while that turn is the one that just
+    // resolved, because the reveal naming it is what is on screen. Once this seat
+    // draws again it is an ordinary card of theirs and forbidden with the rest.
+    const last = deal.drawTurns[deal.drawTurns.length - 1];
+    const lifted = deal.lastDraws[them]?.taken;
+    if (last?.by === them && last.choice === "took-discard" && lifted !== undefined) {
+      forbidden.delete(cardId(lifted));
+    }
+  }
+  return forbidden;
 }
 
 /** A draw phase run out `turns` deep, both seats keeping card 1 every time. */
 function drawnOut(turns: number): TableState {
   let table = startTable({ seed: 11, starter: 0 });
   for (let turn = 0; turn < turns; turn++) {
-    table = applyTableAction(table, table.deal.toAct, { type: "draw-decide", keep: true });
+    table = applyTableAction(table, table.deal.toAct, { type: "draw-decide", take: "first" });
   }
   return table;
 }
@@ -131,6 +151,35 @@ describe("what a seat is sent", () => {
     }
   });
 
+  /**
+   * The same walker under the variant, which is the only thing in the game that
+   * widens what a seat may see. `step` picks the last legal action, and taking
+   * the pile is the last one `takesFrom` offers, so this drives the rubber
+   * *through* the new move rather than merely alongside it.
+   */
+  it("holds nothing extra under the open discard bar the card lying face up", () => {
+    let table = startTable({ rules: { openDiscard: true }, seed: 4242, starter: 0 });
+    let taken = 0;
+
+    for (let move = 0; move < 900; move++) {
+      for (const seat of [0, 1] as PlayerId[]) {
+        const forbidden = forbiddenFor(table, seat);
+        const leaked = cardsWithin(snapshotFor(table, seat))
+          .map(cardId)
+          .filter((id) => forbidden.has(id));
+
+        expect(leaked, `seat ${seat} was sent ${leaked.join(", ")}`).toEqual([]);
+      }
+
+      taken += table.deal.drawTurns[table.deal.drawTurns.length - 1]?.choice === "took-discard" ? 1 : 0;
+      table = table.deal.phase === "complete" ? nextDeal(table, move + 1) : step(table);
+    }
+
+    // A leak test that never exercised the leaking move would pass for the wrong
+    // reason.
+    expect(taken).toBeGreaterThan(0);
+  });
+
   it("shows a seat the card it just threw away, and nothing older", () => {
     // An odd number of turns, so seat 0's own turn is the one that just
     // resolved and its reveal is the one still on screen.
@@ -149,21 +198,41 @@ describe("what a seat is sent", () => {
   it("stops sending that card as soon as the opponent has drawn", () => {
     const mine = drawnOut(7);
     const thrown = mine.deal.discards[0][mine.deal.discards[0].length - 1]!;
-    const theirs = applyTableAction(mine, mine.deal.toAct, { type: "draw-decide", keep: true });
+    const theirs = applyTableAction(mine, mine.deal.toAct, { type: "draw-decide", take: "first" });
 
     const sent = new Set(cardsWithin(snapshotFor(theirs, 0)).map(cardId));
     expect(sent.has(cardId(thrown))).toBe(false);
   });
 
+  /**
+   * The card they lifted off the open pile is one this seat had been looking at, so
+   * the reveal names it — and then stops, on the same terms as this seat's own last
+   * discard. A permission that outlived its reveal would be a running list of cards
+   * in their hand, which is the thing the whole projection exists to prevent.
+   */
+  it("names the card they lifted off the pile, and stops once this seat draws again", () => {
+    let table = startTable({ rules: { openDiscard: true }, seed: 21, starter: 0 });
+    table = applyTableAction(table, 0, { type: "draw-decide", take: "first" });
+    const offered = table.deal.discardTop!.card;
+
+    const lifted = applyTableAction(table, 1, { type: "draw-decide", take: "discard" });
+    expect(lifted.deal.hands[1].map(cardId)).toContain(cardId(offered));
+    expect(cardId(snapshotFor(lifted, 0).lastDraw!.taken!)).toBe(cardId(offered));
+
+    const after = applyTableAction(lifted, 0, { type: "draw-decide", take: "first" });
+    const sent = new Set(cardsWithin(snapshotFor(after, 0)).map(cardId));
+    expect(sent.has(cardId(offered))).toBe(false);
+  });
+
   it("names neither of the opponent's cards on their draw turn, only the choice", () => {
     let table = startTable({ seed: 21, starter: 1 });
-    table = applyTableAction(table, 1, { type: "draw-decide", keep: false });
+    table = applyTableAction(table, 1, { type: "draw-decide", take: "second" });
 
     const seen = snapshotFor(table, 0).lastDraw!;
     expect(seen.by).toBe(1);
     expect(seen.choice).toBe("took-second");
     expect(seen.taken).toBeNull();
-    expect(seen.discarded).toBeNull();
+    expect(seen.discarded).toEqual([]);
   });
 
   it("survives a round trip through JSON, since that is how it travels", () => {

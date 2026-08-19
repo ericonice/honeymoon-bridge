@@ -464,6 +464,18 @@ function standingOrNull(input: unknown): NonNullable<HandLog["standing"]> | unde
   return { rubber: value.rubber as NonNullable<HandLog["standing"]>["rubber"], vulnerable };
 }
 
+/**
+ * The house rules a deal was played under, or undefined from a build predating
+ * them — which means the base game, since that is all there was.
+ */
+function rulesOrNull(input: unknown): NonNullable<HandLog["rules"]> | undefined {
+  if (typeof input !== "object" || input === null) {
+    return undefined;
+  }
+  const value = input as Record<string, unknown>;
+  return typeof value.openDiscard === "boolean" ? { openDiscard: value.openDiscard } : undefined;
+}
+
 function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
   if (typeof body !== "object" || body === null) {
     return null;
@@ -483,6 +495,7 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
   // the seed it was dealt from. A log without them is simply one the draw phase
   // cannot be replayed from.
   const drawTurns = drawTurnsOrNull(value.drawTurns);
+  const rules = rulesOrNull(value.rules);
   const standing = standingOrNull(value.standing);
   const starter = playerId(value.starter);
   const seed =
@@ -526,6 +539,7 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
     ...(drawTurns === undefined
       ? {}
       : { drawTurns: drawTurns as NonNullable<HandLog["drawTurns"]> }),
+    ...(rules === undefined ? {} : { rules }),
     ...(seed === null ? {} : { seed }),
     ...(standing === undefined ? {} : { standing }),
     ...(starter === null ? {} : { starter }),
@@ -539,6 +553,7 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
       initialHands: log.initialHands,
       tricksWon: log.tricksWon,
       ...(log.drawTurns === undefined ? {} : { drawTurns: log.drawTurns }),
+      ...(log.rules === undefined ? {} : { rules: log.rules }),
       ...(log.seed === undefined ? {} : { seed: log.seed }),
       ...(log.standing === undefined ? {} : { standing: log.standing }),
       ...(log.starter === undefined ? {} : { starter: log.starter }),

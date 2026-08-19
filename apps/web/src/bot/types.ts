@@ -1,4 +1,4 @@
-import type { Call, Card, Pair, PlayerView, RubberState } from "@hb/engine";
+import type { Call, Card, DrawTake, Pair, PlayerView, RubberState } from "@hb/engine";
 
 /**
  * The score the auction is being held over.
@@ -43,14 +43,15 @@ export interface Bot {
   /** A call the auction currently permits, worth what it is worth at this score. */
   chooseCall(view: PlayerView, standing: Standing): Call;
   /**
-   * True to keep card 1; false to discard it and take card 2 sight-unseen.
+   * Which card on offer to take: card 1, card 2 sight-unseen, or — under
+   * `openDiscard` — the face-up top of the discard pile.
    *
    * `remembered` is what this seat has seen and thrown away — the explicit state
    * this interface always said recall would arrive as, rather than something read
    * out of engine state. Handing over a subset is what makes a forgetful
    * opponent, and it is the only thing that needs to change to build one.
    */
-  chooseDraw(view: PlayerView, remembered: readonly Card[]): boolean;
+  chooseDraw(view: PlayerView, remembered: readonly Card[]): DrawTake;
   /**
    * A card the follow-suit rule currently permits.
    *

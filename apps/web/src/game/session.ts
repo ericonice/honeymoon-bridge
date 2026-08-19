@@ -12,7 +12,7 @@ import type {
 // These describe what one seat is entitled to see and how a rubber is recorded,
 // so they belong with the rules rather than with the screens that show them —
 // the server has to produce exactly these shapes too.
-export type { DealRecord, DrawPair, DrawReveal } from "@hb/engine";
+export type { DealRecord, DrawReveal, DrawSpend } from "@hb/engine";
 
 /**
  * Everything the game screens need, and the only thing they are given.
@@ -26,7 +26,7 @@ export type { DealRecord, DrawPair, DrawReveal } from "@hb/engine";
  * strip the three methods and what remains is exactly the snapshot the server
  * sends, so there is one shape to test for leaks instead of a whole UI to audit.
  */
-import type { DealRecord, DrawPair, DrawReveal } from "@hb/engine";
+import type { DealRecord, DrawReveal, DrawSpend } from "@hb/engine";
 
 export interface GameSession {
   /**
@@ -69,7 +69,7 @@ export interface GameSession {
    */
   readonly opponentHand: readonly Card[] | null;
   /** The two cards of the opponent's last draw turn. Null in anything that ships. */
-  readonly opponentLastDraw: DrawPair | null;
+  readonly opponentLastDraw: DrawSpend | null;
   /** Card 1 of the opponent's draw turn. Null in anything that ships. */
   readonly opponentPending: Card | null;
   /**

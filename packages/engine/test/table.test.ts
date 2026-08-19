@@ -12,7 +12,7 @@ function completeDeal(table: TableState, contract: Call): TableState {
   while (current.deal.phase === "draw") {
     current = applyTableAction(current, current.deal.toAct, {
       type: "draw-decide",
-      keep: true,
+      take: "first",
     });
   }
   current = applyTableAction(current, current.deal.toAct, { type: "call", call: contract });
@@ -94,7 +94,7 @@ describe("the table", () => {
   it("alternates who draws first, and redeals a passed-out deal to the same player", () => {
     let table = startTable({ seed: 7, starter: 0 });
     while (table.deal.phase === "draw") {
-      table = applyTableAction(table, table.deal.toAct, { type: "draw-decide", keep: true });
+      table = applyTableAction(table, table.deal.toAct, { type: "draw-decide", take: "first" });
     }
     table = applyTableAction(table, table.deal.toAct, { type: "call", call: { type: "pass" } });
     table = applyTableAction(table, table.deal.toAct, { type: "call", call: { type: "pass" } });
@@ -139,15 +139,15 @@ describe("what a resolved draw turn shows each seat", () => {
     const cardOne = table.deal.pending!;
     const cardTwo = table.deal.stock[0]!;
 
-    const after = applyAction(table.deal, 0, { type: "draw-decide", keep: true });
+    const after = applyAction(table.deal, 0, { type: "draw-decide", take: "first" });
 
     const mine = drawRevealFor(after, 0)!;
     expect(cardId(mine.taken!)).toBe(cardId(cardOne));
-    expect(cardId(mine.discarded!)).toBe(cardId(cardTwo));
+    expect(mine.discarded.map(cardId)).toEqual([cardId(cardTwo)]);
 
     const theirs = drawRevealFor(after, 1)!;
     expect(theirs.taken).toBeNull();
-    expect(theirs.discarded).toBeNull();
+    expect(theirs.discarded).toEqual([]);
     // The choice itself is public to both.
     expect(theirs.choice).toBe("kept-first");
     expect(theirs.by).toBe(0);
@@ -156,27 +156,27 @@ describe("what a resolved draw turn shows each seat", () => {
   it("only holds up a card the seat has not already seen", () => {
     const table = startTable({ seed: 4, starter: 0 });
 
-    const kept = drawRevealFor(applyAction(table.deal, 0, { type: "draw-decide", keep: true }), 0)!;
+    const kept = drawRevealFor(applyAction(table.deal, 0, { type: "draw-decide", take: "first" }), 0)!;
     expect(revealsUnseenCard(kept)).toBe(true);
 
-    const took = drawRevealFor(applyAction(table.deal, 0, { type: "draw-decide", keep: false }), 0)!;
+    const took = drawRevealFor(applyAction(table.deal, 0, { type: "draw-decide", take: "second" }), 0)!;
     expect(revealsUnseenCard(took)).toBe(false);
 
     // Never for the other seat, whatever they chose.
-    const theirs = drawRevealFor(applyAction(table.deal, 0, { type: "draw-decide", keep: true }), 1)!;
+    const theirs = drawRevealFor(applyAction(table.deal, 0, { type: "draw-decide", take: "first" }), 1)!;
     expect(revealsUnseenCard(theirs)).toBe(false);
   });
 
   it("reaches back to a seat's own last turn regardless of whose turn resolved", () => {
     let state = startTable({ seed: 12, starter: 0 }).deal;
-    state = applyAction(state, 0, { type: "draw-decide", keep: true });
+    state = applyAction(state, 0, { type: "draw-decide", take: "first" });
     const afterMine = ownDrawPairFor(state, 0)!;
 
-    state = applyAction(state, 1, { type: "draw-decide", keep: true });
+    state = applyAction(state, 1, { type: "draw-decide", take: "first" });
     const stillMine = ownDrawPairFor(state, 0)!;
 
     expect(cardId(stillMine.taken)).toBe(cardId(afterMine.taken));
-    expect(cardId(stillMine.discarded)).toBe(cardId(afterMine.discarded));
+    expect(stillMine.discarded.map(cardId)).toEqual(afterMine.discarded.map(cardId));
   });
 
   it("has nothing to show before the first turn", () => {

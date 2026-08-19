@@ -40,16 +40,30 @@ unknown card. This is the central tension of the phase.
 The phase runs 26 turns (13 per player) and consumes the deck exactly. Both players finish
 with 13 cards. The 26 discarded cards are out of play for the rest of the deal.
 
+There is one optional house rule that changes this phase — the open discard, §3.6b — which is off by
+default. Everything above is the game; that is a variant of it.
+
 ### 1.3 The Draw Screen
 
 The draw phase is 26 turns of the same decision, so the screen it happens on carries most of the
 game's feel. What follows is a layout requirement, not a styling one — each element earns its place
 by making a rule visible.
 
-Top to bottom: **the opponent's hand** as a face-down row that grows a card a turn; **the stock and
-the discard pile** across the middle; **the two cards the turn spends**, card 1 face up and card 2
-face down; **your own hand** along the bottom, visible at all times, because every draw is judged
-against what you already hold.
+Top to bottom: **the opponent's hand** as a face-down row that grows a card a turn, with their name,
+turn state and what they last did on one line beneath it; **the stock and the discard pile** across
+the middle, each at full card size with its count printed across it; **the cards this turn offers
+you**, of which you take one; **your own hand** along the bottom, visible at all times, because every
+draw is judged against what you already hold.
+
+**The opponent's name used to be on screen twice in adjacent bands** — once as a seat label, once as
+the subject of the sentence under it. The label now keeps what a sentence cannot say, whose turn it is
+and whether they are vulnerable, and the sentence finishes it as a clause.
+
+**Shrinking the piles to buy that height back does not work, and was tried.** A compact strip — a
+small stack with the number beside it — reclaims about 120px for the choices below, on the reasoning
+that the deck's count is derivable from the turn track and the opponent's hand row anyway. It reads
+worse: the count printed across the card is the thing you actually look at, and at a third the size
+there is nowhere to print it. The piles stay full size.
 
 **The choice is those two cards, not a pair of buttons.** It was keep and reject as two full-width
 buttons, which stated the rule correctly and left the player to translate it: *reject* is a word
@@ -715,6 +729,139 @@ filled, so nobody waits longer to be paired for the sake of it.
 The preference is read **when a match starts** and never again. Changing the setting cannot move
 the goalposts on a sitting under way, and a player reconnecting mid-match carries no authority over
 it.
+
+### 3.6b The Open Discard — a house variant
+
+**Two cards by default, and two cards is the game.** §1.2 is the rules; this is an alternative
+chosen from Settings, and it changes the draw phase rather than dressing it up. Every number ever
+measured in here was measured under the base rules, so a variant that quietly became the default
+would make all of them describe something else.
+
+**Settings calls it "Draw style", and offers two cards or three** rather than naming the mechanic.
+A turn offering three cards is what a player experiences; the top of the discard pile lying face up
+is the rule that produces it, and the engine's flag is named for the rule (`openDiscard`). The same
+split the match format already uses, where the row says "Match length" and the type says `rubber`.
+It is a choice rather than a toggle for the same reason that one is: "take their discard, off" leaves
+the reader to work out what off does.
+
+**The rule.** The top of the discard pile lies face up. A turn therefore offers three cards and
+takes one: card 1, face up, as always; card 2, still sight-unseen; and the top of the pile. Whichever
+is taken, the other two go to the pile — so a turn that takes off the pile throws **both** its own
+cards, and the pile still nets exactly one card a turn, minus the one lifted off it and plus the two
+laid on top. Two cards leave the stock every turn either way, and the deck still exhausts exactly on
+turn 26 with thirteen cards in each hand.
+
+**§1.2's central tension is untouched.** Card 2 is still drawn only after the decision is committed,
+so rejecting it is still a genuine gamble on a card nobody has seen. What the variant adds is a
+priced alternative to that gamble rather than a way out of it — and card 2, when it is thrown away,
+is still turned over and held long enough to read, exactly as §1.3 requires of a keep.
+
+**The card on offer is always the opponent's own last discard.** Not a pile to rummage through: turns
+strictly alternate and every turn ends by covering the pile with a card the acting player threw, so
+what is face up on your turn is never your own throw. That is the whole point of the variant, and the
+reason it exists.
+
+**Why it exists: the draw phase has no interaction in it.** A turn spends two stock cards whichever
+card is taken, so nothing either player does changes what the other is offered. Twenty-six of a
+deal's fifty-two decisions — and most of its playing time — are two games of solitaire running side
+by side, with the only lever a keep-or-reject against a pool of twenty-six cards nobody has seen.
+With this on, the card you throw away is a card they may pick up. Rejecting a good card stops being
+free, and keeping a card you do not want in order to deny it becomes a real move. Neither is
+reachable under the base rules.
+
+**The pile is adversely selected, and readably so.** A card somebody *rejected* is a card they judged
+worse than an unknown one — suspect, possibly bait. A card thrown as card 2 off a keep is forced and
+random, and can be excellent. The draw screen already says which of the two happened on every turn,
+so telling them apart needs no new information.
+
+**What it costs, which is not settled.** You now see the opponent's discards as they cross the top of
+the pile, so a player who remembers all thirteen ends the deal knowing their hand exactly. A person
+will not manage that and the memory is one §1.4 already wants to reward. **A bot would manage it
+trivially**, which is what finally turns §2.1's forgetting lever from something available into
+something that has to be built. For now the computer is handed no more recall than before: its own
+discards, and nothing it merely watched cross the pile.
+
+**All three choices sit in one row, and the pile is the third of them.** §1.3's founding argument is
+that the choice should be the rule as a picture rather than a description of it — which is why it is
+cards rather than buttons. "A turn offers you these cards and you take one" is three cards abreast,
+so on a three-card draw the discard pile leaves the stock's side and takes the third place in the
+choice row, at the same size and in the same shell as the two cards beside it.
+
+**The pile itself moves, not a copy of its top card.** A copy would have to fly back to the pile
+every time it went untaken — thirteen round trips a deal, animating a card that never moved. Any
+layout that draws the card somewhere it is not has to lie about where it goes when it is refused.
+Moving the pile keeps the card where it actually is, and keeps the pile's thickness, which is both
+the discard count §1.3 asks for and the thing that says *this one is not from the stock*.
+
+This overrules §1.3 on where the pile sits, and on that section's own terms: it put the pile beside
+the stock "the way a stock and a waste pile sit side by side on a real table," and gave as the reason
+that neither is a tap target so proximity could never be read as a choice. Under a three-card draw
+that reason is gone. On a two-card draw the pile is only scenery again, and goes back beside the
+stock.
+
+**The row runs "Last discard", "Face up", "Unseen"** — their discard, then this turn's face-up card,
+then the blind one at the far end. The two cards you can actually read sit together and the gamble is
+at the edge. It ran face-up, unseen, pile at first, which put the one card carrying no information
+*between* the two carrying all of it, so every turn the eye had to jump a card back to make the only
+comparison there is.
+
+**The discard is the first of the three to be shown, not the last.** It is not being dealt — it has
+been lying on the table since they threw it — so it turns face up the moment the turn is yours, and
+this turn's own two cards fly in from the stock beside a choice already on offer. It had been gated on
+the same flag that gates tapping, which held it back until after the cards it competes with had
+landed. Tapping still waits for the board to finish dealing; being *visible* does not.
+
+**The cards are labelled for what they are, not for what taking them does** — "Last discard", "Face
+up", "Unseen". "Discard" on its own is a trap worth recording: under a card you can tap it reads as a
+verb, and tapping this one does the opposite of discarding. The row itself now says *take one*, so three labels each repeating the verb would be saying
+it a fourth, fifth and sixth time in the space where the words have to fit under a 64px card. The
+pile keeps a label even when it is not takeable, unlike the two cards: they belong to this turn and
+are gone by the next, while the pile is a standing object and wants saying what it is.
+
+**Every card this turn can be spent on also carries an amber edge while the decision is live.** With
+the choices in one row this is no longer what tells them apart from the scenery; what is left for it
+is the other half of the job — saying the board has settled and the turn is yours, which the row's
+existence cannot say. Amber because the app already spends amber on one idea only, "it is your move,"
+and this is that idea pointed at a card.
+
+**What the computer chose is shown, not only stated.** Under the base rules their turn is
+deliberately not animated (§1.3): two face-down cards travelling say nothing the line of text does
+not, and cost a second on each of their thirteen turns. That reasoning does not survive the third
+choice — **when they lift a card off the pile, the card that moves is face up and one you have been
+looking at.** So that turn alone animates: the card travels from the pile to their hand, and the
+commentary names it outright ("*Bobby Orr* took your ♠Q") while the reveal is still theirs. It is
+the only moment in the whole draw when you learn a *particular* card in the other hand, and it was
+previously a sentence in small grey text that vanished on the next turn.
+
+**The three choices turn face up together.** The pile's top card is shown face up exactly while
+there is a decision to make with it, which is the rule card 1 already follows — neither is turned
+over until it is this seat's to act on. That also fixed a blink: the top was previously hidden only
+while a turn *played out*, and the pause before the computer moves is the same length as that
+playout, so the card you had just thrown turned face up and was covered again inside a frame.
+Nothing is lost by hiding it in between, since the top of the pile between your turn and theirs is
+your own discard from two seconds ago, and the lift animates it face up if they take it.
+
+The cost, which is a real one and not yet judged: you do not get to watch them consider the card
+sitting there. Restoring that means holding the top's *previous* value through a turn rather than
+hiding it, and giving the computer a beat before it acts — which lengthens every one of its thirteen
+turns on the phase whose open question is whether it drags.
+
+The other two choices stay words, with the choice picked out rather than left to be read. That
+asymmetry is deliberate: kept-the-face-up-card and took-the-unseen-card both put an unknown stock
+card in their hand and differ only in what it hints about their judgement, so giving all three
+outcomes equal weight on screen would spend the phase's attention on the two that carry least.
+
+The named card obeys the same rule as every other reveal — it plays once, at the moment of the turn.
+Once you draw again the card is no longer sent at all and the sentence goes back to being general;
+remembering it is your problem, as §1.4 intends.
+
+**Read when a match starts and never again**, exactly like the match length above. The rules travel on
+the deal and are carried forward by `nextDeal`, so changing the setting cannot alter a sitting under
+way, and every deal of a rubber is played under one game.
+
+**Not offered in a networked game yet.** It is a local preference and a table would have to negotiate
+it between two seats the way `formatFor` negotiates length. The engine and the wire shape both carry
+it; nothing on the server turns it on.
 
 ### 3.7 Accounts and Sign-in
 

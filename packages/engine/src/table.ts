@@ -4,7 +4,7 @@ import { applyDealScore, newRubber, vulnerability } from "./rubber.js";
 import { scoreDeal } from "./scoring.js";
 import type { DealScore } from "./scoring.js";
 import type { MatchFormat, RubberState } from "./rubber.js";
-import type { Contract, DealAction, DealState, Pair, PlayerId } from "./types.js";
+import type { Contract, DealAction, DealRules, DealState, Pair, PlayerId } from "./types.js";
 
 /**
  * One deal's line on the scorepad.
@@ -48,6 +48,8 @@ export interface TableState {
 export interface StartTableOptions {
   /** Defaults to a rubber, which is what this game was until it was not. */
   readonly format?: MatchFormat;
+  /** Defaults to `BASE_RULES`. Chosen when players sit down, like the format. */
+  readonly rules?: DealRules;
   readonly seed: number;
   readonly starter: PlayerId;
 }
@@ -134,7 +136,10 @@ export function nextDeal(table: TableState, seed: number): TableState {
   const starter = table.deal.passedOut ? table.deal.starter : opponentOf(table.deal.starter);
 
   return {
-    deal: startDeal({ seed, starter }),
+    // The house rules come off the deal just finished for the same reason the
+    // format comes off the rubber: both are chosen when players sit down, and
+    // neither is re-read from a setting that could have moved under way.
+    deal: startDeal({ rules: table.deal.rules, seed, starter }),
     played: won ? [] : history,
     // A new match is the same kind of match. The format is chosen when players
     // sit down, not per rubber, so it carries across.

@@ -1,3 +1,4 @@
+import { discardsCardTwo } from "@hb/engine";
 import type { DrawReveal } from "@hb/engine";
 
 /**
@@ -154,10 +155,25 @@ export function drawPauseBefore(previous: DrawReveal | null, theirCardsShowing: 
 }
 
 export function drawPlayout(reveal: DrawReveal, theirCardsShowing: boolean): DrawPlayout {
-  // `taken` is filled in only for the seat's own turn, so it needs no second
+  // `discarded` is filled in only for the seat's own turn, so it needs no second
   // opinion about whose turn this was.
-  const animated = reveal.taken !== null || theirCardsShowing;
-  const holdsReveal = animated && reveal.choice === "kept-first";
+  const mine = reveal.discarded.length > 0;
+  // `taken` on a turn that is not this seat's own means one thing only: they
+  // lifted a card off the open pile, and it is a card this seat can see. That
+  // travels — the opponent's turn is otherwise a pause precisely because two
+  // face-down cards moving say nothing, and this one is neither face down nor
+  // silent. It is the only moment in the draw where you learn a *particular* card
+  // in their hand, so it is the last thing that should be a line of text.
+  const liftedFromPile = !mine && reveal.taken !== null;
+  const animated = mine || liftedFromPile || theirCardsShowing;
+  // Whether a card 2 is turned over and held to be read. Which turns throw card 2
+  // away is a rule and `discardsCardTwo` is where it lives, but the hold also needs
+  // this screen to be *allowed* to show the card — so a turn of theirs qualifies
+  // only with their cards showing, and never on the strength of the pile card
+  // alone. The `took-discard` turn spends three cards and still fits this budget:
+  // its two other legs travel at `discard`'s speed, which is shorter than the hold
+  // and the two legs either side of it.
+  const holdsReveal = (mine || theirCardsShowing) && discardsCardTwo(reveal.choice);
   return { animated, duration: drawTurnDuration(animated, holdsReveal), holdsReveal };
 }
 

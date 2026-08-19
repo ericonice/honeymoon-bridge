@@ -1,5 +1,5 @@
 import { legalActionsForView } from "@hb/engine";
-import type { Call, Card, DealAction, PlayerView, Rng } from "@hb/engine";
+import type { Call, Card, DealAction, DrawTake, PlayerView, Rng } from "@hb/engine";
 import type { Bot } from "./types.js";
 
 function pick<T>(items: readonly T[], rng: Rng): T {
@@ -16,6 +16,10 @@ function callsFrom(actions: readonly DealAction[]): Call[] {
 
 function cardsFrom(actions: readonly DealAction[]): Card[] {
   return actions.flatMap((action) => (action.type === "play" ? [action.card] : []));
+}
+
+function takesFrom(actions: readonly DealAction[]): DrawTake[] {
+  return actions.flatMap((action) => (action.type === "draw-decide" ? [action.take] : []));
 }
 
 /**
@@ -35,8 +39,10 @@ export function createRandomBot(rng: Rng): Bot {
       return pick(callsFrom(legalActionsForView(view)), rng);
     },
 
-    chooseDraw(): boolean {
-      return rng.next() < 0.5;
+    chooseDraw(view: PlayerView): DrawTake {
+      // Off the legal actions rather than off a coin, so a variant that adds a
+      // third choice gets picked from without this bot knowing there is one.
+      return pick(takesFrom(legalActionsForView(view)), rng);
     },
 
     choosePlay(view: PlayerView): Card {

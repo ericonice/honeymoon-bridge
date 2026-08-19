@@ -520,13 +520,72 @@ function trumpTricks(trumps: readonly Card[], bid: boolean): number {
  * rule misapplied; they are correctly declining to pay for length that has not
  * happened yet.
  */
-export function rawHandValue(hand: readonly Card[], growing = false): number {
+/**
+ * How much of a growing hand's worth is taken from defending rather than declaring.
+ *
+ * **A hand being dealt does not yet know which side of the auction it will be on**,
+ * and the two sides pay for completely different cards. `rawTricks` values a hand
+ * as declarer in its best strain, and by that measure a low card added to an
+ * already-long suit beats an ace: an extra trump is a winner *and* one fewer trump
+ * left in the other hand, which `trumpTricks` prices at about 1.33 against an ace's
+ * flat 1.0. That arithmetic is right about a spade contract and silent about the
+ * deal where somebody else plays it — where the sixth spade is worth nothing at all
+ * and the ace is still worth a trick.
+ *
+ * Measured before it was written, over ~3,700 part-built hands offered an ace they
+ * could take: the undiluted declaring value passed it up **5.2% of the time**, and
+ * the cases were all one shape — a low card in a five- or six-card suit scoring
+ * 1.32 against the ace's 1.00. Blending in what the hand is worth on defense fixes
+ * exactly those, because an ace scores in both terms and a low trump scores in one.
+ *
+ * **Fitted to that behavior, not to hand quality**, and the two columns are why.
+ * Refusals, and how many of them had an honor as card 1 — the defensible ones,
+ * where card 1 fills out a holding the hand already has:
+ *
+ *     weight   refused   card 1 an honor
+ *     0.00      5.25%          21%
+ *     0.20      4.60%          24%
+ *     0.25      1.46%          74%
+ *     0.30      0.97%         100%
+ *     0.50      0.41%         100%
+ *
+ * 0.3 is the first weight at which **no low card ever beats an ace** and the
+ * transition either side of it is sharp. Above it nothing improves on that
+ * criterion; it only starts refusing aces in the honor cases too, which are the
+ * ones that were right all along — a king added to a suit already holding the
+ * queen gains half a trick on defense *and* its length, so it should still outbid
+ * an offside ace. A fix that made the draw stop building suits would be a worse bot
+ * than the one that passed up aces.
+ *
+ * **Worth nothing measurable in hand quality, and that is expected.** Against the
+ * same policy at weight 0 over 400 deals: +0.04 ± 0.10 tricks, 337 hands to 333 —
+ * because it flips only 1.3% of draw decisions, which are by construction the ones
+ * already on a knife edge. Same shape as the recall finding: shifting a mean by a
+ * little changes almost no decisions. This is here because passing up a visible ace
+ * looks broken to somebody watching, which is a reason a trick metric cannot see
+ * and not a reason to pretend it measured well.
+ */
+export const DEFENSE_SHARE = 0.3;
+
+export function rawHandValue(
+  hand: readonly Card[],
+  growing = false,
+  defenseShare = DEFENSE_SHARE,
+): number {
   const winners = growing ? potentialTricks : quickTricks;
   let best = rawTricks({ hand, strain: "NT", winners });
   for (const suit of SUITS) {
     best = Math.max(best, rawTricks({ hand, strain: suit, winners }));
   }
-  return best;
+  if (!growing) {
+    return best;
+  }
+
+  // The same winner count `rawTricks` uses, summed across all four suits instead
+  // of being read through one strain — which is what a defender holds, since
+  // nothing they hold is trumps and no length of theirs cashes.
+  const defending = SUITS.reduce((total, suit) => total + winners(cardsIn(hand, suit)), 0);
+  return best * (1 - defenseShare) + defending * defenseShare;
 }
 
 export interface Evaluation {

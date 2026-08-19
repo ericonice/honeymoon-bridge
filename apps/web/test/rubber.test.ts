@@ -55,7 +55,7 @@ describe("scoring a deal into a rubber", () => {
   it("has nothing to score for a deal that was passed out", () => {
     let state = startDeal({ seed: 3, starter: 0 });
     while (state.phase === "draw") {
-      state = applyAction(state, state.toAct, { type: "draw-decide", keep: true });
+      state = applyAction(state, state.toAct, { type: "draw-decide", take: "first" });
     }
     state = applyAction(state, state.toAct, { type: "call", call: { type: "pass" } });
     state = applyAction(state, state.toAct, { type: "call", call: { type: "pass" } });
@@ -109,7 +109,7 @@ describe("scoring a deal into a rubber", () => {
   it("records a passed-out deal with no contract and nothing scored", () => {
     let state = startDeal({ seed: 3, starter: 0 });
     while (state.phase === "draw") {
-      state = applyAction(state, state.toAct, { type: "draw-decide", keep: true });
+      state = applyAction(state, state.toAct, { type: "draw-decide", take: "first" });
     }
     state = applyAction(state, state.toAct, { type: "call", call: { type: "pass" } });
     state = applyAction(state, state.toAct, { type: "call", call: { type: "pass" } });

@@ -8,7 +8,7 @@ import type { Call, Card, DealState } from "../src/types.js";
 function completeDraw(state: DealState): DealState {
   let current = state;
   while (current.phase === "draw") {
-    current = applyAction(current, current.toAct, { type: "draw-decide", keep: true });
+    current = applyAction(current, current.toAct, { type: "draw-decide", take: "first" });
   }
   return current;
 }
@@ -114,7 +114,13 @@ describe("player view", () => {
     for (const card of state.hands[1]) {
       expect(view.hand.some((held) => cardId(held) === cardId(card))).toBe(false);
     }
-    expect(serialized).not.toContain("discard");
+    // Every card either seat threw away, looked for as a card rather than as a
+    // field name — `discardTop` is a legitimate field that is null under these
+    // rules, and matching the word alone found the name and called it a leak.
+    for (const card of [...state.discards[0], ...state.discards[1]]) {
+      expect(serialized).not.toContain(JSON.stringify(card));
+    }
+    expect(view.discardTop).toBeNull();
     expect(serialized).not.toContain("stock\"");
     expect(view.handSizes).toEqual([13, 13]);
   });
@@ -136,7 +142,7 @@ describe("player view", () => {
 
   it("publishes each player's draw choices to both players", () => {
     let state = startDeal({ seed: 800, starter: 0 });
-    state = applyAction(state, 0, { type: "draw-decide", keep: false });
+    state = applyAction(state, 0, { type: "draw-decide", take: "second" });
 
     expect(viewFor(state, 1).drawTurns).toEqual([{ by: 0, choice: "took-second" }]);
   });
@@ -145,7 +151,7 @@ describe("player view", () => {
     let state = startDeal({ seed: 900, starter: 0 });
     expect(viewFor(state, 0).stockRemaining).toBe(52);
 
-    state = applyAction(state, 0, { type: "draw-decide", keep: true });
+    state = applyAction(state, 0, { type: "draw-decide", take: "first" });
     expect(viewFor(state, 1).stockRemaining).toBe(50);
   });
 });
@@ -198,8 +204,8 @@ describe("legality from a player view alone", () => {
     const state = startDeal({ seed: 21, starter: 1 });
 
     expect(legalActionsForView(viewFor(state, 1))).toEqual([
-      { type: "draw-decide", keep: true },
-      { type: "draw-decide", keep: false },
+      { type: "draw-decide", take: "first" },
+      { type: "draw-decide", take: "second" },
     ]);
     expect(legalActionsForView(viewFor(state, 0))).toEqual([]);
   });

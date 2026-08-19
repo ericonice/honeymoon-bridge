@@ -108,8 +108,8 @@ function CurrentPhase({
           showingTheirCards={peeking && session.opponentHand !== null}
           vulnerable={vulnerable}
           view={view}
-          onDecide={(keep) => {
-            session.act({ type: "draw-decide", keep });
+          onDecide={(take) => {
+            session.act({ type: "draw-decide", take });
           }}
         />
       );

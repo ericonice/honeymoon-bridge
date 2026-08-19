@@ -1,6 +1,7 @@
 import { STRAINS, applyAction, createRng, opponentOf, startDeal, viewFor } from "@hb/engine";
-import type { Card, Pair, PlayerId, PlayerView } from "@hb/engine";
-import { shouldKeepCard } from "../src/bot/drawDecision.js";
+import type { Card, DealRules, DrawTake, Pair, PlayerId, PlayerView } from "@hb/engine";
+import { chooseTake } from "../src/bot/drawDecision.js";
+import { DEFENSE_SHARE } from "../src/bot/evaluate.js";
 import { solve } from "../src/bot/solver.js";
 import { createProgress } from "./progress.js";
 
@@ -25,11 +26,22 @@ import { createProgress } from "./progress.js";
  *   npm run bench:draw --workspace @hb/web -- [deals]
  */
 
-type DrawPolicy = (view: PlayerView, remembered: readonly Card[]) => boolean;
+type DrawPolicy = (view: PlayerView, remembered: readonly Card[]) => DrawTake;
+
+/** The shipped policy, or the same policy at a different defensive weight. */
+function policyAt(defenseShare: number): DrawPolicy {
+  return (view, remembered) =>
+    chooseTake({
+      defenseShare,
+      discardTop: view.discardTop,
+      first: view.pending!,
+      hand: view.hand,
+      remembered,
+    });
+}
 
 /** Whatever the bot does today. */
-const current: DrawPolicy = (view, remembered) =>
-  shouldKeepCard(view.hand, view.pending!, remembered);
+const current: DrawPolicy = policyAt(DEFENSE_SHARE);
 
 /**
  * A fixed, deliberately poor reference.
@@ -39,7 +51,7 @@ const current: DrawPolicy = (view, remembered) =>
  * same immovable opponent and the two margins compared. Blunter than pairing
  * them directly, and the only option when the difference lives in a constant.
  */
-const alwaysKeep: DrawPolicy = () => true;
+const alwaysKeep: DrawPolicy = () => "first";
 
 /**
  * Turns where the two policies would have chosen differently.
@@ -50,22 +62,41 @@ const alwaysKeep: DrawPolicy = () => true;
  */
 let disagreements = 0;
 let decisions = 0;
+/**
+ * Turns the challenger spent on the pile, counted for the same reason
+ * `disagreements` is: under `open` a margin of zero has two causes, a third
+ * option that does not help and a third option nothing ever takes.
+ */
+let taken = 0;
 
-function drawOut(seed: number, starter: PlayerId, policies: Pair<DrawPolicy>, watch: PlayerId): Pair<readonly Card[]> {
-  let state = startDeal({ seed, starter });
+function drawOut(
+  seed: number,
+  starter: PlayerId,
+  policies: Pair<DrawPolicy>,
+  watch: PlayerId,
+  rules: DealRules,
+): Pair<readonly Card[]> {
+  let state = startDeal({ rules, seed, starter });
   while (state.phase === "draw") {
     const seat = state.toAct;
     // Through `viewFor`, so a policy is offered exactly what a bot would be:
     // its own hand and card 1, and nothing about the stock or the other seat.
     const view = viewFor(state, seat);
-    const keep = policies[seat](view, state.discards[seat]);
+    const take = policies[seat](view, state.discards[seat]);
     if (seat === watch) {
       decisions += 1;
-      if (keep !== alwaysKeep(view, state.discards[seat])) {
+      // Against the reference actually in play, not against `alwaysKeep`. With
+      // `vs=` the reference *is* a real policy, and measuring disagreement with a
+      // third one nobody is playing reads as "the weight changed 70% of
+      // decisions" while meaning nothing of the kind.
+      if (take !== policies[opponentOf(seat)](view, state.discards[seat])) {
         disagreements += 1;
       }
+      if (take === "discard") {
+        taken += 1;
+      }
     }
-    state = applyAction(state, seat, { type: "draw-decide", keep });
+    state = applyAction(state, seat, { type: "draw-decide", take });
   }
   return state.initialHands!;
 }
@@ -94,7 +125,7 @@ function standardError(values: readonly number[]): number {
   return Math.sqrt(variance / values.length);
 }
 
-function run(deals: number): void {
+function run(deals: number, rules: DealRules, reference: DrawPolicy): void {
   const margins: number[] = [];
   const progress = createProgress(deals, "deals");
 
@@ -103,10 +134,10 @@ function run(deals: number): void {
     // thirteen times from a fuller stock, which is not nothing.
     for (const challengerSeat of [0, 1] as const) {
       const policies: Pair<DrawPolicy> = [
-        challengerSeat === 0 ? current : alwaysKeep,
-        challengerSeat === 1 ? current : alwaysKeep,
+        challengerSeat === 0 ? current : reference,
+        challengerSeat === 1 ? current : reference,
       ];
-      const hands = drawOut(seed, (seed % 2) as PlayerId, policies, challengerSeat);
+      const hands = drawOut(seed, (seed % 2) as PlayerId, policies, challengerSeat, rules);
       margins.push(
         bestPar(hands, challengerSeat) - bestPar(hands, opponentOf(challengerSeat)),
       );
@@ -125,6 +156,32 @@ function run(deals: number): void {
     `  decisions changed    ${disagreements} of ${decisions} — ` +
       `${((100 * disagreements) / Math.max(1, decisions)).toFixed(1)}%`,
   );
+  if (rules.openDiscard) {
+    console.log(
+      `  took the discard     ${taken} of ${decisions} — ` +
+        `${((100 * taken) / Math.max(1, decisions)).toFixed(1)}%`,
+    );
+  }
 }
 
-run(Number(process.argv[2] ?? 300));
+// `open` plays the whole bench under the house variant, so a policy that can take
+// the pile is measured in a game where taking it is legal. Both seats get the same
+// rules — a variant only one side is playing is a handicap, not a variant.
+const rules: DealRules = { openDiscard: process.argv.includes("open") };
+
+/**
+ * `vs=N` replaces the fixed reference with **this same policy** at a different
+ * defensive weight, which is the only way to ask what the weight is worth: against
+ * `alwaysKeep` both weights win enormously and the difference between them is
+ * buried in the margin. Both seats then draw by a real policy from one stock, so
+ * what is left over is the weight and nothing else.
+ */
+const versus = process.argv.find((arg) => arg.startsWith("vs="));
+const reference: DrawPolicy =
+  versus === undefined ? alwaysKeep : policyAt(Number(versus.slice(3)));
+
+console.log(
+  `draw policies under ${rules.openDiscard ? "the open discard" : "the base rules"} — ` +
+    `defense ${DEFENSE_SHARE} against ${versus === undefined ? "always-keep" : `defense ${versus.slice(3)}`}`,
+);
+run(Number(process.argv[2] ?? 300), rules, reference);

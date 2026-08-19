@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BASE_RULES } from "@hb/engine";
 import { shouldAcceptClaim } from "../src/bot/claimDecision.js";
 import type { Card, Contract, DealState, Pair, PlayedCard, PlayerId, Rank, Suit } from "@hb/engine";
 
@@ -36,13 +37,16 @@ function stateWith(overrides: {
     contract,
     currentTrick: overrides.currentTrick ?? [],
     discards: [[], []],
+    discardTop: null,
     drawTurns: [],
     hands: overrides.hands,
     initialHands: overrides.hands,
+    lastDraws: [null, null],
     passedOut: false,
     pending: null,
     phase: "play",
     revealed: overrides.claimant,
+    rules: BASE_RULES,
     starter: 0,
     stock: [],
     toAct: overrides.claimant === 0 ? 1 : 0,

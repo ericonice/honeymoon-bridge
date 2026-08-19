@@ -1,5 +1,5 @@
 import { cardId, playableFrom } from "@hb/engine";
-import type { Call, Card, Pair, PlayerView, Rng } from "@hb/engine";
+import type { Call, Card, DrawTake, Pair, PlayerView, Rng } from "@hb/engine";
 import { createHeuristicBot } from "./heuristicBot.js";
 import type { BotTuning } from "./heuristicBot.js";
 import { sampleOpponentHand } from "./sample.js";
@@ -91,7 +91,7 @@ export function createSamplingBot(
       return heuristic.chooseCall(view, standing);
     },
 
-    chooseDraw(view: PlayerView, remembered: readonly Card[]): boolean {
+    chooseDraw(view: PlayerView, remembered: readonly Card[]): DrawTake {
       return heuristic.chooseDraw(view, remembered);
     },
 

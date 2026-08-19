@@ -6,7 +6,7 @@ import type { Call, DealState } from "../src/types.js";
 function completeDraw(state: DealState): DealState {
   let current = state;
   while (current.phase === "draw") {
-    current = applyAction(current, current.toAct, { type: "draw-decide", keep: true });
+    current = applyAction(current, current.toAct, { type: "draw-decide", take: "first" });
   }
   return current;
 }

@@ -31,7 +31,7 @@ function drawOut(seed: number): { hands: readonly Card[][]; turns: number } {
     const seat = state.toAct;
     state = applyAction(state, seat, {
       type: "draw-decide",
-      keep: shouldKeepCard(viewFor(state, seat).hand, state.pending!),
+      take: shouldKeepCard(viewFor(state, seat).hand, state.pending!) ? "first" : "second",
     });
     turns++;
   }

@@ -7,11 +7,13 @@ import { readDevTools, writeDevTools } from "./game/devTools.js";
 import {
   boldness,
   disguiseEnabled,
+  drawStyle,
   pace,
   peeking as storedPeeking,
   preferredFormat,
   setBoldness,
   setDisguiseEnabled,
+  setDrawStyle,
   setPace,
   setPeeking as storePeeking,
   setPreferredFormat,
@@ -105,6 +107,10 @@ export function App(): React.JSX.Element {
   // A preference for the *next* match. A game in progress reads its format from
   // its own state, so changing this cannot alter one already under way.
   const [format, setFormat] = useState(preferredFormat);
+  // A house rule, and a preference for the *next* match for the same reason the
+  // format is: a deal carries its own rules, so changing this cannot alter one
+  // already under way.
+  const [draw, setDraw] = useState(drawStyle);
   const [disguise, setDisguise] = useState(disguiseEnabled);
   // Testing settings, kept in state only so the rows re-render when tapped; the
   // stored value is what anything actually reads.
@@ -379,6 +385,7 @@ export function App(): React.JSX.Element {
             cardColor={cardColor}
             devTools={devTools}
             format={format}
+            drawStyle={draw}
             pace={speed}
             playtester={account.playtester}
             strength={level}
@@ -398,6 +405,10 @@ export function App(): React.JSX.Element {
             onFormatChange={(next) => {
               setPreferredFormat(next);
               setFormat(next);
+            }}
+            onDrawStyleChange={(next) => {
+              setDrawStyle(next);
+              setDraw(next);
             }}
             onPeekingChange={(enabled) => {
               storePeeking(enabled);
@@ -444,6 +455,7 @@ export function App(): React.JSX.Element {
             is opened from. */}
         {showingHelp ? (
           <HelpOverlay
+            openDiscard={draw === "three-card"}
             onClose={() => {
               setShowingHelp(false);
             }}

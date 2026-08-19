@@ -1,6 +1,6 @@
 import { legalCalls } from "./auction.js";
 import { opponentOf, sortHand } from "./cards.js";
-import { playableFrom } from "./deal.js";
+import { playableFrom, takesFrom } from "./deal.js";
 import type {
   AuctionEntry,
   Card,
@@ -8,8 +8,10 @@ import type {
   Contract,
   DealAction,
   DealPhase,
+  DealRules,
   DealState,
   DrawChoice,
+  DrawSpend,
   DrawTurnRecord,
   Pair,
   PlayedCard,
@@ -29,6 +31,11 @@ import type {
  *    player has seen 13 cards they threw away and remembering them is part of
  *    the game. A bot's recall is supplied to it separately as explicit state,
  *    so that imperfect memory stays available as a difficulty lever.
+ *
+ * `openDiscard` cuts one card out of the second and third of those, and exactly
+ * one: `discardTop` is a card both seats can see lying face up on the table, so
+ * it is sent to both. The card *under* it never becomes visible again, which is
+ * why one card is all this ever has to carry.
  */
 export interface PlayerView {
   readonly auction: readonly AuctionEntry[];
@@ -37,6 +44,17 @@ export interface PlayerView {
   readonly completedTricks: readonly CompletedTrick[];
   readonly contract: Contract | null;
   readonly currentTrick: readonly PlayedCard[];
+  /**
+   * The face-up top of the discard pile, under `openDiscard` and during the draw.
+   *
+   * Null whenever the variant is off, which is what keeps the base game's
+   * projection exactly as narrow as it always was. Sent to both seats and at all
+   * times during the phase, not only to whoever is on turn: it is a card lying
+   * face up on the table, and watching what the opponent throws is the point of
+   * the variant. On your own turn it is always their last discard — the one you
+   * may take — and on theirs it is your own, which tells you nothing new.
+   */
+  readonly discardTop: Card | null;
   /** Public record of which card each player took on each draw turn. */
   readonly drawTurns: readonly DrawTurnRecord[];
   readonly hand: readonly Card[];
@@ -53,6 +71,8 @@ export interface PlayerView {
    * populated with your own hand: you already have that in `hand`.
    */
   readonly revealedHand: { readonly by: PlayerId; readonly cards: readonly Card[] } | null;
+  /** The house rules in force, so the UI and a bot can tell which moves exist. */
+  readonly rules: DealRules;
   readonly starter: PlayerId;
   readonly stockRemaining: number;
   readonly toAct: PlayerId;
@@ -69,6 +89,8 @@ export function viewFor(state: DealState, me: PlayerId): PlayerView {
     completedTricks: state.completedTricks,
     contract: state.contract,
     currentTrick: state.currentTrick,
+    discardTop:
+      state.rules.openDiscard && state.phase === "draw" ? (state.discardTop?.card ?? null) : null,
     drawTurns: state.drawTurns,
     hand: sortHand(state.hands[me]),
     handSizes: [state.hands[0].length, state.hands[1].length],
@@ -81,18 +103,13 @@ export function viewFor(state: DealState, me: PlayerId): PlayerView {
       state.revealed !== null && state.revealed !== me
         ? { by: state.revealed, cards: state.hands[state.revealed] }
         : null,
+    rules: state.rules,
     starter: state.starter,
     stockRemaining: state.stock.length + (state.pending === null ? 0 : 1),
     toAct: state.toAct,
     trickLeader: state.trickLeader,
     tricksWon: state.tricksWon,
   };
-}
-
-/** The two cards one draw turn spent: one into a hand, one into the discard. */
-export interface DrawPair {
-  readonly discarded: Card;
-  readonly taken: Card;
 }
 
 /**
@@ -103,6 +120,12 @@ export interface DrawPair {
  * of your own cards, including the one you throw away on a keep, while the
  * opponent's *choice* is public and their cards never are.
  *
+ * `openDiscard` puts exactly one card through that asymmetry: the one they took
+ * off the pile. It was lying face up when they took it — `viewFor` was sending it
+ * to this seat as `discardTop` on the turn before — so declining to name it now
+ * would be hiding a card this seat has been staring at, which is not a rule the
+ * information model has anywhere. Their card 1 and card 2 stay theirs.
+ *
  * It lives here beside `viewFor` because it is the same question: what may this
  * seat be told. A server sending this has to get it right per seat, and getting
  * it wrong would hand over a card nobody should see.
@@ -110,24 +133,31 @@ export interface DrawPair {
 export interface DrawReveal {
   readonly by: PlayerId;
   readonly choice: DrawChoice;
-  /** The card thrown away, if it was this seat's to see. */
-  readonly discarded: Card | null;
-  /** The card that went into a hand, if it was this seat's to see. */
+  /**
+   * The cards thrown away, if they were this seat's to see. Empty when they were
+   * not; one card for a keep or a reject, and two for a `took-discard`, which
+   * throws both of its own and takes off the pile instead.
+   */
+  readonly discarded: readonly Card[];
+  /**
+   * The card that went into a hand, when this seat may see it: always for its own
+   * turn, and for the opponent's only when they lifted it off the face-up pile.
+   */
   readonly taken: Card | null;
   /** Which draw turn this was, so a repeated choice is still a new event. */
   readonly turn: number;
 }
 
 /**
- * `applyDrawDecision` appends to both the hand and the discards every turn, so
- * the last entry of each is the pair that turn spent.
+ * Whether a resolved turn's taken card is one the other seat may be told.
+ *
+ * True only for a card taken off the open pile, which was public before it moved.
+ * Stated as its own function because it is a rule about hidden information and the
+ * server has to apply it per seat — the kind of thing that must be one testable
+ * answer rather than a condition inlined at a call site.
  */
-function lastPair(state: DealState, player: PlayerId): DrawPair | null {
-  const hand = state.hands[player];
-  const discards = state.discards[player];
-  const taken = hand[hand.length - 1];
-  const discarded = discards[discards.length - 1];
-  return taken === undefined || discarded === undefined ? null : { discarded, taken };
+function takenIsPublic(state: DealState, choice: DrawChoice): boolean {
+  return state.rules.openDiscard && choice === "took-discard";
 }
 
 export function drawRevealFor(state: DealState, me: PlayerId): DrawReveal | null {
@@ -137,30 +167,50 @@ export function drawRevealFor(state: DealState, me: PlayerId): DrawReveal | null
     return null;
   }
 
-  const pair = record.by === me ? lastPair(state, me) : null;
+  const mine = record.by === me;
+  const spend = state.lastDraws[record.by];
+  const shown = mine || takenIsPublic(state, record.choice);
   return {
     by: record.by,
     choice: record.choice,
-    discarded: pair?.discarded ?? null,
-    taken: pair?.taken ?? null,
+    // Never theirs: card 1 and card 2 are the two cards this seat has no claim on,
+    // and a `took-discard` throws both of them.
+    discarded: mine ? (spend?.discarded ?? []) : [],
+    taken: shown ? (spend?.taken ?? null) : null,
     turn,
   };
 }
 
-/** The pair this seat's own most recent turn spent, whenever that turn was. */
-export function ownDrawPairFor(state: DealState, me: PlayerId): DrawPair | null {
-  return lastPair(state, me);
+/** What this seat's own most recent turn spent, whenever that turn was. */
+export function ownDrawPairFor(state: DealState, me: PlayerId): DrawSpend | null {
+  return state.lastDraws[me];
+}
+
+/**
+ * Whether a choice throws card 2 away rather than taking it into the hand.
+ *
+ * `took-second` is the one that does not: card 2 goes to the hand, where it is on
+ * screen from then on and needs no reveal of its own. Both others throw it unseen,
+ * and §1.3 requires it be held long enough to read on the way out. Stated here so
+ * that the screen deciding how long a turn takes and the reveal deciding what it
+ * shows read the same rule rather than each keeping a list of choices.
+ */
+export function discardsCardTwo(choice: DrawChoice): boolean {
+  return choice !== "took-second";
 }
 
 /**
  * True when a resolved turn puts a card in front of this seat that it has not
- * seen before — only ever its own card 2 after a keep.
+ * seen before — only ever its own card 2, and only when the turn threw it away.
  *
- * Read off `taken`, which is filled in only for the seat's own turn, so this
- * needs no second opinion about whose turn it was.
+ * Read off `discarded`, which is filled in only for the seat's *own* turn, so this
+ * needs no second opinion about whose turn it was. Deliberately not off `taken`,
+ * which it used to be: under `openDiscard` that is also filled in for the opponent
+ * lifting a card off the pile, and that card is one this seat has already been
+ * looking at — the exact opposite of what this asks.
  */
 export function revealsUnseenCard(reveal: DrawReveal): boolean {
-  return reveal.taken !== null && reveal.choice === "kept-first";
+  return reveal.discarded.length > 0 && discardsCardTwo(reveal.choice);
 }
 
 /**
@@ -209,10 +259,9 @@ export function legalActionsForView(view: PlayerView): DealAction[] {
       if (view.pending === null) {
         return [];
       }
-      return [
-        { type: "draw-decide", keep: true },
-        { type: "draw-decide", keep: false },
-      ];
+      return takesFrom(view.rules, view.discardTop).map(
+        (take) => ({ type: "draw-decide", take }) as const,
+      );
     }
     case "auction": {
       return legalCalls(view.auction, view.me).map((call) => ({ type: "call", call }) as const);

@@ -1,10 +1,11 @@
-import { STRAINS, createRng, opponentOf, scoreDeal, sortHand } from "@hb/engine";
+import { BASE_RULES, createRng, opponentOf, scoreDeal, sortHand, STRAINS } from "@hb/engine";
 import type {
   AuctionEntry,
   Call,
   Card,
   CompletedTrick,
   Contract,
+  DealRules,
   Pair,
   PlayerId,
   PlayerView,
@@ -43,6 +44,8 @@ interface LoggedDeal {
   readonly completedTricks: readonly CompletedTrick[];
   readonly contract: Contract;
   readonly initialHands: Pair<readonly Card[]>;
+  /** Absent from a deal logged before the house rules existed, which means the base game. */
+  readonly rules?: DealRules;
   readonly tricksWon: Pair<number>;
 }
 
@@ -232,6 +235,7 @@ function replayCall(hand: LoggedHand, before: number): Call | null {
     completedTricks: [],
     contract: null,
     currentTrick: [],
+    discardTop: null,
     drawTurns: [],
     hand: sortHand(deal.initialHands[BOT]),
     handSizes: [13, 13],
@@ -241,6 +245,7 @@ function replayCall(hand: LoggedHand, before: number): Call | null {
     pending: null,
     phase: "auction",
     revealedHand: null,
+    rules: BASE_RULES,
     starter: HUMAN,
     stockRemaining: 0,
     toAct: BOT,
@@ -310,9 +315,18 @@ interface Corpus {
   readonly played: readonly LoggedHand[];
 }
 
-/** How this deal's opponent was configured. Four things, any of which changes the play. */
+/**
+ * How this deal was configured. Any of these changes the play, so a block holding
+ * more than one is not measuring a single opponent.
+ *
+ * The house rules are in here rather than being a separate axis because they are
+ * the same kind of fact and the same failure if pooled — a deal where a discard
+ * could be taken is a different game from one where it could not, and averaging
+ * the two reports a number describing neither.
+ */
 function configOf(hand: LoggedHand): string {
-  return `v${hand.botVersion ?? "?"}, ${hand.strength}, ${hand.boldness}, disguise ${hand.disguise ? "on" : "off"}`;
+  const rules = hand.deal.rules?.openDiscard === true ? ", open discard" : "";
+  return `v${hand.botVersion ?? "?"}, ${hand.strength}, ${hand.boldness}, disguise ${hand.disguise ? "on" : "off"}${rules}`;
 }
 
 function census(hands: readonly LoggedHand[]): Map<string, number> {

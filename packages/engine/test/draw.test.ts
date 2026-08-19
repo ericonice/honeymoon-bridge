@@ -9,7 +9,7 @@ function playOutDraw(state: DealState, keepDecisions: (turn: number) => boolean)
   while (current.phase === "draw") {
     current = applyAction(current, current.toAct, {
       type: "draw-decide",
-      keep: keepDecisions(turn),
+      take: keepDecisions(turn) ? "first" : "second",
     });
     turn++;
   }
@@ -67,7 +67,7 @@ describe("draw phase", () => {
     const first = state.pending!;
     const second = state.stock[0]!;
 
-    const after = applyAction(state, 0, { type: "draw-decide", keep: true });
+    const after = applyAction(state, 0, { type: "draw-decide", take: "first" });
 
     expect(after.hands[0].map(cardId)).toEqual([cardId(first)]);
     expect(after.discards[0].map(cardId)).toEqual([cardId(second)]);
@@ -79,7 +79,7 @@ describe("draw phase", () => {
     const first = state.pending!;
     const second = state.stock[0]!;
 
-    const after = applyAction(state, 0, { type: "draw-decide", keep: false });
+    const after = applyAction(state, 0, { type: "draw-decide", take: "second" });
 
     expect(after.hands[0].map(cardId)).toEqual([cardId(second)]);
     expect(after.discards[0].map(cardId)).toEqual([cardId(first)]);
@@ -88,7 +88,7 @@ describe("draw phase", () => {
 
   it("reveals a fresh card 1 to the next player after each turn", () => {
     const state = startDeal({ seed: 5, starter: 0 });
-    const after = applyAction(state, 0, { type: "draw-decide", keep: true });
+    const after = applyAction(state, 0, { type: "draw-decide", take: "first" });
 
     expect(after.toAct).toBe(1);
     expect(after.pending).not.toBeNull();
@@ -105,7 +105,7 @@ describe("draw phase", () => {
 
   it("rejects an action from the player who is not on turn", () => {
     const state = startDeal({ seed: 2, starter: 0 });
-    expect(() => applyAction(state, 1, { type: "draw-decide", keep: true })).toThrow();
+    expect(() => applyAction(state, 1, { type: "draw-decide", take: "first" })).toThrow();
   });
 
   it("offers exactly the keep and reject actions to the player on turn", () => {

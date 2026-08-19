@@ -1,13 +1,14 @@
 import { cardId } from "@hb/engine";
-import type { Card, DrawChoice, Pair, PlayerView } from "@hb/engine";
+import type { Card, DrawChoice, DrawTake, Pair, PlayerView } from "@hb/engine";
 import { motion } from "framer-motion";
 import { useLayoutEffect, useRef, useState } from "react";
 import { DRAW_TIMING, currentPacing, drawPlayout } from "../game/timing.js";
-import type { DrawPair, DrawReveal } from "../game/session.js";
+import type { DrawReveal, DrawSpend } from "../game/session.js";
 import { CardBack, CardFace, CardSlot } from "./CardFace.js";
 import type { CardSize } from "./CardFace.js";
 import { CardFlight, centerIn } from "./CardFlight.js";
 import type { Flight, Point } from "./CardFlight.js";
+import { CardText } from "./CardText.js";
 import { DiscardPile, DrawDeck } from "./DrawPiles.js";
 import { SeatLabel } from "./SeatLabel.js";
 
@@ -19,7 +20,7 @@ export interface DrawPhaseProps {
    * Development builds only: the two cards the opponent's last turn spent, which
    * is what lets their turn be animated the way yours is.
    */
-  readonly peekLastDraw: DrawPair | null;
+  readonly peekLastDraw: DrawSpend | null;
   /** Development builds only: card 1 of the opponent's turn, shown in their pair. */
   readonly peekPending: Card | null;
   /**
@@ -29,7 +30,7 @@ export interface DrawPhaseProps {
    */
   readonly showingTheirCards: boolean;
   readonly view: PlayerView;
-  onDecide(keep: boolean): void;
+  onDecide(take: DrawTake): void;
 }
 
 function lastOpponentChoice(view: PlayerView): DrawChoice | null {
@@ -43,49 +44,131 @@ function lastOpponentChoice(view: PlayerView): DrawChoice | null {
 }
 
 /**
+ * The choice itself, picked out of the sentence around it.
+ *
+ * Three outcomes read at a glance rather than by being read word by word, which
+ * they were not: one line of uniform small text, changing twenty-six times a deal,
+ * is a thing you stop looking at. Amber for the same reason the takeable edge is
+ * amber — it is the one colour this screen spends on what is happening now.
+ */
+function Chose({ children }: { readonly children: React.ReactNode }): React.JSX.Element {
+  return <span className="font-semibold text-amber-200">{children}</span>;
+}
+
+/**
  * The running commentary on the opponent's turn.
  *
- * Their choice is public even though neither of their cards is. It is the only
- * thing you learn about their hand across the whole draw, so it is said in
- * words as well as shown by where their cards go.
+ * Their choice is public even though neither of their cards is, and under the base
+ * rules it is the only thing you ever learn about their hand — so it is said in
+ * words as well as shown by where their cards go. Under `openDiscard` there is one
+ * more thing to say and it is worth far more: which of *your* cards they just
+ * picked up.
  */
 function OpponentLine({
-  opponentName,
+  lastDraw,
   settling,
   view,
 }: {
-  readonly opponentName: string;
+  /** The turn that just resolved, which names their card only if they lifted it off the pile. */
+  readonly lastDraw: DrawReveal | null;
   readonly settling: boolean;
   readonly view: PlayerView;
 }): React.JSX.Element {
   if (view.toAct === view.opponent || settling) {
-    return <>{opponentName} is drawing…</>;
+    return <>drawing…</>;
   }
 
   const choice = lastOpponentChoice(view);
   if (choice === null) {
-    return <>{opponentName} has not drawn yet.</>;
+    return <>has not drawn yet</>;
   }
 
-  // The same two words the labels under your own pair use. "Rejected" was the
-  // vocabulary of the buttons that pair replaced, and it needed translating
-  // back into "and took an unknown card instead" every time it was read — which
-  // is the reason those buttons went, and applies to a sentence just as well.
-  return choice === "kept-first" ? (
-    <>{opponentName} kept the first card.</>
-  ) : (
-    <>{opponentName} took the unseen card.</>
-  );
+  // The same words the labels under the choices use. "Rejected" was the vocabulary
+  // of the buttons those cards replaced, and it needed translating back into "and
+  // took an unknown card instead" every time it was read — which is the reason those
+  // buttons went, and applies to a sentence just as well.
+  //
+  // No name and no full stop: this is a clause finishing the seat label beside it,
+  // which is where the name now lives. It had been on the screen twice in adjacent
+  // bands, once as a label and once as the subject of this sentence.
+  switch (choice) {
+    case "kept-first": {
+      return (
+        <>
+          kept the <Chose>face-up card</Chose>
+        </>
+      );
+    }
+    case "took-second": {
+      return (
+        <>
+          took the <Chose>unseen card</Chose>
+        </>
+      );
+    }
+    case "took-discard": {
+      // Named as *your* card rather than as "the discard", because that is the
+      // fact worth reading: a card you threw away is now in their hand. And named
+      // outright while the reveal is still theirs — it was lying face up when they
+      // took it, so there is nothing here to protect. Once you draw again the card
+      // stops being sent and the sentence goes back to being general, which is the
+      // same rule as every other reveal: it plays once, at the moment of the turn.
+      const took = lastDraw !== null && lastDraw.by === view.opponent ? lastDraw.taken : null;
+      return took === null ? (
+        <>
+          took <Chose>your discard</Chose>
+        </>
+      ) : (
+        <>
+          took your{" "}
+          <Chose>
+            <CardText card={took} on="dark" />
+          </Chose>
+        </>
+      );
+    }
+  }
 }
 
 /**
- * One half of the pair, and the tap that takes it.
+ * The edge that marks a card as one this turn can be spent on.
  *
- * The card *is* the choice: one that can be seen and one that cannot, and
- * taking either is what the turn amounts to. The hit area is padded well past
- * the card because a draw is final the instant it is made — §1.6 gives a bid a
- * confirmation tap and gives this none, so the target has to be forgiving
- * instead.
+ * Position is what this screen uses to say what a thing is, and the choices now sit
+ * in one row saying it properly — this is no longer carrying that job on its own,
+ * which is what it was introduced to do while the third choice was still stranded
+ * beside the stock. What is left for it is the other half: *now*. It says the board
+ * has settled and the turn is yours, which is a thing the row's mere existence
+ * cannot say, and it is why it appears and disappears rather than being painted on.
+ *
+ * Amber because the app already spends amber on exactly one idea — it is your move
+ * (`SeatLabel` when active, the current dot in `TurnTrack`) — and "you may take
+ * this" is that same idea pointed at a card.
+ *
+ * Drawn outside the box rather than as a border, so nothing shifts by a pixel when
+ * it appears and disappears twenty-six times a deal.
+ *
+ * **Two layers, because one did not survive a face-up card.** A single amber ring
+ * was pale amber directly against the near-white `--color-card-face`, which is the
+ * one ground it cannot be seen on — it read as part of the card's own edge rather
+ * than as a mark on it. So a dark gap goes between them: card, then 2px of
+ * translucent black, then 3px of amber. The amber now has dark on both sides
+ * whatever it is drawn over.
+ *
+ * Translucent black rather than `ring-offset`, which takes a solid color. The table
+ * ground is a per-theme variable *and* carries a radial sheen in the hockey theme,
+ * so any one color would be a visibly wrong patch somewhere; darkening whatever is
+ * actually behind it is correct on both themes and needs to know neither.
+ */
+const TAKEABLE_EDGE =
+  "rounded-xl shadow-[0_0_0_2px_rgba(0,0,0,0.55),0_0_0_5px_#fbbf24]";
+
+/**
+ * One of the two cards this turn spends, and the tap that takes it.
+ *
+ * The card *is* the choice: one that can be seen and one that cannot, and taking
+ * either is what the turn amounts to. The hit area is padded well past the card
+ * because a draw is final the instant it is made — §1.6 gives a bid a confirmation
+ * tap and gives this none, so the target has to be forgiving instead.
  */
 function ChoiceCard({
   card,
@@ -110,7 +193,7 @@ function ChoiceCard({
    * until the next turn's own flight landed.
    */
   readonly empty: boolean;
-  /** What taking this card does, or null when the turn is not yours. */
+  /** What this card is, or null when the turn is not yours. */
   readonly label: string | null;
   readonly onTake: (() => void) | null;
   readonly slotRef: React.RefObject<HTMLDivElement | null>;
@@ -125,32 +208,34 @@ function ChoiceCard({
         disabled={!takeable}
         onClick={onTake ?? undefined}
       >
-        <div ref={slotRef}>
+        <div ref={slotRef} className={takeable ? TAKEABLE_EDGE : undefined}>
           {empty ? (
-            <CardSlot size="table" />
-          ) : card === null ? (
-            <CardBack size="table" />
-          ) : (
-            <motion.div
-              // Keyed on the card, so a new card 1 is its own element rather
-              // than a silent swap.
-              key={cardId(card)}
-              // No mount animation: this only ever appears once its own
-              // flight from the stock has already arrived solid — see the
-              // deal-in effect's `fade: false` — so fading it in again on
-              // top of that would be the same blink `PlayPhase`'s `Slot`
-              // already had, just moved to this screen instead.
-              initial={false}
-              animate={{ opacity: 1, scale: 1 }}
-            >
+        <CardSlot size="table" />
+      ) : card === null ? (
+        <CardBack size="table" />
+      ) : (
+        <motion.div
+          // Keyed on the card, so a new card 1 is its own element rather
+          // than a silent swap.
+          key={cardId(card)}
+          // No mount animation: this only ever appears once its own
+          // flight from the stock has already arrived solid — see the
+          // deal-in effect's `fade: false` — so fading it in again on
+          // top of that would be the same blink `PlayPhase`'s `Slot`
+          // already had, just moved to this screen instead.
+          initial={false}
+          animate={{ opacity: 1, scale: 1 }}
+        >
               <CardFace card={card} size="table" />
             </motion.div>
           )}
         </div>
       </button>
-      {/* The height is held whether or not there is a label, so the pair does
-          not shift up and down twice a turn. */}
-      <span className="h-4 text-xs text-white/55">{label}</span>
+      {/* The height is held whether or not there is a label, so the pair does not
+          shift up and down twice a turn. Amber when there is one, matching the edge
+          above it and the choice named in the commentary — a second cue for the same
+          fact, and the only one that is not sitting against a card face. */}
+      <span className="h-4 text-xs font-medium text-amber-200">{label}</span>
     </div>
   );
 }
@@ -246,16 +331,63 @@ function findHandSlot(id: string): HTMLElement | null {
 }
 
 /**
- * The two cards a resolved turn spent, or null when they are not this screen's
- * to show — which is every turn of the opponent's without their cards showing.
+ * The cards a resolved turn spent, or null when they are not this screen's to
+ * show — which is every turn of the opponent's without their cards showing.
  */
-function pairFor(reveal: DrawReveal, mine: boolean, peekLastDraw: DrawPair | null): DrawPair | null {
+function pairFor(
+  reveal: DrawReveal,
+  mine: boolean,
+  peekLastDraw: DrawSpend | null,
+): DrawSpend | null {
   if (!mine) {
     return peekLastDraw;
   }
-  return reveal.discarded === null || reveal.taken === null
+  return reveal.discarded.length === 0 || reveal.taken === null
     ? null
     : { discarded: reveal.discarded, taken: reveal.taken };
+}
+
+/**
+ * Where each card of a resolved turn travels, keyed by which one was taken.
+ *
+ * Choreographed by card 1 and card 2 rather than by taken and discarded, because
+ * which of the two goes where *is* the choice. Both leave from the pair rather
+ * than from the stock, since that is where they already are — and on a
+ * `took-discard` neither of them goes to a hand at all: they both land on the
+ * pile, and the card that comes back the other way is the one lifted off it.
+ */
+interface DrawLeg {
+  readonly card: Card;
+  /** Held face up partway, for a card this seat has not seen before. */
+  readonly reads: boolean;
+  readonly source: "discard" | "one" | "two";
+  readonly target: "discard" | "hand";
+}
+
+function legsFor(choice: DrawChoice, spend: DrawSpend): DrawLeg[] {
+  switch (choice) {
+    case "kept-first": {
+      return [
+        { card: spend.taken, reads: false, source: "one", target: "hand" },
+        { card: spend.discarded[0]!, reads: true, source: "two", target: "discard" },
+      ];
+    }
+    case "took-second": {
+      return [
+        { card: spend.discarded[0]!, reads: false, source: "one", target: "discard" },
+        { card: spend.taken, reads: false, source: "two", target: "hand" },
+      ];
+    }
+    case "took-discard": {
+      return [
+        { card: spend.taken, reads: false, source: "discard", target: "hand" },
+        { card: spend.discarded[0]!, reads: false, source: "one", target: "discard" },
+        // Card 2 was thrown without ever being looked at, so it is turned over on
+        // the way out exactly as a keep's is. This is the only sight of it.
+        { card: spend.discarded[1]!, reads: true, source: "two", target: "discard" },
+      ];
+    }
+  }
 }
 
 export function DrawPhase({
@@ -296,6 +428,7 @@ export function DrawPhase({
   const [dealFlights, setDealFlights] = useState<readonly Flight[]>([]);
 
   const pending = view.pending;
+
   const turn = lastDraw?.turn ?? 0;
 
   // The engine hands each seat its card 1 the instant the other's turn
@@ -304,9 +437,23 @@ export function DrawPhase({
   // still — yours here, and the computer's in the pair above.
   const shown = settling ? null : pending;
   const theirShown = settling ? null : peekPending;
-  // Not decidable mid-flight either: tapping a card still in the air would
+  /**
+   * The turn is this seat's and the board is still — but its own two cards may not
+   * have arrived yet. Which is exactly the distinction the discard pile needs: that
+   * card is not being dealt, it has been lying on the table since they threw it, so
+   * it is face up from the moment the turn is yours and the two stock cards fly in
+   * beside a choice already on offer. Gated on it turning up *last* had it arriving
+   * after the cards it competes with, which is backwards.
+   */
+  const mineToAct = shown !== null;
+  /** Whether this deal offers a third card: the top of the discard pile. */
+  const openDiscard = view.rules.openDiscard;
+  // Not decidable mid-flight, though: tapping a card still in the air would
   // resolve a turn the board has not finished dealing.
-  const decidable = shown !== null && !dealArriving;
+  const decidable = mineToAct && !dealArriving;
+  // The pile is a choice only under the rule, only on your turn, and only once there
+  // is something on it — every turn but the first.
+  const takeableDiscard = decidable && openDiscard && view.discardTop !== null;
   // Nothing of this turn's own to show at the choice pair, in any of three
   // ways: still travelling in from the stock, already gone to the hand or
   // the discard, or — the computer's own turn, `pending` null throughout —
@@ -376,54 +523,53 @@ export function DrawPhase({
     const one = centerIn(bounds, mine ? oneRef.current : theirOneRef.current);
     const two = centerIn(bounds, mine ? twoRef.current : theirTwoRef.current);
 
-    if (
-      playout.animated &&
-      pair !== null &&
-      discard !== null &&
-      hand !== null &&
-      one !== null &&
-      two !== null
-    ) {
-      const kept = lastDraw.choice === "kept-first";
+    // Their turn, without their cards showing, when they lifted a card off the open
+    // pile: the one card that moves is one this seat has been looking at, so it
+    // travels on its own. Neither of their two is drawn, because neither is this
+    // seat's to see — which is also why this cannot go through `legsFor`, whose
+    // every case needs a full `DrawSpend`.
+    const legs =
+      pair !== null
+        ? legsFor(lastDraw.choice, pair)
+        : lastDraw.taken === null
+          ? []
+          : [{ card: lastDraw.taken, reads: false, source: "discard", target: "hand" } as DrawLeg];
 
-      // Choreograph by card 1 and card 2, not by taken and discarded: card 1
-      // goes to a hand on a keep and to the discard on a reject, and card 2
-      // takes whichever place is left. Both leave from the pair rather than
-      // from the stock, because that is where they already are.
-      const cardOne = kept ? pair.taken : pair.discarded;
-      const cardTwo = kept ? pair.discarded : pair.taken;
+    // Only the points the legs in hand actually need, which is the whole reason
+    // this is resolved per leg rather than up front. `theirOneRef` and
+    // `theirTwoRef` are attached by `TheirPair`, which is only on screen with the
+    // computer's cards showing — so demanding all four points meant the one flight
+    // that needs neither of them, the pile lift on the computer's own turn, was
+    // silently dropped in exactly the configuration anybody actually plays in.
+    const from: Record<DrawLeg["source"], Point | null> = { discard, one, two };
+    const to: Record<DrawLeg["target"], Point | null> = { discard, hand };
+    const placed = legs.filter((leg) => from[leg.source] !== null && to[leg.target] !== null);
 
-      setFlights([
-        {
-          card: cardOne,
+    if (playout.animated && placed.length > 0 && placed.length === legs.length) {
+      setFlights(
+        // `placed`, not `legs`: identical here by the guard above, and it is the one
+        // whose points are known non-null.
+        placed.map((leg) => ({
+          card: leg.card,
           delay: 0,
           fade: true,
-          from: one,
-          hold: 0,
-          key: `${turn}-one`,
-          size,
-          to: kept ? hand : discard,
-          travel: discardTravel,
-          via: null,
-        },
-        {
-          card: cardTwo,
-          delay: 0,
-          fade: true,
-          from: two,
-          hold: playout.holdsReveal ? hold : 0,
-          key: `${turn}-two`,
-          size,
-          to: kept ? discard : hand,
-          // Only a keep's card 2 gets a hold to lean on, so only it earns
-          // `flightTravel`'s quicker, hold-carried legs; rejecting straight
-          // to the hand is exactly as unaided as card 1's own trip.
-          travel: playout.holdsReveal ? flightTravel : discardTravel,
-          // Card 2 on a keep turns face up where it already lies and stays
-          // there long enough to read. It is the only chance to see it.
-          via: playout.holdsReveal ? two : null,
-        },
-      ]);
+          from: from[leg.source]!,
+          hold: leg.reads ? hold : 0,
+          key: `${turn}-${leg.source}`,
+          // A card leaving the pile leaves at the size the pile draws it, whoever
+          // is taking it — the pile is one shared object at one size, unlike the
+          // two pairs, which is what `size` is otherwise saying.
+          size: leg.source === "discard" ? "table" : size,
+          to: to[leg.target]!,
+          // Only a card being read gets a hold to lean on, so only it earns
+          // `flightTravel`'s quicker, hold-carried legs; every other trip is
+          // exactly as unaided as card 1's own.
+          travel: leg.reads ? flightTravel : discardTravel,
+          // A card this seat has not seen turns face up partway and stays there
+          // long enough to read. It is the only chance to see it.
+          via: leg.reads ? from[leg.source]! : null,
+        })),
+      );
 
       timers.push(
         setTimeout(() => {
@@ -539,13 +685,6 @@ export function DrawPhase({
       className="relative flex flex-1 flex-col items-center justify-between px-4 py-3"
     >
       <div className="flex flex-col items-center gap-1">
-        {/* Lit while they are deciding — and while the board is still settling
-            after their turn, since until it does the decision is not yours. */}
-        <SeatLabel
-          active={view.toAct === view.opponent || settling}
-          name={opponentName}
-          vulnerable={vulnerable[view.opponent]}
-        />
         {/* Their hand as a growing row of backs — except while their cards are
             showing, when the same hand is already on screen face up in the band
             above and this is the identical information with less in it. */}
@@ -574,43 +713,101 @@ export function DrawPhase({
           <TheirPair cardOne={theirShown} oneRef={theirOneRef} twoRef={theirTwoRef} />
         ) : null}
 
-        {/* What they did, directly under whatever of theirs is on screen — the
-            pair while it is showing, the face-down hand otherwise. It sat down
-            in your own half once, which put a sentence about them as far from
-            them as the layout allows. */}
-        <p className="flex min-h-10 max-w-sm items-center justify-center px-4 text-center text-sm text-white/70">
-          <OpponentLine opponentName={opponentName} settling={settling} view={view} />
-        </p>
+        {/* Who they are and what they just did, on one line, directly under whatever
+            of theirs is on screen — the pair while it is showing, the face-down hand
+            otherwise. These were two bands, and the opponent's name was in both: once
+            as the seat label and once as the subject of the sentence beneath it. The
+            label keeps what the sentence cannot say — whose turn it is, and whether
+            they are vulnerable — and the sentence finishes it as a clause.
+
+            It also puts their label on the inward side of their own hand, mirroring
+            yours at the bottom of the screen, where before one sat above its hand and
+            the other below. */}
+        <div className="flex min-h-10 max-w-sm flex-wrap items-center justify-center gap-x-1.5 px-4 text-center text-sm text-white/70">
+          {/* Lit while they are deciding — and while the board is still settling
+              after their turn, since until it does the decision is not yours. */}
+          <SeatLabel
+            active={view.toAct === view.opponent || settling}
+            name={opponentName}
+            vulnerable={vulnerable[view.opponent]}
+          />
+          {/* One span around the whole clause, because this is a flex container — a
+              flex container makes every child its own flex item, and whitespace at an
+              item's edge is trimmed exactly as it would be at a block's, so the space
+              before an emphasized phrase disappeared and it read "took theunseen
+              card". The clause has to be a single inline item for the spaces inside it
+              to survive; `{" "}` does not help, since a whitespace-only text node
+              between two items is discarded outright. The space between the label and
+              the clause is `gap-x`, for the same reason. */}
+          <span>
+            <OpponentLine lastDraw={lastDraw} settling={settling} view={view} />
+          </span>
+        </div>
       </div>
 
-      {/* Centered like every other pair on this screen, rather than pinned to
-          the true left and right edges: that spread the two piles across the
-          full width with a dead gap between them, out of step with the
-          opponent's pair above and the decision pair below. Close together
-          instead, the way a stock and a waste pile sit side by side on a
-          real table — neither is a tap target, so proximity here is never
-          read as a choice the way it would be for the decision pair below. */}
+      {/* Centered like every other row on this screen, rather than pinned to the
+          true left and right edges: that spread the piles across the full width with
+          a dead gap between them, out of step with the opponent's pair above and the
+          choices below. Close together instead, the way a stock and a waste pile sit
+          side by side on a real table.
+
+          The discard stays here even when it is a choice. Moving it down among the
+          turn's own two cards was tried — three cards abreast is "a turn offers you
+          these cards and you take one" as a picture — and it is cramped across a
+          phone, and it lines the pile up as a third card when it is not the same kind
+          of object: it is a standing pile with a count on it that happens to have a
+          takeable card on top. */}
       <div className="flex items-start justify-center gap-6">
-        <div ref={deckRef}>
-          <DrawDeck remaining={view.stockRemaining - (pending === null ? 0 : 1)} />
-        </div>
-        <div ref={discardRef}>
-          <DiscardPile count={view.drawTurns.length} />
-        </div>
+        <DrawDeck
+          remaining={view.stockRemaining - (pending === null ? 0 : 1)}
+          stackRef={deckRef}
+        />
+        <DiscardPile
+          count={view.drawTurns.length}
+          edge={takeableDiscard ? TAKEABLE_EDGE : undefined}
+          // A noun, and the same one for as long as the rule is on. "Discard" alone
+          // was tempting and is a trap: under a card you can tap it reads as a verb,
+          // and tapping this does the opposite of discarding. "Last" is exactly true —
+          // turns alternate and every turn covers the pile with a card the player
+          // acting threw, so what is on offer is always their most recent throw.
+          label={openDiscard ? "Last discard" : "discarded"}
+          stackRef={discardRef}
+          // Face up from the moment the turn is this seat's — see `mineToAct`. Hidden
+          // the rest of the time, which is what stopped it blinking: it used to be
+          // suppressed only while a turn *played out*, and the pause before the
+          // computer moves is the same length as that playout, so the card you had
+          // just thrown turned face up and was covered again inside a frame.
+          top={openDiscard && mineToAct ? view.discardTop : null}
+          onTake={
+            takeableDiscard
+              ? () => {
+                  onDecide("discard");
+                }
+              : null
+          }
+        />
       </div>
 
-      {/* The decision itself: the two cards this turn spends, one you can see
-          and one you cannot. Taking either is the whole move. */}
+      {/* The decision itself, as the sentence it is: a turn offers you these cards
+          and you take one. Two under the game's own rules, one you can see and one
+          you cannot; three on a house draw, the third being the pile itself rather
+          than a copy of its top card — a copy would have to fly back to the pile
+          every time it went untaken, animating a card that never moved.
+
+          Under a three-card draw the third is the discard pile, in the row above:
+          it is takeable from where it lies rather than being copied down here, and a
+          copy would have to fly back to the pile every time it went untaken,
+          animating a card that never moved. */}
       <div className="flex items-start justify-center gap-8">
         <ChoiceCard
           card={shown}
           empty={slotEmpty}
-          label={decidable ? "Keep" : null}
+          label={decidable ? "Face up" : null}
           slotRef={oneRef}
           onTake={
             decidable
               ? () => {
-                  onDecide(true);
+                  onDecide("first");
                 }
               : null
           }
@@ -618,12 +815,12 @@ export function DrawPhase({
         <ChoiceCard
           card={null}
           empty={slotEmpty}
-          label={decidable ? "Take unseen" : null}
+          label={decidable ? "Unseen" : null}
           slotRef={twoRef}
           onTake={
             decidable
               ? () => {
-                  onDecide(false);
+                  onDecide("second");
                 }
               : null
           }

@@ -47,7 +47,7 @@ export function botActionFor({ bot, seat, standing, state }: BotTurn): DealActio
       // and therefore saw. Not a leak — a player is entitled to remember their
       // own discards, and §1.4 says so. It is handed over here rather than read
       // from the engine so that a forgetful bot is a matter of passing less.
-      return { type: "draw-decide", keep: bot.chooseDraw(view, state.discards[seat]) };
+      return { type: "draw-decide", take: bot.chooseDraw(view, state.discards[seat]) };
     }
     case "auction": {
       return { type: "call", call: bot.chooseCall(view, standing) };
