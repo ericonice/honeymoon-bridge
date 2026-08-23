@@ -10,6 +10,7 @@ import { CardBack, CardFace, CardSlot } from "./CardFace.js";
 import type { CardSize } from "./CardFace.js";
 import { CardFlight, centerIn } from "./CardFlight.js";
 import type { Flight, Point } from "./CardFlight.js";
+import { CARD_WIDTHS, MINI_MIN_STEP, spreadStep, useRowRoom } from "./Hand.js";
 import { CardText } from "./CardText.js";
 import { DrawLessonNote } from "./DrawLessonNote.js";
 import { Spotlight } from "./Spotlight.js";
@@ -470,6 +471,10 @@ export function DrawPhase({
   const mineRef = useRef<HTMLDivElement>(null);
   // The regions the tour points at. Three of them no flight ever needed a handle on.
   const theirHandRef = useRef<HTMLDivElement>(null);
+  // Their row measures its own box and spaces itself the way your hand does —
+  // see `spreadStep`. Measured rather than assumed, since the frame is narrower
+  // than its cap on most phones.
+  const { ref: theirRoomRef, room: theirRoom } = useRowRoom();
   const pilesRef = useRef<HTMLDivElement>(null);
   const choicesRef = useRef<HTMLDivElement>(null);
   const youRef = useRef<HTMLDivElement>(null);
@@ -823,6 +828,13 @@ export function DrawPhase({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingKey, settling]);
 
+  const theirStep = spreadStep({
+    available: theirRoom,
+    cardWidth: CARD_WIDTHS.mini,
+    count: view.handSizes[view.opponent],
+    minStep: MINI_MIN_STEP,
+  });
+
   return (
     <div
       ref={containerRef}
@@ -838,19 +850,32 @@ export function DrawPhase({
             showing, when the same hand is already on screen face up in the band
             above and this is the identical information with less in it. */}
         {showingTheirCards ? null : (
-          // Sized from the outset for all thirteen — 28px for the first card
-          // and 12px for each one that overlaps it. The row still visibly grows
-          // a card a turn, which is the point of it, but the box holding it
-          // never changes, so nothing above or below is nudged by the growing.
-          <div ref={theirHandRef} className="flex h-10 w-43 items-center justify-center">
+          // `mini`, because a card's size follows how badly a mis-tap would hurt
+          // and this row cannot be tapped at all — §1.5. Drawing it at the footer
+          // hand's size was tried on both screens and reverted on both: nothing
+          // you cannot touch should compete with something you can, and on this
+          // screen the something is the three cards on offer.
+          //
+          // Spaced by `spreadStep`, which is the rule your own hand follows: the
+          // cards overlap only as much as they have to, so this row loosens as it
+          // fills rather than sitting at its thirteen-card spacing from the first
+          // turn. A fixed overlap was the one thing that still read differently
+          // from your own hand. The box is full width and never changes, so the
+          // row growing inside it nudges nothing above or below.
+          <div ref={theirRoomRef} className="flex h-10 w-full items-center justify-center">
             {view.handSizes[view.opponent] === 0 ? (
               <span className="text-xs text-white/30">no cards yet</span>
             ) : (
-              Array.from({ length: view.handSizes[view.opponent] }, (_, index) => (
-                <div key={index} className={index > 0 ? "-ml-4" : ""}>
-                  <CardBack size="mini" />
-                </div>
-              ))
+              <div ref={theirHandRef} className="flex items-center">
+                {Array.from({ length: view.handSizes[view.opponent] }, (_, index) => (
+                  <div
+                    key={index}
+                    style={index === 0 ? {} : { marginLeft: theirStep - CARD_WIDTHS.mini }}
+                  >
+                    <CardBack size="mini" />
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -862,9 +887,21 @@ export function DrawPhase({
           <TheirPair cardOne={theirShown} oneRef={theirOneRef} twoRef={theirTwoRef} />
         ) : null}
 
-        {/* Between their hand and their label, which is where yours sits between
-            your label and your hand — the same three things in the same order,
-            reflected. */}
+        {/* Their side, in the order yours is in. Read from the middle of the table
+            outward, both sides are label, then dots, then the rule, then the hand
+            — so the rule sits immediately against the hand on each side, which is
+            where `GameBoard`'s footer puts yours. It separates a hand from
+            everything else; anything that changed about that between the two ends
+            made them disagree about what the line was for.
+
+            Its own element rather than a border on the box above, which is what
+            it was: a border there sits inside that box's padding and lands on the
+            cards when the box is only as tall as they are. A 1px row in the flow
+            cannot touch anything, and the column's own `gap-1` keeps it clear on
+            both sides. `self-stretch` with a negative inset reaches past this
+            screen's `px-4` so it runs edge to edge like the footer's. */}
+        <div className="-mx-4 h-px self-stretch bg-white/10" />
+
         <TurnTrack choices={choicesFor(view, view.opponent)} live={false} />
 
         {/* Who they are and what they just did, on one line, directly under whatever

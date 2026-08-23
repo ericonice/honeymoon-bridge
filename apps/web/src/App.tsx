@@ -1,17 +1,20 @@
 import { useState } from "react";
 import { useAccount } from "./game/account.js";
 import { applyCardColor, readCardColor, writeCardColor } from "./game/cardColor.js";
+import type { Density } from "./game/identity.js";
 import type { Destination } from "./game/destination.js";
 import { destinationFromWire, HOME, takeDestination } from "./game/destination.js";
 import { readDevTools, writeDevTools } from "./game/devTools.js";
 import {
   boldness,
+  density as storedDensity,
   disguiseEnabled,
   drawStyle,
   pace,
   peeking as storedPeeking,
   preferredFormat,
   setBoldness,
+  setDensity,
   setDisguiseEnabled,
   setDrawStyle,
   setPace,
@@ -20,9 +23,11 @@ import {
   setSoundEnabled,
   setStrength,
   setTapToSelectEnabled,
+  setTrickCountEnabled,
   soundEnabled,
   strength,
   tapToSelectEnabled,
+  trickCountEnabled,
 } from "./game/identity.js";
 import {
   clearLocationHash,
@@ -119,6 +124,11 @@ export function App(): React.JSX.Element {
   const [speed, setSpeed] = useState(pace);
   const [sound, setSound] = useState(soundEnabled);
   const [tapToSelect, setTapToSelect] = useState(tapToSelectEnabled);
+  const [trickCount, setTrickCount] = useState(trickCountEnabled);
+  // Read once at mount, like every other setting here. Its *default* comes from
+  // the viewport rather than storage — see `density` — so an untouched install
+  // follows the device it launched on and a deliberate choice sticks.
+  const [layout, setLayout] = useState<Density>(storedDensity);
   // Already on the document by now — main.tsx applies it before the first
   // render — so this is the same value again, for the card back to read.
   const [theme, setTheme] = useState(readTheme);
@@ -306,7 +316,9 @@ export function App(): React.JSX.Element {
             devTools={devTools}
             peeking={peeking}
             sound={sound}
+            density={layout}
             tapToSelect={tapToSelect}
+            trickCount={trickCount}
             onLeave={goHome}
             onShowSettings={showSettings}
           />
@@ -346,7 +358,9 @@ export function App(): React.JSX.Element {
             devTools={devTools}
             peeking={peeking}
             sound={sound}
+            density={layout}
             tapToSelect={tapToSelect}
+            trickCount={trickCount}
             onLeave={goHome}
             onShowSettings={showSettings}
           />
@@ -369,7 +383,7 @@ export function App(): React.JSX.Element {
           monitor makes rows of buttons absurdly wide rather than usefully
           bigger. On a phone the cap never binds. */}
       <div
-        className="table-surface relative mx-auto flex h-[100dvh] w-full max-w-md flex-col overflow-hidden text-white"
+        className="table-surface viewport-height relative mx-auto flex w-full max-w-md flex-col overflow-hidden text-white"
         style={{
           paddingTop: "env(safe-area-inset-top)",
           paddingRight: "env(safe-area-inset-right)",
@@ -392,7 +406,9 @@ export function App(): React.JSX.Element {
             peeking={peeking}
             disguise={disguise}
             sound={sound}
+            density={layout}
             tapToSelect={tapToSelect}
+            trickCount={trickCount}
             theme={theme}
             onClose={() => {
               setShowingSettings(false);
@@ -439,9 +455,17 @@ export function App(): React.JSX.Element {
               setSoundEnabled(enabled);
               setSound(enabled);
             }}
+            onDensityChange={(next) => {
+              setDensity(next);
+              setLayout(next);
+            }}
             onTapToSelectChange={(enabled) => {
               setTapToSelectEnabled(enabled);
               setTapToSelect(enabled);
+            }}
+            onTrickCountChange={(enabled) => {
+              setTrickCountEnabled(enabled);
+              setTrickCount(enabled);
             }}
             onThemeChange={(next) => {
               writeTheme(next);

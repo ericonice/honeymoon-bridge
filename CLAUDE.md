@@ -33,9 +33,11 @@ npm run dev:lan --workspace @hb/web   # also on the LAN, for testing on the phon
 npm run build   --workspace @hb/web
 npm run deploy  --workspace @hb/web   # Cloudflare Pages; live at honeymoon-bridge.ericonice.com
 
-# A single test file or test
-npx vitest run test/scoring.test.ts --workspace @hb/engine
-npx vitest run -t "pays 700 for a rubber won two games to none"
+# A single test file or test. Run these from the workspace directory, not the repo root:
+# `vitest --workspace` takes a *config file* path, so `--workspace @hb/engine` resolves to the
+# package's `main` and fails with "must export a default array of project paths".
+cd packages/engine && npx vitest run test/scoring.test.ts
+cd apps/web      && npx vitest run -t "the ring counts down this seat's own target"
 
 # Measuring the bot. Not tests — slow, and they print numbers rather than pass.
 # All from the repo root. Everything after `--` is passed to the bench.
@@ -362,9 +364,115 @@ person. And two-player testing would otherwise cost an email per window per run,
 the client *and* refused by any server the dev script did not start — §3.6 explains why this one
 cannot ship when the others can.
 
+**Card size is allocated by how badly a mis-tap would hurt — §1.5 — and getting there cost two
+reverts of the same mistake.** Both were "draw the opponent's hand at your hand's size", first on the
+play screen and then on the draw screen, justified as symmetry and then as "their hand growing is the
+subject of that screen". Both shipped and both came back. The rule that replaced the reasoning:
+**nothing you cannot touch should compete with something you can.**
+
+Two things worth keeping from it. A change about two hands matching has to cover both screens that
+draw two hands — `DrawPhase` keeps its own opponent row rather than sharing `PlayPhase`'s, so grep
+`CardBack size` before believing that kind of change is done. And the size jump at the reveal, which
+I cited as evidence the rows were inconsistent, is actually what marks the moment their cards stop
+being a number and become information; I read a meaningful transition as an accident.
+
+What survived is the hairline on both screens and one spacing rule for every row of cards
+(`spreadStep`).
+
+**The hairline itself took three placements, and the test that finally settled it is worth reusing:
+read each player's side outward from the middle of the table and compare the two as sequences.** Every
+wrong version looked defensible on its own screen — below their whole side, then between their dots
+and their label — and the disagreement only showed up written out side by side, where one side read
+label/dots/rule/hand and the other did not. Settling it moved their seat label below their hand, so
+there is no seat asymmetry left to chase.
+
 **Not started.** The dev control that force-drops the socket, which §3.6 calls the only way to
 exercise reconnection deliberately rather than hoping. Nothing persists a rubber across a refresh
-in the robot game. And the play screen still has none of the polish the draw screen got.
+in the robot game. And the play screen has one considered thing on it now — the ring below — and
+otherwise still none of the polish the draw screen got.
+
+**The play screen counts down the tricks each side needs, and the design took seven passes to get
+small.** §1.6 has the rule and the several rejected versions; what belongs here is the engineering.
+
+**The arithmetic is `trickOutlook` in the engine, not in the component** — declarer needs level + 6
+and the defender 8 − level, which is a rule, and `scoreDeal` now reads its own requirement from the
+same function so the rings and the score cannot disagree. `packages/engine/test/outlook.test.ts`
+pins exactly that across every level and every possible trick split, which is the test to keep.
+
+**Both rings hang off the trick slots, in `PlayPhase`, and that is the third placement.** Each sits
+eight pixels off its own seat's played card, so which is whose is answered by position and needs no
+label or colour. The two rejected placements are in §1.6; the one worth knowing here is that they were
+at the right edge of the two hand rows first, in two different files — `PlayPhase` and `GameBoard`'s
+footer — which was both harder to change and wrong on screen. A ring changes only when a trick
+resolves, and that is exactly the moment nobody is looking at the edges.
+
+They are `absolute` inside `Slot` rather than items in the row, which is what keeps them off
+`spreadStep`: in the flow they would be one more thing thirteen cards have to make room for, and §1.5
+does not trade the size of the cards you tap for anything.
+
+**Neither ring is keyed on `view.phase`, and a version that was shipped broken.** The engine
+completes a deal the instant its thirteenth card lands, so `view.phase === "play"` unmounted both
+rings in the same render that would have drawn the check — every deal settled on the last trick, which
+is most of them, showed nothing. `PlayPhase` only renders while the *shown* phase is "play", and that
+window stays open for the last trick's hold and sweep, so the condition is just "is there a contract".
+What ends the rings is the slots unmounting at the reveal.
+
+**The reveal is one event, and the result headline used to jump the queue.** `revealedHands` goes
+non-null the instant the thirteenth card lands, and the headline branch was gated on that alone where
+the opponent's hand, both slots and the seat label all wait for `swept`. So a headline and its score
+columns arrived in a band that had been holding one line, and everything below — the played cards and
+the hand under them — visibly shifted down while the last trick was still sitting there. Gated on
+`swept` now, so the hands turning face up, the slots clearing and the headline are one moment.
+
+Worth noting what it cost to leave: nothing was *missing* during the hold, since the phase is over and
+no lead or claim line is due either, and `min-h-10` already holds the height. The band is simply empty
+for a beat, which is what it should have been all along.
+
+**The test that missed it had explicitly skipped it** — it walked until a deal was decided and then
+bailed if the deal was over, which is exactly the case. There is now a test for the last trick that
+was checked against the bug: restore `view.phase === "play"` and it fails. Note it has to settle
+*inside* the hold, since a full `settle` runs the sweep and the reveal that follows removes the rings.
+
+**Both rings are computed in one expression rather than two.** They were two
+expressions in two files briefly, and the divergence that caused is worth keeping: this seat's read
+the *shown* phase, which stays "play" through the last-trick hold and the reveal, so it outlived
+theirs and the two sides of the table disagreed about whether the deal was still being counted. One
+expression for the pair is the fix, not a matching pair of conditions.
+
+**A preference in the "Testing only" panel is unreachable, and this happened.** The trick-count
+toggle shipped inside the `playtester` block, which is gated on an account flag — so the only people
+who could switch it off were the ones who had volunteered for unfinished behavior. §3.6 has always
+said what that panel is for; the mistake was putting an ordinary matter of taste in it because that
+is where the neighbouring rows happened to be. `test/settingsRows.test.ts` now renders the screen
+with the flag off and walks a list of the rows everyone must be able to reach, with the panel's own
+heading asserted *absent* so it cannot pass by rendering the gated version.
+
+That test also needed `vitest.config.ts` to carry `define` values for `__APP_VERSION__`,
+`__BUILD_ID__` and `__BUILD_TIME__`. They are Vite `define` substitutions rather than real globals,
+so any component that prints one throws a bare `ReferenceError` under the runner — which is why no
+test had rendered this screen before.
+
+**The ring has one live colour, and two escalating ramps were built and deleted to get there.**
+White resting with amber at the edge, then amber resting with orange one trick out and white at the
+edge itself. Both were a colour on one ring restating what the *other* ring was already saying in
+tricks, and tricks are the clearer channel — so `TrickOutlook` lost a `jeopardy` state, a `tight`
+state and the `slack` field they were cut from on the way back out. **If a third ramp gets proposed,
+this is the argument against it**: with both seats' counts on screen, "you are in trouble" is already
+drawn.
+
+**Only one ring ever wears the check**, because a seat being out of reach and its opponent arriving
+are the same event: the targets sum to fourteen against thirteen tricks. It is green on either ring —
+it marks that side reaching its own target, the same mark for a contract made and a contract set —
+which is why `TrickRing` does not know whose ring it is at all. `trickRingLabel` still takes `mine`,
+because a sentence has to name somebody where a shape does not.
+
+**The outcome sound moved from scoring to the deciding trick, and that gave the verdict two possible
+sources.** So it is a latch, not a rising edge — whichever of the deciding trick and the score
+arrives first is the announcement and the other is silent. This file has now recorded the same
+double-announcement bug three times (the fog horn, the unlock chime, and this), which is why
+`test/trickRing.test.ts` asserts the count rather than merely that it fired. It also stopped being a
+fact about the *contract*: it used to be handed `score.detail.made`, so a defender who had just
+broken a contract heard the triumphant chime for it.
 
 **The bot is versioned, from v1 Angela James; v2 Bobby Orr is current.** `bot/release.ts` holds it; versions are numbered from
 one and named alphabetically after hockey players, so a list of them reads in the order they
@@ -405,7 +513,14 @@ does not exist.
 
 Not a scripted deal either — every deal teaches the mechanic identically, and a hand-picked seed is
 only needed to teach strategy. Robot game only, since at a table the other seat would be watching
-somebody read with no idea why. `walkthrough.ts` holds the copy; `Spotlight` does the cutout with one
+somebody read with no idea why. **What a tour step may describe is decided by what its cutout frames**, which is a real constraint
+and caught the dots. The `opponent` step anchors on their row of card backs only, so their turn
+track is outside the highlight and the tour says nothing about it — that fact lives on the rules
+screen instead, which is where a fact with nothing to point at belongs. The `you` step does take in
+the turn track along with the hand, so that is where the dot colours are named. Grep the anchors in
+`DrawPhase` before writing copy about a part of the screen.
+
+`walkthrough.ts` holds the copy; `Spotlight` does the cutout with one
 element and a 9999px `box-shadow` spread rather than four bands agreeing on a rect. `DrawPhase` keys
 the notes off `handSizes[me] + 1`, and a gap in the numbering would mean a walkthrough that never
 completes and so restarts every deal — there is a test for that. Done is stored when the *tour*

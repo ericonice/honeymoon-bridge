@@ -8,7 +8,7 @@ vi.mock("../src/game/soundEffects.js", () => ({
   playAchievement: vi.fn(),
   playCall: vi.fn(),
   playCardPlayed: vi.fn(),
-  playContractResult: vi.fn(),
+  playDealOutcome: vi.fn(),
   playDrawResolve: vi.fn(),
   playRubberWon: vi.fn(),
 }));

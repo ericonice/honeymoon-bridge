@@ -5,14 +5,19 @@ import { useNetworkSession } from "../game/networkSession.js";
 import type { NetworkGame } from "../game/networkSession.js";
 import type { GameSession } from "../game/session.js";
 import { inviteLink } from "../game/serverUrl.js";
+import type { Density } from "../game/identity.js";
 import { GameBoard } from "./GameBoard.js";
 
 export interface TableGameProps {
   readonly code: string;
+  /** How much room the chrome may take — see `Density`. */
+  readonly density: Density;
   readonly devTools: boolean;
   readonly peeking: boolean;
   readonly sound: boolean;
   readonly tapToSelect: boolean;
+  /** Whether the play screen draws each side's trick countdown. */
+  readonly trickCount: boolean;
   /** Goes back to the home screen. The seat is given up before this is called. */
   onLeave(): void;
   onShowSettings(): void;
@@ -186,12 +191,14 @@ function TheyLeft({
 
 export function TableGame({
   code,
+  density,
   devTools,
   onLeave,
   onShowSettings,
   peeking,
   sound,
   tapToSelect,
+  trickCount,
 }: TableGameProps): React.JSX.Element {
   const game = useNetworkSession(code);
 
@@ -236,6 +243,7 @@ export function TableGame({
     <>
       <Interruption game={game} />
       <GameBoard
+        density={density}
         devTools={devTools}
         exit={{
           leave: quit,
@@ -248,6 +256,7 @@ export function TableGame({
         session={session}
         sound={sound}
         tapToSelect={tapToSelect}
+        trickCount={trickCount}
         // Never at a table: the walkthrough holds the board while it is read, and the
         // other seat has no way to know why nothing is happening.
         walkthrough={false}

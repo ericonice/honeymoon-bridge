@@ -2,6 +2,7 @@ import { cardId, finishedHandsFor, legalActionsForView } from "@hb/engine";
 import type { Call, Card, DealPhase, DrawReveal, Pair, PlayerId, PlayerView } from "@hb/engine";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { drawPlayout } from "../game/timing.js";
+import type { Density } from "../game/identity.js";
 import type { GameSession } from "../game/session.js";
 import { useGameSounds } from "../game/useGameSounds.js";
 import { AchievementToast } from "./AchievementToast.js";
@@ -39,6 +40,8 @@ export interface GameExit {
 }
 
 export interface GameBoardProps {
+  /** How much room the chrome may take — see `Density`. */
+  readonly density: Density;
   readonly devTools: boolean;
   /** Null when this match has no exit of its own to offer. */
   readonly exit: GameExit | null;
@@ -46,6 +49,8 @@ export interface GameBoardProps {
   readonly session: GameSession;
   readonly sound: boolean;
   readonly tapToSelect: boolean;
+  /** Whether to draw each side's trick countdown — see `TrickRing`. */
+  readonly trickCount: boolean;
   /** Whether a first-time player is walked through the draw — see `walkthrough.ts`. */
   readonly walkthrough: boolean;
   onShowSettings(): void;
@@ -83,6 +88,7 @@ function CurrentPhase({
   phase,
   revealedHands,
   session,
+  trickCount,
   walkthrough,
 }: {
   readonly handOriginRef: React.RefObject<DOMRect | null>;
@@ -97,6 +103,8 @@ function CurrentPhase({
   /** See `PlayPhase`'s own prop of the same name. */
   readonly revealedHands: Pair<readonly Card[]> | null;
   readonly session: GameSession;
+  /** See `GameBoardProps`. */
+  readonly trickCount: boolean;
   /** See `GameBoardProps`. */
   readonly walkthrough: boolean;
 }): React.JSX.Element {
@@ -154,6 +162,7 @@ function CurrentPhase({
           opponentWaitingToContinue={session.opponentWaitingToContinue}
           release={onStartPlay}
           revealedHands={revealedHands}
+          trickCount={trickCount}
           view={view}
           vulnerable={vulnerable}
           waitingToContinue={session.waitingToContinue}
@@ -438,6 +447,7 @@ function useHandsSettled(view: PlayerView): { markSettled(): void; readonly sett
  * right place.
  */
 export function GameBoard({
+  density,
   devTools,
   exit,
   onShowSettings,
@@ -445,6 +455,7 @@ export function GameBoard({
   session,
   sound,
   tapToSelect,
+  trickCount,
   walkthrough,
 }: GameBoardProps): React.JSX.Element {
   const [showingScore, setShowingScore] = useState(false);
@@ -520,6 +531,7 @@ export function GameBoard({
       />
 
       <ContractBar
+        density={density}
         handsPlayed={session.history.length}
         opponentName={session.opponentName}
         phase={phase}
@@ -575,6 +587,7 @@ export function GameBoard({
           peeking={peeking}
           phase={phase}
           revealedHands={revealedHands}
+          trickCount={trickCount}
           session={session}
           walkthrough={walkthrough}
           onDismissTrick={session.dismissTrick}

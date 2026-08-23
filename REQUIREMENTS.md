@@ -258,6 +258,36 @@ Full contract bridge auction once both hands are complete.
   rest of the convention apparatus are meaningless here and are explicitly out of scope.
 - A deal passed out by both players is redealt, with the same player drawing first.
 
+**A card's size follows how badly a mis-tap would hurt.** Not symmetry, not importance, and not how
+interesting a row is to look at — the app has three card sizes and this is what allocates them:
+
+- **Largest** for something you tap where a wrong tap cannot be taken back. The draw's three cards on
+  offer, at 64×96: the decision is final and §1.3 gives it no confirmation step, so the target is
+  made forgiving instead.
+- **Middle** for your own hand, at 56×80. Thirteen overlapping cards with no undo is the hardest
+  target in the app, which is why it is nowhere near the smallest.
+- **Smallest** for anything you cannot tap that is sharing a screen with something you can, at
+  28×40. The opponent's hand on either screen, the hand a claim reveals, their pair while their
+  cards are showing.
+
+The size is about competition, not about being untappable in itself — which is why the last trick,
+looked back at in an overlay of its own, is drawn at the largest size instead. Two cards with nothing
+else on screen compete with nothing, and drawing them at the trick slots' own size is what makes them
+read as *that* trick rather than as a picture of it.
+
+The rule earned its place by catching two mistakes that both came from reasoning some other way.
+Drawing the opponent's hand at your hand's size — first on the play screen, then on the draw screen —
+was justified as symmetry and then as "their hand growing is the subject of that screen", and was
+wrong both times for the same reason: **nothing you cannot touch should compete with something you
+can.** On the play screen the something is the trick; on the draw screen it is the three cards on
+offer. A row that is merely interesting to watch does not earn size.
+
+One tension is left in it deliberately. Your hand is the hardest *target* yet the draw's choices are
+larger, which is the cost of a decision with no confirmation outranking a decision with thirteen
+overlapping options. Resolving it means either growing your hand — which costs height on both screens,
+and the footer's height is load-bearing in `GameBoard` — or shrinking the draw choices, against §1.3's
+own reasoning. Left as it is until something makes the choice for us.
+
 **A suit's colour carries exactly one bit: red or black.** That is its whole job in bridge — the
 shape says spade, and the colour only has to say "not a red suit". White carries that bit perfectly
 well, so a white spade in running text is the correct ink for the table and costs a reader nothing.
@@ -299,6 +329,37 @@ Pass, Double and Redouble stay plain words throughout. They are calls *about* a 
 cards, nothing about them was ever hard to read, and it keeps two different kinds of thing looking
 different.
 
+**The app is a fixed frame, so it has a height budget and the budget is real.** Nothing scrolls: the
+frame is the viewport and each region inside it is sized to fit, which is what keeps the board from
+moving under a thumb mid-turn. The cost is that a screen which does not fit is simply cut off, and
+`body { overflow: hidden }` means there is nothing to scroll to reach it. A phone reported exactly
+that.
+
+Two separate causes, and only one of them was about size. The frame's height was `100dvh` alone —
+right for tracking Safari's collapsing toolbar, but it needs Safari 15.4 or Chrome 108, and an older
+browser **drops the declaration** rather than approximating it. The frame then took `height: auto`,
+grew past the viewport, and was clipped with no way to reach the rest. There is a static `100vh`
+fallback now, in an `@supports` pair rather than two declarations in one rule, because a minifier
+drops a superseded declaration and the fallback then exists only in source.
+
+The other cause is that the layout genuinely is too tall for a 667px screen — about 674px for the
+draw and 704px for the play — and there is a **Layout setting** for it: normal or compact. Compact
+currently puts the contract bar's standing on one wrapping line instead of five stacked rows, worth
+about 66px; the trick slots and the draw's cards on offer dropping from the largest size to the
+middle one, and tighter gaps, are the obvious next members of it and worth about another 100px.
+
+**Its default is the viewport rather than a stored value, and that is the point of it being a
+setting at all.** Somebody whose phone cannot afford the room should never have to discover this, and
+somebody whose phone can should not lose the roomier scoring to a phone they do not own — so an
+untouched install re-decides on every launch from the height it actually has, and only a deliberate
+choice is stored. The row exists for the two cases automatic cannot serve: a large phone whose owner
+wants more board, and a small one whose owner would rather keep the fuller scoring and live with the
+squeeze. The boundary is 700px rather than 667, since a `dvh` frame is shorter than its phone's
+nominal height whenever the browser toolbars are showing.
+
+The five-row standing is the better read, which is why it is what normal gets and why collapsing it
+for everybody was tried and reverted.
+
 ### 1.6 Play
 
 - No dummy. Both hands stay concealed throughout.
@@ -329,6 +390,45 @@ different.
   left in the position, which makes this the same kind of question honors or auction legality
   already are — a rule to get right, not a skill to play at a level. No difficulty setting touches
   it.
+- **Each player's hand is ruled off from the rest of the table by the same hairline, in the same
+  place.** Read from the middle of the table outward, both sides are the same sequence: the seat
+  label, then the turn dots where a screen has them, then the rule, then the hand. So the rule sits
+  immediately against the hand on each side, which is where the footer has always put yours.
+
+  That took three tries and the reason is worth keeping: **the line separates a hand from everything
+  else, and every version that put it somewhere else made the two ends of the table disagree about
+  what it was for.** It was below the opponent's whole side, which lumped their label and dots in with
+  their hand; then between their dots and their label, which read as tidy in isolation and put the
+  rule on a different side of the dots from yours. Both looked defensible until the two sides were
+  read outward from the middle and compared as sequences.
+
+  Getting there also moved their seat label below their hand, which had been the last asymmetry: their
+  hand is now the outermost thing on their side exactly as yours is on yours.
+
+  It is its own 1px row in the flow rather than a border on the box holding the cards. A border there
+  sits inside that box's padding, and the box is only as tall as the cards — so the rule landed on
+  them. A row of its own cannot touch anything, and each column's existing gap keeps it clear on both
+  sides.
+
+  **Their cards are `mini` on both screens**, per §1.5's rule: they cannot be tapped, so they take the
+  smallest size, and at your hand's size the row becomes a thirteen-card block of card-back pattern
+  as loud as the hand you are choosing from while saying nothing you need.
+
+  The jump in size at the reveal was the argument *for* matching them and turned out to be the
+  argument against. Before the reveal their cards are a number; after it they are information; the
+  size changing is what marks the moment that stops being true. A meaningful transition read as an
+  accident.
+
+    **Both rows space themselves the way your own hand does**, which was the last thing about them that
+  read as two different kinds of object. Your hand overlaps its cards only as much as it has to, so
+  it loosens as it empties; the opponent's used a fixed overlap and simply got shorter. One rule now
+  serves all three rows — yours, and theirs on each screen — so theirs loosens as it empties on the
+  play screen and tightens as it fills on the draw. The floor is a strip narrow enough to still read
+  as a separate card, below which the row is allowed to clip: illegible is worse than cut off.
+
+  On §1.3 their row sits in a full-width box that never changes, so it still visibly grows a card a
+  turn without nudging anything above or below it.
+
 - **A finished trick is swept toward whoever won it**, then it is gone. The engine resolves a
   trick the instant the second card lands and hands the lead to the winner, so without this the
   trick you just lost would be replaced by the next card before you had read it. The direction of
@@ -374,6 +474,96 @@ different.
   misclicks; card plays are final on release.
 - With 26 cards missing from the deal, voids and unusual distributions are common and
   expected. This is not an error condition.
+- **A trick countdown sits beside each played card — two of them, one per side.**
+  Asked for because a child playing this asks "how many tricks do I need?" every deal, and nothing
+  on the screen answered it — the trick score says what has happened, not what is required.
+
+  Each is a ring divided into as many segments as that side's target has tricks: **level + 6 for
+  the declarer, 8 − level for the defender**, one segment lighting per trick taken. So the same
+  object serves both seats with nothing switched but the number of segments, and it fills when you
+  make a contract exactly as it fills when you set one. The two targets always sum to 14 against 13
+  tricks, which is why only one side can ever arrive and the deal cannot be drawn.
+
+  **Two rather than one, and each eight pixels off its own player's played card.** A single ring was built first and was worse in two ways.
+  Drawing both means the opponent's ring filling up simply *is* the loss, so impossibility stops
+  being arithmetic about what is left and becomes a thing on screen. And the pair carries the margin
+  between them: their count is exactly your slack plus one, so the squeeze is visible at "they need
+  two" rather than only when your own ring changes at all. Position is what makes them need no label
+  and no colour to say whose they are, and it costs no height, since both slots already exist.
+
+  **Two placements were rejected on the way to the card.** Side by side in the middle of the board:
+  two identical rings in one row demand to be compared and have nothing left to distinguish them but
+  colour, which the state already spends. And out at the right edge of each hand row, which shipped
+  first and was wrong twice over — flush right, a ring reads as attached to nothing, and a ring only
+  changes when a trick resolves, which is precisely the moment nobody is looking at the edges of the
+  screen. **A countdown you never watch count is barely a countdown.** Beside the card, every step of
+  it happens where the eye already is, and it moves when the table moves rather than asking for a
+  glance of its own.
+
+  **Wordless, and no numeral either.** Four written versions and a nine-widget gallery were drawn
+  and rejected on the way here; the finding that ended it is that a *discrete* ring already carries
+  the count, so a number beside it says the same thing twice. What earlier versions all got wrong is
+  more interesting: every one of them drew all thirteen tricks. The tricks already played are behind
+  you and the score bar states them, so drawing only what is **still needed** is both smaller and
+  the thing actually being asked about.
+
+  **One colour, and no escalation.** Amber — the gold of the card backs — for every trick a side has
+  taken, at every point in every deal. The only thing that changes the drawing is a side reaching its
+  target: a **green disc with a check**, on whichever ring got there. It marks that side achieving its
+  own goal, so it is the same mark for a contract made and a contract set.
+
+  **Two ramps were built and removed, and the reason they were wrong is the same reason two rings are
+  right.** First white resting with amber at the edge; then amber resting, orange one trick from the
+  edge, white at the edge. Every step was a colour on *your* ring restating something the opponent's
+  ring was already saying in tricks — their count closing in *is* your margin running out, said in the
+  clearer of the two channels and the one that cannot be misread at 24px. The engine lost a `jeopardy`
+  and a `tight` state with them.
+
+  A ring is live where a disc is decided, which is what lets the check borrow a hue without ambiguity:
+  a green disc cannot be misread as progress where a nearly-complete green ring could be.
+
+  **The check has to survive the last trick.** A deal settled by its thirteenth card is the case it
+  is least likely to be seen in and most wanted in, and it was drawn for nobody at first: the engine
+  completes the deal the instant that card lands, so gating the rings on the deal being in play
+  unmounted them in the same render that would have drawn the check. The screen goes on showing the
+  play for that trick's hold and its sweep — a real beat, the same one every other trick gets — and
+  that is the window it belongs in. What ends the rings is the reveal, where both hands are face up
+  and the result is stated in full.
+
+  **Only one of the pair ever wears the check**, because a side being out of reach and its opponent
+  arriving are the same event. The side that fell short is left exactly where it stopped, in the same
+  amber, which says how far short it fell rather than only that it fell short.
+
+  From your seat a check on *their* ring is bad news, and it is still the true statement about them.
+  How the deal went for *you* is carried by the sound below — the rings are per-seat, the sound is
+  per-device.
+
+  **The state that justifies the whole thing is being out of reach.** A contract that cannot be made
+  cannot be made, and that is frequently settled several tricks before the last card. It is why the
+  engine exposes `trickOutlook` rather than the screen doing the arithmetic.
+
+  **On by default, with a switch in the ordinary Settings.** It shipped one release inside the
+  "Testing only" panel by mistake, which is gated on an account flag — so the only people who could
+  turn the countdown off were the ones who had already volunteered for unfinished behavior, meaning
+  nobody the setting is for. Not an open question but an ordinary preference:
+  somebody who keeps the count in their head does not want it kept for them, and what you can hold
+  in your head is part of this game. Off draws nothing at all rather than dimming it, and does not
+  touch the sound below.
+- **"Follow suit" is gone from the play screen.** The hand already refuses a card that would not
+  follow, so the words restated a rule the cards were enforcing, on most turns of every deal, for
+  nobody who did not already know it. "Your lead" stays — that one is the rule people most reliably
+  have backwards, and it is information the cards cannot give.
+- **The deal's outcome sounds the moment it is decided, and it is about you rather than about the
+  contract.** A rising chime if the deal went your way, two falling notes if it did not — fired on
+  the deciding trick, which is often several tricks before the deal is scored. It replaces the cue
+  that used to sound at scoring, where the screen had already said the result; announcing on both
+  would be the same double-announcement bug as the fog horn and the unlock chime.
+
+  Two details that are the point rather than incidental. It used to be handed "did the contract
+  make", which is a fact about the contract — so a defender who had just broken one heard the
+  triumphant chime for it. And a deal that never has a deciding trick (a pass-out, or a claim that
+  ends it with neither target reached) still falls back to being scored, because that is the first
+  moment there is any news at all.
 
 ### 1.7 Scoring — Rubber Bridge
 

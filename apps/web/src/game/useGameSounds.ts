@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
+import { declaringIn, outlookFor } from "./outlook.js";
 import type { GameSession } from "./session.js";
 import {
   playAchievement,
   playCall,
   playCardPlayed,
-  playContractResult,
+  playDealOutcome,
   playDrawResolve,
   playRubberWon,
 } from "./soundEffects.js";
@@ -72,13 +73,48 @@ export function useGameSounds({ enabled, session, showingFinalScore }: GameSound
     playedCount.current = cardsPlayed;
   }, [cardsPlayed, enabled]);
 
-  const hadScore = useRef(score !== null);
+  // How the deal turned out, announced at the moment it is actually decided.
+  //
+  // A deal is very often over several tricks before its last card — a contract
+  // that cannot be made cannot be made, whatever the remaining tricks do — and
+  // this used to say nothing until the score appeared, by which time the screen
+  // had already stated the result and the sound was announcing old news.
+  // `trickOutlook` is what makes the earlier moment nameable.
+  //
+  // Two sources, in that order. `settled` is the deciding trick, which is the one
+  // to prefer. `fromScore` is the fallback for the deals that never have one — a
+  // pass-out has no contract at all, and a claim can end a deal with neither
+  // target reached — where being scored is the first moment there is any news.
+  //
+  // A latch rather than a rising edge, because both sources describe the same
+  // event: whichever arrives first is the announcement, and the other is then the
+  // same verdict a second time. That is the shape of bug this file has now been
+  // bitten by three times, so it is a latch on purpose.
+  const outlook = outlookFor(view);
+  const settled =
+    outlook === null || (outlook.state !== "reached" && outlook.state !== "gone")
+      ? null
+      : outlook.state === "reached";
+  const fromScore = score === null ? null : declaringIn(view) === score.detail.made;
+  const decided = settled ?? fromScore;
+
+  const announced = useRef(decided !== null);
   useEffect(() => {
-    if (enabled && score !== null && !hadScore.current) {
-      playContractResult(score.detail.made);
+    // Every deal opens with the draw, so that is the one place this resets. It
+    // has to reset somewhere: the latch outlives a deal otherwise, and the next
+    // one would be played out in silence.
+    if (view.phase === "draw") {
+      announced.current = false;
+      return;
     }
-    hadScore.current = score !== null;
-  }, [enabled, score]);
+    if (decided === null || announced.current) {
+      return;
+    }
+    announced.current = true;
+    if (enabled) {
+      playDealOutcome(decided);
+    }
+  }, [decided, enabled, view.phase]);
 
   // A title unlocked, keyed on the toast having something to show rather than on
   // the deal that earned it: the two are the same instant against the computer

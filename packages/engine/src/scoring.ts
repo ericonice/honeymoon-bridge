@@ -14,6 +14,19 @@ export interface DealScore {
   readonly detail: ScoreDetail;
 }
 
+/** Whether a seat has won the deal, lost it, or is still playing for it. */
+export type OutlookState = "gone" | "open" | "reached";
+
+export interface TrickOutlook {
+  /** Tricks this seat still has to take. Zero once the target is reached. */
+  readonly need: number;
+  /** Tricks not yet played, the one in progress included. */
+  readonly remaining: number;
+  readonly state: OutlookState;
+  /** Tricks this seat must take to win the deal — see `trickTarget`. */
+  readonly target: number;
+}
+
 export interface ScoreDetail {
   readonly contractTricks: number;
   readonly honors: Pair<number>;
@@ -25,6 +38,58 @@ export interface ScoreDetail {
 }
 
 const BOOK = 6;
+
+/** Tricks in a deal. Every hand is played out to all thirteen — see `REQUIREMENTS.md` §1. */
+export const TRICKS = 13;
+
+/**
+ * How many tricks a seat has to take to win the deal.
+ *
+ * Declarer needs the book plus the level. The defender needs one more than what
+ * that leaves, so the two targets sum to fourteen against thirteen tricks — which
+ * is exactly why only one side can ever reach its own and the deal cannot be drawn.
+ */
+export function trickTarget(contract: Contract, seat: PlayerId): number {
+  const required = contract.level + BOOK;
+  return seat === contract.declarer ? required : TRICKS - required + 1;
+}
+
+/**
+ * Where a deal stands from one seat, counted in tricks.
+ *
+ * `gone` is the state worth having: a deal is frequently decided several tricks
+ * before its last card is played, and nothing else in the engine says so. It is
+ * exactly the complement of the opponent's `reached`, since the two targets sum to
+ * one more than the tricks in a deal.
+ *
+ * Finer gradations were tried and removed. There was a `jeopardy` and a `tight`,
+ * cut from how many tricks a seat could still afford to lose, so a screen could
+ * escalate as the margin ran out. With both seats' outlooks on screen at once that
+ * is redundant: the opponent closing in *is* the margin running out, said by their
+ * own count rather than by a colour on yours.
+ *
+ * Derived rather than stored, so it cannot disagree with `scoreDeal`.
+ */
+export function trickOutlook({
+  contract,
+  seat,
+  tricksWon,
+}: {
+  readonly contract: Contract;
+  readonly seat: PlayerId;
+  readonly tricksWon: Pair<number>;
+}): TrickOutlook {
+  const target = trickTarget(contract, seat);
+  const need = Math.max(0, target - tricksWon[seat]);
+  const remaining = TRICKS - tricksWon[0] - tricksWon[1];
+
+  return {
+    need,
+    remaining,
+    state: need === 0 ? "reached" : need > remaining ? "gone" : "open",
+    target,
+  };
+}
 
 /** Points per trick over book, for overtricks and for the body of a contract. */
 function perTrickValue(strain: Strain): number {
@@ -127,7 +192,7 @@ export function scoreDeal(result: DealResult, vulnerable: Pair<boolean>): DealSc
   const defender = opponentOf(declarer);
   const declarerVulnerable = vulnerable[declarer];
 
-  const required = level + BOOK;
+  const required = trickTarget(contract, declarer);
   const taken = tricksWon[declarer];
   const made = taken >= required;
 

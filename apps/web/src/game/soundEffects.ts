@@ -238,26 +238,34 @@ export function playCall(call: Call): void {
 }
 
 /**
- * The contract's fate: a bright rising chime for making it, two falling
- * buzzer notes for going down.
+ * How the deal turned out *for you*: a bright rising chime for winning it, two
+ * falling buzzer notes for losing it.
  *
- * Made and failed used to differ only in pitch, both as short, buzzy tones a
- * fifth or so apart — easy to tell apart side by side, not so easy to tell
- * apart as a single blip weeks into a rubber. A single falling glide read as
- * one sour note rather than a verdict, so going down is two of them instead
- * of one — the second lower and quieter, an echo of the first rather than a
- * repeat of it.
+ * Won and lost used to differ only in pitch, both as short, buzzy tones a fifth
+ * or so apart — easy to tell apart side by side, not so easy to tell apart as a
+ * single blip weeks into a rubber. A single falling glide read as one sour note
+ * rather than a verdict, so losing is two of them instead of one — the second
+ * lower and quieter, an echo of the first rather than a repeat of it.
+ *
+ * **The argument is this seat's, not the contract's.** It used to be handed
+ * `score.detail.made`, which is a fact about the contract — so a defender who had
+ * just broken one heard the triumphant chime for it. Whoever plays this deal, the
+ * rising figure now means the same thing: the deal went your way.
+ *
+ * The whole figure is offset by a fifth of a second, because it fires on the trick
+ * that decides the deal and would otherwise land on top of that card's own click.
  */
-export function playContractResult(made: boolean): void {
+export function playDealOutcome(won: boolean): void {
+  const start = 0.2;
   play((ctx) => {
-    if (made) {
-      tone(ctx, { decay: 0.16, frequency: 523, gain: 0.09, type: "triangle" });
-      tone(ctx, { decay: 0.16, delay: 0.08, frequency: 659, gain: 0.09, type: "triangle" });
-      tone(ctx, { decay: 0.32, delay: 0.16, frequency: 784, gain: 0.11, type: "triangle" });
+    if (won) {
+      tone(ctx, { decay: 0.16, delay: start, frequency: 523, gain: 0.09, type: "triangle" });
+      tone(ctx, { decay: 0.16, delay: start + 0.08, frequency: 659, gain: 0.09, type: "triangle" });
+      tone(ctx, { decay: 0.32, delay: start + 0.16, frequency: 784, gain: 0.11, type: "triangle" });
       return;
     }
-    tone(ctx, { decay: 0.22, frequency: 220, gain: 0.12, glideTo: 90, type: "square" });
-    tone(ctx, { decay: 0.22, delay: 0.26, frequency: 196, gain: 0.09, glideTo: 80, type: "square" });
+    tone(ctx, { decay: 0.22, delay: start, frequency: 220, gain: 0.12, glideTo: 90, type: "square" });
+    tone(ctx, { decay: 0.22, delay: start + 0.26, frequency: 196, gain: 0.09, glideTo: 80, type: "square" });
   });
 }
 

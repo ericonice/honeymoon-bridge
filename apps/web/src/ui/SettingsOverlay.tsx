@@ -2,7 +2,7 @@ import type { MatchFormat, Unlock } from "@hb/engine";
 import { useState } from "react";
 import { BOT_RELEASE } from "../bot/release.js";
 import type { CardColor } from "../game/cardColor.js";
-import type { Boldness, DrawStyle, Pace, Strength } from "../game/identity.js";
+import type { Boldness, Density, DrawStyle, Pace, Strength } from "../game/identity.js";
 import type { Theme } from "../game/theme.js";
 import { playAchievement } from "../game/soundEffects.js";
 import { AchievementToast } from "./AchievementToast.js";
@@ -39,16 +39,21 @@ export interface SettingsOverlayProps {
   /** Temporary, while it is being decided whether the ambiguity works on a person. */
   readonly disguise: boolean;
   readonly boldness: Boldness;
+  readonly density: Density;
   readonly pace: Pace;
   readonly sound: boolean;
   readonly strength: Strength;
   readonly tapToSelect: boolean;
+  /** Whether the play screen draws each side's trick countdown. */
+  readonly trickCount: boolean;
   onBoldnessChange(next: Boldness): void;
   onCardColorChange(next: CardColor): void;
+  onDensityChange(next: Density): void;
   onPaceChange(next: Pace): void;
   onSoundChange(enabled: boolean): void;
   onStrengthChange(next: Strength): void;
   onTapToSelectChange(enabled: boolean): void;
+  onTrickCountChange(enabled: boolean): void;
   readonly theme: Theme;
   onClose(): void;
   onDevToolsChange(enabled: boolean): void;
@@ -156,6 +161,7 @@ function Choice<T extends string>({
 export function SettingsOverlay({
   boldness,
   cardColor,
+  density,
   devTools,
   disguise,
   format,
@@ -163,6 +169,7 @@ export function SettingsOverlay({
   onCardColorChange,
   onClose,
   onDevToolsChange,
+  onDensityChange,
   onDisguiseChange,
   onDrawStyleChange,
   onFormatChange,
@@ -172,6 +179,7 @@ export function SettingsOverlay({
   onSoundChange,
   onStrengthChange,
   onTapToSelectChange,
+  onTrickCountChange,
   onThemeChange,
   drawStyle,
   pace,
@@ -180,6 +188,7 @@ export function SettingsOverlay({
   sound,
   strength,
   tapToSelect,
+  trickCount,
   theme,
 }: SettingsOverlayProps): React.JSX.Element {
   const [showingHandLogs, setShowingHandLogs] = useState(false);
@@ -240,6 +249,32 @@ export function SettingsOverlay({
           />
         </div>
 
+        {/* The app is a fixed frame with nothing scrollable in it, so a screen
+            that does not fit is cut off and there is nothing to scroll to reach
+            it — and on a 667px phone it does not fit. Compact is what buys the
+            room back.
+
+            **Its default is the viewport, not a stored value**, which is the
+            whole reason this is worth a row rather than a media query: somebody
+            whose phone cannot afford the room should never have to find this,
+            and somebody whose phone can should not lose the roomier layout to a
+            phone they do not own. The row exists for the two cases automatic
+            cannot serve — a large phone whose owner wants more board, and a
+            small one whose owner would rather have the fuller scoring and live
+            with it. */}
+        <div className="w-full max-w-sm">
+          <Choice
+            label="Layout"
+            description="How much room the scoring and the chrome around the board may take. Normal spells the standing out over several lines; compact puts the same figures on one. Starts on whichever suits this screen, and stays wherever you put it."
+            value={density}
+            onChange={onDensityChange}
+            options={[
+              { label: "Normal", value: "normal" },
+              { label: "Compact", value: "compact" },
+            ]}
+          />
+        </div>
+
         {/* Out of the testing panel, where it sat while it was still a question —
             twenty-six turns of the same decision either read as deliberate or as
             waiting, and no bench has an opinion about which. Playing it answered
@@ -259,6 +294,20 @@ export function SettingsOverlay({
               { label: "Normal", value: "normal" },
               { label: "Slow", value: "slow" },
             ]}
+          />
+        </div>
+
+        {/* An ordinary preference, and it spent one release in the testing panel by
+            mistake — where nobody who is not a playtester could reach it, which is
+            everybody the setting exists for. Nothing here is under test: the
+            question "how many tricks do I need" is asked out loud every deal, and
+            whether you want it answered for you is a matter of taste. */}
+        <div className="w-full max-w-sm">
+          <Toggle
+            label="Count the tricks each side needs"
+            description="A small ring beside each played card: one segment per trick that side has to take — ten to make 4♠, four to set it — filling as they take them. It turns orange when one more lost trick would put them on the edge, and closes when the deal is decided, which is often several tricks before the last card. Off if you would rather keep the count yourself."
+            on={trickCount}
+            onChange={onTrickCountChange}
           />
         </div>
 

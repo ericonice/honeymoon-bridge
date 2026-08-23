@@ -26,7 +26,7 @@ const CARD_WIDTH = 56;
 export const HAND_HEIGHT = 80 + 36 + 4;
 
 /** Never squeeze a card's exposed strip below this, or the index becomes unreadable. */
-const MIN_STEP = 18;
+export const MIN_STEP = 18;
 
 /**
  * What an emphasized card aims for: iOS's minimum comfortable tap target.
@@ -41,6 +41,87 @@ const TIGHT_STEP = 20;
 
 /** The `px-3` on the scroll frame, which `clientWidth` includes. */
 const FRAME_PADDING = 24;
+
+/** The `hand` and `mini` card widths in `CardFace`, which the spacing is set in terms of. */
+export const CARD_WIDTHS = { hand: CARD_WIDTH, mini: 28 } as const;
+
+/**
+ * The narrowest strip of a `mini` card worth showing — proportionally what
+ * `MIN_STEP` is to a full-size one. Lower than that floor because these rows are
+ * read rather than tapped: a face-down back only has to look like a separate
+ * card, and a small face-up hand is being counted rather than picked from.
+ */
+export const MINI_MIN_STEP = 10;
+
+/**
+ * How far apart a row of face-down cards sits, given the room it has.
+ *
+ * **This is the rule your own hand follows, stated so a row of backs can follow
+ * it too.** Cards overlap only as much as they have to, so a row spreads out as
+ * it empties rather than staying bunched at its thirteen-card spacing — and a
+ * row that grows spreads the other way. The opponent's hand used a fixed overlap
+ * and so behaved visibly differently from yours: it got shorter as it emptied
+ * where yours got looser, which reads as two different kinds of object rather
+ * than as two hands.
+ *
+ * `minStep` is the floor, since a strip too narrow to see stops reading as a
+ * separate card at all. Below it the row is allowed to be wider than the room
+ * and clip, which is the same thing `stepsFor` does and for the same reason:
+ * illegible is worse than cut off.
+ */
+export function spreadStep({
+  available,
+  cardWidth,
+  count,
+  minStep,
+}: {
+  readonly available: number;
+  readonly cardWidth: number;
+  readonly count: number;
+  readonly minStep: number;
+}): number {
+  if (count <= 1) {
+    return cardWidth;
+  }
+  const fits = (available - cardWidth) / (count - 1);
+  return Math.max(minStep, Math.min(cardWidth, fits));
+}
+
+/**
+ * A ref to put on a row's container, and how wide that container currently is.
+ *
+ * Measured rather than assumed, and remeasured on rotation and on the
+ * keyboard-driven viewport changes iOS makes. Shared because three rows need it
+ * — your hand, and the opponent's on each of the two screens that draw one —
+ * and a magic number for the app frame's width would be wrong on every phone
+ * narrower than the cap.
+ */
+export function useRowRoom(): {
+  readonly ref: React.RefObject<HTMLDivElement | null>;
+  readonly room: number;
+} {
+  const ref = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState(320);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element === null) {
+      return;
+    }
+    const measure = (): void => {
+      setRoom(element.clientWidth);
+    };
+    measure();
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  return { ref, room };
+}
 
 /**
  * How far each card sits from the one before it — which is exactly how much of
@@ -64,13 +145,23 @@ function stepsFor(
   const emphasized = (card: Card): boolean => emphasize !== null && emphasize(card);
   const restricted = emphasize !== null && cards.some((card) => !emphasized(card));
 
+  // Nothing to emphasize means every gap is the same, which is `spreadStep`'s
+  // whole job — so it is called rather than recomputed, and the opponent's row
+  // and yours cannot drift apart.
+  if (!restricted) {
+    const step = spreadStep({
+      available,
+      cardWidth: CARD_WIDTH,
+      count: cards.length,
+      minStep: MIN_STEP,
+    });
+    return cards.slice(1).map(() => step);
+  }
+
   // `steps[i]` is the gap before card i + 1, so it is the exposure of card i.
-  let steps: number[] = cards.slice(1).map((_, index) => {
-    if (!restricted) {
-      return CARD_WIDTH;
-    }
-    return emphasized(cards[index]!) ? LEGAL_STEP : TIGHT_STEP;
-  });
+  let steps: number[] = cards
+    .slice(1)
+    .map((_, index) => (emphasized(cards[index]!) ? LEGAL_STEP : TIGHT_STEP));
 
   const width = (list: number[]): number => CARD_WIDTH + list.reduce((sum, s) => sum + s, 0);
 
@@ -126,9 +217,8 @@ export function Hand({
   playable,
   tapToSelect,
 }: HandProps): React.JSX.Element {
-  const frameRef = useRef<HTMLDivElement>(null);
+  const { ref: frameRef, room: available } = useRowRoom();
   const rowRef = useRef<HTMLDivElement>(null);
-  const [available, setAvailable] = useState(320);
   // The card currently raised — set on pointer down, retargeted live on
   // pointer move, and whatever it holds when the pointer lifts is what plays
   // in the default gesture. Under `tapToSelect` it persists between separate
@@ -143,24 +233,6 @@ export function Hand({
   // `tapToSelect` reads this; the default gesture always plays whatever is
   // raised on release regardless of what was raised before.
   const raisedBeforePress = useRef<number | null>(null);
-
-  // Remeasure on rotation and on the keyboard-driven viewport changes iOS makes.
-  useLayoutEffect(() => {
-    const frame = frameRef.current;
-    if (frame === null) {
-      return;
-    }
-    const measure = (): void => {
-      setAvailable(frame.clientWidth);
-    };
-    measure();
-
-    const observer = new ResizeObserver(measure);
-    observer.observe(frame);
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
 
   const isLegal = (card: Card): boolean =>
     playable !== null && playable.some((allowed) => sameCard(allowed, card));

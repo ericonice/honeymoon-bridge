@@ -1,6 +1,7 @@
 import { cardId } from "@hb/engine";
 import type { Card } from "@hb/engine";
 import { CardFace } from "./CardFace.js";
+import { CARD_WIDTHS, MINI_MIN_STEP, spreadStep, useRowRoom } from "./Hand.js";
 
 export interface ClaimRevealProps {
   readonly cards: readonly Card[];
@@ -24,6 +25,14 @@ export function ClaimReveal({
   onAccept,
   onDeny,
 }: ClaimRevealProps): React.JSX.Element {
+  const { ref: roomRef, room } = useRowRoom();
+  const step = spreadStep({
+    available: room,
+    cardWidth: CARD_WIDTHS.mini,
+    count: cards.length,
+    minStep: MINI_MIN_STEP,
+  });
+
   return (
     <div className="safe-inset absolute inset-0 z-40 flex flex-col justify-end bg-black/70 px-5 pb-5">
       <div className="flex flex-col gap-4 rounded-2xl bg-table-dark px-5 py-5">
@@ -37,12 +46,21 @@ export function ClaimReveal({
           </p>
         </div>
 
-        <div className="flex h-16 items-center justify-center">
-          {cards.map((card, index) => (
-            <div key={cardId(card)} className={index > 0 ? "-ml-4" : ""}>
-              <CardFace card={card} size="mini" />
-            </div>
-          ))}
+        {/* Spaced the way every other row of cards in the app is — see
+            `spreadStep`. A claim is usually made with few cards left, which is
+            exactly where a fixed overlap looks wrong: five cards bunched at
+            thirteen-card spacing in a box with room for all of them. */}
+        <div ref={roomRef} className="flex h-16 w-full items-center justify-center">
+          <div className="flex items-center">
+            {cards.map((card, index) => (
+              <div
+                key={cardId(card)}
+                style={index === 0 ? {} : { marginLeft: step - CARD_WIDTHS.mini }}
+              >
+                <CardFace card={card} size="mini" />
+              </div>
+            ))}
+          </div>
         </div>
 
         <button

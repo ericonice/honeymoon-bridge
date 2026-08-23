@@ -10,7 +10,7 @@ import { board, renderBoard, settle, stubBrowser } from "./support/board.js";
 vi.mock("../src/game/soundEffects.js", () => ({
   playCall: vi.fn(),
   playCardPlayed: vi.fn(),
-  playContractResult: vi.fn(),
+  playDealOutcome: vi.fn(),
   playDrawResolve: vi.fn(),
   playRubberWon: vi.fn(),
 }));

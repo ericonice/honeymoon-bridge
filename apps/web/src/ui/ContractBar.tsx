@@ -1,8 +1,11 @@
 import { totalScore } from "@hb/engine";
 import type { DealPhase, Pair, PlayerView, RubberState } from "@hb/engine";
+import type { Density } from "../game/identity.js";
 import { ContractText } from "./CardText.js";
 
 export interface ContractBarProps {
+  /** How much room this strip may take — see `Density`. */
+  readonly density: Density;
   /** Deals played so far this rubber, including the one in progress. */
   readonly handsPlayed: number;
   readonly opponentName: string;
@@ -18,6 +21,33 @@ export interface ContractBarProps {
    * control competing for room in an already narrow bar.
    */
   onShowScore: (() => void) | null;
+}
+
+/**
+ * One figure of the standing on a single line — "Total 340&ndash;120", your own
+ * side first.
+ *
+ * Unlabelled as to whose is whose, on purpose: the contract line in this same
+ * strip has always read `Tricks 5 – 3` with no header, so "yours first" is a
+ * convention this bar already sets an inch away rather than one invented here.
+ */
+function Figure({
+  label,
+  values,
+  view,
+}: {
+  readonly label: string;
+  readonly values: Pair<number>;
+  readonly view: PlayerView;
+}): React.JSX.Element {
+  return (
+    <span className="whitespace-nowrap">
+      {label}{" "}
+      <span className="tabular-nums text-white/60">
+        {values[view.me]}&ndash;{values[view.opponent]}
+      </span>
+    </span>
+  );
 }
 
 // Same width as `Scorepad`'s own cell — wide enough for "Computer" to sit
@@ -83,11 +113,13 @@ function StandingRow({
  * above would just be the same numbers said twice.
  */
 function StandingLines({
+  density,
   handsPlayed,
   opponentName,
   rubber,
   view,
 }: {
+  readonly density: Density;
   readonly handsPlayed: number;
   readonly opponentName: string;
   readonly rubber: RubberState;
@@ -101,6 +133,24 @@ function StandingLines({
   // behind it is already scored, and this should already read as the count
   // that includes it rather than overshoot by counting the next one too.
   const handNumber = view.phase === "complete" ? handsPlayed : handsPlayed + 1;
+
+  // Five stacked rows read better and cost about 82px of a phone's height, on
+  // every screen, all game — so where that room does not exist the same figures
+  // go on one wrapping line instead. `flex-wrap` rather than truncation, so a
+  // very narrow screen spends a second line rather than hiding a figure; two
+  // rows is still three better than five.
+  if (density === "compact") {
+    return (
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 text-xs text-white/45">
+        <span className="whitespace-nowrap">Hand {handNumber}</span>
+        <Figure label="Total" values={totalScore(rubber)} view={view} />
+        <Figure label="Part" values={rubber.partScore} view={view} />
+        {rubber.format === "rubber" ? (
+          <Figure label="Games" values={rubber.gamesWon} view={view} />
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="text-xs">
@@ -127,6 +177,7 @@ function StandingLines({
  * that room was sometimes only "2NT by…".
  */
 export function ContractBar({
+  density,
   handsPlayed,
   onShowScore,
   opponentName,
@@ -149,7 +200,13 @@ export function ContractBar({
   const content = (
     <>
       {phase === "complete" ? null : (
-        <StandingLines handsPlayed={handsPlayed} opponentName={opponentName} rubber={rubber} view={view} />
+        <StandingLines
+          density={density}
+          handsPlayed={handsPlayed}
+          opponentName={opponentName}
+          rubber={rubber}
+          view={view}
+        />
       )}
       {contract === null ? null : (
         <p className={`flex items-baseline justify-between gap-2 ${phase === "complete" ? "" : "mt-1"}`}>

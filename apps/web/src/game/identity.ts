@@ -6,10 +6,12 @@ const DRAW_STYLE_KEY = "hb.drawStyle";
 const DISGUISE_KEY = "hb.disguise";
 const BOLDNESS_KEY = "hb.boldness";
 const STRENGTH_KEY = "hb.strength";
+const DENSITY_KEY = "hb.density";
 const PACE_KEY = "hb.pace";
 const PEEK_KEY = "hb.peek";
 const SOUND_KEY = "hb.sound";
 const TAP_TO_SELECT_KEY = "hb.tapToSelect";
+const TRICK_COUNT_KEY = "hb.trickCount";
 const NICKNAME_KEY = "hb.nickname";
 const TOKEN_KEY = "hb.token";
 
@@ -169,6 +171,50 @@ export type Strength = "normal" | "strong" | "weak";
  * exactly that person, and they should be able to slow the board down while they
  * read it. Behind the playtester flag they could not.
  */
+export type Density = "compact" | "normal";
+
+/**
+ * How much room the chrome around the board is allowed.
+ *
+ * The app is a fixed frame with no scrolling anywhere (§1.5), so a screen that
+ * does not fit is simply cut off and there is nothing to scroll to reach it. On a
+ * 667px phone — an iPhone SE or 8, and smaller Androids — it does not fit. The
+ * standing in the contract bar is five stacked rows costing about 82px of that,
+ * on every screen, for the whole game.
+ *
+ * **The default is the viewport rather than a stored value**, which is the whole
+ * point: somebody whose phone cannot afford the room should not have to know a
+ * setting exists, and somebody whose phone can should not have their layout
+ * traded away for a phone they do not own. Only an explicit choice is stored, so
+ * an untouched install re-decides on every launch and follows the device it is
+ * actually running on.
+ *
+ * 700 rather than 667: the frame is `dvh`, so a phone whose browser toolbars are
+ * showing has less than its nominal height, and the boundary wants to sit above
+ * the size it is protecting rather than exactly on it.
+ */
+const COMPACT_BELOW = 700;
+
+/** What the device asks for, before any choice of the player's. */
+function densityForViewport(): Density {
+  if (typeof window === "undefined") {
+    return "normal";
+  }
+  return window.innerHeight < COMPACT_BELOW ? "compact" : "normal";
+}
+
+export function density(): Density {
+  const stored = readStored(DENSITY_KEY);
+  if (stored === "compact" || stored === "normal") {
+    return stored;
+  }
+  return densityForViewport();
+}
+
+export function setDensity(next: Density): void {
+  writeStored(DENSITY_KEY, next);
+}
+
 export type Pace = "fast" | "normal" | "slow";
 
 /**
@@ -253,6 +299,23 @@ export function tapToSelectEnabled(): boolean {
 
 export function setTapToSelectEnabled(enabled: boolean): void {
   writeStored(TAP_TO_SELECT_KEY, enabled ? "on" : "off");
+}
+
+/**
+ * Whether the play screen shows each side's trick countdown — see `TrickRing`.
+ *
+ * On by default, because the question it answers ("how many tricks do I need?")
+ * is asked out loud at the table every deal and nothing else on the screen
+ * answers it. Off is here because it is a genuine matter of taste rather than an
+ * open question: somebody who keeps the count in their head does not want it kept
+ * for them, and part of this game is what you can hold.
+ */
+export function trickCountEnabled(): boolean {
+  return readStored(TRICK_COUNT_KEY) !== "off";
+}
+
+export function setTrickCountEnabled(enabled: boolean): void {
+  writeStored(TRICK_COUNT_KEY, enabled ? "on" : "off");
 }
 
 export function pace(): Pace {

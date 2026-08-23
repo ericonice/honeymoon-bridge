@@ -1,30 +1,38 @@
 import { matchNoun } from "../game/labels.js";
 import { useLocalSession } from "../game/localSession.js";
+import type { Density } from "../game/identity.js";
 import { GameBoard } from "./GameBoard.js";
 
 export interface RobotGameProps {
+  /** How much room the chrome may take — see `Density`. */
+  readonly density: Density;
   readonly devTools: boolean;
   readonly peeking: boolean;
   readonly sound: boolean;
   readonly tapToSelect: boolean;
+  /** Whether the play screen draws each side's trick countdown. */
+  readonly trickCount: boolean;
   onLeave(): void;
   onShowSettings(): void;
 }
 
 /** A rubber against the computer, running entirely in this browser. */
 export function RobotGame({
+  density,
   devTools,
   onLeave,
   onShowSettings,
   peeking,
   sound,
   tapToSelect,
+  trickCount,
 }: RobotGameProps): React.JSX.Element {
   const session = useLocalSession({ peek: peeking });
   const noun = matchNoun(session.rubber.format);
 
   return (
     <GameBoard
+      density={density}
       devTools={devTools}
       // Nobody is kept waiting and nobody is told, so the warning is only about
       // what this browser is about to throw away.
@@ -37,6 +45,7 @@ export function RobotGame({
       session={session}
       sound={sound}
       tapToSelect={tapToSelect}
+      trickCount={trickCount}
       // Only here. At a table the other player would be sitting watching somebody
       // read three notes, and the draw phase has no clock to protect them with.
       walkthrough

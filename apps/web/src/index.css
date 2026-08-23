@@ -118,6 +118,32 @@ body {
   background-image: var(--table-sheen);
 }
 
+/* The frame's height, with a static fallback first.
+
+   `dvh` is what the app wants — it tracks Safari's collapsing address bar, which
+   is the whole reason the board does not jump as you scroll nothing. But it needs
+   Safari 15.4 or Chrome 108, and an older browser **drops the declaration
+   entirely** rather than approximating it. With no fallback the frame fell back to
+   `height: auto`, grew past the viewport, and `body { overflow: hidden }` then cut
+   off whatever stuck out with nothing to scroll — which is exactly what an older
+   phone reported: not everything fits, and no way to reach it.
+
+   `@supports` rather than two declarations in one rule, which was the first
+   attempt and did not survive the build: the CSS minifier treats a later
+   declaration of the same property as making the earlier one redundant and drops
+   it, so the shipped stylesheet carried `100dvh` alone and the fallback existed
+   only in source. Two rules in different at-rule contexts cannot be collapsed
+   that way. Check the built CSS, not this file, if this ever looks wrong. */
+.viewport-height {
+  height: 100vh;
+}
+
+@supports (height: 100dvh) {
+  .viewport-height {
+    height: 100dvh;
+  }
+}
+
 /* Same reason as `.table-surface`: the pattern has to switch off with the
    theme, and a colour token cannot carry a background image. */
 .card-back {

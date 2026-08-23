@@ -73,11 +73,13 @@ function Harness({
   sound,
   table,
   tapToSelect,
+  trickCount,
 }: {
   readonly seat: PlayerId;
   readonly sound: boolean;
   readonly table: TableState;
   readonly tapToSelect: boolean;
+  readonly trickCount: boolean;
 }): React.JSX.Element {
   const [state, setState] = useState(table);
   const [, setProcessed] = useState(0);
@@ -138,6 +140,9 @@ function Harness({
   };
 
   return createElement(GameBoard, {
+    // Tests render the roomy layout; the compact one is a different set of
+    // classes on the same components and has nothing of its own to assert.
+    density: "normal",
     devTools: false,
     exit: null,
     onShowSettings: () => {},
@@ -145,6 +150,7 @@ function Harness({
     session,
     sound,
     tapToSelect,
+    trickCount,
     walkthrough: false,
   });
 }
@@ -157,6 +163,8 @@ export interface RenderBoardOptions {
   /** Off unless a test is about sound: the stub below has no real Web Audio in it. */
   readonly sound?: boolean;
   readonly tapToSelect?: boolean;
+  /** On by default, as it ships. Pass false for a test about the screen without it. */
+  readonly trickCount?: boolean;
 }
 
 export function renderBoard({
@@ -165,6 +173,7 @@ export function renderBoard({
   seed,
   sound = false,
   tapToSelect = false,
+  trickCount = true,
 }: RenderBoardOptions): void {
   const table = startTable({ seed, starter: 0 });
   render(
@@ -173,6 +182,7 @@ export function renderBoard({
       sound,
       table: rubberBefore === undefined ? table : { ...table, rubberBefore },
       tapToSelect,
+      trickCount,
     }),
   );
 }

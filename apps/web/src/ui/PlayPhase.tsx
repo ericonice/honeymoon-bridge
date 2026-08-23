@@ -1,14 +1,25 @@
 import { cardId } from "@hb/engine";
-import type { Card, CompletedTrick, DealScore, Pair, PlayedCard, PlayerId, PlayerView } from "@hb/engine";
+import type {
+  Card,
+  CompletedTrick,
+  DealScore,
+  Pair,
+  PlayedCard,
+  PlayerId,
+  PlayerView,
+  TrickOutlook,
+} from "@hb/engine";
 import { motion } from "framer-motion";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { declaringIn, outlookFor } from "../game/outlook.js";
 import { paced, TRICK_TIMING } from "../game/timing.js";
 import { CardBack, CardFace, CardSlot } from "./CardFace.js";
 import { CardFlight, centerIn, centerInFromRect } from "./CardFlight.js";
 import type { Flight } from "./CardFlight.js";
-import { Hand } from "./Hand.js";
+import { CARD_WIDTHS, Hand, MINI_MIN_STEP, spreadStep, useRowRoom } from "./Hand.js";
 import { DealResultHeadline } from "./ScoreRows.js";
 import { SeatLabel } from "./SeatLabel.js";
+import { TrickRing, trickRingLabel } from "./TrickRing.js";
 
 export interface PlayPhaseProps {
   /**
@@ -83,6 +94,8 @@ export interface PlayPhaseProps {
    * two reveals that started at different times would not read as one.
    */
   onHandsSettled?(): void;
+  /** Whether to draw the opponent's trick countdown — see `TrickRing`. */
+  readonly trickCount: boolean;
   readonly view: PlayerView;
   readonly vulnerable: Pair<boolean>;
   /**
@@ -121,11 +134,19 @@ function tableTrick(view: PlayerView, lastTrick: CompletedTrick | null): TableTr
 
 function Slot({
   played,
+  ring,
   slotRef,
   sweepTo,
   trickKey,
 }: {
   readonly played: PlayedCard | undefined;
+  /**
+   * This slot's owner's trick countdown, or null. Anchored to the slot rather
+   * than to the row it sits in: out at the row's right edge the ring reads as
+   * unattached to anything, where eight pixels off the card it plainly belongs
+   * to the seat whose card that is.
+   */
+  readonly ring: React.ReactNode;
   readonly slotRef: React.RefObject<HTMLDivElement | null>;
   /** Null while the trick is still in progress; otherwise the direction it is collected in. */
   readonly sweepTo: number | null;
@@ -134,6 +155,9 @@ function Slot({
   return (
     <div ref={slotRef} className="relative h-24 w-16">
       <CardSlot size="table" />
+      {ring === null ? null : (
+        <div className="absolute top-1/2 -right-8 -translate-y-1/2">{ring}</div>
+      )}
       {played === undefined ? null : (
         <motion.div
           // Keyed on the trick as well as the card, so each trick's cards are
@@ -179,10 +203,20 @@ function Slot({
  * in the exact spot that had just been counting down to zero, is what makes
  * the reveal read as more of the same screen rather than a new one.
  *
- * At `Hand`'s own size, not `mini` — the same component the footer's own
- * thirteen use, non-interactive, so both hands read at the same size rather
- * than the opponent's coming out smaller and harder to read than the one
- * already on screen.
+ * **The face-down row is `mini` and the revealed one is not, and that difference
+ * is the point rather than an oversight.** Drawing the backs at the footer hand's
+ * size was tried and reverted: a face-down row carries exactly one fact, how many
+ * cards they have left, and `mini` carries it. At full size it becomes a
+ * thirteen-card block of card-back pattern across the top, as loud as your own
+ * hand, competing with the trick in the middle for attention while saying nothing
+ * you need — your hand has to be readable card by card because you are choosing
+ * from it, and theirs is a count.
+ *
+ * The jump in size at the reveal was the argument *for* matching them and is
+ * actually the argument against: before the reveal their cards are a number,
+ * after it they are information, and the size changing is what marks the moment
+ * that stops being true. §1.3's draw screen is the other way round — there their
+ * hand growing is the subject of the screen, so it is drawn at full size.
  */
 function OpponentHand({
   count,
@@ -193,6 +227,8 @@ function OpponentHand({
   readonly revealed: readonly Card[] | null;
   readonly rowRef: React.RefObject<HTMLDivElement | null>;
 }): React.JSX.Element {
+  const { ref: roomRef, room } = useRowRoom();
+
   if (revealed !== null) {
     return (
       <div ref={rowRef} className="w-full">
@@ -200,13 +236,28 @@ function OpponentHand({
       </div>
     );
   }
+  // The same rule your own hand follows — see `spreadStep`. A fixed overlap made
+  // this row get shorter as it emptied where yours got looser, which is the one
+  // thing about the two that read as different kinds of object.
+  const step = spreadStep({
+    available: room,
+    cardWidth: CARD_WIDTHS.mini,
+    count,
+    minStep: MINI_MIN_STEP,
+  });
+
   return (
-    <div ref={rowRef} className="flex h-10 items-center justify-center">
-      {Array.from({ length: count }, (_, index) => (
-        <div key={index} className={index > 0 ? "-ml-4" : ""}>
-          <CardBack size="mini" />
-        </div>
-      ))}
+    <div ref={roomRef} className="relative flex h-10 w-full items-center justify-center">
+      <div ref={rowRef} className="flex items-center">
+        {Array.from({ length: count }, (_, index) => (
+          <div
+            key={index}
+            style={index === 0 ? {} : { marginLeft: step - CARD_WIDTHS.mini }}
+          >
+            <CardBack size="mini" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -234,19 +285,22 @@ function justPlayed(view: PlayerView): PlayedCard | null {
 /**
  * What you have to do, when it is your move.
  *
- * No longer says *whose* turn it is — the seat labels carry that now. This is
- * only for the part a name cannot tell you: whether you are leading or have to
- * follow a suit.
+ * Says nothing about *whose* turn it is — the seat labels carry that. And nothing
+ * about following suit either, which it used to: the hand already refuses to play
+ * a card that would not follow, so the words were restating a rule the cards were
+ * enforcing, on the majority of turns in a deal, for no one who did not already
+ * know. The lead is the one case worth a line — §1.6 calls it the rule people most
+ * reliably have backwards — so this is now empty except on the turns that have it.
  */
 function instruction(view: PlayerView): string | null {
   // There is nothing left to do once the deal is over. The board goes on
   // showing this screen for a beat so the thirteenth trick can be collected,
   // and the engine has already handed the lead on by then — so without this it
   // asks for a card that no longer exists.
-  if (view.phase !== "play" || view.toAct !== view.me) {
+  if (view.phase !== "play" || view.toAct !== view.me || view.currentTrick.length > 0) {
     return null;
   }
-  return view.currentTrick.length === 0 ? "Your lead" : "Follow suit";
+  return "Your lead";
 }
 
 /**
@@ -271,6 +325,7 @@ export function PlayPhase({
   opponentWaitingToContinue,
   release,
   revealedHands,
+  trickCount,
   view,
   vulnerable,
   waitingToContinue,
@@ -301,6 +356,48 @@ export function PlayPhase({
   // fresh one — is not a card that just landed, so the first run only records
   // it rather than replaying it.
   const mountedAt = useRef<number | null>(null);
+
+  // Both rings, each beside the card its own seat just played — so which is whose
+  // is answered by position and needs no label or colour of its own. They were on
+  // the two hand rows first, which put them at the edges of a screen nobody looks
+  // at between tricks; a ring changes exactly when a trick resolves, which is the
+  // one moment the eye is certainly on these two cards.
+  //
+  // **Not gated on `view.phase`, which is the bug that shipped.** The engine
+  // completes the deal the instant the thirteenth card lands, so a contract made
+  // or set on the last trick flipped the phase and unmounted both rings in the
+  // same render that would have drawn the check — the one deal in every rubber
+  // where it is settled at the last possible moment never showed it settle.
+  //
+  // This component is only ever rendered while the *shown* phase is "play", and
+  // that is the right window: it stays open for the last trick's hold and its
+  // sweep, so the check lands with the trick that earned it. What ends the rings
+  // is the slots themselves unmounting once both hands are face up, where the
+  // result is stated in full and a countdown has nothing left to say.
+  const counting = trickCount && view.contract !== null;
+  const rings: Pair<TrickOutlook | null> = [
+    counting ? outlookFor(view, 0) : null,
+    counting ? outlookFor(view, 1) : null,
+  ];
+
+  function ringFor(seat: PlayerId): React.ReactNode {
+    const outlook = rings[seat];
+    if (outlook === null) {
+      return null;
+    }
+    return (
+      <>
+        <TrickRing outlook={outlook} />
+        <span className="sr-only">
+          {trickRingLabel({
+            declaring: declaringIn(view, seat),
+            mine: seat === view.me,
+            outlook,
+          })}
+        </span>
+      </>
+    );
+  }
 
   const trick = tableTrick(view, lastTrick);
   const cards = trick?.cards ?? [];
@@ -468,15 +565,31 @@ export function PlayPhase({
       className="relative flex flex-1 flex-col items-center justify-center gap-3"
       onClick={handleTap}
     >
-      <SeatLabel
-        active={live && !yourTurn}
-        name={opponentName}
-        vulnerable={vulnerable[view.opponent]}
-      />
+      {/* Their side, in the order yours is in — read from the middle of the table
+          outward, both are label, then the rule, then the hand. Their label used
+          to sit above their hand, which put the rule on the far side of it and
+          made the two ends of the table disagree about what the line separates.
+          It separates a hand from everything else, on both sides.
+
+          Their hand is therefore the outermost thing on their side, exactly as
+          yours is on yours — see `GameBoard`'s footer, which draws this same
+          hairline immediately above your own thirteen. */}
       <OpponentHand
         count={view.handSizes[view.opponent]}
         revealed={swept ? (revealedHands?.[view.opponent] ?? null) : null}
         rowRef={opponentHandRef}
+      />
+
+      {/* Its own element rather than a border on a box wrapping the hand, which
+          is what it was: a border there sits inside that box's padding and lands
+          on the cards when the box is only as tall as they are. A 1px row in the
+          flow cannot touch anything, and this column's `gap-3` keeps it clear. */}
+      <div className="h-px w-full bg-white/10" />
+
+      <SeatLabel
+        active={live && !yourTurn}
+        name={opponentName}
+        vulnerable={vulnerable[view.opponent]}
       />
       {/* The trick slots are only worth looking at while there is something
           in them or about to be — once hands are revealed there is nothing
@@ -485,18 +598,34 @@ export function PlayPhase({
       {swept && revealedHands !== null ? null : (
         <Slot
           played={pendingBy === view.opponent ? undefined : cards.find((played) => played.by === view.opponent)}
+          ring={ringFor(view.opponent)}
           slotRef={opponentSlotRef}
           sweepTo={sweepTo}
           trickKey={trickKey}
         />
       )}
 
+      {/* Gated on `swept`, like every other part of the reveal on this screen.
+          `revealedHands` alone is not the same moment: it goes non-null the
+          instant the thirteenth card lands, so the headline and its score columns
+          used to appear *while the last trick was still on the table* — several
+          lines arriving in a band that had been holding one, which pushed the
+          played cards and the hand below them visibly down.
+
+          There is nothing to say in that gap: the phase is over, so no lead or
+          claim line is due either, and `min-h-10` is already the height of the one
+          line this band was holding. So the trick sits undisturbed for its own
+          stage time, and then the hands turning face up, the slots clearing and
+          this headline all happen together — which is what they were always
+          meant to read as. */}
       <div className="flex min-h-10 flex-col items-center justify-center gap-2">
-        {claimStatus(view) !== null ? (
-          <p className="text-center text-sm text-amber-200/70">{claimStatus(view)}</p>
-        ) : instruction(view) !== null ? (
-          <p className="text-center text-sm text-white/50">{instruction(view)}</p>
-        ) : revealedHands !== null && dealScore !== null ? (
+        {!swept || revealedHands === null || dealScore === null ? (
+          claimStatus(view) !== null ? (
+            <p className="text-center text-sm text-amber-200/70">{claimStatus(view)}</p>
+          ) : instruction(view) !== null ? (
+            <p className="text-center text-sm text-white/50">{instruction(view)}</p>
+          ) : null
+        ) : (
           <>
             <DealResultHeadline
               opponentName={opponentName}
@@ -513,12 +642,13 @@ export function PlayPhase({
               <p className="text-center text-xs text-white/40">{opponentName} is ready</p>
             ) : null}
           </>
-        ) : null}
+        )}
       </div>
 
       {swept && revealedHands !== null ? null : (
         <Slot
           played={pendingBy === view.me ? undefined : cards.find((played) => played.by === view.me)}
+          ring={ringFor(view.me)}
           slotRef={mySlotRef}
           sweepTo={sweepTo}
           trickKey={trickKey}

@@ -80,6 +80,13 @@ export interface TourStep {
  * Four steps, in reading order down the screen, ending on the hand being built. The
  * last step is the one that used to be the first note, and it is better said pointing
  * at the hand and the dots than as a paragraph on its own.
+ *
+ * **The last step names the dot colours, and nothing here names the opponent's row of
+ * dots**, deliberately: the `opponent` spotlight frames their row of card backs only,
+ * so their turn track is outside the cutout and describing it would be pointing at
+ * something the player cannot see highlighted. What a seat took is public, and §1.4
+ * says so on the rules screen, which is the right place for a fact with nothing on
+ * this screen to point at.
  */
 export function drawTour(openDiscard: boolean): readonly TourStep[] {
   return [
@@ -104,8 +111,9 @@ export function drawTour(openDiscard: boolean): readonly TourStep[] {
       title: "Your turn is one of these",
     },
     {
-      body:
-        "Nobody is dealt thirteen cards here. Over 26 turns you build the hand you will bid and play, and the dots count off your thirteen. Then the deck runs out and it is ordinary bridge.",
+      body: openDiscard
+        ? "Nobody is dealt thirteen cards here. Over 26 turns you build the hand you will bid and play, and the dots are your thirteen turns — each filling in the colour of the card you took: blue for the face-up one, purple for the unseen gamble, green for one off the discard pile."
+        : "Nobody is dealt thirteen cards here. Over 26 turns you build the hand you will bid and play, and the dots are your thirteen turns — each filling in blue if you took the face-up card and purple if you took the unseen one. Then the deck runs out and it is ordinary bridge.",
       target: "you",
       title: "The hand you are building",
     },

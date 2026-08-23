@@ -184,6 +184,16 @@ export function HelpOverlay({ onClose, openDiscard }: HelpOverlayProps): React.J
             setting touches.
           </Rule>
 
+          <Rule title="The two rings count what each side still needs">
+            One beside each played card, divided into as many segments as that side has to take:
+            level plus six to make the contract, and one more than that leaves to break it. A
+            segment fills per trick won, and whichever ring closes gets a green check — the same
+            mark for a contract made and a contract set, because both are that side getting what it
+            was playing for. It very often arrives with cards still in hand: once one side has its
+            tricks the deal is decided, whatever the rest of them do. Switch it off in Settings if
+            you would rather keep the count yourself.
+          </Rule>
+
           <Rule title="Honors look after themselves">
             Awarded automatically to whoever was holding them when the deal ends, and that
             includes the defender — so points can arrive for a hand you did not bid.
