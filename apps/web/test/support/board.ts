@@ -147,6 +147,7 @@ function Harness({
     exit: null,
     onShowSettings: () => {},
     peeking: false,
+    ratings: { mine: null, opponent: null },
     session,
     sound,
     tapToSelect,

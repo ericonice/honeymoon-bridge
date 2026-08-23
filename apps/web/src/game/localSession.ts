@@ -310,7 +310,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     // Nothing to log for a passed-out deal: no contract, no play, nothing a
     // later solver-based assessment could do anything with.
     if (!deal.passedOut && deal.contract !== null && deal.initialHands !== null) {
-      void reportHandLog({
+      reportHandLog({
         auction: deal.auction,
         boldness: boldness(),
         botVersion: BOT_RELEASE.version,
@@ -348,7 +348,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     }
     reported.current = true;
     const points = totalScore(summary.rubber);
-    void reportRobotRubber({
+    reportRobotRubber({
       botVersion: BOT_RELEASE.version,
       deals: summary.history.length,
       format: summary.rubber.format,

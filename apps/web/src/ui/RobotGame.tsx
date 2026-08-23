@@ -1,6 +1,7 @@
 import { matchNoun } from "../game/labels.js";
 import { useLocalSession } from "../game/localSession.js";
 import type { Density } from "../game/identity.js";
+import { knownRatings } from "../game/records.js";
 import { GameBoard } from "./GameBoard.js";
 
 export interface RobotGameProps {
@@ -27,6 +28,8 @@ export function RobotGame({
   tapToSelect,
   trickCount,
 }: RobotGameProps): React.JSX.Element {
+  // Read once a mount. It changes only when a match ends, and this screen is one match.
+  const cached = knownRatings();
   const session = useLocalSession({ peek: peeking });
   const noun = matchNoun(session.rubber.format);
 
@@ -42,6 +45,10 @@ export function RobotGame({
         warning: "The deals played so far are lost — an unfinished match is not kept anywhere.",
       }}
       peeking={peeking}
+      // Both sides are knowable here and only here: the computer's rating is
+      // pinned server-side and yours came down with the record, so neither costs
+      // a request the robot game is not allowed to make.
+      ratings={{ mine: cached.mine, opponent: cached.bot }}
       session={session}
       sound={sound}
       tapToSelect={tapToSelect}

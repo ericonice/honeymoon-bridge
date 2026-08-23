@@ -82,7 +82,31 @@ interface RobotRubber {
   readonly botVersion: number | null;
   readonly points: number;
   readonly pointsAgainst: number;
+  /**
+   * When the rubber ended on the client, or null from a build that does not say.
+   * Trusted only within `REPORT_WINDOW` of now — see `playedAt`.
+   */
+  readonly finishedAt: number | null;
   readonly won: boolean;
+}
+
+/**
+ * How far from now a client's own timestamp is taken at face value.
+ *
+ * A queued report can be days late, so its own idea of when the game ended is
+ * better than the moment it arrives — but it is also a number the client chose,
+ * and a rubber stamped in 2019 or next year would sort wrongly forever in a
+ * rating that walks the history in order. Outside the window, the arrival time is
+ * the honest answer: late, but real.
+ */
+const REPORT_WINDOW = 30 * 24 * 60 * 60 * 1000;
+
+/** When to say a reported rubber was played. */
+function playedAt(reported: number | null, now: number): number {
+  if (reported === null || reported > now + 60_000 || reported < now - REPORT_WINDOW) {
+    return now;
+  }
+  return reported;
 }
 
 /**
@@ -104,6 +128,13 @@ function robotRubberFrom(body: unknown): RobotRubber | null {
       : null;
 
   const deals = whole(value.deals, 500);
+  // When the rubber actually ended, which is not when this arrives: the client
+  // queues a report and retries, so a delivery timestamp can be days late. Kept
+  // optional for the older builds the service worker keeps in circulation.
+  const finishedAt =
+    typeof value.finishedAt === "number" && Number.isInteger(value.finishedAt)
+      ? value.finishedAt
+      : null;
   const points = whole(value.points, 100_000);
   const pointsAgainst = whole(value.pointsAgainst, 100_000);
   if (deals === null || deals === 0 || points === null || pointsAgainst === null) {
@@ -118,6 +149,7 @@ function robotRubberFrom(body: unknown): RobotRubber | null {
 
   const nickname = typeof value.nickname === "string" ? value.nickname.slice(0, 20) : "";
   return {
+    finishedAt,
     // Null from a client too old to name which bot it played. That is not the
     // same as version zero and must not be recorded as one — it means the game
     // predates the question being asked.
@@ -850,7 +882,7 @@ export default {
           ],
           winner: rubber.won ? 0 : 1,
         },
-        Date.now(),
+        playedAt(rubber.finishedAt, Date.now()),
       );
       return json(request, { ok: true }, 201);
     }

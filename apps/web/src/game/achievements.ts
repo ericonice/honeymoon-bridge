@@ -10,6 +10,7 @@ import type {
 } from "@hb/engine";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { storedSession } from "./account.js";
+import { enqueue } from "./outbox.js";
 import { achievementsUrl, dealAchievementsUrl, rubberAchievementsUrl } from "./serverUrl.js";
 
 /** The badge list and running counters behind it, as the server sends them. */
@@ -45,42 +46,38 @@ async function fetchAchievements(): Promise<AchievementSnapshot | null> {
 /**
  * Tells the server what one deal or rubber just meant for achievements.
  *
- * Fire-and-forget, exactly like `reportRobotRubber` — the robot game must work
- * with no network at all, so a failed report is dropped rather than queued or
- * retried. What was shown locally already stands; it simply will not have
- * persisted, which is the accepted cost of a notification that cannot wait on
- * a round trip.
+ * Queued rather than sent — see `outbox.ts`. The notification still cannot wait
+ * on a round trip and does not: what was shown locally stands immediately, and
+ * this is only the part that has to survive to the next launch. It used to be
+ * dropped on any failure, which is how a title could be announced and then not be
+ * there.
+ *
+ * Skipped outright with nobody signed in, which is unchanged: there is no account
+ * for a count to be added to, and queueing them would quietly change *which*
+ * hands get counted rather than only whether the counting arrives.
  */
-async function reportDeal(facts: DealFacts, player: PlayerId): Promise<void> {
-  const session = storedSession();
-  if (session === null) {
+function reportDeal(facts: DealFacts, player: PlayerId): void {
+  if (storedSession() === null) {
     return;
   }
-  try {
-    await fetch(dealAchievementsUrl(), {
-      body: JSON.stringify({ facts, player }),
-      headers: { Authorization: `Bearer ${session}`, "Content-Type": "application/json" },
-      method: "POST",
-    });
-  } catch {
-    // Offline, most likely. See the note above.
-  }
+  enqueue({
+    body: JSON.stringify({ facts, player }),
+    kind: "Deal achievements",
+    url: dealAchievementsUrl(),
+    withSession: true,
+  });
 }
 
-async function reportRubber(facts: RubberFacts, player: PlayerId): Promise<void> {
-  const session = storedSession();
-  if (session === null) {
+function reportRubber(facts: RubberFacts, player: PlayerId): void {
+  if (storedSession() === null) {
     return;
   }
-  try {
-    await fetch(rubberAchievementsUrl(), {
-      body: JSON.stringify({ facts, player }),
-      headers: { Authorization: `Bearer ${session}`, "Content-Type": "application/json" },
-      method: "POST",
-    });
-  } catch {
-    // Offline, most likely. See the note above.
-  }
+  enqueue({
+    body: JSON.stringify({ facts, player }),
+    kind: "Rubber achievements",
+    url: rubberAchievementsUrl(),
+    withSession: true,
+  });
 }
 
 export interface AchievementsState {
@@ -162,7 +159,7 @@ export function useAchievementTracker(): AchievementTracker {
   const applyDeal = useCallback(
     (facts: DealFacts, player: PlayerId) => {
       absorb(dealUnlocks(progress.current, facts, player));
-      void reportDeal(facts, player);
+      reportDeal(facts, player);
     },
     [absorb],
   );
@@ -170,7 +167,7 @@ export function useAchievementTracker(): AchievementTracker {
   const applyRubber = useCallback(
     (facts: RubberFacts, player: PlayerId) => {
       absorb(rubberUnlocks(progress.current, facts, player));
-      void reportRubber(facts, player);
+      reportRubber(facts, player);
     },
     [absorb],
   );

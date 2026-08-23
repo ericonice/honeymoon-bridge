@@ -4,6 +4,7 @@ import { matchNoun } from "../game/labels.js";
 import { useNetworkSession } from "../game/networkSession.js";
 import type { NetworkGame } from "../game/networkSession.js";
 import type { GameSession } from "../game/session.js";
+import { knownRatings } from "../game/records.js";
 import { inviteLink } from "../game/serverUrl.js";
 import type { Density } from "../game/identity.js";
 import { GameBoard } from "./GameBoard.js";
@@ -253,6 +254,9 @@ export function TableGame({
           warning: `${session.opponentName} will be told the ${noun} ended. There is nowhere to keep an unfinished one.`,
         }}
         peeking={peeking}
+        // Yours only. A person's rating is theirs, and nothing about a seat
+        // carries it — the server sends a nickname, not a record.
+        ratings={{ mine: knownRatings().mine, opponent: null }}
         session={session}
         sound={sound}
         tapToSelect={tapToSelect}

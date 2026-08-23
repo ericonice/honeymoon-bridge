@@ -1,8 +1,9 @@
 import type { MatchFormat, Unlock } from "@hb/engine";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BOT_RELEASE } from "../bot/release.js";
 import type { CardColor } from "../game/cardColor.js";
 import type { Boldness, Density, DrawStyle, Pace, Strength } from "../game/identity.js";
+import { flush, outboxState } from "../game/outbox.js";
 import type { Theme } from "../game/theme.js";
 import { playAchievement } from "../game/soundEffects.js";
 import { AchievementToast } from "./AchievementToast.js";
@@ -158,6 +159,87 @@ function Choice<T extends string>({
  * the wrong category and the wrong place to look for it; it lives in the top
  * bar of the board now, where a phone puts the way back.
  */
+/**
+ * Anything played but not yet filed with the server.
+ *
+ * Renders nothing at all when the outbox is empty, which is nearly always — this
+ * is not a status light, it is the answer to "my rubber did not save". Down here
+ * with the build stamp rather than behind the playtester flag on purpose: the
+ * person who needs to read it out is whoever the game went missing for.
+ *
+ * `stuck` is the interesting half. Waiting means the network was down and it will
+ * land; stuck means the server read the report and refused it, which is a bug
+ * rather than a connection, and the status is the first useful thing to know
+ * about it.
+ */
+function Unsent(): React.JSX.Element | null {
+  const [state, setState] = useState(outboxState);
+
+  useEffect(() => {
+    // Opening Settings is as good a moment as any to try again, and somebody
+    // looking for a missing result is very likely to be here.
+    void flush().then(() => {
+      setState(outboxState());
+    });
+  }, []);
+
+  const pending = [...state.stuck, ...state.waiting];
+  if (pending.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-amber-300/25 bg-amber-300/5 px-3 py-2">
+      <p className="text-sm text-amber-100/90">
+        {pending.length === 1 ? "1 result not sent yet" : `${pending.length} results not sent yet`}
+      </p>
+      {/* One line each, with what actually happened. The first version said only
+          "they will be filed the next time the app has a connection", which is a
+          guess dressed as an explanation — a report failing every attempt for some
+          other reason looked identical to one waiting out a tunnel. The status and
+          the try count are the whole difference between a diagnosis and a shrug. */}
+      <ul className="mt-1 flex flex-col gap-0.5">
+        {pending.slice(0, 5).map((item) => (
+          <li key={item.id} className="text-xs text-white/55">
+            {item.kind} · queued {sinceQueued(item.queuedAt)} ·{" "}
+            {item.attempts === 0
+              ? "not tried yet"
+              : `${item.attempts === 1 ? "1 try" : `${item.attempts} tries`}, last: ${item.status}`}
+            {item.permanent ? " · refused" : ""}
+          </li>
+        ))}
+        {pending.length > 5 ? (
+          <li className="text-xs text-white/35">and {pending.length - 5} more</li>
+        ) : null}
+      </ul>
+      <button
+        type="button"
+        className="mt-2 rounded-lg border border-white/20 px-3 py-1 text-xs text-white/80"
+        onClick={() => {
+          void flush().then(() => {
+            setState(outboxState());
+          });
+        }}
+      >
+        Try again now
+      </button>
+    </div>
+  );
+}
+
+/** How long a report has been waiting, in the roundest useful terms. */
+function sinceQueued(at: number): string {
+  const minutes = Math.max(0, Math.round((Date.now() - at) / 60_000));
+  if (minutes < 1) {
+    return "just now";
+  }
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
+}
+
 export function SettingsOverlay({
   boldness,
   cardColor,
@@ -478,6 +560,7 @@ export function SettingsOverlay({
             Bot version v{BOT_RELEASE.version} ({BOT_RELEASE.name})
           </p>
           <p className="mt-2 text-sm text-white/55">Version {__APP_VERSION__}</p>
+          <Unsent />
           <p className="mt-0.5">
             Build {__BUILD_ID__} · {__BUILD_TIME__} UTC
           </p>

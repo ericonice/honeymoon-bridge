@@ -12,6 +12,7 @@ import type {
 import { storedSession } from "./account.js";
 import type { Boldness, Strength } from "./identity.js";
 import { playerToken } from "./identity.js";
+import { enqueue } from "./outbox.js";
 import { handLogUrl, handsUrl } from "./serverUrl.js";
 
 /** A completed robot-game deal, in the shape a later assessment against the solver needs. */
@@ -61,42 +62,35 @@ export interface HandLog {
  * actually played, so a later pass can run the identical solver-based mistake
  * analysis against real hands instead of only self-play.
  *
- * Fire-and-forget, exactly like `reportRobotRubber`: the device token always
- * goes along, the session only if there is one, and failure is swallowed —
- * this is a record of a hand already played, and logging it must never be
- * the thing that interrupts one.
+ * Queued rather than sent — see `outbox.ts`. This is the least urgent of the
+ * reports and the most annoying to lose, since the whole value of a hand log is
+ * having a run of real deals rather than most of one.
  */
-export async function reportHandLog(log: HandLog): Promise<void> {
-  const session = storedSession();
-  try {
-    await fetch(handLogUrl(), {
-      body: JSON.stringify({
-        auction: log.auction,
-        boldness: log.boldness,
-        botVersion: log.botVersion,
-        completedTricks: log.completedTricks,
-        contract: log.contract,
-        deviceToken: playerToken(),
-        disguise: log.disguise,
-        drawTurns: log.drawTurns,
-        initialHands0: log.initialHands[0],
-        initialHands1: log.initialHands[1],
-        rules: log.rules,
-        seed: log.seed,
-        standing: log.standing,
-        starter: log.starter,
-        strength: log.strength,
-        tricksWon: log.tricksWon,
-      }),
-      headers: {
-        "Content-Type": "application/json",
-        ...(session === null ? {} : { Authorization: `Bearer ${session}` }),
-      },
-      method: "POST",
-    });
-  } catch {
-    // Offline, most likely — see `reportRobotRubber`.
-  }
+export function reportHandLog(log: HandLog): void {
+  enqueue({
+    kind: "Hand log",
+    url: handLogUrl(),
+    // The device token names the player; a session only sharpens it.
+    withSession: false,
+    body: JSON.stringify({
+      auction: log.auction,
+      boldness: log.boldness,
+      botVersion: log.botVersion,
+      completedTricks: log.completedTricks,
+      contract: log.contract,
+      deviceToken: playerToken(),
+      disguise: log.disguise,
+      drawTurns: log.drawTurns,
+      initialHands0: log.initialHands[0],
+      initialHands1: log.initialHands[1],
+      rules: log.rules,
+      seed: log.seed,
+      standing: log.standing,
+      starter: log.starter,
+      strength: log.strength,
+      tricksWon: log.tricksWon,
+    }),
+  });
 }
 
 /**

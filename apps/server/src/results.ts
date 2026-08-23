@@ -1,5 +1,7 @@
 import type { MatchFormat, PlayerId } from "@hb/engine";
 import type { Env } from "./env.js";
+import { botRating, ratingOf, ratingsFor, START_RATING } from "./ratings.js";
+import type { RatingPoint, Ratings } from "./ratings.js";
 
 /**
  * The token standing in for the computer.
@@ -153,6 +155,33 @@ interface ResultRow {
 }
 
 /**
+ * One finished match against one opponent, as that opponent's own row shows it.
+ *
+ * Neither who nor which format: both are fixed by the `OpponentRecord` this hangs
+ * off, and repeating them per match would be several hundred bytes of the same two
+ * strings on a screen a family reads.
+ */
+export interface OpponentMatch {
+  /** Null for a person, and null for a robot game older than bot versions. */
+  readonly botVersion: number | null;
+  readonly deals: number;
+  readonly finishedAt: number;
+  readonly pointsAgainst: number;
+  readonly pointsFor: number;
+  readonly won: boolean;
+}
+
+/**
+ * How many of an opponent's matches travel with their record.
+ *
+ * Enough to cover the sittings somebody would still remember, and bounded because
+ * a few hundred rubbers against the computer is a realistic total and this rides on
+ * a settings screen. The caller can tell it has been truncated — `won + lost` is
+ * the real count — and says so rather than quietly showing a partial history.
+ */
+const MATCHES_PER_OPPONENT = 20;
+
+/**
  * A record against one opponent at one match length, from the asker's side.
  *
  * One per opponent *per format*: a rubber and a game are not the same
@@ -164,6 +193,17 @@ export interface OpponentRecord {
   readonly format: MatchFormat;
   readonly lastPlayed: number;
   readonly lost: number;
+  /**
+   * The most recent matches against them, newest first, up to
+   * `MATCHES_PER_OPPONENT`.
+   *
+   * Carried here rather than fetched per opponent, because there is nothing to
+   * fetch *by*: `opponentKey` is handed out positionally per response, so it is
+   * not an identifier a client can send back — a new opponent would shift it. And
+   * `recordsFor` has already read every row to tally these totals, so grouping
+   * them costs no extra query.
+   */
+  readonly matches: readonly OpponentMatch[];
   /**
    * What to call them.
    *
@@ -186,11 +226,25 @@ export interface OpponentRecord {
   readonly opponentKey: string;
   readonly pointsAgainst: number;
   readonly pointsFor: number;
+  /**
+   * What this opponent is rated — see `ratings.ts`.
+   *
+   * For the computer it is the pinned rating of the newest version played against,
+   * which is what "what the computer is rated" can mean for a row that spans
+   * versions; the panel's own history is where the change is marked.
+   */
+  readonly rating: number;
   readonly won: number;
 }
 
 export interface Records {
   readonly opponents: OpponentRecord[];
+  /** The asker's own rating, the matches it rests on, and how it got there. */
+  readonly rating: {
+    readonly history: readonly RatingPoint[];
+    readonly played: number;
+    readonly value: number;
+  };
   /** Kept apart from the rest — see `recordsFor`. One entry per format played. */
   readonly robot: OpponentRecord[];
 }
@@ -198,7 +252,7 @@ export interface Records {
 // `opponentKey` is assigned once the whole set is known — see
 // `assignOpponentKeys` — so it is not part of a row while it is still being
 // tallied.
-export type Tallied = Omit<OpponentRecord, "opponentKey"> & {
+export type Tallied = Omit<OpponentRecord, "opponentKey" | "rating"> & {
   readonly account: string | null;
   readonly token: string;
 };
@@ -222,7 +276,7 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
   const tokens = await env.DB.prepare("SELECT token FROM account_tokens WHERE account_id = ?")
     .bind(accountId)
     .all<{ token: string }>();
-  const mine = new Set(tokens.results.map((row) => row.token));
+  const mineTokens = new Set(tokens.results.map((row) => row.token));
 
   const rows = await env.DB.prepare(
     `SELECT * FROM results
@@ -237,7 +291,7 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
     .all<ResultRow>();
 
   const isMine = (account: string | null, token: string): boolean =>
-    account === accountId || (account === null && mine.has(token));
+    account === accountId || (account === null && mineTokens.has(token));
 
   const tally = new Map<string, Tallied>();
 
@@ -259,12 +313,24 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
     const running = tally.get(key);
     const won = row.winner === seat;
 
+    // Rows arrive oldest-first, so this appends in order and the newest end is
+    // the tail — trimmed once at the end rather than on every row.
+    const match: OpponentMatch = {
+      botVersion: theirToken === ROBOT_TOKEN ? row.bot_version : null,
+      deals: row.deals,
+      finishedAt: row.finished_at,
+      pointsAgainst: theirPoints,
+      pointsFor: myPoints,
+      won,
+    };
+
     tally.set(key, {
       account: theirAccount,
       deals: (running?.deals ?? 0) + row.deals,
       format: row.format,
       lastPlayed: row.finished_at,
       lost: (running?.lost ?? 0) + (won ? 0 : 1),
+      matches: [...(running?.matches ?? []), match],
       // The most recent one stored on the row. For an opponent with an account
       // this is overwritten below by the name they go by now; it survives only
       // for rows played before an account was required, where it is all there
@@ -277,18 +343,28 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
     });
   }
 
-  const all = [...tally.values()];
+  // Newest first, and only as many as travel — see `MATCHES_PER_OPPONENT`.
+  const all = [...tally.values()].map((entry) => ({
+    ...entry,
+    matches: entry.matches.slice(-MATCHES_PER_OPPONENT).reverse(),
+  }));
   const opponentKeys = assignOpponentKeys(all);
+  // One global pass, because a rating is only comparable if it comes out of the
+  // same walk as everybody else's — see `ratingsFor`.
+  const ratings = await ratingsFor(env);
+  const mine = ratingOf(ratings, accountId, [...mineTokens]);
 
   return {
     opponents: await withNames(
       env,
       all.filter((entry) => entry.token !== ROBOT_TOKEN),
       opponentKeys,
+      ratings,
     ),
+    rating: { history: mine.history, played: mine.played, value: mine.rating },
     robot: all
       .filter((entry) => entry.token === ROBOT_TOKEN)
-      .map((entry) => strip(entry, opponentKeys))
+      .map((entry) => strip(entry, opponentKeys, ratings))
       .sort((a, b) => b.lastPlayed - a.lastPlayed),
   };
 }
@@ -311,12 +387,28 @@ export function assignOpponentKeys(entries: readonly Tallied[]): Map<string, str
   return keys;
 }
 
-function strip(entry: Tallied, keys: Map<string, string>): OpponentRecord {
+/**
+ * What this opponent is rated.
+ *
+ * The computer's is pinned and never learned, and the version taken is the newest
+ * one this row has a match against — `matches` is newest-first by the time this
+ * runs. A person's is whatever the global pass put under the identity their matches
+ * landed on, which is their account where they have one and the device otherwise.
+ */
+function ratingFor(entry: Tallied, ratings: Ratings): number {
+  if (entry.token === ROBOT_TOKEN) {
+    return botRating(entry.matches[0]?.botVersion ?? null);
+  }
+  const identity = entry.account === null ? `token:${entry.token}` : `account:${entry.account}`;
+  return Math.round(ratings.rating.get(identity) ?? START_RATING);
+}
+
+function strip(entry: Tallied, keys: Map<string, string>, ratings: Ratings): OpponentRecord {
   const { account: _account, token: _token, ...record } = entry;
   const identity = entry.account ?? `token:${entry.token}`;
   // `keys` was built from the same set this entry came from, so its identity
   // is always in it.
-  return { ...record, opponentKey: keys.get(identity)! };
+  return { ...record, opponentKey: keys.get(identity)!, rating: ratingFor(entry, ratings) };
 }
 
 /**
@@ -356,6 +448,7 @@ async function withNames(
   env: Env,
   records: readonly Tallied[],
   keys: Map<string, string>,
+  ratings: Ratings,
 ): Promise<OpponentRecord[]> {
   const names = await currentNamesFor(
     env,
@@ -364,7 +457,7 @@ async function withNames(
 
   return records
     .map((record) => ({
-      ...strip(record, keys),
+      ...strip(record, keys, ratings),
       name: (record.account === null ? null : names.get(record.account)) ?? record.name,
     }))
     .sort((a, b) => b.lastPlayed - a.lastPlayed);

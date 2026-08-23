@@ -772,6 +772,150 @@ their client knew to send them.
 Deliberately *not* logged: what the bot thought. It is version-specific, it bloats the record, and
 it is recomputable from a replayable deal. Log the deal, replay the bidder.
 
+**A rubber somebody played must not depend on the network at the moment it ended, and for a long
+time it did.** A robot rubber went missing, and the cause was structural rather than a bug on the
+winner path: four reporters — `reportRobotRubber`, both achievement reports and `reportHandLog` —
+were each a single fire-and-forget `fetch` inside `try {} catch {}`. Two ways to lose a game:
+
+- **A dropped connection lost it silently and permanently.** No retry, nothing on disk, and no
+  `keepalive`, so a request still in flight when the page went away was simply cancelled. The end of
+  a rubber is exactly when somebody puts the phone down.
+- **A refused body lost it just as silently.** None of the four looked at `response.ok`, so a 400
+  and a 201 were indistinguishable. A record could vanish with the network working perfectly.
+
+`game/outbox.ts` replaces all four. The report is written to `localStorage` *before* the request, so
+the worst case is late rather than never; it is removed only on a 2xx; and it drains on launch, on
+`online`, and on the tab becoming visible again — the last being the one that fires after a phone
+suspended the app mid-send. Two rules worth keeping: **a 4xx other than 401/408/429 is permanent**,
+because a body the server has read and refused will be refused identically forever, and **`drain`
+re-reads the queue each step rather than iterating a snapshot** — a rubber's own result and its
+achievements are enqueued a moment apart, so the second used to be invisible to the pass the first
+had already started.
+
+**The diagnosis surface is the outbox itself**, which is why the answer to "can we add logging" was
+not logging. Settings shows unsent reports in the footer beside the build stamp rather than behind the
+playtester flag — the person who needs to read it out is whoever the game went missing for. **An empty
+outbox alongside a missing record is a different search**, on the server side, and `wrangler d1
+execute --remote` answers that one directly.
+
+The first version of that row printed a status only for *refused* reports and told everything else it
+would be "filed the next time the app has a connection", which is a guess dressed as an explanation:
+a report failing every attempt for some other reason read identically to one waiting out a tunnel.
+Every pending report now prints its own line — kind, how long it has been queued, how many tries, and
+what happened last. **A CORS failure, a blocked request and a real outage all surface as `offline`
+from `fetch`**, so the try count is what separates "just now" from "forty attempts over two days".
+
+**`enqueue` must not be able to throw.** By the time it runs the caller has already marked the rubber
+reported, so a throw loses the record with nothing queued *and* nothing shown — the one failure worse
+than the bug this file exists to fix. `crypto.randomUUID` needs a secure context and a new enough
+browser, so the id falls back to a counter; only uniqueness within one device's queue matters.
+
+**A row of five dim figures is unreadable, and the fix was mostly subtraction.** The record screen's
+per-format summary ran "20 matches · 146 deals · 12,430–11,789 pts (+641)" at 12px in 40% white, and
+that was four problems rather than one: **"N matches" is won plus lost**, already stated by the
+`13–7` directly above it; **the point totals wore a bare `N–N`**, the same shape as the record, so
+the eye had to work out which kind of pair it was reading; counts, points and a signed difference
+**shared one separator** despite being three kinds of number; and none of it had the contrast of
+something meant to be read.
+
+It ended up as **one line per opponent and format**: `name · won–lost · margin`, and nothing else.
+Two fuller versions were built on the way — a sentence of middot-separated figures, then four
+captioned columns — and the columns read well; they just cost five lines for an opponent who has
+played both formats, on a screen that is a list of one or two people. **A standings list is scanned,
+not read.** So it holds the two things being compared and hands the rest to the match list below it,
+where every individual game already appears with its own points.
+
+Everything dropped was either duplicated or available elsewhere. "N matches" is won plus lost. "Last
+played" is what the list's own most-recent-first sort says — `whenPlayed` and its thirteen assertions
+went with it, rather than being left behind for a display that no longer exists. The point totals and
+the per-deal margin are in the match list. **The per-deal figure is the one worth remembering**,
+because it was right on its own terms — a total of +641 means nothing until you know it took 146
+deals, the same lesson as everything in `bench/` — and it still lost to the line budget.
+
+**A row opens on a tap, and the history it opens into had to come down with the record.** The panel
+carries what the columns cannot: the exact point totals the bar only draws as a proportion, every rate
+derived from them, and that opponent's own matches. The captions come back inside it, which is
+affordable there and was not on the row — there is one open panel rather than one per opponent, which
+is exactly what made a captioned table cost five lines a person.
+
+**It could not be a second request.** `opponentKey` is handed out positionally per response —
+`opponent-0`, `opponent-1` — so it is deliberately not an identifier a client can send back; a new
+opponent shifts every key after it. `recordsFor` already reads every row to tally, so the matches ride
+down on `OpponentRecord.matches`, capped at `MATCHES_PER_OPPONENT`. **The cap is why nothing treats
+`matches.length` as the number played** — `won + lost` is that, and the panel says what it is not
+showing rather than presenting a partial history as a whole one. It is also empty from a server too
+old to send it, which has to read as a record with no history rather than as an error.
+
+One at a time, because a panel breaks the column alignment where it sits and that alignment is the
+whole reason the table works. And the row is a real `button` with `aria-expanded`: a decorated `div`
+would leave the keyboard and a screen reader with no way to know the panel exists.
+
+**Deals won and lost is not available and should not be added.** `results` records a match winner, a
+deal *count* and each side's points; there is no per-deal outcome, so it would need a column blank for
+every game already recorded. It is also weaker than the margin beside it: a deal can be passed out
+with nobody winning it, and a rubber is settled in points.
+
+**There is a rating now, and the computer is what makes it mean anything.** `apps/server/src/ratings.ts`
+walks every match ever recorded, in order, as Elo. In a family-sized pool that is normally circular —
+Elo conserves points, so two people who only play each other trade the same points back and forth and
+the number says nothing the head-to-head record did not. **The bots' ratings are pinned rather than
+learned**, so the pool has an anchor that never moves and a person's number becomes "how you do against
+a fixed standard", which is comparable between two people who have never played each other.
+
+**Recomputed on every read, never stored.** A rating is only comparable if it comes out of the same
+pass as everybody else's, and it is sequential, so it cannot be derived from one account's slice.
+Recomputing self-heals: a record reset, a retuned anchor or a corrected timestamp all just come out
+right next time, where a column would need a migration and a backfill.
+
+**That made `finished_at` load-bearing.** The robot route used to stamp rows on arrival, which was
+harmless until the outbox started retrying — a report delivered days late would sort after games played
+since and rewrite the history. The client now sends `finishedAt` and the server takes it inside
+`REPORT_WINDOW`, falling back to arrival time outside it, since that number is the client's to choose.
+
+**The anchors are asserted, and the recorded games cannot settle them — this is worth reading before
+retuning them.** This account is 6–2 against v1 and 21–2 against v2, which taken at face value makes
+v2 the *weaker* opponent; the same period is when the person improved, and with one human there is
+nothing to separate the two. `bench/rubber.ts` cannot re-measure it either, because a version is a
+snapshot of code and v1's is gone. So the 200-point spacing comes from what was measured when the
+change landed (775–225 over a thousand rubbers, a 77.5% score, a 215-point gap), and only the absolute
+anchor is invented: v2 at 1200 puts this account's real 31-match history at **1514**, which is where a
+competent player should sit. Anchoring the bot at 1500 instead would put the whole family above
+average, which reads as flattery.
+
+The number shows in two places. The record screen, above the head-to-head table rather than in it,
+because it is the only figure there that is not relative to somebody. And beside the seat labels on the
+**play screen only** — the auction and the draw show the same two names and were deliberately
+quietened. `knownRatings()` reads the last fetched value out of `localStorage` rather than requesting
+one, because the robot game must work with no network at all; a person's rating does not travel with a
+seat, so across a table you see only your own.
+
+**The rating line is the one chart in the app, and it earned that.** Everything else here is text,
+dots and one bar, and the reason to cross that threshold is that a rating is the only series in this
+project that is not noise: it moves by `K × (result − expected)`, so it is bounded, ordered and evenly
+spaced *by match*. A per-match points margin is a random walk — one doubled contract swings it
+hundreds — and a line through that would be fiction. Plotted against matches, not time: a rating
+changes only when you play, so a time axis is long flat stretches meaning "did not play this week".
+
+**The reference is 1500, and drawing the bot's own anchor there was tried and fails on real numbers.**
+The idea was good — a rule at Bobby Orr's 1200 would read "here is where I passed the computer" — and
+this account is 300 clear of it, so including it squashes the whole line into the top fifth and loses
+the shape. **A reference has to sit inside the data's range to be worth its space**, so the average is
+the rule and the bot's rating is a caption.
+
+The opening stretch is shaded and labelled `SETTLING` rather than trimmed. Everybody starts at 1500 and
+the first results move by nearly a whole K, so that stretch ramps whatever the player did; hiding it
+would make the line start at an unexplained height, where saying so explains both. And the tick marks
+where the bot *version* changed, which is the only vertical event on the chart with a cause — results
+either side are not measuring the same opponent.
+
+The history was free: `ratingsFor` already computed every point during its walk and threw them away.
+No new query and no schema — only `HISTORY_LENGTH` to bound the payload.
+
+**The trap to state before anyone reads a flat line as a plateau:** because the bot is pinned, the
+line converges toward *bot + the player's true gap* and then flattens. That is having found your
+level, not having stopped improving, and the only way past it is a stronger opponent — which is what a
+v3 would be for.
+
 ### Open threads
 
 - **The growing-hand thresholds were tried and left alone, which is not the same as untouched.**
@@ -1083,6 +1227,20 @@ side that anybody could see. What actually happened:
   current client throws a `TypeError` on its first draw turn against an older server.
 - `DrawReveal.discarded` had gone from `Card | null` to `readonly Card[]`, and `drawPlayout` reads
   `.length` — so the same client throws again on the opponent's first turn.
+
+**Never request a new hashed asset through the custom domain until a cache-buster has proved the
+origin has it.** Pages answers an unpropagated `/assets/*` with the SPA fallback — `index.html`, under
+`Cache-Control: immutable, max-age=31536000` — so one curl poisons that path for a year. I have done
+this twice, and the second time was worse than the first because I had convinced myself of a wrong
+safety check: **`index.html` on the domain already naming the asset does not mean the asset has
+propagated.** It named it, the asset path still returned HTML, and the request I made to "verify"
+cached that HTML under the exact URL every visitor was about to load. The app was broken until the
+next deploy.
+
+The order that is actually safe: deploy, verify on the `*.pages.dev` alias, then probe the domain
+with `?v=<timestamp>` and check `content-type`, and only then touch the plain path. Recovery is a
+rebuild — the build stamp changes, so the content hash changes — and a redeploy, which orphans the
+poisoned path.
 
 Diagnosing this by reading the code was slow and diagnosing it by comparing timestamps was instant:
 `npx wrangler deployments list` in `apps/server` against `npx wrangler pages deployment list

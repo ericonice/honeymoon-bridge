@@ -2,6 +2,7 @@ import { useState } from "react";
 import { matchNoun } from "../game/labels.js";
 import type { MatchRecord, OpponentRecord, Records } from "../game/records.js";
 import { resetRecord, useRecentMatches, useRecords } from "../game/records.js";
+import { RatingTrend } from "./RatingTrend.js";
 
 export interface RecordProps {
   readonly signedIn: boolean;
@@ -10,22 +11,19 @@ export interface RecordProps {
 }
 
 /**
- * Roughly how long ago, in the terms somebody would actually use.
+ * How long ago, in the roundest terms that are still true.
  *
- * A date is not what the question is: "three days ago" answers whether this is
- * a standing rivalry or something from last winter, and an exact timestamp on a
- * scoreboard is precision nobody asked for.
- *
- * Counted in calendar days from local midnight, not in elapsed 24-hour spans.
- * Dividing the difference by a day says "today" about a game played at eleven
- * last night and "yesterday" about one from two mornings ago — which is wrong
- * in the small hours, and the small hours are when this gets played.
+ * Deleted once, when "last played" left the opponent row, and back because the
+ * opened panel wants it: the list's most-recent-first order says *which* opponent
+ * was played latest and nothing about when. Days are computed from local midnight
+ * rather than by dividing a difference, so "yesterday" means the previous calendar
+ * day and not twenty-four hours.
  */
 export function whenPlayed(at: number): string {
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
-  const days = Math.ceil((midnight.getTime() - at) / 86_400_000);
-  if (days <= 0) {
+  const days = Math.max(0, Math.ceil((midnight.getTime() - at) / 86_400_000));
+  if (days === 0) {
     return "today";
   }
   if (days === 1) {
@@ -43,50 +41,335 @@ function count(n: number, singular: string, plural = `${singular}s`): string {
   return `${n.toLocaleString()} ${n === 1 ? singular : plural}`;
 }
 
-/** One opponent's record in one match format — half of an `OpponentSection`. */
-function FormatRow({
-  formatLabel,
-  record,
+/** A signed points figure, with the minus sign that reads as one rather than a hyphen. */
+function signed(points: number, digits = 0): string {
+  const size = Math.abs(points).toLocaleString(undefined, {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+  });
+  return `${points < 0 ? "−" : "+"}${size}`;
+}
+
+/**
+/**
+ * One number for how you are playing, rather than one per opponent.
+ *
+ * A rating is the only figure on this screen that is not *relative to somebody* —
+ * which is exactly what a head-to-head table cannot give you, and why it sits above
+ * the table rather than in it. It is comparable between two people who have never
+ * played each other, because the computer is a fixed point they have both been
+ * measured against; the server's `ratings.ts` has why that pinning is what makes the
+ * whole thing mean anything.
+ *
+ * The match count is not decoration. At four rated matches the number is mostly the
+ * 1500 everybody starts on, and saying so is the difference between a rating and a
+ * guess wearing one's clothes.
+ */
+function Rating({
+  rating,
 }: {
-  readonly formatLabel: string;
-  readonly record: OpponentRecord;
+  readonly rating: Records["rating"];
 }): React.JSX.Element {
-  const played = record.won + record.lost;
+  // Over five matches, which is the shortest span worth calling recent — and a
+  // number rather than a slope, because a number is what you would say out loud.
+  const recent = rating.history.length < 6 ? null : rating.value - rating.history.at(-6)!.rating;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-baseline gap-2.5">
+        <span className="font-mono text-3xl tabular-nums text-white">{rating.value}</span>
+        <span className="text-xs text-white/45">
+          your rating
+          {rating.played === 0
+            ? " · no rated matches yet"
+            : ` · ${count(rating.played, "match", "matches")}`}
+          {recent === null ? null : (
+            <>
+              {" · "}
+              <span className={recent >= 0 ? "text-emerald-300/80" : "text-amber-200/70"}>
+                {signed(recent)}
+              </span>{" "}
+              over 5
+            </>
+          )}
+        </span>
+      </div>
+      <RatingTrend history={rating.history} />
+    </div>
+  );
+}
+
+/**
+ * The column layout, shared by the header and every row so they cannot drift.
+ *
+ * Fixed widths rather than content-sized, which is the entire point: a column that
+ * sizes to its own row puts the same figure in a different place on every line, and
+ * then the eye has to parse each row from scratch. Fixed, it learns the positions
+ * once. 384px of app minus the screen's 24px padding each side leaves 336px, and
+ * the four numeric columns plus their gaps take 202 of it.
+ */
+const COLUMNS = "grid grid-cols-[1fr_40px_30px_60px_44px_12px] items-baseline gap-1.5";
+
+/** The header, paid for once above the whole list rather than on every row. */
+function ListHeader(): React.JSX.Element {
+  return (
+    <div className={`${COLUMNS} border-b border-white/15 pb-1`}>
+      {/* The sixth is the chevron's column, and it is empty on purpose: labelling
+          the control would be labelling the whole row, which is what the name
+          already does. */}
+      {["opponent", "w–l", "hands", "points", "diff", ""].map((label) => (
+        <span
+          key={label === "" ? "chevron" : label}
+          className={`font-mono text-[0.55rem] tracking-wider text-white/40 uppercase ${label === "opponent" ? "" : "text-right"}`}
+        >
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Points for against points against, as a share of everything scored.
+ *
+ * The exact totals are gone from this screen, deliberately — three fuller versions
+ * were drawn first and this is the one that read fastest, because "am I behind
+ * against this person" turns out to be a question about proportion rather than
+ * about two six-digit numbers. A bar answers it without a digit being read, and it
+ * is *scale-aware* in a way the margin is not: +641 across 146 deals is a nearly
+ * even bar, which is the truth of it, where the same +641 in nine deals would not
+ * be.
+ *
+ * The totals still exist for a screen reader, which is the one place they are free.
+ * For everyone else the individual match list below carries every game's own points.
+ */
+function PointsBar({
+  against,
+  points,
+}: {
+  readonly against: number;
+  readonly points: number;
+}): React.JSX.Element {
+  const total = points + against;
+  const share = total === 0 ? 0 : (points / total) * 100;
+
+  return (
+    <div className="flex h-1.5 self-center overflow-hidden rounded-sm bg-white/12">
+      <span className="sr-only">
+        {points.toLocaleString()} points for, {against.toLocaleString()} against
+      </span>
+      {total === 0 ? null : (
+        <>
+          <div className="h-full bg-emerald-300" style={{ width: `${share}%` }} />
+          <div className="h-full bg-amber-300" style={{ width: `${100 - share}%` }} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One opponent, in one match format, on one line.
+ *
+ * `name · won–lost · hands · points · margin`, under one header at the top of the
+ * list. Getting here took four shapes and the lesson is worth keeping: **what made
+ * the original unreadable was not how many figures it held but that they did not
+ * line up.** It was a sentence of middot-separated values, so the third figure sat
+ * somewhere different on every row and each one had to be read from the beginning.
+ * A fixed grid with the labels paid for once fixes that without dropping anything.
+ *
+ * A version with a captioned column per figure was drawn too, and repeating those
+ * captions per opponent is what made it cost five lines each.
+ *
+ * **Hands sits beside the points rather than beside the record** because it is the
+ * sample size — it is what makes a margin mean anything.
+ *
+ * Deals won and lost is not here and cannot be: `results` records a match winner, a
+ * deal count and each side's points, with no per-deal outcome, so it would need a
+ * column blank for every game already recorded. It is also weaker than the margin
+ * beside it, since a deal can be passed out with nobody winning it.
+ */
+function OpponentLine({
+  format,
+  name,
+  onToggle,
+  open,
+  record,
+  robot,
+}: {
+  /** Named only when this opponent has a record in both formats. */
+  readonly format: string | null;
+  readonly name: string;
+  onToggle(): void;
+  readonly open: boolean;
+  readonly record: OpponentRecord;
+  readonly robot: boolean;
+}): React.JSX.Element {
   const margin = record.pointsFor - record.pointsAgainst;
 
   return (
-    <div className="mt-2 first:mt-0">
-      <div className="flex items-baseline gap-3">
-        <span className="min-w-0 flex-1 text-sm text-white/50">{formatLabel}</span>
-        <span className="shrink-0 font-mono text-base tabular-nums">
-          {record.won}–{record.lost}
-        </span>
-      </div>
-
-      {/* Every count on the left reads in one direction now, labeled rather
-          than left to guesswork — the points total used to be a bare "N–N",
-          the same bare shape as the won-lost record above it, with nothing
-          to tell the two apart at a glance. "Last played" keeps its own
-          place on the right: recency answers a different question than the
-          tally does, and folding it into the same run of numbers is what
-          made deals read as "today's deals" once before. */}
-      <div className="mt-0.5 flex items-baseline justify-between gap-3 text-xs text-white/40">
-        <span>
-          {count(played, "match", "matches")} · {count(record.deals, "deal")} ·{" "}
-          <span className="font-mono tabular-nums">
-            {record.pointsFor.toLocaleString()}–{record.pointsAgainst.toLocaleString()}
-          </span>{" "}
-          pts (
-          <span className={margin >= 0 ? "text-emerald-300/70" : "text-amber-200/60"}>
-            {margin >= 0 ? "+" : "−"}
-            {Math.abs(margin).toLocaleString()}
+    <button
+      type="button"
+      aria-expanded={open}
+      className={`${COLUMNS} w-full border-b border-white/7 py-1.5 text-left last:border-b-0 ${open ? "border-b-transparent bg-white/5" : ""}`}
+      onClick={onToggle}
+    >
+      <span className="flex min-w-0 items-baseline gap-1">
+        <span className={`truncate text-sm ${robot ? "text-white/60 italic" : ""}`}>{name}</span>
+        {robot ? (
+          <span className="shrink-0 rounded-sm bg-white/10 px-1 py-px font-mono text-[0.5rem] font-semibold tracking-wide text-white/40 uppercase">
+            cpu
           </span>
-          )
-        </span>
-        <span className="shrink-0">last played {whenPlayed(record.lastPlayed)}</span>
-      </div>
+        ) : null}
+        {format === null ? null : (
+          <span className="shrink-0 text-[0.6rem] text-white/35">{format}</span>
+        )}
+      </span>
+      <span className="text-right font-mono text-xs tabular-nums">
+        {record.won}–{record.lost}
+      </span>
+      <span className="text-right font-mono text-xs tabular-nums text-white/70">
+        {record.deals.toLocaleString()}
+      </span>
+      <PointsBar against={record.pointsAgainst} points={record.pointsFor} />
+      <span
+        className={`text-right font-mono text-sm tabular-nums ${margin >= 0 ? "text-emerald-300" : "text-amber-200"}`}
+      >
+        {signed(margin)}
+      </span>
+      <svg
+        aria-hidden="true"
+        className={`self-center transition-transform ${open ? "rotate-180 text-white/55" : "text-white/30"}`}
+        fill="none"
+        height="10"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.6"
+        viewBox="0 0 10 10"
+        width="10"
+      >
+        <path d="M2 3.6 L5 6.6 L8 3.6" />
+      </svg>
+    </button>
+  );
+}
+
+/**
+ * Everything the row could not hold, for the one opponent whose row is open.
+ *
+ * The exact point totals — which the row draws only as a proportion — every rate
+ * derived from them, and that opponent's own match history. **The captions are
+ * affordable here in a way they were not on the row**: there is one open panel
+ * rather than one per opponent, which is what made a captioned table cost five
+ * lines a person.
+ *
+ * Each rate sits on the line of the total it came from, which is where a rate is
+ * easiest to trust: `+641` and `+4.4 a deal` together rather than in separate
+ * columns that have to be mentally paired.
+ *
+ * The history is capped server-side, so the count of matches shown is not the
+ * number played. It says what it is not showing rather than presenting a partial
+ * list as a whole one — and it is empty from a server too old to send it, which
+ * reads as a record with no history rather than as an error.
+ */
+function OpponentPanel({
+  myRating,
+  record,
+}: {
+  /** The asker's own, so this one can be called above or below it. */
+  readonly myRating: number;
+  readonly record: OpponentRecord;
+}): React.JSX.Element {
+  const margin = record.pointsFor - record.pointsAgainst;
+  const played = record.won + record.lost;
+  const rate = (value: number, per: number): string => (per === 0 ? "—" : signed(value / per, 1));
+  const older = played - record.matches.length;
+
+  return (
+    <div className="border-b border-white/7 bg-white/5 px-0.5 pt-1 pb-3">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 pb-2">
+        <Fact label="Points">
+          {record.pointsFor.toLocaleString()} <Dim>for</Dim> {record.pointsAgainst.toLocaleString()}{" "}
+          <Dim>against</Dim>
+        </Fact>
+        <Fact label="Margin">
+          <span className={margin >= 0 ? "text-emerald-300" : "text-amber-200"}>
+            {signed(margin)}
+          </span>{" "}
+          <Dim>{rate(margin, record.deals)} a deal</Dim>
+        </Fact>
+        <Fact label="Matches">
+          {played} <Dim>played</Dim> {record.won}–{record.lost}
+        </Fact>
+        <Fact label="Hands">
+          {record.deals.toLocaleString()}{" "}
+          <Dim>{played === 0 ? "—" : `${(record.deals / played).toFixed(1)} a match`}</Dim>
+        </Fact>
+        <Fact label="Rating">
+          {record.rating}
+          <Dim>{record.rating >= myRating ? "above you" : "below you"}</Dim>
+        </Fact>
+        <Fact label="Last played">
+          <Dim>{whenPlayed(record.lastPlayed)}</Dim>
+        </Fact>
+      </dl>
+
+      {record.matches.length === 0 ? null : (
+        <>
+          <p className="border-t border-white/8 pt-1 font-mono text-[0.55rem] tracking-wider text-white/35 uppercase">
+            every match
+          </p>
+          {record.matches.map((match) => (
+            <div
+              key={match.finishedAt}
+              className="grid grid-cols-[62px_1fr_26px_74px] items-baseline gap-1.5 py-0.5"
+            >
+              <span className="font-mono text-[0.65rem] text-white/40">
+                {formatMatchTime(match.finishedAt)}
+              </span>
+              <span className="text-[0.68rem] text-white/40">{count(match.deals, "deal")}</span>
+              <span
+                className={`font-mono text-[0.55rem] font-semibold tracking-wide uppercase ${match.won ? "text-emerald-300" : "text-amber-200"}`}
+              >
+                {match.won ? "won" : "lost"}
+              </span>
+              <span className="text-right font-mono text-[0.7rem] tabular-nums text-white/70">
+                {match.pointsFor.toLocaleString()}–{match.pointsAgainst.toLocaleString()}
+              </span>
+            </div>
+          ))}
+          {older <= 0 ? null : (
+            <p className="pt-1 text-[0.65rem] text-white/30">
+              {count(older, "older match", "older matches")} not shown
+            </p>
+          )}
+        </>
+      )}
     </div>
   );
+}
+
+/** A label and its value, on one line of the panel's list. */
+function Fact({
+  children,
+  label,
+}: {
+  readonly children: React.ReactNode;
+  readonly label: string;
+}): React.JSX.Element {
+  return (
+    <>
+      <dt className="text-[0.7rem] text-white/40">{label}</dt>
+      <dd className="m-0 text-right font-mono text-[0.74rem] tabular-nums text-white/80">
+        {children}
+      </dd>
+    </>
+  );
+}
+
+/** The unit or the rate beside a figure — present, and not competing with it. */
+function Dim({ children }: { readonly children: React.ReactNode }): React.JSX.Element {
+  return <span className="text-white/45">{children}</span>;
 }
 
 interface OpponentGroup {
@@ -155,29 +438,64 @@ function groupByOpponent(records: Records): readonly OpponentGroup[] {
  * should not read as one — but naming that difference on the row itself is
  * enough; it does not need a whole section to itself to say it.
  */
-function OpponentSection({ group }: { readonly group: OpponentGroup }): React.JSX.Element {
+/**
+ * One opponent's rows, and the panel under whichever of them is open.
+ *
+ * One open at a time across the whole list — see `Body`. A panel breaks the column
+ * alignment where it sits, which is the thing that makes the table readable, so
+ * having several open at once would leave the list looking like the sentence this
+ * replaced.
+ */
+function OpponentSection({
+  group,
+  myRating,
+  onToggle,
+  openRow,
+}: {
+  readonly group: OpponentGroup;
+  /** See `OpponentPanel`. */
+  readonly myRating: number;
+  onToggle(row: string): void;
+  /** `key|format` of the row whose panel is showing, or null. */
+  readonly openRow: string | null;
+}): React.JSX.Element {
+  // Only worth naming when there are two of them to tell apart.
+  const both = group.game !== null && group.rubber !== null;
+
+  const row = (record: OpponentRecord, format: string | null): React.JSX.Element => {
+    const id = `${group.key}|${record.format}`;
+    const open = openRow === id;
+    return (
+      <>
+        <OpponentLine
+          format={format}
+          name={group.name}
+          open={open}
+          record={record}
+          robot={group.isRobot}
+          onToggle={() => {
+            onToggle(id);
+          }}
+        />
+        {open ? <OpponentPanel myRating={myRating} record={record} /> : null}
+      </>
+    );
+  };
+
   return (
-    <div className="border-t border-white/10 py-3 first:border-t-0">
-      <div className="flex items-center gap-2">
-        <span className={`truncate text-base ${group.isRobot ? "text-white/60 italic" : ""}`}>
-          {group.name}
-        </span>
-        {group.isRobot ? (
-          <span className="shrink-0 rounded bg-white/10 px-1.5 py-px text-[0.6rem] font-semibold tracking-wide text-white/45 uppercase">
-            computer
-          </span>
-        ) : null}
-      </div>
-      {group.rubber === null ? null : <FormatRow formatLabel="Rubber" record={group.rubber} />}
-      {group.game === null ? null : <FormatRow formatLabel="Single game" record={group.game} />}
-    </div>
+    <>
+      {group.rubber === null ? null : row(group.rubber, both ? "rubbers" : null)}
+      {group.game === null ? null : row(group.game, both ? "single games" : null)}
+    </>
   );
 }
 
 /**
- * When a match finished, in whatever timezone this device is currently set
- * to — unlike `whenPlayed`, which only says how long ago, this is for telling
- * two matches from the same day apart.
+ * When a match finished, in whatever timezone this device is currently set to.
+ *
+ * Precise to the minute rather than "3 days ago", because this is the individual
+ * match list: telling two matches from the same afternoon apart is the whole job,
+ * and how long ago they were is what the ordering says.
  */
 function formatMatchTime(at: number): string {
   return new Date(at).toLocaleString(undefined, {
@@ -354,6 +672,9 @@ function Body({
   onSignIn(): void;
 }): React.JSX.Element {
   const { loading, records, reload } = useRecords(signedIn);
+  // `key|format` of the one open row. Declared before the early returns below so
+  // the hook order does not depend on whether there is anything to show.
+  const [openRow, setOpenRow] = useState<string | null>(null);
 
   if (!signedIn) {
     return (
@@ -393,10 +714,22 @@ function Body({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
+        <Rating rating={records.rating} />
         <h2 className="text-lg font-semibold">Head to head</h2>
         <div>
+          <ListHeader />
           {groups.map((group) => (
-            <OpponentSection key={group.key} group={group} />
+            <OpponentSection
+              key={group.key}
+              group={group}
+              myRating={records.rating.value}
+              openRow={openRow}
+              onToggle={(row) => {
+                // Tapping the open one closes it, which is the only way back to a
+                // list that is purely a list.
+                setOpenRow((current) => (current === row ? null : row));
+              }}
+            />
           ))}
         </div>
       </div>

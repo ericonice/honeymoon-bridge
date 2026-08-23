@@ -9,6 +9,7 @@ function entry(account: string | null, token: string, format: "game" | "rubber" 
     format,
     lastPlayed: 1_700_000_000_000,
     lost: 0,
+    matches: [],
     name: "Somebody",
     pointsAgainst: 0,
     pointsFor: 100,

@@ -46,6 +46,8 @@ export interface GameBoardProps {
   /** Null when this match has no exit of its own to offer. */
   readonly exit: GameExit | null;
   readonly peeking: boolean;
+  /** See `PlayPhase`'s own prop of the same name. */
+  readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
   readonly session: GameSession;
   readonly sound: boolean;
   readonly tapToSelect: boolean;
@@ -86,6 +88,7 @@ function CurrentPhase({
   onStartPlay,
   peeking,
   phase,
+  ratings,
   revealedHands,
   session,
   trickCount,
@@ -100,6 +103,8 @@ function CurrentPhase({
   readonly onStartPlay: (() => void) | null;
   readonly peeking: boolean;
   readonly phase: DealPhase;
+  /** See `PlayPhase`'s own prop of the same name. */
+  readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
   /** See `PlayPhase`'s own prop of the same name. */
   readonly revealedHands: Pair<readonly Card[]> | null;
   readonly session: GameSession;
@@ -160,6 +165,7 @@ function CurrentPhase({
           }
           opponentName={session.opponentName}
           opponentWaitingToContinue={session.opponentWaitingToContinue}
+          ratings={ratings}
           release={onStartPlay}
           revealedHands={revealedHands}
           trickCount={trickCount}
@@ -452,6 +458,7 @@ export function GameBoard({
   exit,
   onShowSettings,
   peeking,
+  ratings,
   session,
   sound,
   tapToSelect,
@@ -586,6 +593,7 @@ export function GameBoard({
           handOriginRef={handOriginRef}
           peeking={peeking}
           phase={phase}
+          ratings={ratings}
           revealedHands={revealedHands}
           trickCount={trickCount}
           session={session}
