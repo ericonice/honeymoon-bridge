@@ -799,7 +799,13 @@ export default {
       if (accountId === null) {
         return json(request, { error: "Not signed in" }, 401);
       }
-      return json(request, { forgotten: await resetRecord(env, accountId) });
+      // Achievements are opt-in rather than implied: a fresh record and a wiped
+      // collection are two different wishes — see `resetRecord`. Absent means
+      // no, which is the safe reading of a body this route did not used to take
+      // at all, and so is also what an older client sending none gets.
+      const body = (await request.json().catch(() => ({}))) as { achievements?: unknown };
+      const achievements = body.achievements === true;
+      return json(request, { forgotten: await resetRecord(env, accountId, { achievements }) });
     }
 
     // A rubber against the computer, reported by the browser that played it.

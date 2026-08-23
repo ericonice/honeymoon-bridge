@@ -59,12 +59,15 @@ primeOnFirstGesture();
 function noiseBurst(
   ctx: AudioContext,
   {
+    delay = 0,
     duration,
     filterFrequency,
     filterType = "bandpass",
     gain,
     q = 1,
   }: {
+    /** Seconds before it starts, so a burst can sit inside a longer figure. */
+    readonly delay?: number;
     readonly duration: number;
     readonly filterFrequency: number;
     readonly filterType?: BiquadFilterType;
@@ -86,7 +89,7 @@ function noiseBurst(
   filter.frequency.value = filterFrequency;
   filter.Q.value = q;
 
-  const now = ctx.currentTime;
+  const now = ctx.currentTime + delay;
   const env = ctx.createGain();
   env.gain.setValueAtTime(gain, now);
   env.gain.exponentialRampToValueAtTime(0.0001, now + duration);
@@ -263,5 +266,50 @@ export function playRubberWon(): void {
   play((ctx) => {
     fogHorn(ctx);
     noiseBurst(ctx, { duration: 1.3, filterFrequency: 1200, gain: 0.05, q: 0.4 });
+  });
+}
+
+/**
+ * A title unlocked: four bells up a major triad, with a shimmer over the top.
+ *
+ * **The hard constraint is not sounding like a made contract.** That one is a
+ * rising three-note triangle chime at 523/659/784, and an unlock lands seconds
+ * after it on the deal that earned it — two rising chimes in a row would read as
+ * one event stuttering. So this starts where that one *ends* and climbs an
+ * octave above it, in sine rather than triangle, which is rounder and reads as a
+ * bell where the other reads as a beep.
+ *
+ * The fourth note is the point: three notes is a cadence and resolves, four with
+ * the last one held is an announcement. The noise burst is high-passed to a
+ * sparkle rather than the broad swell under the fog horn — a title is a smaller
+ * thing than a rubber and should not borrow the crowd.
+ *
+ * The whole figure is offset by a quarter second so it arrives *after* whatever
+ * the deal itself had to say, rather than on top of it.
+ */
+export function playAchievement(): void {
+  play((ctx) => {
+    const start = 0.25;
+    // G5, B5, D6, G6 — the triad, then the octave, which is the one that lands.
+    const notes = [
+      { decay: 0.22, delay: start, frequency: 784, gain: 0.07 },
+      { decay: 0.22, delay: start + 0.09, frequency: 988, gain: 0.07 },
+      { decay: 0.24, delay: start + 0.18, frequency: 1175, gain: 0.08 },
+      { decay: 0.55, delay: start + 0.29, frequency: 1568, gain: 0.09 },
+    ];
+    for (const note of notes) {
+      tone(ctx, { ...note, type: "sine" });
+      // A quiet triangle doubling an octave down gives each bell a body a pure
+      // sine has none of, without making it a different instrument.
+      tone(ctx, { ...note, frequency: note.frequency / 2, gain: note.gain * 0.35, type: "triangle" });
+    }
+    noiseBurst(ctx, {
+      delay: start,
+      duration: 0.5,
+      filterFrequency: 5200,
+      filterType: "highpass",
+      gain: 0.02,
+      q: 0.6,
+    });
   });
 }

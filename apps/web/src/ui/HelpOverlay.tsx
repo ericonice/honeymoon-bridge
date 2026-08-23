@@ -143,6 +143,13 @@ export function HelpOverlay({ onClose, openDiscard }: HelpOverlayProps): React.J
             the draw you will have seen twenty-six cards and kept thirteen; remembering the other
             thirteen is meant to be part of playing well, not an oversight.
           </Rule>
+
+          <Rule title="The row of dots is a record of the choices">
+            Each of you has thirteen, one a turn, hollow until it is spent. What it is filled with
+            says which card was taken: blue for the face-up one, purple for the unseen gamble
+            {openDiscard ? ", green for a card off the discard pile" : ""}. Theirs is there for the
+            same reason — what somebody takes is public, and only the cards are not.
+          </Rule>
         </Section>
 
         <Section title="The auction" open={open.auction} onToggle={() => toggle("auction")}>

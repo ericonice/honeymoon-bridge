@@ -59,6 +59,20 @@ draw is judged against what you already hold.
 the subject of the sentence under it. The label now keeps what a sentence cannot say, whose turn it is
 and whether they are vulnerable, and the sentence finishes it as a clause.
 
+**Both players get a row of thirteen dots, and a spent one says which card that turn took.** The
+row began as a progress bar for your own turns and that is the smaller half of what it can be. The
+choice a turn makes is public — the opponent sees what you took, never the cards — so thirteen dots
+are a record of how somebody has been playing the draw rather than only how far through it they are.
+Colour carries it, because shape is already spoken for: filled is a turn spent and hollow a turn
+still ahead, and "how many are left" has to stay readable at a glance. Blue for the face-up card,
+purple for the unseen gamble, green for a card taken off the discard pile under §3.6b — the
+distinction that matters being *how much was known at the moment of the decision*, which is the whole
+of what this phase asks. Amber is not available for any of them: this screen spends amber on one idea
+only, "it is your move", and the dot for the turn being decided is one of the three places it says
+so. The opponent's track therefore has no amber dot; their own seat label is what says the turn is
+theirs. The rows sit mirrored — hand, dots, name on their side; name, dots, hand on yours — and the
+help screen carries the one sentence that names the colours.
+
 **Shrinking the piles to buy that height back does not work, and was tried.** A compact strip — a
 small stack with the number beside it — reclaims about 120px for the choices below, on the reasoning
 that the deck's count is derivable from the turn track and the opponent's hand row anyway. It reads
@@ -162,8 +176,8 @@ naming the opponent's hand, the two piles, the cards on offer, and the hand you 
 exists because roughly half the draw screen carries no label at all. The three cards do say "Last
 discard", "Face up" and "Unseen" — but the row of face-down cards along the top does not say whose it
 is, the piles do not say why they matter, and the row of dots above your own name, which is your
-thirteen turns, says nothing whatever. A tour is exactly the right instrument for that and the wrong
-one for anything else.
+thirteen turns, says nothing whatever on its own. A tour is exactly the right instrument for that and
+the wrong one for anything else.
 
 The **notes** then land on the second and third turns, each about something that has just happened:
 what became of the card you threw, and that half the deck never appears. They are notes rather than
@@ -243,6 +257,47 @@ Full contract bridge auction once both hands are complete.
   auction is a purely competitive negotiation over the contract. Stayman, transfers and the
   rest of the convention apparatus are meaningless here and are explicitly out of scope.
 - A deal passed out by both players is redealt, with the same player drawing first.
+
+**A suit's colour carries exactly one bit: red or black.** That is its whole job in bridge — the
+shape says spade, and the colour only has to say "not a red suit". White carries that bit perfectly
+well, so a white spade in running text is the correct ink for the table and costs a reader nothing.
+The app therefore keeps two inks per ground: the cards' black and printed red on paper, and the
+table's own body colour with a lighter red on felt.
+
+**Matching the cards' ink matters only where the glyph stands amongst cards.** That is the auction's
+five strain tiles, and only those: five tap targets standing for suits, inches below thirteen real
+cards where the identical glyph is black. That mismatch is visible, and it was the original
+complaint. They are drawn on real card stock and take the cards' inks, so the black suits are black
+there. A selected strain stays amber, which is also a light ground, so the ink no longer changes
+value between the two states as it had to while one of them was dark.
+
+**Four attempts to make every suit in the app black went past that one-bit argument, and all four are
+worth recording so they are not tried again.** A chip of paper behind each name reads as specks of
+white on a large field of blue. A paper-coloured rim around each name reads as a sticker cut out and
+laid on the felt, worst where the name is smallest because the rim is a fixed width. Printed ink
+straight onto the table is a silhouette. And washed surfaces behind the contract bar, the scorepad,
+the settled contract and a deal's result *worked* — and turned the app's dark table into a lighter
+one, permanently, on every screen, to fix a mismatch nobody could see. The last of those was built
+and deployed before being reverted, which is the honest reason this paragraph is long.
+
+The general lesson, which cost more than the feature: **a local complaint deserves a local fix.**
+"Spades look wrong on the bidding screen" was true and specific. Generalising it to "spades are
+always black" turned one visible mismatch into a rule that then demanded a mechanism for every place
+the app names a card, and every mechanism was worse than a white glyph nobody was misreading.
+
+One surface survives besides the strain tiles, and not as an exception to any of this: the auction
+record is written on a washed scorecard, in `AuctionPhase` while it is being made and in the bidding
+overlay when it is recalled during play. A two-column record of an auction *is* a scorecard and looks
+like one; the black suits that fall out of it are a side effect and were never the reason to keep it.
+The wash is paper at 55% so it composites with whatever is behind it, which is what lets one value
+work over both themes and over the darker ground inside an overlay.
+
+A test walks a whole deal asserting each red suit takes the red of the ground it is on and never the
+other one. Both are red, so nothing but a walk like that would catch a swap.
+
+Pass, Double and Redouble stay plain words throughout. They are calls *about* a card rather than
+cards, nothing about them was ever hard to read, and it keeps two different kinds of thing looking
+different.
 
 ### 1.6 Play
 

@@ -1,10 +1,23 @@
-import type { MatchFormat } from "@hb/engine";
+import type { MatchFormat, Unlock } from "@hb/engine";
 import { useState } from "react";
 import { BOT_RELEASE } from "../bot/release.js";
 import type { CardColor } from "../game/cardColor.js";
 import type { Boldness, DrawStyle, Pace, Strength } from "../game/identity.js";
 import type { Theme } from "../game/theme.js";
+import { playAchievement } from "../game/soundEffects.js";
+import { AchievementToast } from "./AchievementToast.js";
 import { HandLogsOverlay } from "./HandLogsOverlay.js";
+
+/**
+ * One of each tier for the preview below, from three different families so the
+ * titles are not three variations of one line. Real, existing unlocks rather
+ * than invented ones, so what the preview shows is what an unlock looks like.
+ */
+const PREVIEW_UNLOCKS: readonly Unlock[] = [
+  { achievement: "slam", tier: "gold" },
+  { achievement: "hands-played", tier: "silver" },
+  { achievement: "two-suiter", tier: "bronze" },
+];
 
 export interface SettingsOverlayProps {
   readonly cardColor: CardColor;
@@ -170,6 +183,7 @@ export function SettingsOverlay({
   theme,
 }: SettingsOverlayProps): React.JSX.Element {
   const [showingHandLogs, setShowingHandLogs] = useState(false);
+  const [previewUnlocks, setPreviewUnlocks] = useState<readonly Unlock[]>([]);
 
   return (
     <div className="safe-inset absolute inset-0 z-30 flex flex-col bg-table-dark/97">
@@ -363,6 +377,31 @@ export function SettingsOverlay({
                 onChange={onDevToolsChange}
               />
 
+              {/* An unlock is a rare event — the counter families cross at 50,
+                  250 and 1000, and most of the rest are once-ever — so the one
+                  thing that cannot be checked by playing is the notification
+                  itself. This shows all three tiers at once, which is also the
+                  only way to compare the metals side by side, and plays the
+                  sound.
+
+                  It exercises the toast and the cue, not the detection: whether
+                  a real unlock reaches `justUnlocked` is `useAchievementTracker`
+                  and the server's business, and nothing here stands in for it. */}
+              <button
+                type="button"
+                className="w-full rounded-xl border border-white/15 px-4 py-3 text-left"
+                onClick={() => {
+                  setPreviewUnlocks(PREVIEW_UNLOCKS);
+                  playAchievement();
+                }}
+              >
+                <span className="block text-base font-medium">Preview an unlock</span>
+                <span className="mt-0.5 block text-xs text-white/55">
+                  Shows the notification with a bronze, a silver and a gold, and plays the sound it
+                  arrives with.
+                </span>
+              </button>
+
               {/* Raw for now — see `HandLogsOverlay`. What a later pass will
                   actually assess the bot against, not a preference. */}
               <button
@@ -408,6 +447,13 @@ export function SettingsOverlay({
           Close
         </button>
       </div>
+
+      <AchievementToast
+        unlocked={previewUnlocks}
+        onDismiss={() => {
+          setPreviewUnlocks([]);
+        }}
+      />
 
       {showingHandLogs ? (
         <HandLogsOverlay

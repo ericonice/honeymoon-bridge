@@ -246,19 +246,30 @@ function RecentMatches({ signedIn }: { readonly signedIn: boolean }): React.JSX.
  * §2.2 arrived at for leaving a game, and for the same reason: a warning that
  * does not say what goes only teaches people to tap through warnings.
  *
- * What it names is the part that surprises: a rubber against a person stays on
- * *their* record. It is one row holding both sides of a game they also played,
- * and taking a win off somebody else's scoreboard is not this button's to do.
+ * A rubber against a person stays on *their* record: it is one row holding both
+ * sides of a game they also played, and taking a win off somebody else's
+ * scoreboard is not this button's to do. That is named because nobody would
+ * guess it.
+ *
+ * Achievements are a checkbox rather than a consequence. The two wishes are
+ * genuinely different: a record is relative and ongoing, so clearing it is a
+ * fresh start against the people you play — while a collection of titles has no
+ * fresh start, and somebody starting a new season has no reason to give up a
+ * Grand Slam they made in March. Off by default, because that is the less
+ * destructive of the two and because the sentence above already promises
+ * enough. Still one control rather than two: a second reset button elsewhere
+ * would be two destructive things for one idea.
  */
 function Reset({ onDone }: { onDone(): void }): React.JSX.Element {
   const [asking, setAsking] = useState(false);
   const [working, setWorking] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [alsoAchievements, setAlsoAchievements] = useState(false);
 
   const go = async (): Promise<void> => {
     setWorking(true);
     setFailed(false);
-    const forgotten = await resetRecord().catch(() => null);
+    const forgotten = await resetRecord({ achievements: alsoAchievements }).catch(() => null);
     setWorking(false);
     if (forgotten === null) {
       setFailed(true);
@@ -288,6 +299,23 @@ function Reset({ onDone }: { onDone(): void }): React.JSX.Element {
         Forget every match on your record? Games against the computer are deleted outright. Games
         against people leave your record but stay on theirs — they played them too.
       </p>
+      {/* A checkbox rather than a line of prose, because it is a decision and
+          not a warning. Labelled with what is lost rather than with the word
+          "achievements" alone: "every title and every count" is the part worth
+          thinking about for a second. */}
+      <label className="mt-3 flex items-start gap-2.5">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 shrink-0 accent-amber-200"
+          checked={alsoAchievements}
+          onChange={(event) => {
+            setAlsoAchievements(event.target.checked);
+          }}
+        />
+        <span className="text-sm text-white/70">
+          Reset achievements too — every title and every count back to nothing.
+        </span>
+      </label>
       <p className="mt-1 text-xs text-white/40">This cannot be undone.</p>
       <div className="mt-3 flex gap-2">
         <button
@@ -307,6 +335,7 @@ function Reset({ onDone }: { onDone(): void }): React.JSX.Element {
           onClick={() => {
             setAsking(false);
             setFailed(false);
+            setAlsoAchievements(false);
           }}
         >
           Keep them

@@ -283,12 +283,29 @@ export class Table extends DurableObject<Env> {
       return;
     }
 
+    // Everything from here on is bookkeeping about a move the engine has
+    // already accepted, and none of it may cost the move. The one action in a
+    // whole deal that touches the database is the one that completes it — the
+    // achievements below — so a database that is slow, unreachable or a
+    // migration behind stops exactly one card from being playable: the last
+    // one, every deal, with the client shown nothing at all because the state
+    // it is waiting for is never saved and never broadcast. Same rule as
+    // `#recordIfWon`, which has said so all along; this is the other half of it.
     const summary = summarize(next);
     const recorded = await this.#recordIfWon(stored, summary);
-    await this.#applyAchievements(stored, next, summary);
+    let applied = true;
+    try {
+      await this.#applyAchievements(stored, next, summary);
+    } catch (error) {
+      applied = false;
+      console.error("could not apply achievements", (error as Error).message);
+    }
     await this.#save({
       ...stored,
-      dealAchievementsApplied: next.deal.phase === "complete",
+      // Only a run that actually got through counts as done, so a resent
+      // action retries rather than silently skipping — the flag is there to
+      // stop double-counting, not to record an attempt.
+      dealAchievementsApplied: next.deal.phase === "complete" && applied,
       recorded,
       table: next,
     });

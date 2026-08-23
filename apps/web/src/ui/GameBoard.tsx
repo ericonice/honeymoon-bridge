@@ -274,27 +274,34 @@ function useShownPhase(session: GameSession, peeking: boolean): ShownPhase {
   const theirCardsShowing = peeking && session.opponentHand !== null;
   const meIsDeclarer = session.view.contract?.declarer === session.view.me;
 
-  // A layout effect, not a plain one: `actual` having already moved on is
-  // what this render shows unless `held` catches it first, and a plain
-  // effect only runs after the browser has painted that unheld frame — a
-  // real flash of the phase just left showing the phase just reached, gone
-  // as soon as it corrects itself. Layout effects run before paint, so the
-  // correction is never visible to begin with.
+  // Decided during the render that first sees the change, not in the effect
+  // that records it. A hold is a pure function of the transition, so there is
+  // nothing here to wait for — and waiting costs more than a frame. The effect
+  // below runs *after* the render it would correct has been committed, so for
+  // that one commit this hook reports the phase the engine has reached rather
+  // than the one still on screen: a phase nobody ever sees, that anything
+  // reading it from an effect of its own nonetheless does. The victory horn
+  // sounded on exactly that — a "complete" that was never a screen — and then
+  // again when the screen actually arrived. See `GameSounds.showingFinalScore`.
+  const left = previous.current;
+  const changed = left !== actual;
+  const beat = changed
+    ? finalBeat({
+        claimedFinish: actual === "complete" && session.view.completedTricks.length < 13,
+        entered: actual,
+        lastDraw,
+        left,
+        meIsDeclarer,
+        theirCardsShowing,
+      })
+    : null;
+
   useLayoutEffect(() => {
-    const left = previous.current;
-    previous.current = actual;
-    if (left === actual) {
+    if (!changed) {
       return;
     }
+    previous.current = actual;
 
-    const beat = finalBeat({
-      claimedFinish: actual === "complete" && session.view.completedTricks.length < 13,
-      entered: actual,
-      lastDraw,
-      left,
-      meIsDeclarer,
-      theirCardsShowing,
-    });
     if (beat === null) {
       // Also clears whatever an *earlier* transition was holding: a shortcut
       // can reach this phase before that hold's own timer ever fires, and its
@@ -326,8 +333,17 @@ function useShownPhase(session: GameSession, peeking: boolean): ShownPhase {
   }, [actual]);
 
   return {
-    phase: held ?? actual,
-    release: dismissable
+    // On the render that first sees a transition, `beat` already says which
+    // phase belongs on screen, and `held` is still whatever the *previous*
+    // transition left there — so it is deliberately not consulted until the
+    // effect above has caught up. Reading it there was a frame of the last
+    // phase held open at the start of the next one, which is the same bug in
+    // the other direction.
+    phase: changed ? (beat !== null ? left : actual) : (held ?? actual),
+    // Read off `beat` on that same first render, for the same reason: a screen
+    // held open for a tap that has no way to take one, even for one frame, is
+    // a button that is there and does nothing.
+    release: (changed ? beat?.kind === "dismissed" : dismissable)
       ? () => {
           setDismissable(false);
           setHeld(null);
@@ -384,10 +400,15 @@ function useClaimResult(view: PlayerView): { readonly clear: () => void; readonl
 
 /**
  * Whether the footer owes its own reveal yet — see `PlayPhase`'s
- * `onHandsSettled`, which is what actually flips this. Reset the moment the
- * engine reaches "complete" for a fresh deal, so a stale `true` left over
- * from the last one cannot make this deal's footer jump ahead of its own
- * last trick clearing away.
+ * `onHandsSettled`, which is what actually flips this.
+ *
+ * Cleared the moment the deal *leaves* "complete", not when it reaches it.
+ * Clearing it on arrival looked equivalent and was not: by then it is already
+ * true from the deal before, so the guard against a stale `true` never fired
+ * on the one transition it was written for. The reveal of the next deal's
+ * thirteenth trick was therefore on screen for the render that finished it,
+ * before its own last trick had gone anywhere. A fresh deal is the honest
+ * place to reset, and there is no deal in between for it to be wrong in.
  */
 function useHandsSettled(view: PlayerView): { markSettled(): void; readonly settled: boolean } {
   const [settled, setSettled] = useState(false);
@@ -396,7 +417,7 @@ function useHandsSettled(view: PlayerView): { markSettled(): void; readonly sett
   useEffect(() => {
     const left = previous.current;
     previous.current = view.phase;
-    if (left !== "complete" && view.phase === "complete") {
+    if (left === "complete" && view.phase !== "complete") {
       setSettled(false);
     }
   }, [view.phase]);

@@ -21,6 +21,23 @@
   --color-ink-red: #c8102e;
   --color-table: #14324f;
   --color-table-dark: #081827;
+  /* Bronze, silver and gold are the whole of the achievement ranking, and for a
+     long time all three were drawn in one amber — so holding a gold looked
+     exactly like holding a bronze, on the notification *and* on the screen you
+     go to in order to look at what you have earned. These are the metals.
+
+     Warm/cool/warm on purpose: bronze and gold are both warm and would be hard
+     to separate at badge size on their own, so silver sitting cool between them
+     is what makes the three read as a ranking rather than as three browns. Each
+     is light enough to carry small text on the dark table and to tint a wash
+     behind it at low opacity.
+
+     Gold is amber-adjacent, which elsewhere in the app means "it is your move".
+     That rule is about the *board*; these appear on the achievements screen and
+     in a modal over it, where nothing is anybody's move. */
+  --color-tier-bronze: #d2864f;
+  --color-tier-silver: #c3cfda;
+  --color-tier-gold: #e8b93f;
 }
 
 :root {
@@ -56,6 +73,12 @@ html[data-theme="felt"] {
   --color-ink-red: oklch(57.7% 0.245 27.325);
   --color-table: #064e3b;
   --color-table-dark: #033024;
+  /* A touch deeper than the rink's, because green is a warmer ground than blue
+     and the same metals read washed out on it. Silver especially: on ice it can
+     be near-white, on baize it needs to be a grey somebody would call silver. */
+  --color-tier-bronze: #c1743d;
+  --color-tier-silver: #b2c0cc;
+  --color-tier-gold: #dcac2c;
   --table-sheen: none;
 }
 
@@ -105,6 +128,25 @@ body {
 .card-face {
   background-color: var(--color-card-face);
   background-image: var(--card-face-pattern);
+}
+
+/* The auction record, written down.
+
+   Not a rule about suit colour — that was tried in every direction and the
+   answer is in `CardText`. This is a surface because a two-column record of an
+   auction *is* a scorecard, and looks like one on paper and like loose text on
+   felt. The black suits it happens to make black are a side effect, and were
+   never the reason to keep it.
+
+   Paper at 55% rather than solid, so it composites with whatever is behind it:
+   it reads as part of the table rather than a card laid on one, and a single
+   value works over both themes' tables and over the darker ground inside an
+   overlay, where the same record is recalled during play. It is the only dial.
+   Muted text on it is the same ink at lower opacity rather than a second
+   colour. */
+.scorecard {
+  background-color: color-mix(in oklab, var(--color-card-face) 55%, transparent);
+  color: var(--color-ink-black);
 }
 
 /* Kill the grey flash and the double-tap-to-zoom delay on every tap target. */

@@ -3,7 +3,8 @@ import type { AchievementId, CounterKey, Tier } from "@hb/engine";
 import { ACHIEVEMENT_ORDER, ACHIEVEMENTS, tierLabel } from "../game/labels.js";
 import type { AchievementSnapshot } from "../game/achievements.js";
 import { useAchievements } from "../game/achievements.js";
-import { AchievementIcon } from "./icons.js";
+import { FamilyIcon } from "./icons.js";
+import { TIER_FILL, TIER_INK, TIER_UNHELD, bestHeld } from "./tiers.js";
 
 export interface AchievementsProps {
   readonly signedIn: boolean;
@@ -40,13 +41,18 @@ function FamilyCard({
 }): React.JSX.Element {
   const info = ACHIEVEMENTS[id];
   const earnedTiers = TIERS.filter((tier) => tier in info.tiers);
-  const anyHeld = earnedTiers.some((tier) => held.has(unlockKey({ achievement: id, tier })));
+  // The family's own icon takes the metal of the *best* tier held rather than a
+  // flat "any of them". Scanning this screen is mostly asking "where am I doing
+  // well", and one glance down a column of metals answers it where a column of
+  // identical amber never could.
+  const best = bestHeld((tier) => held.has(unlockKey({ achievement: id, tier })));
 
   return (
     <div className="rounded-xl border border-white/10 px-4 py-3">
       <div className="flex items-start gap-3">
-        <AchievementIcon
-          className={`mt-0.5 h-6 w-6 shrink-0 ${anyHeld ? "text-amber-200" : "text-white/25"}`}
+        <FamilyIcon
+          achievement={id}
+          className={`mt-0.5 h-6 w-6 shrink-0 ${best === null ? "text-white/25" : TIER_INK[best]}`}
         />
         <div className="min-w-0 flex-1">
           <span className="block text-base font-semibold">{info.name}</span>
@@ -68,9 +74,7 @@ function FamilyCard({
                 <div
                   key={tier}
                   className={`rounded-lg px-2 py-1.5 text-center ${
-                    unlocked
-                      ? "bg-amber-200/15 text-amber-100"
-                      : "bg-white/5 text-white/35"
+                    unlocked ? `${TIER_FILL[tier]} ${TIER_INK[tier]}` : TIER_UNHELD
                   }`}
                 >
                   <div className="text-[11px] font-semibold">{tierLabel(tier)}</div>

@@ -22,22 +22,27 @@ export function BiddingOverlay({ onClose, opponentName, view }: BiddingOverlayPr
 
   return (
     <Overlay title="Bidding" onClose={onClose}>
-      <div className="grid grid-cols-2 gap-x-6 text-sm">
-        <p className="pb-1 text-xs text-white/45">You</p>
-        <p className="pb-1 text-xs text-white/45">{opponentName}</p>
-        {view.auction.map((entry, index) => (
-          // The auction is append-only, so the index is a stable identity.
-          <p key={index} className={entry.by === view.me ? "col-start-1" : "col-start-2"}>
-            <CallText call={entry.call} on="dark" />
+      {/* The same scorecard `AuctionPhase` writes this record on while it is
+          being made — §1.5. One surface for the whole account rather than a mark
+          per call, which is what lets every black suit in here be black. */}
+      <div className="scorecard rounded-xl px-3 py-2">
+        <div className="grid grid-cols-2 gap-x-6 text-sm">
+          <p className="pb-1 text-xs text-ink-black/55">You</p>
+          <p className="pb-1 text-xs text-ink-black/55">{opponentName}</p>
+          {view.auction.map((entry, index) => (
+            // The auction is append-only, so the index is a stable identity.
+            <p key={index} className={entry.by === view.me ? "col-start-1" : "col-start-2"}>
+              <CallText call={entry.call} on="light" />
+            </p>
+          ))}
+        </div>
+        {contract === null ? null : (
+          <p className="mt-2 border-t border-ink-black/15 pt-2 text-sm text-ink-black/75">
+            <ContractText contract={contract} on="light" />{" "}
+            {contract.declarer === view.me ? "by you" : `by ${opponentName}`}
           </p>
-        ))}
+        )}
       </div>
-      {contract === null ? null : (
-        <p className="mt-3 border-t border-white/10 pt-3 text-sm text-white/70">
-          <ContractText contract={contract} on="dark" />{" "}
-          {contract.declarer === view.me ? "by you" : `by ${opponentName}`}
-        </p>
-      )}
     </Overlay>
   );
 }

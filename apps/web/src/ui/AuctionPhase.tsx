@@ -42,8 +42,46 @@ function toneFor(selected: boolean): string {
 }
 
 /**
- * The auction so far, in two columns. Calls strictly alternate, so each one
- * belongs to a fixed column and the rows line up without any bookkeeping.
+ * The strain buttons are printed on card stock, and they are the one row in the
+ * app that had to be.
+ *
+ * A suit symbol on the table has to be drawn white to be seen, and these five
+ * sit inches below thirteen real cards where the identical glyph is black. That
+ * mismatch is visible, and it is visible *here* rather than in prose because
+ * these are tap targets standing for suits — objects amongst objects, not a
+ * sentence about one.
+ *
+ * So the row borrows `card-face`, the class the cards themselves use, picking up
+ * whichever paper and pattern the theme is on, and takes the cards' inks with
+ * it: `text-ink-black`, or `redTone("light")` for a red suit. Selection stays
+ * amber, which is also a light ground, so the ink no longer changes value
+ * between the two states as it had to while one of them was dark.
+ *
+ * **This does not generalise, and trying to cost a long detour.** See
+ * `CardText`'s own note: a suit's colour carries one bit, red or black, and
+ * white carries it perfectly well in running text. Paper belongs where a glyph
+ * stands amongst cards, which is here and nowhere else.
+ */
+function strainTone(selected: boolean): string {
+  return `text-ink-black ${selected ? "bg-amber-400" : "card-face"}`;
+}
+
+/**
+ * The auction so far, written onto a scorecard.
+ *
+ * Two columns, because calls strictly alternate: each one belongs to a fixed
+ * column and the rows line up without any bookkeeping.
+ *
+ * **The surface is what makes a spade black here** (§1.5). A black suit cannot
+ * be printed black on the table, and giving each call its own little chip of
+ * paper was tried and reads as a row of specks — so the record gets *one*
+ * surface instead of six, and every call on it takes the cards' own inks. A
+ * spade in the auction record is then the same black as the spade in your hand.
+ *
+ * Paper at 55% rather than solid, so it composites with whatever table is
+ * behind it: it reads as a ruled area the auction is written into rather than a
+ * white card laid on top of one, and it needs no per-theme value of its own.
+ * That figure is the only dial here — lower melds further and costs contrast.
  */
 function History({
   opponentName,
@@ -54,17 +92,21 @@ function History({
 }): React.JSX.Element {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
-      <div className="grid grid-cols-2 gap-x-6 text-sm">
-        <p className="pb-1 text-xs text-white/45">You</p>
-        <p className="pb-1 text-xs text-white/45">{opponentName}</p>
-        {view.auction.map((entry, index) => (
-          // The auction is append-only, so the index is a stable identity.
-          <p key={index} className={entry.by === view.me ? "col-start-1" : "col-start-2"}>
-            <CallText call={entry.call} on="dark" />
-          </p>
-        ))}
+      <div className="scorecard rounded-xl px-3 py-2">
+        <div className="grid grid-cols-2 gap-x-6 text-sm">
+          <p className="pb-1 text-xs text-ink-black/55">You</p>
+          <p className="pb-1 text-xs text-ink-black/55">{opponentName}</p>
+          {view.auction.map((entry, index) => (
+            // The auction is append-only, so the index is a stable identity.
+            <p key={index} className={entry.by === view.me ? "col-start-1" : "col-start-2"}>
+              <CallText call={entry.call} on="light" />
+            </p>
+          ))}
+        </div>
+        {view.auction.length === 0 ? (
+          <p className="text-sm text-ink-black/50">No calls yet.</p>
+        ) : null}
       </div>
-      {view.auction.length === 0 ? <p className="pt-2 text-sm text-white/40">No calls yet.</p> : null}
     </div>
   );
 }
@@ -185,7 +227,7 @@ export function AuctionPhase({
                 <button
                   key={strain}
                   type="button"
-                  className={`${BUTTON} ${toneFor(selected)}`}
+                  className={`${BUTTON} ${strainTone(selected)}`}
                   disabled={!myTurn || !open}
                   onClick={() => {
                     if (activeLevel !== null) {
@@ -193,11 +235,11 @@ export function AuctionPhase({
                     }
                   }}
                 >
-                  {/* Selecting a strain turns the button amber, which is a light
-                      ground — so the red changes value rather than switching off.
-                      Dropping it entirely printed hearts and diamonds in black,
-                      which reads as a different bid. */}
-                  <span className={strainIsRed(strain) ? redTone(selected ? "light" : "dark") : ""}>
+                  {/* Both grounds this button has are light, so this is the
+                      printed red in either state — it no longer changes value
+                      when the tile turns amber. A black suit and NT inherit
+                      `text-ink-black` from the button — see `strainTone`. */}
+                  <span className={strainIsRed(strain) ? redTone("light") : ""}>
                     {strainSymbol(strain)}
                   </span>
                 </button>

@@ -92,13 +92,19 @@ export async function reportRobotRubber(rubber: RobotRubber): Promise<void> {
  * are one row shared with somebody who also played them, and taking a match off
  * their record is not this button's to do.
  */
-export async function resetRecord(): Promise<number | null> {
+export async function resetRecord({
+  achievements,
+}: {
+  /** Whether the titles and counts go with the matches. Asked, never assumed. */
+  readonly achievements: boolean;
+}): Promise<number | null> {
   const session = storedSession();
   if (session === null) {
     return null;
   }
   const response = await fetch(resetRecordUrl(), {
-    headers: { Authorization: `Bearer ${session}` },
+    body: JSON.stringify({ achievements }),
+    headers: { Authorization: `Bearer ${session}`, "content-type": "application/json" },
     method: "POST",
   });
   if (!response.ok) {

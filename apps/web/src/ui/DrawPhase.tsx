@@ -1,5 +1,5 @@
 import { cardId } from "@hb/engine";
-import type { Card, DrawChoice, DrawTake, Pair, PlayerView } from "@hb/engine";
+import type { Card, DrawChoice, DrawTake, Pair, PlayerId, PlayerView } from "@hb/engine";
 import { motion } from "framer-motion";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DRAW_TIMING, currentPacing, drawPlayout } from "../game/timing.js";
@@ -284,29 +284,60 @@ function TheirPair({
 const TURNS_PER_PLAYER = 13;
 
 /**
- * Your thirteen turns in the draw, spent one at a time as your hand fills.
+ * What a spent turn's dot is filled with: which of the cards on offer it took.
  *
- * Hand size already counts them — every turn nets exactly one card, kept or
- * not — so this reads that count rather than tracking a second one. A spent
- * turn fills its dot solid, the way a card fills a hand; a hollow ring is a
- * turn still ahead. Shape carries "how many remain" rather than color, since
- * a hollow ring reads as open at a glance in a way a merely dim dot does
- * not. Monochrome deliberately: amber appears on exactly one dot, the current
- * turn, matching the one thing `SeatLabel` uses it for — "it's your move" —
- * rather than being spent decorating twelve dots that are not.
+ * Color, because shape is already spoken for — filled is a turn spent and
+ * hollow a turn still ahead, and "how many are left" has to stay readable at a
+ * glance. Amber is not available either: this screen spends amber on exactly
+ * one idea, "it is your move".
+ *
+ * The distinction worth drawing is how much was known at the moment of the
+ * decision, which is the whole of what this phase asks. A card that was face up
+ * and a card that was not are different bets, and thirteen of them in a row is a
+ * record of how somebody played the draw rather than merely how far through it
+ * they are. The pile take gets its own fill rather than sharing the face-up one:
+ * it is equally a seen card, but it is the only choice that takes a card *the
+ * other player threw*, and under the house rule that is the interesting half of
+ * what happened.
+ */
+const SPENT_DOT: Record<DrawChoice, string> = {
+  "kept-first": "bg-sky-300",
+  "took-discard": "bg-emerald-300",
+  "took-second": "bg-violet-400",
+};
+
+/** One seat's draw turns, oldest first. Public: the choice is, the cards are not. */
+function choicesFor(view: PlayerView, seat: PlayerId): DrawChoice[] {
+  return view.drawTurns.filter((turn) => turn.by === seat).map((turn) => turn.choice);
+}
+
+/**
+ * Thirteen turns in the draw, spent one at a time as a hand fills.
+ *
+ * Drawn for both seats. Theirs is the same information the commentary line
+ * gives — the choice is public, the cards never are — except that the line only
+ * ever says what they did *last*, and thirteen of these say what they have been
+ * doing. Nothing here is a widening of what crosses the wire: `drawTurns` has
+ * always carried every choice both ways.
+ *
+ * `live` marks the turn currently being decided, and is only ever passed for
+ * this seat — it is amber, and amber on this screen means "it's your move" and
+ * nothing else. Their own seat label is what says the turn is theirs.
  */
 function TurnTrack({
-  active,
-  taken,
+  choices,
+  live,
 }: {
-  readonly active: boolean;
-  readonly taken: number;
+  readonly choices: readonly DrawChoice[];
+  readonly live: boolean;
 }): React.JSX.Element {
+  const taken = choices.length;
+
   return (
     <div className="flex items-center gap-1">
       {Array.from({ length: TURNS_PER_PLAYER }, (_, index) => {
-        const spent = index < taken;
-        if (index === taken && active) {
+        const choice = choices[index];
+        if (index === taken && live) {
           return (
             <motion.span
               key={index}
@@ -319,7 +350,9 @@ function TurnTrack({
         return (
           <span
             key={index}
-            className={`h-1.5 w-1.5 rounded-full ${spent ? "bg-white/70" : "border border-white/40"}`}
+            className={`h-1.5 w-1.5 rounded-full ${
+              choice === undefined ? "border border-white/40" : SPENT_DOT[choice]
+            }`}
           />
         );
       })}
@@ -829,6 +862,11 @@ export function DrawPhase({
           <TheirPair cardOne={theirShown} oneRef={theirOneRef} twoRef={theirTwoRef} />
         ) : null}
 
+        {/* Between their hand and their label, which is where yours sits between
+            your label and your hand — the same three things in the same order,
+            reflected. */}
+        <TurnTrack choices={choicesFor(view, view.opponent)} live={false} />
+
         {/* Who they are and what they just did, on one line, directly under whatever
             of theirs is on screen — the pair while it is showing, the face-down hand
             otherwise. These were two bands, and the opponent's name was in both: once
@@ -945,7 +983,7 @@ export function DrawPhase({
 
       <div ref={youRef} className="flex flex-col items-center gap-1">
         <SeatLabel active={decidable} name="You" vulnerable={vulnerable[view.me]} />
-        <TurnTrack active={decidable} taken={view.handSizes[view.me]} />
+        <TurnTrack choices={choicesFor(view, view.me)} live={decidable} />
       </div>
 
       {/* Where cards headed for a hand are aimed: yours pinned to the bottom of

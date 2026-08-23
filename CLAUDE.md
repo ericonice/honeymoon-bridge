@@ -242,6 +242,39 @@ from ordinary bridge:
 - No section-header banner comments. `describe` blocks are the structure.
 - Prefer seeded deals and deterministic assertions over anything probabilistic. When a test needs a
   specific hand, construct it directly rather than searching seeds for one.
+- **`suitInk.test.ts` is the second blind walker in the repo, and it is blind for the same reason
+  `packages/protocol/test/snapshot.test.ts` is.** §1.5 keeps two reds, one per ground, and both are
+  red — so a swap is invisible to a person and catchable only by walking the rendered text of a whole
+  deal, working out what ground each glyph stands on, and checking the red against it. No component
+  is asked anything, so a new screen that names a card is covered without anyone updating this.
+
+  **It passed vacuously twice, and catching that is the reason it counts what it found.** Once
+  because it did not know a new wash class was a light ground; once because the auction it drives bid
+  clubs, so it never put a red suit on the region under test at all. Both fixes are in it: the walk
+  deliberately bids a red strain, and the paper check names classes rather than opacities so the one
+  number that tunes them can move without breaking the test. A walker is only as good as what you
+  march past it.
+
+  It is also the smaller half of what it once asserted. The rule it was written for — every suit on
+  paper, everywhere — is gone; §1.5 has the four mechanisms tried, and why a white spade in prose was
+  right all along.
+
+- **The board itself is testable now, and `apps/web/test/support/board.ts` is how.** jsdom plus
+  Testing Library, `renderBoard` for a `GameBoard` fed a `GameSession` built exactly as
+  `networkSession.ts` builds one, over a `TableState` the test advances as the Durable Object would.
+  Files that use it carry `// @vitest-environment jsdom` and use `createElement` rather than JSX,
+  since `vitest.config.ts` collects only `*.test.ts` and has no React plugin.
+
+  It exists because "the last card cannot be played" was a report that no headless test could either
+  confirm or deny — the rules said the card was legal and the question was whether the screen would
+  take it. What it covers now: every card of several consecutive deals, from either seat, by real
+  pointer gestures as well as by click, with tap-to-select on and off, and with the seat opposite
+  moving before any animation has finished. Use it for anything phrased as "the UI will not let me",
+  and reach for the real `wrangler dev` above for anything phrased as "nothing happens".
+
+  Two things it deliberately does *not* model, so do not read a pass as covering them: React
+  `StrictMode`, which the real app runs under and which diverges enough in this harness to be
+  misleading, and the local session's bot, whose solver makes a whole rubber too slow to drive.
 
 ## Working agreements
 
@@ -273,11 +306,36 @@ keep-or-reject choice, and the animation is what shows you your own card 2, whic
 require and the first build silently omitted. All draw-phase pacing lives in `game/timing.ts` —
 tune there first if the 26 turns drag.
 
+**`useShownPhase` decides during render, and the reason is worth keeping.** It holds the outgoing
+phase so the last thing that happened in one gets the same ending as everything before it, and it
+used to set that hold in a layout effect. A layout effect runs before *paint*, which is what it was
+chosen for — but after *commit*, and that is a real difference: for one committed render the hook
+reported the phase the engine had reached rather than the one still on screen. Nobody saw it. Every
+passive effect reading it did, and the victory horn was keyed on exactly that — it sounded once on a
+"complete" that was never a screen, and again when the screen arrived. **A phase that has to be held
+is a pure function of the transition, so it belongs in the render, not in an effect after it.** The
+same change fixes it in the other direction too: a stale `held` was a frame of the last phase at the
+start of the next one.
+
+The horn is also armed once per *match* rather than on the rising edge of that screen, which is
+belt-and-braces on purpose: a final score can be reached, left and reached again — a remount, an
+effect either side of the release — without a second match having been won.
+
 **Done, unwired.** `packages/protocol` and `apps/server`. A Worker mints invite codes and routes
 a socket to one Durable Object per table; the object owns the `TableState`, deals the seeds,
 validates every action through the engine and sends each seat a `snapshotFor` projection. Sockets
 go through the Hibernation API, state is persisted so a rubber survives a deploy, and a token
 reclaims a seat after a drop.
+
+**Nothing after `applyTableAction` in `Table#act` may cost the move, and one thing did.** The
+achievements write was the only database work in a whole deal, it sat on the one action that
+completes one, and it was not wrapped — so a database that was slow, unreachable or a migration
+behind would take out exactly the last card of every deal, with the client shown nothing at all,
+because the state it was waiting for was never saved and never broadcast. `#recordIfWon` had said
+why this is wrong since it was written ("a rubber is a real thing that happened whether or not the
+database was reachable"); the rule just had not been applied to the neighbour added later. A failed
+run leaves `dealAchievementsApplied` false so a resent action retries — the flag is there to stop
+double-counting, not to record an attempt.
 
 Verified against a real `wrangler dev` — two seats, 26 draw turns, an out-of-turn action refused
 by the server, and a reconnect resuming mid-auction with the hand intact. `npm run dev --workspace
@@ -352,6 +410,71 @@ element and a 9999px `box-shadow` spread rather than four bands agreeing on a re
 the notes off `handSizes[me] + 1`, and a gap in the numbering would mean a walkthrough that never
 completes and so restarts every deal — there is a test for that. Done is stored when the *tour*
 finishes rather than the last note, so walking it and then leaving does not earn a second tour.
+
+**Achievements have three tiers and for a long time drew them all in one amber.** Bronze, silver and
+gold *is* the ranking, and both places that show it — the unlock notification and the Achievements
+screen you go to afterwards — rendered a held tier as `bg-amber-200/15 text-amber-100` regardless of
+which tier it was. So earning a gold looked exactly like earning a bronze, which is why the
+notification did not land as a reward: the one fact it was announcing was the one fact it did not
+draw. `--color-tier-*` are the metals, per theme, and `ui/tiers.ts` is the single vocabulary both
+screens read so they cannot drift apart again. Warm/cool/warm is deliberate — two warm metals are
+hard to separate at badge size, and silver sitting cool between them is what makes three colours read
+as a ranking.
+
+The toast is built around the badge rather than as a row, and has one control instead of three. What
+was *not* changed, having been argued for and then dropped: an unread mark on Home, moving the
+announcement inline into the hands reveal, and reserving ceremony for the rare tiers. All three were
+a redesign of the notification's architecture off a complaint about how it looked — and the premise
+was wrong anyway. Unlocks are rare (the counter families cross at 50, 250 and 1000; most of the rest
+are once-ever), so a modal every few sessions is a moment rather than an interruption.
+
+**An unlock has a sound now, and a way to be looked at without waiting for one.** The cue is four
+bells up a major triad with a shimmer over it, and the hard constraint was *not sounding like a made
+contract* — that one is a rising three-note triangle chime at 523/659/784 and an unlock lands seconds
+after it on the deal that earned it, so two rising chimes in a row would read as one event
+stuttering. This starts where that one ends, climbs an octave above it, and is sine rather than
+triangle, which reads as a bell where the other reads as a beep. The whole figure is offset a quarter
+second so it arrives *after* whatever the deal had to say.
+
+It fires on the rising edge of `justUnlocked`, not on "is non-empty" — the list accumulates, and over
+a network the server pushes deal unlocks and rubber unlocks as separate messages, both of which can
+land before anybody taps the notification away. That is one announcement. `test/unlockSound.test.ts`
+pins it, and it is the same bug shape as the double fog horn, which is why it has a test at all.
+
+**"Preview an unlock" in the testing panel** shows the notification with a bronze, a silver and a
+gold at once and plays the cue, because unlocks are far too rare to check by playing — and it is the
+only way to compare the three metals side by side. What it does *not* exercise is the detection:
+whether a real unlock reaches `justUnlocked` is `useAchievementTracker`'s business against the
+computer and the server's at a table, and nothing in the preview stands in for either.
+
+**Every family has its own glyph now, and the trophy stood for all thirteen before.** A Grand Slam
+and Hands Played were the same icon on both screens that show one, so the notification announced a
+title without saying what kind of thing it was. `FamilyIcon` in `icons.tsx` holds them; the trophy
+stays on Home, where it stands for the idea rather than for a family, and on Take the Rubber, which
+is the one achievement that actually is a trophy. Played/Won/Lost share a base — the same three cards
+with a chevron up, down, or absent — because they *are* one family of three and played is the
+superset. All thirteen are built from rectangles, straight lines and simple polygons rather than
+fitted curves: at badge size a bezier suit pip is a smudge, and a shape assembled from primitives is
+one whose result can be predicted from reading the source, which matters when there are thirteen of
+them and no way to see them from here.
+
+**Resetting achievements is a checkbox on the record reset, not a button of its own.** The argument
+for taking them automatically is real and is about the *counters*: Hands Played is a running tally of
+exactly the matches being deleted, so leaving it behind leaves a count of 257 outliving the 257 hands
+it counted. The argument against is about everything else — a record is relative and ongoing, so
+clearing it is a fresh start against the people you play, while a collection of titles has no fresh
+start and a new season is no reason to give up a Grand Slam made in March. Two different wishes, so
+the caller says which; off by default, since it is the less destructive reading.
+
+Server-side it is `{ achievements: boolean }` on `POST /api/results/reset`, and **absent means no** —
+which is both the safe reading of a body the route did not used to take and what an older client
+still in circulation via the service worker gets. Deletes are scoped to the verified account and
+nothing else can reach them: there is no admin path, and the three branches (off, on, no body at all)
+were each checked against real local D1 rather than read.
+
+**`REQUIREMENTS.md` has no section on achievements at all** — the feature was built without one, so
+what each family is for and why it exists lives only in `labels.ts`. Worth writing before the next
+change to them, since the code is currently its own source of truth here.
 
 **The bot bids, draws and plays.** What each part does is written up in `REQUIREMENTS.md` §2.1.
 
@@ -826,9 +949,50 @@ it is recomputable from a replayable deal. Log the deal, replay the bidder.
 
 - **Turn clock.** None in v1. Revisit if the 26-turn draw phase drags.
 
+### Deploying: the app and the server ship together
+
+**`npm run deploy --workspace @hb/web` and `npm run deploy --workspace @hb/server` are one release,
+and nothing enforces it.** The engine is shared source bundled into both, so a change to
+`packages/engine` changes what each end expects — and the wire carries no version, so a mismatch is
+not refused anywhere. It just misbehaves.
+
+This has already happened once and cost an afternoon of looking in the wrong place. `apps/web` was
+deployed from a commit that added the open discard; `apps/server` was not. Nothing errored on either
+side that anybody could see. What actually happened:
+
+- `draw-decide` had changed from `{ keep: boolean }` to `{ take: "first" | "second" | "discard" }`,
+  so the client's choice arrived as a field the deployed server did not read. `undefined` is falsy,
+  so **every draw turn of every networked deal was silently treated as a reject** — the player's
+  taps did nothing, and the hands were still thirteen cards, so nothing looked wrong.
+- `PlayerView` had gained `rules`, and `legalActionsForView` reads `view.rules.openDiscard` — so a
+  current client throws a `TypeError` on its first draw turn against an older server.
+- `DrawReveal.discarded` had gone from `Card | null` to `readonly Card[]`, and `drawPlayout` reads
+  `.length` — so the same client throws again on the opponent's first turn.
+
+Diagnosing this by reading the code was slow and diagnosing it by comparing timestamps was instant:
+`npx wrangler deployments list` in `apps/server` against `npx wrangler pages deployment list
+--project-name=honeymoon-bridge` in `apps/web`, then `git log --since=<the older one> -- packages/`.
+**If anything in `packages/` landed between the two deploys, stop looking for a bug and deploy.**
+
+The general shape, worth keeping: a networked bug report that the same code cannot reproduce locally
+is a question about *what is deployed* before it is a question about the code. The rules engine and
+the board were both exonerated here by tests that were written to accuse them.
+
 ### Testing on a phone
 
 Development is Windows + desktop Chrome with the DevTools device toolbar; two-player testing uses a
 normal window plus an incognito window, since separate `localStorage` means separate seats. Chrome
 cannot verify WebKit behavior (safe-area insets, `dvh` viewport, PWA install, background socket
 drops) — `REQUIREMENTS.md` §3.6 covers what needs a real iPhone and when.
+
+A local `wrangler dev` needs two things that are not in the repo: `SESSION_SECRET`, without which
+sign-in throws, and `DEV_SIGNIN`, which the `dev` script already passes. There is no `.dev.vars`, so
+`npm run dev --workspace @hb/server` alone cannot seat anybody — and neither can it before
+`npx wrangler d1 migrations apply honeymoon-bridge --local` has been run, since a table needs an
+account and an account needs the schema. Both are one-time setup that looks like a bug the first time.
+
+**The Durable Object is exercised against a real `wrangler dev`, and driving it takes twenty lines.**
+Two `WebSocket`s, `/api/auth/dev` for a session apiece, `/api/auth/name` (a seat is refused without
+one), `POST /api/tables` for a code, then `legalActionsForView` off each seat's own snapshot to pick
+the next action. Worth writing again whenever a networked report needs the server ruled in or out:
+it plays a full 26-turn draw, an auction and 13 tricks in about a second.

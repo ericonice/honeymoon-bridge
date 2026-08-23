@@ -76,8 +76,27 @@ export async function recordRubber(env: Env, rubber: FinishedRubber, now: number
  * that maps to nothing, since the token is the other way a row is recognized.
  * What the opponent keeps is a game against somebody with the name that was
  * used at the time, which is the truth of what happened.
+ *
+ * **Achievements are asked about rather than assumed**, which is `achievements`.
+ * The argument for taking them automatically is real and is about the counters:
+ * Hands Played is a running tally of exactly the matches being deleted, so
+ * leaving it behind leaves a count of 257 outliving the 257 hands it counted.
+ * The argument against is about everything else. A record is relative and
+ * ongoing, so wiping it is a fresh start, which is a coherent thing to want on
+ * its own; a collection of titles has no fresh start, and somebody starting a
+ * new season against their family has no reason to give up a Grand Slam they
+ * made in March. Those are two different wishes and the caller says which.
+ *
+ * Done last on purpose. Every step here can fail on its own — there is no
+ * transaction spanning them — so the order is chosen so that a partial failure
+ * lands on a state the app has already shipped and tolerated: matches gone,
+ * achievements still there. The reverse order would invent a new one.
  */
-export async function resetRecord(env: Env, accountId: string): Promise<number> {
+export async function resetRecord(
+  env: Env,
+  accountId: string,
+  { achievements }: { readonly achievements: boolean },
+): Promise<number> {
   const mine = "(account{seat} = ?1 OR token{seat} IN (SELECT token FROM account_tokens WHERE account_id = ?1))";
   const asSeat = (seat: 0 | 1): string => mine.replaceAll("{seat}", String(seat));
 
@@ -102,6 +121,18 @@ export async function resetRecord(env: Env, accountId: string): Promise<number> 
     detached += result.meta.changes;
   }
 
+  if (achievements) {
+    // Batched so the two halves of "what this account has earned" cannot come
+    // apart from each other, even though neither can be batched with the work
+    // above it.
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM achievement_counters WHERE account_id = ?").bind(accountId),
+      env.DB.prepare("DELETE FROM achievement_unlocks WHERE account_id = ?").bind(accountId),
+    ]);
+  }
+
+  // The number of *matches*, always — the achievements are asked about
+  // separately and the caller already knows what it asked for.
   return removed.meta.changes + detached;
 }
 

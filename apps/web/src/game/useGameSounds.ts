@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { GameSession } from "./session.js";
 import {
+  playAchievement,
   playCall,
   playCardPlayed,
   playContractResult,
@@ -37,7 +38,7 @@ export interface GameSounds {
 }
 
 export function useGameSounds({ enabled, session, showingFinalScore }: GameSounds): void {
-  const { lastDraw, rubber, score, view } = session;
+  const { justUnlocked, lastDraw, rubber, score, view } = session;
   const auction = view.auction;
 
   const drawTurn = useRef(lastDraw?.turn ?? null);
@@ -79,15 +80,44 @@ export function useGameSounds({ enabled, session, showingFinalScore }: GameSound
     hadScore.current = score !== null;
   }, [enabled, score]);
 
+  // A title unlocked, keyed on the toast having something to show rather than on
+  // the deal that earned it: the two are the same instant against the computer
+  // and are not over a network, where the server decides and pushes separately.
+  // Rising rather than "is non-empty", because the list accumulates — a second
+  // unlock arriving while the first is still on screen is not a second fanfare.
+  const hadUnlocks = useRef(justUnlocked.length > 0);
+  useEffect(() => {
+    const has = justUnlocked.length > 0;
+    if (enabled && has && !hadUnlocks.current) {
+      playAchievement();
+    }
+    hadUnlocks.current = has;
+  }, [enabled, justUnlocked]);
+
   // Keyed on the screen rather than on the rubber, so the horn lands with the
   // headline that says who won. `rubber.complete` is still what makes it a
   // *rubber* horn — `showingFinalScore` is only ever true alongside it — but it
   // is no longer what decides the moment.
-  const hadFinalScore = useRef(showingFinalScore);
+  //
+  // Once per match, not once per rising edge of that screen. The two are not
+  // the same: a match's final score can be reached, left and reached again
+  // without a second match having been won — the board holds the last trick
+  // and only then releases the phase, effects run either side of that, and a
+  // remount re-arms anything keyed on a transition. A won match is a single
+  // event, so the horn is armed by a match that is *not* finished and spent by
+  // the first screen that shows one that is.
+  const horned = useRef(false);
   useEffect(() => {
-    if (enabled && showingFinalScore && !hadFinalScore.current) {
+    if (!rubber.complete) {
+      horned.current = false;
+      return;
+    }
+    if (!showingFinalScore || horned.current) {
+      return;
+    }
+    horned.current = true;
+    if (enabled) {
       playRubberWon();
     }
-    hadFinalScore.current = showingFinalScore;
-  }, [enabled, showingFinalScore]);
+  }, [enabled, rubber.complete, showingFinalScore]);
 }
