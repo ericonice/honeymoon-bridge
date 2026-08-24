@@ -14,20 +14,18 @@ vi.mock("../src/game/identity.js", () => ({
 }));
 
 /**
- * The order the app asked the network for things, which is the entire subject.
+ * When the record is read, relative to a report still in flight.
  *
- * A rubber's result is enqueued the moment the match ends and `enqueue` starts
- * sending straight away, so reading the record immediately afterwards is a race.
- * Both orders "work" — nothing throws either way — and the wrong one answers with
- * the record as it stood before the match, until somebody reloads the page.
+ * A rubber's result is enqueued the moment the match ends, so a read taken
+ * straight afterwards answers with the record from before the match. The first fix
+ * made the read wait for the send, and that was worse: `outbox.ts` awaits `fetch`
+ * with no timeout, so one hanging report held the screen — sometimes for a long
+ * while, sometimes forever. **A screen that never appears is a worse bug than a
+ * screen showing yesterday's number.**
  *
- * **The first version of this test was vacuous and passed against the bug.** It
- * asserted the order the two requests were *issued* in, which is report-then-read
- * either way, because the send is started synchronously by `enqueue` before the
- * screen ever asks for anything. What actually distinguishes the two is whether
- * the read waits for the report's *response*. So the report is held open here and
- * the assertion is that nothing reads while it is in flight — which fails if the
- * `flush()` in `useRecords` is removed, and that was checked rather than assumed.
+ * So the contract is: read immediately, and read *again* once the queue has
+ * drained. Both halves need asserting. Without the second read the original
+ * staleness is back; without the first, the screen can hang.
  */
 let calls: string[] = [];
 
@@ -79,14 +77,23 @@ beforeEach(() => {
   fakeNetwork();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Settle any report left hanging, so the outbox's in-flight pass does not leak
+  // into the next test. Worth knowing that this is a real property and not test
+  // housekeeping: `flush()` joins the pass already running, so a request that never
+  // settles means every later flush joins a promise that never resolves and nothing
+  // is ever sent again for the life of the page.
+  deliverReport?.();
+  await act(async () => {
+    await Promise.resolve();
+  });
   cleanup();
   vi.unstubAllGlobals();
 });
 
-test("the record is not read while the rubber just played is still in flight", async () => {
+test("the record is read at once, without waiting for the report", async () => {
   reportRobotRubber({
-    botVersion: 2,
+    botVersion: 3,
     deals: 8,
     format: "rubber",
     points: 1200,
@@ -99,14 +106,30 @@ test("the record is not read while the rubber just played is still in flight", a
   });
   await settle();
 
-  // The report has gone out and the server has not answered it yet. Reading the
-  // record now is what returned the pre-match record.
-  expect(calls).toEqual(["report"]);
+  // The report is deliberately left hanging. The screen must not be waiting on it.
+  expect(calls).toEqual(["report", "read"]);
+});
+
+test("and read again once the report has landed, so it is not left stale", async () => {
+  reportRobotRubber({
+    botVersion: 3,
+    deals: 8,
+    format: "rubber",
+    points: 1200,
+    pointsAgainst: 300,
+    won: true,
+  });
+
+  await act(async () => {
+    render(createElement(Reader));
+  });
+  await settle();
+  expect(calls).toEqual(["report", "read"]);
 
   deliverReport?.();
   await settle();
 
-  expect(calls).toEqual(["report", "read"]);
+  expect(calls).toEqual(["report", "read", "read"]);
 });
 
 test("with nothing queued the record is still read", async () => {

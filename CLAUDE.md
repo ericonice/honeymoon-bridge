@@ -1031,11 +1031,27 @@ where a game somebody has just played is most obviously missing. `flush` joins a
 rather than starting a second, so the wait is the report's own round trip and nothing at all when the
 queue is empty.
 
-**The test for it was vacuous first, and that is the third time in this file.** It asserted the order
-the two requests were *issued* in — which is report-then-read either way, because the send starts
-synchronously before the screen asks for anything — so it passed against the bug. What distinguishes
-the two is whether the read waits for the report's *response*, so the fake report is held open and the
-assertion is that nothing reads while it is in flight. Checked by reverting the fix, which fails it.
+**The first fix was worse than the bug and had to be reversed.** Making the read *wait* on `flush()`
+did stop the staleness, and it also made the screen depend on a network round trip that has no
+timeout: `send` awaits `fetch` with nothing bounding it, so one slow or hanging report held the record
+and achievements screens — sometimes for a while, sometimes forever. Reported from real use as "takes
+quite a while to display, or never does". **A screen that never appears is a worse failure than a
+screen showing yesterday's number.** So the read never depends on the send now: it fetches
+immediately, and fetches *again* after the pass, and only when `outboxState()` says something was
+waiting — which is the case that needed it, after a match rather than every time the screen opens.
+
+**And a hanging request wedges the outbox for the life of the page.** `flush()` joins the pass already
+running rather than starting a second, which is deliberate and right — but a request that never
+settles means `running` never clears, so every later flush joins a promise that will never resolve and
+nothing is sent again. It showed up as one test leaking into the next and it is a real property, not
+test housekeeping. Not fixed: the obvious guard is an `AbortController` timeout, and aborting a request
+the server actually received would leave the item queued for a retry that duplicates it, since the
+bodies carry no idempotency key. Worth doing deliberately rather than as a side effect.
+
+**The test was vacuous first, and that is the third time in this file.** It asserted the order the two
+requests were *issued* in — report-then-read either way, because the send starts synchronously before
+the screen asks for anything — so it passed against the bug. It now pins both halves of the contract,
+read-at-once and read-again, each checked by reverting the corresponding half.
 
 The first version of that row printed a status only for *refused* reports and told everything else it
 would be "filed the next time the app has a connection", which is a guess dressed as an explanation:
@@ -1149,6 +1165,15 @@ either side are not measuring the same opponent.
 
 The history was free: `ratingsFor` already computed every point during its walk and threw them away.
 No new query and no schema — only `HISTORY_LENGTH` to bound the payload.
+
+**The chart marked the first release change only, and v3 is what exposed it.** `versionChangeAt`
+returned a single index and the render drew a single rule, which was indistinguishable from correct for
+as long as anybody's history held one change. The moment v3 shipped, a line spanning v1, v2 and v3 drew
+the v1-to-v2 rule and silently dropped the one the player had just created — reported as "I see a v2
+indicator but no v3". It returns every change now. **A "the" in a function name is worth suspecting
+whenever the thing it names can happen twice.** `test/ratingTrend.test.ts` covers three releases, one
+release, none, and a person played between two bots — that last because a null either side of a version
+is not a change of opponent worth a rule.
 
 **The trap to state before anyone reads a flat line as a plateau:** because the bot is pinned, the
 line converges toward *bot + the player's true gap* and then flattens. That is having found your

@@ -36,18 +36,29 @@ const WIDTH = 336;
 const HEIGHT = 54;
 const PAD = 4;
 
-/** Where the opponent stopped being the same opponent — see `bot/release.ts`. */
-function versionChangeAt(history: readonly RatingPoint[]): number | null {
+/**
+ * Every point where the opponent stopped being the same opponent — see
+ * `bot/release.ts`.
+ *
+ * **All of them, and it used to be the first one only.** This returned a single
+ * index and the chart drew a single rule, which was indistinguishable from correct
+ * for as long as there had been exactly one release change in anybody's history.
+ * The moment v3 shipped, a line spanning v1, v2 and v3 drew the v1-to-v2 rule and
+ * silently dropped the one somebody had just created. A "the" in a function name
+ * is worth suspecting whenever the thing it names can happen twice.
+ */
+function versionChanges(history: readonly RatingPoint[]): readonly number[] {
+  const changes: number[] = [];
   for (let index = 1; index < history.length; index += 1) {
     const before = history[index - 1]!.botVersion;
     const now = history[index]!.botVersion;
     // Only a change between two *known* bots is an event. Null is a person, and
     // "person, then computer" is not a change of opponent strength worth a rule.
     if (before !== null && now !== null && before !== now) {
-      return index;
+      changes.push(index);
     }
   }
-  return null;
+  return changes;
 }
 
 export function RatingTrend({ history }: RatingTrendProps): React.JSX.Element | null {
@@ -71,7 +82,7 @@ export function RatingTrend({ history }: RatingTrendProps): React.JSX.Element | 
   const path = ratings
     .map((rating, index) => `${index === 0 ? "M" : "L"} ${x(index).toFixed(1)} ${y(rating).toFixed(1)}`)
     .join(" ");
-  const changed = versionChangeAt(history);
+  const changes = versionChanges(history);
   const settling = Math.min(SETTLING, history.length - 1);
 
   return (
@@ -116,8 +127,8 @@ export function RatingTrend({ history }: RatingTrendProps): React.JSX.Element | 
         {STARTING_RATING}
       </text>
 
-      {changed === null ? null : (
-        <>
+      {changes.map((changed) => (
+        <g key={changed}>
           <line
             className="stroke-amber-300/45"
             x1={x(changed)}
@@ -128,8 +139,8 @@ export function RatingTrend({ history }: RatingTrendProps): React.JSX.Element | 
           <text className="fill-amber-300/70 font-mono" fontSize="7.5" x={x(changed) + 3} y={PAD + 6}>
             v{history[changed]!.botVersion}
           </text>
-        </>
-      )}
+        </g>
+      ))}
 
       <path
         className="stroke-emerald-300"

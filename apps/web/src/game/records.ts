@@ -2,7 +2,7 @@ import type { MatchFormat } from "@hb/engine";
 import { useCallback, useEffect, useState } from "react";
 import { storedSession } from "./account.js";
 import { nickname, playerToken } from "./identity.js";
-import { enqueue, flush } from "./outbox.js";
+import { enqueue, flush, outboxState } from "./outbox.js";
 import { readStored, writeStored } from "./storage.js";
 import { recentMatchesUrl, recordsUrl, resetRecordUrl, robotResultUrl } from "./serverUrl.js";
 
@@ -245,29 +245,50 @@ export function useRecords(active: boolean): RecordsState {
       return;
     }
 
+    // Read now, and read again once anything queued has landed.
+    //
+    // **Waiting for the send first was tried and was worse than the bug.** A
+    // rubber's result is enqueued the moment the match ends, so asking the server
+    // straight afterwards is a race the read usually wins and the answer is the
+    // record from before the match. Blocking the read on `flush()` fixed that and
+    // introduced something worse: `outbox.ts` awaits `fetch` with no timeout, so
+    // one slow or hanging report held the whole screen — sometimes for a long
+    // time, sometimes forever. A screen that never appears is a worse failure than
+    // a screen showing yesterday's number.
+    //
+    // So the read never depends on the send. The second pass only happens when
+    // there was something waiting, which is the case that needed it: after a match
+    // rather than every time somebody opens the screen.
+    const issued = { current: 0 };
+    const load = (): Promise<void> => {
+      const mine = (issued.current += 1);
+      return fetch(recordsUrl(), { headers: { Authorization: `Bearer ${session}` } })
+        .then(async (response) => (response.ok ? ((await response.json()) as Records) : null))
+        .then((fetched) => {
+          // A slower earlier read must not overwrite a later one.
+          if (mine < issued.current) {
+            return;
+          }
+          setRecords(fetched === null ? null : withRating(fetched));
+          rememberRatings(fetched);
+        })
+        .catch(() => {
+          if (mine === issued.current) {
+            setRecords(null);
+          }
+        });
+    };
+
+    const pending = outboxState().waiting.length > 0;
     setLoading(true);
-    // Sending first is the whole point, not politeness. A rubber's own result is
-    // enqueued the moment it ends and `enqueue` starts a pass immediately, so
-    // asking the server for the record straight afterwards is a race the read
-    // usually wins — the report is still in flight, the answer is the record from
-    // before the match, and nothing refetches. That is exactly the "it only
-    // updates after a refresh" this fixes. `flush` resolves when the pass ends,
-    // joining one already running rather than starting a second, so the wait is
-    // the report's own round trip and nothing when the queue is empty.
-    void flush()
-      .catch(() => undefined)
-      .then(() => fetch(recordsUrl(), { headers: { Authorization: `Bearer ${session}` } }))
-      .then(async (response) => (response.ok ? ((await response.json()) as Records) : null))
-      .then((fetched) => {
-        setRecords(fetched === null ? null : withRating(fetched));
-        rememberRatings(fetched);
-      })
-      .catch(() => {
-        setRecords(null);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    void load().finally(() => {
+      setLoading(false);
+    });
+    if (pending) {
+      void flush()
+        .catch(() => undefined)
+        .then(() => load());
+    }
   }, []);
 
   useEffect(() => {
@@ -297,21 +318,26 @@ export function useRecentMatches(active: boolean): RecentMatchesState {
     }
 
     setLoading(true);
-    // The same race as `useRecords`, and the match list is where a game somebody
-    // has just played is most obviously missing.
-    void flush()
-      .catch(() => undefined)
-      .then(() => fetch(recentMatchesUrl(), { headers: { Authorization: `Bearer ${session}` } }))
-      .then(async (response) =>
-        response.ok ? ((await response.json()) as { matches: MatchRecord[] }).matches : null,
-      )
-      .then(setMatches)
-      .catch(() => {
-        setMatches(null);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    // The same shape as `useRecords`: read now, and again if something was queued.
+    const load = (): Promise<void> =>
+      fetch(recentMatchesUrl(), { headers: { Authorization: `Bearer ${session}` } })
+        .then(async (response) =>
+          response.ok ? ((await response.json()) as { matches: MatchRecord[] }).matches : null,
+        )
+        .then(setMatches)
+        .catch(() => {
+          setMatches(null);
+        });
+
+    const pending = outboxState().waiting.length > 0;
+    void load().finally(() => {
+      setLoading(false);
+    });
+    if (pending) {
+      void flush()
+        .catch(() => undefined)
+        .then(() => load());
+    }
   }, [active]);
 
   return { loading, matches };
