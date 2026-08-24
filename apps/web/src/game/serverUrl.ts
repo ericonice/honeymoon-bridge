@@ -22,6 +22,11 @@ export function authUrl(action: "code" | "dev" | "me" | "name" | "request" | "ve
   return `${ORIGIN}/api/auth/${action}`;
 }
 
+/** What each computer opponent is rated, per rung. Open — see the route. */
+export function botsUrl(): string {
+  return `${ORIGIN}/api/bots`;
+}
+
 export function recordsUrl(): string {
   return `${ORIGIN}/api/results`;
 }

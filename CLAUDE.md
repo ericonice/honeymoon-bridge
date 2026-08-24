@@ -1389,7 +1389,16 @@ setting and that is what the app plays by default, so retuning a rung does not s
 
 **The anchors are sent to the client rather than computed there**, so the number on the difficulty row
 in Settings, the number beside the computer's seat on the play screen and the number the rating walk
-actually used are one number from one place. Three copies of an anchor is three things to forget to
+actually used are one number from one place.
+
+**`GET /api/bots` is open, and it is the only route here that is.** The first version sent the anchors
+down with the record, which needs a session — so the rating beside the opponent's seat was blank until
+somebody had visited the *record screen*, signed in, on that device. Reported as "I don't see the ELO
+of the bot when playing", and it is backwards for a number whose whole job is to sit beside the
+opponent while you play them. These are constants about the bot rather than about anybody: the same
+dozen numbers for every player, revealing nothing about who plays or how they do. `useBotAnchor` reads
+the cached copy synchronously so a device that has seen them once draws them offline, which the robot
+game requires, and only asks when it has nothing. Three copies of an anchor is three things to forget to
 retune, and this ladder is going to be retuned. `botAnchor` returns **null** rather than a guess when
 nothing has been fetched that says: a rating is the figure somebody quotes at the dinner table, so a
 plausible-looking wrong one is worse than a blank, because nobody checks a number that looks right.

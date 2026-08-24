@@ -671,6 +671,7 @@ export function GameBoard({
         <ScoreOverlay
           history={session.history}
           opponentName={session.opponentName}
+          ratings={ratings}
           rubber={session.rubber}
           view={view}
           vulnerable={session.vulnerable}

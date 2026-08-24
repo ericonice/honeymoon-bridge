@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { matchNoun } from "../game/labels.js";
 import { useLocalSession } from "../game/localSession.js";
 import { difficulty, preferredRelease } from "../game/identity.js";
 import type { Density } from "../game/identity.js";
-import { botAnchor, knownRatings } from "../game/records.js";
+import { knownRatings, useBotAnchor } from "../game/records.js";
 import { GameBoard } from "./GameBoard.js";
 
 export interface RobotGameProps {
@@ -35,7 +36,9 @@ export function RobotGame({
   // on this same first render, which is when `useLocalSession` pins its own copy
   // — so the number shown beside the seat is the one the match will be recorded
   // under, even if somebody changes the setting while the rubber is running.
-  const opponent = botAnchor(preferredRelease().version, difficulty());
+  const [version] = useState(() => preferredRelease().version);
+  const [rung] = useState(() => difficulty());
+  const opponent = useBotAnchor(version, rung);
   const session = useLocalSession({ peek: peeking });
   const noun = matchNoun(session.rubber.format);
 

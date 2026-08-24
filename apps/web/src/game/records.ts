@@ -5,7 +5,7 @@ import { storedSession } from "./account.js";
 import { nickname, playerToken } from "./identity.js";
 import { enqueue, flush, outboxState } from "./outbox.js";
 import { readStored, writeStored } from "./storage.js";
-import { recentMatchesUrl, recordsUrl, resetRecordUrl, robotResultUrl } from "./serverUrl.js";
+import { botsUrl, recentMatchesUrl, recordsUrl, resetRecordUrl, robotResultUrl } from "./serverUrl.js";
 
 /**
  * One finished match against one opponent, as their own row shows it.
@@ -266,6 +266,60 @@ export function knownRatings(): KnownRatings {
 export function botAnchor(version: number, difficulty: Difficulty): number | null {
   const { anchors, bot } = knownRatings();
   return anchors[String(version)]?.[difficulty] ?? bot;
+}
+
+/**
+ * What the computer is rated on this release and this rung, fetched if nothing
+ * local says yet.
+ *
+ * The cached copy is read *synchronously* on the first render, so a device that
+ * has ever seen these numbers draws them immediately and offline — which the
+ * robot game requires, since it must work with no network at all. The request is
+ * only for the case that has none: a fresh install, or a player who has never
+ * opened the record screen.
+ *
+ * That was the bug this replaces. The anchors used to arrive only with the
+ * record, so the rating beside the opponent's seat depended on having visited a
+ * different screen while signed in — and showed nothing until you did. A number
+ * whose whole job is to sit beside the opponent while you play them should not
+ * be reachable only from somewhere else.
+ *
+ * Still null rather than a guess when the fetch fails and nothing is cached. A
+ * rating is the figure somebody quotes at the dinner table, so a plausible wrong
+ * one is worse than a blank: nobody checks a number that looks right.
+ */
+export function useBotAnchor(version: number, difficulty: Difficulty): number | null {
+  const [anchor, setAnchor] = useState(() => botAnchor(version, difficulty));
+
+  useEffect(() => {
+    if (anchor !== null) {
+      return;
+    }
+    let live = true;
+    void fetch(botsUrl())
+      .then(async (response) => (response.ok ? ((await response.json()) as { anchors?: BotAnchors }) : null))
+      .then((body) => {
+        if (!live || body?.anchors === undefined) {
+          return;
+        }
+        rememberAnchors(body.anchors);
+        setAnchor(botAnchor(version, difficulty));
+      })
+      .catch(() => {
+        // No network, or no server. The blank is the honest answer.
+      });
+    return () => {
+      live = false;
+    };
+  }, [anchor, difficulty, version]);
+
+  return anchor;
+}
+
+/** Stores anchors without disturbing the two ratings cached alongside them. */
+export function rememberAnchors(anchors: BotAnchors): void {
+  const known = knownRatings();
+  writeStored(RATING_KEY, JSON.stringify({ anchors, bot: known.bot, mine: known.mine }));
 }
 
 export interface RecordsState {

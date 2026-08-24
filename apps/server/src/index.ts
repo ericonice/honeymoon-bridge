@@ -18,6 +18,7 @@ import { inviteCode, isInviteCode } from "./codes.js";
 import type { Env } from "./env.js";
 import { handLogsFor, recordHandLog } from "./handLogs.js";
 import type { HandLog } from "./handLogs.js";
+import { botAnchors } from "./ratings.js";
 import { recentMatchesFor, recordRubber, recordsFor, resetRecord, ROBOT_TOKEN } from "./results.js";
 
 export { Lobby } from "./lobby.js";
@@ -825,6 +826,24 @@ export default {
       }
       await setAccountName(env, accountId, name);
       return json(request, { name });
+    }
+
+    // What each computer opponent is rated, on each difficulty rung.
+    //
+    // **Deliberately open, where everything around it needs a session.** These are
+    // constants about the bot, not about anybody: the same dozen numbers for every
+    // player, revealing nothing about who plays or how they do. Behind a session
+    // they would be, and were, unreachable exactly when they are wanted — the play
+    // screen shows the opponent's rating beside its seat, the robot game must work
+    // with no account at all, and a fresh install would otherwise show a blank
+    // until somebody happened to open the record screen.
+    //
+    // Sent from here rather than kept in the client so the number on the
+    // difficulty row, the number beside the computer's seat and the number the
+    // rating walk actually used are one number. This ladder will be retuned, and
+    // three copies of an anchor is three things to forget.
+    if (url.pathname === "/api/bots" && request.method === "GET") {
+      return json(request, { anchors: botAnchors() });
     }
 
     // Your record against everyone you have finished a rubber against. Behind a
