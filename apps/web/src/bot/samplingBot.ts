@@ -87,8 +87,8 @@ export function createSamplingBot(
   return {
     name: "Computer",
 
-    chooseCall(view: PlayerView, standing: Standing): Call {
-      return heuristic.chooseCall(view, standing);
+    chooseCall(view: PlayerView, standing: Standing, remembered: readonly Card[]): Call {
+      return heuristic.chooseCall(view, standing, remembered);
     },
 
     chooseDraw(view: PlayerView, remembered: readonly Card[]): DrawTake {

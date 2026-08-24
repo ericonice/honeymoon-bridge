@@ -39,6 +39,33 @@ export interface BotRelease {
 }
 
 /**
+ * **What a release covers: its bidding and its draw, not its card play.**
+ *
+ * Card play is shared. `sample.ts` and `solver.ts` have no per-release tuning, so
+ * a fix there changes how *every* release plays — which happened the day
+ * `KEEP_STRENGTH` corrected a sampler that had been imagining an opponent five
+ * high-card points too weak. That is a boundary worth stating rather than leaving
+ * to be discovered, because `test/botRelease.test.ts` pins only the auction and
+ * the draw and would not catch it.
+ *
+ * Chosen deliberately, and cheaply reversible: `BotTuning` already carries
+ * per-release values, so scoping a card-play constant is about twenty lines across
+ * four call sites. The reason not to, for now, is that one person is playing, the
+ * records are disposable, and a superseded release is worth more as a *fixed
+ * reference* than as a museum piece — but a reference whose whole value is being
+ * unchanged is exactly what this gives up.
+ *
+ * **So a cross-release margin measured before a card-play change cannot be quoted
+ * after one.** v3 beat v2 65.7% of rubbers with the uniform sampler on both sides;
+ * that number is history rather than a fact about the two releases, and the way to
+ * have it again is to re-run the bench, which is possible precisely because both
+ * releases are still playable.
+ *
+ * What would reverse this: more than one person playing, or a release that has to
+ * stay comparable across a change nobody wants to re-measure.
+ */
+
+/**
  * Every release a person can actually sit down against, oldest first.
  *
  * A list rather than the single constant this used to be, and the reason is a

@@ -89,6 +89,36 @@ export interface DrawOptions {
  * that would be a constant nothing here has measured, and `bench/draw.ts` pits
  * policies against each other for exactly this reason. Left unpriced until it is.
  */
+/**
+ * A cheap "would this hand keep that card" test, for asking it many times.
+ *
+ * `chooseTake` answers the same question but recomputes the expected value of an
+ * unknown card for every candidate — a fresh deck and forty `gainFrom` calls each
+ * time — when that expectation depends only on the hand. For one decision that
+ * does not matter. For `drawSimulation.ts`, which asks about every card in the
+ * pool on every one of thirteen turns, it was **55ms a sample**: enough to cut the
+ * bid search from twelve samples inside its deadline to five, which made a better
+ * sampler produce a worse estimate.
+ *
+ * So the expectation is computed once and handed back as a closure. The one
+ * approximation is that the unknown pool here does not exclude the candidate
+ * itself, which is a card in thirty-nine.
+ */
+export function keepTest(
+  hand: readonly Card[],
+  remembered: readonly Card[],
+  defenseShare = DEFENSE_SHARE,
+): (card: Card) => boolean {
+  const base = rawHandValue(hand, true, defenseShare);
+  const pool = unseenPool(hand, [], remembered);
+  const expected =
+    pool.length === 0
+      ? -Infinity
+      : pool.reduce((sum, unseen) => sum + gainFrom(hand, base, unseen, defenseShare), 0) /
+        pool.length;
+  return (card: Card): boolean => gainFrom(hand, base, card, defenseShare) >= expected;
+}
+
 export function chooseTake({
   defenseShare = DEFENSE_SHARE,
   discardTop,

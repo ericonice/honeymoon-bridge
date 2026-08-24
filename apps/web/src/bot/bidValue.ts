@@ -142,6 +142,19 @@ export interface BidValueOptions {
   readonly me: PlayerId;
   /** Defaults to points, so every caller that has not been told otherwise is unchanged. */
   readonly objective?: Objective;
+  /**
+   * The chance of the declarer taking each number of tricks, 0 to 13.
+   *
+   * When supplied this replaces `outcomeOdds` entirely — a measured distribution
+   * rather than a bell curve of fixed width around a counted guess. The width is
+   * the point: `TRICK_SPREAD` is one number applied to every hand, so a flat hand
+   * with solid honours and a wild two-suiter are treated as equally uncertain,
+   * when the difference between them is most of what decides whether to stretch.
+   *
+   * Optional, because the search that produces it has a deadline and a hand whose
+   * search is too slow still has to be bid. Absent means the old behaviour.
+   */
+  readonly odds?: readonly number[] | undefined;
   readonly standing: Standing;
 }
 
@@ -195,7 +208,7 @@ function pricedAt(options: BidValueOptions, tricks: number): Contract {
 
 /** The same, averaged over every plausible number of tricks. */
 export function expectedValue(options: BidValueOptions): number {
-  return outcomeOdds(options.estimate).reduce(
+  return (options.odds ?? outcomeOdds(options.estimate)).reduce(
     (total, odds, tricks) => total + odds * differentialAfter(options, tricks),
     0,
   );

@@ -46,8 +46,30 @@ export interface EquityTable {
 }
 
 /**
- * Fitted over 3000 rubbers — 18,084 standings at no games each, 9,035 a game up —
- * and over 3000 single games for the short format's own cell, 18,204 standings.
+ * Fitted over 300 rubbers played with the solver — 4,848 standings — and over 3000
+ * single games for the short format's own cell.
+ *
+ * **The rubber numbers were re-fitted under solver card play, and that mattered.**
+ * The first version was fitted from 3000 rubbers with the fast heuristic card play,
+ * where contracts fail more often than they do in a real game — so the bidder
+ * learned to stretch in a world where stretching was safer than it is, and
+ * overreached once it met proper play. Re-fitting under the solver dropped
+ * `gameLead` from 0.71 to 0.61 and, measured against v2 at eight samples a card,
+ * cut contracts going down two or more from **18% of its own deals to 13%**, and
+ * what they cost from 508 a rubber to 325, with the rubbers won unchanged at 65%.
+ * Fewer disasters for the same result.
+ *
+ * The price is sample size: 4,848 standings against 36,168, since switching the
+ * solver on costs about 250× per rubber. Error bars are roughly 2.7× wider and the
+ * short format's cell is still the cheap fit.
+ *
+ * **`level.part` is negative and is not understood.** It says a part-score at love
+ * all is worth nothing, which is hard to believe. That cell has now taken four
+ * values across four fits — +0.44, +0.35, +0.00, -0.22 — and the reason is
+ * structural rather than mysterious: `part` and `margin` overlap, because
+ * part-score points sit inside the total, so the split between those two
+ * coefficients is unstable even where their sum is not. It ships because the table
+ * measurably behaves better, not because this number is trusted.
  *
  * Three checks came out of the fit rather than being assumed: a level standing
  * won 0.500, one game each won 0.500, and a game down fitted the exact negative
@@ -77,10 +99,10 @@ export interface EquityTable {
  */
 export const EQUITY: EquityTable = {
   game: { margin: 0.1738, part: 0.9548 },
-  gameLead: 0.7092,
-  level: { margin: 0.0794, part: 0.3492 },
-  oneEach: { margin: 0.1142, part: 0.9173 },
-  oneUp: { margin: 0.0911, part: 0.5753 },
+  gameLead: 0.6104,
+  level: { margin: 0.1328, part: -0.2204 },
+  oneEach: { margin: 0.1359, part: 0.6945 },
+  oneUp: { margin: 0.1124, part: 0.5461 },
 };
 
 /** Below-the-line points that win a game, so a part-score reads as a fraction of one. */

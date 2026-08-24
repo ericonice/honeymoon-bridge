@@ -332,7 +332,12 @@ function replayCall(hand: LoggedHand, before: number): Call | null {
     disguiseCredit: hand.disguise ? DISGUISE_CREDIT_ON : 0,
     gameEquity,
   });
-  return bot.chooseCall(view, standingFor(hand));
+  // The bot's own discards, which the sampler needs to rule out cards it watched
+  // itself bury. `initialHands` is what the draw produced, so the discards are
+  // whatever the deal held that this seat neither kept nor was ever dealt — not
+  // recoverable from the log, so an empty list here means the replayed bidder
+  // guesses from a wider pool than the live one did.
+  return bot.chooseCall(view, standingFor(hand), []);
 }
 
 function saidAs(call: Call): string {

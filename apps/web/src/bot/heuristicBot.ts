@@ -3,6 +3,8 @@ import type { Bid, Call, Card, Contract, DrawTake, PlayerId, PlayerView, Rng, St
 import { DEFAULT_GAME_EQUITY, expectedValue } from "./bidValue.js";
 import type { Objective } from "./bidValue.js";
 import { pointsAsEquity } from "./equity.js";
+import { mirrorOdds, searchTricks, spreadOdds } from "./searchTricks.js";
+import type { TrickSpread } from "./searchTricks.js";
 import { chooseCard } from "./cardPlay.js";
 import { chooseTake } from "./drawDecision.js";
 import { cardsIn, defendingTricks, estimatedTricks } from "./evaluate.js";
@@ -174,6 +176,26 @@ export interface BotTuning {
    * `release.ts` sets it and `test/botRelease.test.ts` pins the result.
    */
   readonly objective?: Objective;
+  /**
+   * How long the bidder may spend searching for a trick distribution, and how
+   * many samples at most. Zero milliseconds is off, which is the default.
+   *
+   * Off by default so that turning it on is a decision with a measurement behind
+   * it rather than a side effect of it being built — and so `test/botRelease.test.ts`
+   * keeps passing until the release that wants it says so.
+   */
+  readonly searchBudgetMs?: number;
+  /**
+   * What to do with what the search found: the whole distribution, or only its
+   * centre with the fitted bell curve kept around it.
+   *
+   * A separator, not a preference. Handing the bidder a measured distribution made
+   * it markedly worse, and two things changed at once — where the estimate sits and
+   * how uncertain it is said to be. `"mean"` moves the centre and leaves the width
+   * alone, which is the only way to tell those apart.
+   */
+  readonly searchMode?: "mean" | "odds";
+  readonly searchSamples?: number;
   /** How far to trust their bid when pricing this seat's own contract. */
   readonly theirBidOnOwnWeight?: number;
 }
@@ -346,9 +368,30 @@ function impliedByTheirBid(view: PlayerView, strain: Strain): number | null {
  * The level they chose says how many they believe they hold. Both are evidence,
  * and the weighting between them was measured rather than assumed.
  */
-function estimateFor(contract: Contract, { theirBidOnOwnWeight, view }: CallContext): number {
+function estimateFor(contract: Contract, context: CallContext): number {
+  const { theirBidOnOwnWeight, view } = context;
+  const searched = context.spreads?.get(contract.strain);
   if (contract.declarer === view.me) {
-    const own = ownEstimate(view, contract.strain);
+    /**
+     * The search answers exactly this question — what this hand takes declaring
+     * this strain — and answers it better: 1.23 tricks of average error against
+     * par where counting gives 1.55.
+     *
+     * **Only for this seat's own contracts, and both halves of that are things I
+     * got wrong first.** `searchTricks` solves with the opponent on lead, so its
+     * answer is about *this* seat declaring; double-dummy tricks depend on who
+     * leads, so thirteen minus that number is not what the other side takes when
+     * *they* declare. Pricing a pass off it was pricing a position nobody was in.
+     *
+     * And it must not swallow the blend below. Replacing the whole function
+     * deleted the trust in their bid level, which is worth +651 a rubber against
+     * +467 and is the largest single thing the bidder knows. A better estimate of
+     * one term is not a reason to discard another.
+     */
+    const own =
+      searched !== undefined && searched.samples > 0
+        ? searched.mean
+        : ownEstimate(view, contract.strain);
     const implied = impliedByTheirBid(view, contract.strain);
     return implied === null
       ? own
@@ -364,6 +407,50 @@ function estimateFor(contract: Contract, { theirBidOnOwnWeight, view }: CallCont
   const fromMyHand = TRICKS - defendingTricks(view.hand, contract.strain);
   const fromTheirBid = contract.level + BOOK;
   return (1 - THEIR_BID_WEIGHT) * fromMyHand + THEIR_BID_WEIGHT * fromTheirBid;
+}
+
+/**
+ * The measured chance of the declarer of this contract taking each trick count,
+ * or undefined when nothing was searched.
+ *
+ * Both directions come from the same search: the solve reports both seats, so a
+ * contract the opponent declares is this seat's own distribution read backwards.
+ * Kept in one function because forgetting the mirror would price a pass as though
+ * this hand were declaring it, which is the exact confusion `estimateFor` was
+ * written to end.
+ */
+function oddsFor(context: CallContext, contract: Contract): readonly number[] | undefined {
+  const spread = context.spreads?.get(contract.strain);
+  if (spread === undefined || context.searchMode === "mean") {
+    return undefined;
+  }
+  // This seat's own contracts only, for the reason `estimateFor` gives: the search
+  // solves with the opponent on lead, so it describes this seat declaring, and
+  // double-dummy tricks are not independent of who leads. A contract they declare
+  // keeps the fitted spread around the blend that reads their bid.
+  return contract.declarer === context.view.me ? spreadOdds(spread) : undefined;
+}
+
+/**
+ * The strains worth spending a solve on.
+ *
+ * Every strain this seat could still legally name, plus whatever is on the table
+ * already — that last one because passing and doubling have to be priced too, and
+ * they are priced in the strain somebody else chose. On an auction that has climbed
+ * this is two or three rather than five, which is where the cost goes.
+ */
+function strainsWorthPricing(view: PlayerView): Strain[] {
+  const worth = new Set<Strain>();
+  for (const call of callsFor(view)) {
+    if (call.type === "bid") {
+      worth.add(call.bid.strain);
+    }
+  }
+  const standing = standingContract(view);
+  if (standing !== null) {
+    worth.add(standing.strain);
+  }
+  return [...worth];
 }
 
 interface Candidate {
@@ -382,6 +469,9 @@ interface CallContext {
   readonly disguiseCredit: number;
   readonly gameEquity: number;
   readonly objective: Objective;
+  readonly searchMode: "mean" | "odds";
+  /** Measured trick distributions per strain, or null when the search is off. */
+  readonly spreads: ReadonlyMap<Strain, TrickSpread> | null;
   readonly standing: Standing;
   readonly theirBidOnOwnWeight: number;
   readonly view: PlayerView;
@@ -408,6 +498,7 @@ function valueOfPassing(context: CallContext): number {
     exposedToDouble: false,
     gameEquity,
     objective,
+    odds: oddsFor(context, contract),
     hand: view.hand,
     me: view.me,
     standing,
@@ -443,6 +534,7 @@ function bidCandidates(context: CallContext, disguiseCredit: number): Candidate[
             exposedToDouble: true,
             gameEquity,
             objective,
+            odds: oddsFor(context, contract),
             hand: view.hand,
             me: view.me,
             standing,
@@ -483,6 +575,7 @@ function doubleCandidate(context: CallContext): Candidate[] {
         exposedToDouble: false,
         gameEquity,
         objective,
+        odds: oddsFor(context, doubled),
         hand: view.hand,
         me: view.me,
         standing,
@@ -551,6 +644,9 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
   const disguiseCredit = tuning.disguiseCredit ?? DISGUISE_CREDIT;
   const gameEquity = tuning.gameEquity ?? DEFAULT_GAME_EQUITY;
   const objective = tuning.objective ?? "points";
+  const searchBudgetMs = tuning.searchBudgetMs ?? 0;
+  const searchSamples = tuning.searchSamples ?? 0;
+  const searchMode = tuning.searchMode ?? "odds";
   const theirBidOnOwnWeight = tuning.theirBidOnOwnWeight ?? THEIR_BID_ON_OWN_WEIGHT;
 
   return {
@@ -558,8 +654,32 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
     // opponent rather than as an implementation.
     name: "Computer",
 
-    chooseCall(view: PlayerView, standing: Standing): Call {
-      return bestCall({ disguiseCredit, gameEquity, objective, standing, theirBidOnOwnWeight, view });
+    chooseCall(view: PlayerView, standing: Standing, remembered: readonly Card[]): Call {
+      // One search for the whole call, not one per candidate: a solve answers a
+      // strain rather than a contract, and every candidate in that strain reads
+      // the same distribution. Strains nobody could legally bid are left out,
+      // which is most of the saving on a crowded auction.
+      const spreads =
+        searchBudgetMs > 0 && searchSamples > 0
+          ? searchTricks({
+              budgetMs: searchBudgetMs,
+              maxSamples: searchSamples,
+              remembered,
+              rng,
+              strains: strainsWorthPricing(view),
+              view,
+            }).spreads
+          : null;
+      return bestCall({
+        disguiseCredit,
+        gameEquity,
+        objective,
+        searchMode,
+        spreads,
+        standing,
+        theirBidOnOwnWeight,
+        view,
+      });
     },
 
     chooseDraw(view: PlayerView, remembered: readonly Card[]): DrawTake {

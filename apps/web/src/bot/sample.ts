@@ -1,5 +1,6 @@
 import { buildDeck, cardId, shuffle } from "@hb/engine";
 import type { Card, PlayerView, Rng, Suit } from "@hb/engine";
+import { canSimulate, simulateDraw, theirChoices } from "./drawSimulation.js";
 
 /**
  * A guess at the opponent's hand, consistent with everything this seat has seen.
@@ -76,6 +77,61 @@ function unaccounted(view: PlayerView, remembered: readonly Card[]): Card[] {
  */
 const BID_WEIGHT = 2;
 
+/**
+ * How much likelier an honour is to be a card they kept than one they threw.
+ *
+ * **The unknown cards are not exchangeable, and treating them as though they were
+ * is worth more than a trick.** Twenty-six cards are dead in this game — their
+ * discards and the undrawn stock — so the pool this samples from holds thirteen
+ * they *kept* and roughly thirteen they *threw away*, and they were choosing. A
+ * uniform draw hands them an average thirteen of the twenty-six when they are
+ * holding their best.
+ *
+ * Measured over 300 deals: they actually hold **15.4** high-card points, a uniform
+ * sample guesses **9.9**, and what they discarded averages **4.5**. Nine-nine is
+ * almost exactly half of the twenty points they saw, which is what a coin flip per
+ * card produces. The consequence is a searched trick estimate biased **+1.14
+ * tricks** — the bot expecting to take more than it will, because it is imagining
+ * a weaker opponent than the one it has.
+ *
+ * Weighted by rank rather than by a keep-or-throw model, because rank is what a
+ * draw decision mostly turns on and a weight is one number to fit. Aces and kings
+ * are near-certainly kept; a two is near-certainly gone.
+ */
+const KEEP_SHAPE: Readonly<Record<number, number>> = {
+  14: 6,
+  13: 5,
+  12: 4,
+  11: 3,
+  10: 2.2,
+  9: 1.6,
+  8: 1.2,
+};
+
+/**
+ * How hard to lean on the shape above. One knob, fitted to one observable.
+ *
+ * The shape says which ranks are likelier kept; this says how much to believe it,
+ * and it is fitted against the only thing here that can be checked directly — the
+ * high-card points the sampler produces against the points the opponent really
+ * holds. At 0 the sample is uniform and comes out at 9.9 against a true 15.4; at 1
+ * it overshoots to 16.6; 0.55 gives 15.1 and 0.65 gives 15.6. Fitted to land on
+ * the truth rather than reasoned about, the same way `evaluate.ts`'s calibration
+ * is.
+ */
+const KEEP_STRENGTH = 0.6;
+
+/**
+ * How likely this card is to be one they kept rather than one they threw.
+ *
+ * Ranks below eight fall through to 1, which is the floor rather than zero: a low
+ * card in a suit they were building is kept all the time, and a sampler that could
+ * not deal them one would produce hands with no shape at all.
+ */
+function keepWeight(card: Card): number {
+  return 1 + KEEP_STRENGTH * ((KEEP_SHAPE[card.rank] ?? 1) - 1);
+}
+
 /** Strains the opponent has named, which are the suits to expect length in. */
 function suitsTheyBid(view: PlayerView): Set<Suit> {
   const named = new Set<Suit>();
@@ -118,9 +174,19 @@ export function sampleOpponentHand(
   // could not be dealt would be worse than an unconstrained guess.
   const drawable = possible.length >= size ? possible : pool;
 
-  const bid = suitsTheyBid(view);
-  if (bid.size === 0) {
-    return shuffle(drawable, rng).slice(0, size);
+  // Replaying the draw beats weighting for it, where the draw can be replayed:
+  // it selects the hand by the same amount their own recorded choices did, rather
+  // than by an average fitted across every deal. See `drawSimulation.ts`.
+  const choices = theirChoices(view);
+  if (canSimulate(drawable, size, choices)) {
+    return simulateDraw({ pool: drawable, rng, turns: choices });
   }
-  return drawWeighted(drawable, size, (card) => (bid.has(card.suit) ? BID_WEIGHT : 1), rng);
+
+  const bid = suitsTheyBid(view);
+  return drawWeighted(
+    drawable,
+    size,
+    (card) => keepWeight(card) * (bid.has(card.suit) ? BID_WEIGHT : 1),
+    rng,
+  );
 }

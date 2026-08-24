@@ -148,7 +148,7 @@ describe("the disguise credit", () => {
     const view = openingView(strong);
     for (const gameEquity of [550, 400, 250]) {
       const bot = createHeuristicBot(createRng(1), { disguiseCredit: 200, gameEquity });
-      const call = bot.chooseCall(view, loveAll());
+      const call = bot.chooseCall(view, loveAll(), []);
       expect(call.type === "bid" && call.bid.level).not.toBe(1);
     }
   });
@@ -161,7 +161,7 @@ describe("the disguise credit", () => {
     const view = openingView(weak);
     const undisguised = createHeuristicBot(createRng(1), { disguiseCredit: 0 }).chooseCall(
       view,
-      loveAll(),
+      loveAll(), [],
     );
     expect(undisguised.type === "bid" && undisguised.bid.level).toBe(1);
 
@@ -170,7 +170,7 @@ describe("the disguise credit", () => {
     // to have the credit weigh in on which suit.
     const disguised = createHeuristicBot(createRng(1), { disguiseCredit: 200 }).chooseCall(
       view,
-      loveAll(),
+      loveAll(), [],
     );
     expect(disguised.type === "bid" && disguised.bid.level).toBe(1);
   });

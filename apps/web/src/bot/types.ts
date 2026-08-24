@@ -41,7 +41,15 @@ export interface Standing {
 export interface Bot {
   readonly name: string;
   /** A call the auction currently permits, worth what it is worth at this score. */
-  chooseCall(view: PlayerView, standing: Standing): Call;
+  /**
+   * `remembered` is the cards this seat threw away, the same explicit state
+   * `chooseDraw` and `choosePlay` are handed. The bidder had no use for it while
+   * it counted its own hand; a bidder that guesses the *other* hand cannot do
+   * without it, since thirteen of the cards it would otherwise deal the opponent
+   * are ones it watched itself bury — and in this game that is half of what it
+   * cannot place.
+   */
+  chooseCall(view: PlayerView, standing: Standing, remembered: readonly Card[]): Call;
   /**
    * Which card on offer to take: card 1, card 2 sight-unseen, or — under
    * `openDiscard` — the face-up top of the discard pile.

@@ -23,10 +23,15 @@ import { botActionFor } from "../src/game/botTurn.js";
  * thing v1 never had, and it is why v1's code is gone and its rating anchor
  * rests on a measurement nobody can repeat.
  *
- * Deliberately the auction and the draw, not the card play. Those are what a
- * bidding change moves, they are decided by the heuristic bot with no solver in
- * the loop, and they run in milliseconds — where `strength: "strong"` is 60
- * samples a card and would make a pinned deal too slow to keep in `npm test`.
+ * Deliberately the auction and the draw, not the card play — and that boundary is
+ * now the *definition* of a release rather than a shortcut for keeping this test
+ * fast. Card play is shared across every release, so a fix to `sample.ts` or
+ * `solver.ts` changes all of them and this test will not notice. `release.ts` says
+ * why that was chosen and what would reverse it.
+ *
+ * The original reason still holds too: these are decided by the heuristic bot with
+ * no solver in the loop and run in milliseconds, where `strength: "strong"` is 60
+ * samples a card and would make a pinned deal too slow for `npm test`.
  * `test/sampling.test.ts` covers the card play.
  */
 const TRANSCRIPTS: Record<number, readonly string[]> = {
@@ -40,14 +45,17 @@ const TRANSCRIPTS: Record<number, readonly string[]> = {
     "KKSSSSSKSKKKSKKSSSSSKSKSSS | 0:1C 1:3S 0:P",
     "KKSSKSSSKSSKSKSSSKSKKSKSSS | 1:2C 0:2S 1:3C 0:P",
   ],
+  // Re-recorded when v3's equity table was re-fitted under solver card play. The
+  // shape of the change is visible in the first and last of these: the old table
+  // climbed to 6D and sacrificed in 5C, and this one doubles instead.
   3: [
-    "KKSKSSSKSSSSKKKSKSSKSSKKSS | 0:4H 1:5D 0:5H 1:6D 0:x 1:P",
-    "SSSSSSKSSSSKSKKKSKSKSSKKSS | 1:1S 0:4H 1:P",
+    "KKSKSSSKSSSSKKKSKSSKSSKKSS | 0:4H 1:5D 0:x 1:P",
+    "SSSSSSKSSSSKSKKKSKSKSSKKSS | 1:P 0:4H 1:P",
     "SSKSSSSSSSSSSSSKSKKKSKSSSS | 0:2H 1:3D 0:P",
-    "SSSKKKKKSSSSSKSSSSKKSKKSSS | 1:1NT 0:2H 1:2S 0:3H 1:3S 0:4H 1:4S 0:P",
-    "SSSKSSKSSSSSKSSKSSKKKKSSSS | 0:2S 1:3C 0:3S 1:4C 0:P",
-    "SKSKKSSSSSKSSSKKSSSSKSSSSS | 1:2D 0:2H 1:3D 0:3H 1:4D 0:P",
-    "KKSSSSSKSKKKSKKSSSSSKSKSSS | 0:1C 1:4S 0:5C 1:x 0:P",
+    "SSSKKKKKSSSSSKSSSSKKSKKSSS | 1:1NT 0:2H 1:2S 0:3H 1:3S 0:P",
+    "SSSKSSKSSSSSKSSKSSKKKKSSSS | 0:2S 1:3C 0:3S 1:P",
+    "SKSKKSSSSSKSSSKKSSSSKSSSSS | 1:2D 0:2H 1:3D 0:3H 1:P",
+    "KKSSSSSKSKKKSKKSSSSSKSKSSS | 0:1C 1:4S 0:x 1:P",
     "KKSSKSSSKSSKSKSSSKSKKSKSSS | 1:2C 0:2S 1:3C 0:P",
   ],
 };

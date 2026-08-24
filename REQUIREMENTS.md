@@ -728,6 +728,94 @@ purpose, which is the shape the difficulty question below actually wants.
   interface should treat "what this bot remembers seeing" as explicit state it is given,
   not as something it reads from the engine directly.
 
+#### Bidding by search — the design for v4, not yet built
+
+The bidder is the last of the three decisions still made by counting. `evaluate.ts` produces one
+number for what a hand takes in a strain, `bidValue.ts` spreads a fixed-width bell curve over that
+number, and every contract is priced against the result. Card play stopped working that way when
+`samplingBot.ts` replaced it, and that was the largest single improvement the bot has had. The same
+substitution is available here: rather than sharpen the count, guess the hand you cannot see and
+solve each guess.
+
+The estimate being replaced explains about **40%** of what actually happens, and the bell curve's
+width is one constant applied to every hand — so a flat hand with solid honours and a wild
+two-suiter are given the same uncertainty, when the difference between them is exactly what decides
+whether to stretch for game.
+
+**One solve answers a whole strain.** Double dummy depends on the strain, not the level: 4♥ and 5♥
+are the same position and the same answer. So the cost is (strains considered) × (samples), not
+(candidate contracts) × (samples), and because a solution reports both seats, one pass prices this
+hand declaring *and* defending — which is what makes pricing a pass, and a double, free.
+
+**Nothing downstream changes.** `bidValue.ts` already takes a distribution over trick counts, prices
+each outcome through the engine's own scoring, folds it into the rubber and averages. Today that
+distribution comes from `outcomeOdds`. It would come from the samples instead, and `outcomeOdds`,
+`TRICK_SPREAD` and much of `evaluate.ts` stop having a job.
+
+##### It has to be an anytime search, and that is a measurement rather than a preference
+
+A fixed sample count cannot work, on any device. Timed at the first call — thirteen cards each,
+nothing played, the worst case — twenty-five samples over five strains costs **102ms on the easiest
+deal and 5,269ms on the hardest**, a fiftyfold spread on one machine. On the newest iPhone, half of
+a dozen runs came in under 500ms and the longest took four seconds.
+
+The cost is set by **hand shape**, not by hardware or by the sample count. A double-dummy search
+collapses quickly where there are long suits and clear structure, because many moves are equivalent
+and the transposition table keeps hitting; it explodes on flat hands with scattered honours, where
+there is little to collapse and the branching stays wide. No per-device tuning of a constant fixes
+a fiftyfold shape-driven spread.
+
+So: **sample and solve one at a time, accumulate, and stop at N samples or a deadline, whichever
+comes first.** Easy hands get the full count; hard hands get four or five. That bounds the latency
+regardless of shape or device, which is the one thing a constant cannot do. Four samples is still a
+real distribution and still better than a point estimate with a fixed spread around it.
+
+**The uncomfortable part, stated rather than buried: the expensive hands are the ones that need the
+search most.** Flat hands with scattered honours are exactly where a trick count is least reliable,
+and a deadline gives them the least accuracy. This design accepts that. If it turns out to matter,
+the answer is a longer deadline off the main thread rather than a cleverer constant.
+
+##### What it costs elsewhere
+
+- **Reproducibility.** A deadline makes the same seed play differently on different phones, which
+  the seeded engine and the replayable hand log both depend on not happening. The fix is to record
+  the sample count each call actually used, beside `strength` in the log; a deal then replays as
+  what it was.
+- **A worker.** Even a 500ms budget on the main thread is a visible hitch, and off-thread the hard
+  hands could afford a second or two. `localSession.ts` computes the bot's action synchronously
+  inside the pause before it moves, so this is the first decision that would need moving off it.
+- **The disguise.** `DISGUISE_MIN_LENGTH` and its credit are expressed against a counted valuation.
+  A searching bidder needs the credit re-expressed or re-fitted; it is not automatically carried
+  over.
+
+##### Reading the opponent, as one mechanism instead of three weights
+
+Today the auction is read three separate ways, each fitted on its own: `THEIRS_BID` adjusts what a
+suit they named is worth, `THEIR_BID_WEIGHT` blends their claimed level into the defensive estimate,
+and the card-play sampler makes a named suit twice as likely to be theirs. Measured, only the level
+mattered — the suit inference was worth nothing distinguishable.
+
+Under a searching bidder all three become one thing: **weight each sampled hand by how well it
+explains the calls they actually made.** If they opened 4♠ and the sample gives them two spades and
+six points, that world is implausible and should count for little. Suit length and claimed strength
+both fall out of "would this hand have said that", with nothing separately fitted.
+
+The trap: you need a bidder to ask that question with, and if it is the searching bidder you have
+infinite regress. Use the **cheap heuristic bidder as the plausibility model** — a poor
+decision-maker but a serviceable model of what somebody would have bid, and it costs microseconds.
+And weight rather than reject: most random hands do not match a given auction, so rejection throws
+away most of the work.
+
+This is also what makes the bot foolable in the way its own disguise setting assumes, since an
+unusual bid would then genuinely mislead it rather than being averaged away.
+
+##### How it would be measured
+
+`bench/rubber.ts` against v3, both seats, `nodouble`, with solver card play on both sides, headlined
+on **rubbers won** — and a null control first, because two identical bidders must tie at 50% and
+that check has already caught one bench handicapping a seat by twelve points of win rate. Plus
+`bench/bidcost.ts` for the latency distribution, read at the maximum rather than the mean.
+
 ### 2.2 Human vs. Human, Networked
 
 - Two players on two devices, **both live and connected**. Not asynchronous or

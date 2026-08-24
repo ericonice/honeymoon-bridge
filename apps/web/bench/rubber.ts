@@ -27,6 +27,8 @@ import type {
 } from "@hb/engine";
 import { DEFAULT_GAME_EQUITY } from "../src/bot/bidValue.js";
 import type { Objective } from "../src/bot/bidValue.js";
+import { releaseFor } from "../src/bot/release.js";
+import type { BotRelease } from "../src/bot/release.js";
 import { defensiveTricks, estimatedTricks } from "../src/bot/evaluate.js";
 import { createHeuristicBot } from "../src/bot/heuristicBot.js";
 import type { BotTuning } from "../src/bot/heuristicBot.js";
@@ -343,6 +345,24 @@ interface RunOptions {
    * so both would beat it and the margin between them would be swamped.
    */
   readonly objective: Objective;
+  /**
+   * Two releases to play against each other, challenger first.
+   *
+   * The point of keeping a superseded release playable, and the reason it does not
+   * have to be *frozen*: card play is shared, so a fix there changes both sides of
+   * a comparison — but a margin that can be re-measured on demand needs no
+   * freezing. A number quoted from before such a change is history; this is how to
+   * get it back.
+   *
+   * Prefer this to `objective=`, which compares one pricing against another and
+   * only happens to name v3 against v2 for as long as that is the only thing
+   * separating them.
+   */
+  readonly releases: Pair<BotRelease> | null;
+  /** Milliseconds the challenger may spend searching for a trick distribution. Zero is off. */
+  readonly search: number;
+  /** `mean` takes the search's centre and keeps the fitted spread; `odds` takes both. */
+  readonly searchMode: "mean" | "odds";
   readonly rubbers: number;
   readonly samples: number;
   /**
@@ -358,7 +378,17 @@ interface RunOptions {
   readonly versusWeight: number | null;
 }
 
-function run({ gameEquity, objective, oracle, rubbers, samples, versusWeight }: RunOptions): void {
+function run({
+  gameEquity,
+  objective,
+  oracle,
+  releases,
+  rubbers,
+  samples,
+  search,
+  searchMode,
+  versusWeight,
+}: RunOptions): void {
   const tuning = { gameEquity };
   const cardPlay = (rng: Rng, extra: BotTuning = {}): Bot =>
     samples > 0
@@ -386,14 +416,31 @@ function run({ gameEquity, objective, oracle, rubbers, samples, versusWeight }: 
       // a fixed baseline and its own bidder ignores it anyway. A head-to-head
       // reference is the same bidder, so it takes the same equity and differs
       // only in the weight being tested.
-      const make = (rng: Rng, challenger: boolean): Bot =>
-        challenger
+      const make = (rng: Rng, challenger: boolean): Bot => {
+        if (search > 0) {
+          // The same bidder, one side searching for its trick distribution and
+          // the other counting it. Everything else is held identical, which is
+          // the only way to price the search itself.
+          return challenger
+            ? cardPlay(rng, {
+                objective,
+                searchBudgetMs: search,
+                searchMode: searchMode === "mean" ? "mean" : "odds",
+                searchSamples: 25,
+              })
+            : cardPlay(rng, { objective });
+        }
+        if (releases !== null) {
+          return cardPlay(rng, releases[challenger ? 0 : 1].tuning);
+        }
+        return challenger
           ? cardPlay(rng, { objective })
           : versusWeight !== null
             ? cardPlay(rng, { theirBidOnOwnWeight: versusWeight })
             : objective === "equity"
               ? cardPlay(rng, { objective: "points" })
               : legacyBidder(createHeuristicBot(rng));
+      };
       const bots: Pair<Bot> = [
         make(createRng(seed), challengerSeat === 0),
         make(createRng(seed), challengerSeat === 1),
@@ -425,11 +472,15 @@ function run({ gameEquity, objective, oracle, rubbers, samples, versusWeight }: 
 
   const play = samples > 0 ? `, ${samples}-sample card play` : `, heuristic card play`;
   console.log(
-    versusWeight !== null
-      ? `the same bidder against itself trusting their bid at ${versusWeight}${play}`
-      : objective === "equity"
-        ? `the equity objective against the same bidder pricing in points${play}`
-        : `points bidder against the old "can I make it" bidder${play}`,
+    search > 0
+      ? `the bidder searching its tricks at ${search}ms (${searchMode}) against the same bidder counting them${play}`
+      : releases !== null
+        ? `v${releases[0].version} ${releases[0].name} against v${releases[1].version} ${releases[1].name}${play}`
+          : versusWeight !== null
+          ? `the same bidder against itself trusting their bid at ${versusWeight}${play}`
+          : objective === "equity"
+            ? `the equity objective against the same bidder pricing in points${play}`
+            : `points bidder against the old "can I make it" bidder${play}`,
   );
   console.log(`  challenger prices a game at ${gameEquity}`);
   console.log(
@@ -468,12 +519,34 @@ function run({ gameEquity, objective, oracle, rubbers, samples, versusWeight }: 
 // The oracle is the default because the five-level-only reference is what hid
 // four-level disasters in the first place; `nodouble` restores it for comparing
 // against a margin recorded before this existed.
+/**
+ * `releases=3:2` plays one release against another, challenger first.
+ *
+ * Both must be in the registry, which is what makes this possible at all — see
+ * `release.ts` on why a superseded release stays playable.
+ */
+function releasesFrom(arg: string | undefined): Pair<BotRelease> | null {
+  if (arg === undefined) {
+    return null;
+  }
+  const [first, second] = arg.slice("releases=".length).split(":");
+  const challenger = releaseFor(Number(first));
+  const reference = releaseFor(Number(second));
+  if (challenger === null || reference === null) {
+    throw new Error(`releases=${first}:${second} names a version this build does not have`);
+  }
+  return [challenger, reference];
+}
+
 const equityArg = process.argv.find((arg) => arg.startsWith("equity="));
 const versusArg = process.argv.find((arg) => arg.startsWith("vs="));
 
 run({
   gameEquity: equityArg === undefined ? DEFAULT_GAME_EQUITY : Number(equityArg.slice("equity=".length)),
   objective: process.argv.includes("objective=equity") ? "equity" : "points",
+  releases: releasesFrom(process.argv.find((arg) => arg.startsWith("releases="))),
+  search: Number(process.argv.find((arg) => arg.startsWith("search="))?.slice("search=".length) ?? 0),
+  searchMode: process.argv.includes("mean") ? "mean" : "odds",
   oracle: !process.argv.includes("nodouble"),
   rubbers: Number(process.argv[2] ?? 60),
   samples: Number(process.argv[3] ?? 0) || 0,

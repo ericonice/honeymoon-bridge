@@ -1,6 +1,7 @@
 import type { MatchFormat, Unlock } from "@hb/engine";
 import { useEffect, useState } from "react";
 import { BOT_RELEASES, LATEST_RELEASE } from "../bot/release.js";
+import { runBidTiming } from "../game/bidCost.js";
 import type { CardColor } from "../game/cardColor.js";
 import type { Boldness, Density, DrawStyle, Pace, Strength } from "../game/identity.js";
 import { flush, outboxState } from "../game/outbox.js";
@@ -279,6 +280,7 @@ export function SettingsOverlay({
 }: SettingsOverlayProps): React.JSX.Element {
   const [showingHandLogs, setShowingHandLogs] = useState(false);
   const [previewUnlocks, setPreviewUnlocks] = useState<readonly Unlock[]>([]);
+  const [bidCost, setBidCost] = useState<string | null>(null);
 
   return (
     <div className="safe-inset absolute inset-0 z-30 flex flex-col bg-table-dark/97">
@@ -557,6 +559,25 @@ export function SettingsOverlay({
                 <span className="mt-0.5 block text-xs text-white/55">
                   Shows the notification with a bronze, a silver and a gold, and plays the sound it
                   arrives with.
+                </span>
+              </button>
+
+              {/* The one measurement that cannot be taken anywhere but here.
+                  `bench/bidcost.ts` runs the identical code on a desktop; what
+                  decides whether bidding can search is the ratio between the two,
+                  and phones vary by a factor of two either way. */}
+              <button
+                type="button"
+                className="w-full rounded-xl border border-white/15 px-4 py-3 text-left"
+                onClick={() => {
+                  setBidCost(runBidTiming());
+                }}
+              >
+                <span className="block text-base font-medium">Time a bid search</span>
+                <span className="mt-0.5 block text-xs text-white/55">
+                  {bidCost === null
+                    ? "Guesses the other hand 25 times and solves each, which is what bidding by search would cost. Blocks for a second or two on purpose."
+                    : bidCost}
                 </span>
               </button>
 

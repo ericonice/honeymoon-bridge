@@ -46,6 +46,7 @@ npm run bench:par       --workspace @hb/web -- 300 sampling   # tricks lost agai
 npm run bench:head      --workspace @hb/web -- 120 25   # two card-play policies, in points
 npm run bench:calibrate --workspace @hb/web -- 400      # refit the estimates against par
 npm run bench:auction   --workspace @hb/web -- 12       # why the bidder bid that
+npm run bench:bidcost   --workspace @hb/web -- 25       # what bidding by search would cost
 npm run bench:strain    --workspace @hb/web -- "S:AK4 H:AK4 D:A43 C:AK32"
 npm run bench:draw      --workspace @hb/web -- 300 open # draw policies; `open` runs the variant
 npm run bench:equity    --workspace @hb/web -- 1500      # what a standing is worth, as a win chance
@@ -140,6 +141,29 @@ and `heuristicBot.ts` threads it from `BotTuning`. Against the same bidder prici
 everything else held identical, the equity objective wins **631 rubbers to 169, 78.9% ± 1.4**, twenty
 standard errors from even, and +237 points a rubber as well. For scale, the change that made the
 bidder price in points at all was 77.5%.
+
+**Re-fitted under solver card play, which fixed the overreaching and nothing else.** The table was
+first fitted from rubbers played with the fast heuristic, where contracts fail more often than they do
+in a real game — so v3 learned to stretch in a world where stretching was safe. Re-fitting with the
+solver on, 300 rubbers, and measuring against v2 at eight samples a card under identical conditions:
+
+| | shipped table | re-fit |
+| --- | --- | --- |
+| rubbers won | 65.7% ± 4.0 | **65.0% ± 4.0** |
+| down 2+ in its own contracts | 18% of deals | **13%** |
+| what those cost | 508 a rubber | **325** |
+
+**A third fewer disasters for the same result.** The prediction was half right and the half that
+failed is worth recording: those contracts were costing points without costing games, so the win rate
+did not move. `gameLead` fell 0.71 to 0.61 as expected; `level.part` went *negative*, which is not
+understood and is flagged in `equity.ts` rather than trusted — that cell has taken four values across
+four fits because it overlaps with the margin term.
+
+The anchor stays at 1250, since the win rate against v2 did not change. Kept as a correction to v3
+rather than a v4: with the records disposable there is no accumulated history for a version to
+protect, and a permanent near-empty rung costs more than it buys. **The threshold worth stating: a
+release with almost no recorded games can be corrected in place; one with a real history cannot,
+because the history is the thing a version exists to protect.**
 
 **But that number is measured under heuristic card play, and it does not survive the sampler
 intact.** With eight-sample solver card play on both sides it wins 92 rubbers to 48 — 65.7% ± 4.0,
@@ -254,6 +278,17 @@ is gone and `bidValue.ts` has no format branch left.
 `bench/rubber.ts` takes flags after the counts: `nodouble` restores the old
 five-level-only reference, `equity=N` sets what the challenger prices a game at, and
 `vs=N` replaces the reference with **this same bidder** at a different trust weight.
+`releases=3:2` plays one release against another, challenger first, reading both
+tunings out of the registry — **prefer that to `objective=equity`**, which compares
+one pricing against another and only happens to name v3 against v2 for as long as
+that is the only thing separating them.
+
+**Release-versus-release is what makes releases comparable, and it is the reason they
+do not need freezing.** Card play is shared, so a fix there moves both sides of any
+recorded margin — but a margin that can be *re-measured on demand* needs no frozen
+artefact. That is the trade this project has taken: v2's behavior may change, and
+any number quoted about it is re-derivable rather than preserved. It only works
+because superseded releases stay playable, which is what v1 was not.
 That last one is not a variant, it is the answer to a question the legacy reference
 cannot answer — see "the instrument decided this one" below.
 
@@ -707,6 +742,22 @@ Deliberately the auction and the draw and not the card play. Those are what a bi
 decided by the heuristic bot with no solver in the loop, and they run in 60ms — where `strength: "strong"` is 60
 samples a card and would make a pinned deal too slow to keep in `npm test`.
 
+**What a release covers is its bidding and its draw, not its card play — and that is now a decision
+rather than an accident.** `sample.ts` and `solver.ts` have no per-release tuning, so a fix there
+changes every release at once. That happened the day `KEEP_STRENGTH` corrected a sampler which had
+been imagining an opponent five high-card points too weak, and `test/botRelease.test.ts` did not
+notice, because it pins only the auction and the draw.
+
+Scoping it would be cheap — `BotTuning` already carries per-release values, so it is about twenty
+lines across four call sites — and it was chosen against on the grounds that one person is playing and
+the records are disposable. **The thing given up is worth naming: a superseded release is most useful
+as a fixed reference, and a reference whose value is being unchanged is exactly what this trades
+away.** So a cross-release margin measured before a card-play change cannot be quoted after one — v3
+beating v2 65.7% of rubbers is history rather than a fact about the pair, and the way to have it again
+is to re-run the bench, which is possible only because both releases are still playable. Reverse this
+if more than one person plays, or if a release has to stay comparable across a change nobody wants to
+re-measure.
+
 **There is no per-release tuning field yet, and that is deliberate.** Two releases that differ have somewhere to
 say so — `BotTuning`, which `createHeuristicBot` already takes — and one release has nothing to say. A field
 with exactly one possible value is not yet a field, for the same reason a knob whose effect on behavior has
@@ -850,6 +901,104 @@ The one number to keep: `test/solver.test.ts` cross-checks the solver against a 
 minimax on small positions. That test immediately caught the collapsing treating the *led* card as
 out of play, which silently made a queen and an ace interchangeable behind a led king. Anything
 touching the search needs that cross-check to stay.
+
+**The sampler imagined an opponent five points too weak, for as long as it has existed.** The unknown
+cards are not exchangeable. Twenty-six cards are dead in this game — their discards and the undrawn
+stock — so the pool `sampleOpponentHand` draws from holds thirteen the opponent *kept* and thirteen
+they *threw away*, and they were choosing. Measured over 300 deals: they hold **15.4** high-card
+points, a uniform sample guesses **9.9**, and their discards average 4.5. Nine-nine is almost exactly
+half of the twenty points they saw, which is what a coin flip per card produces.
+
+`KEEP_STRENGTH` corrects it — one knob, weighting the draw by rank, fitted against that observable
+rather than reasoned about. Paired against the uniform sampler on the same 398 deals:
+
+| tricks thrown away per deal | uniform | fixed | |
+| --- | --- | --- | --- |
+| as declarer | 0.46 | **0.36** | −22% |
+| as defender | 0.44 | **0.35** | −20% |
+| total | 0.90 | **0.71** | **−21%** |
+| contracts made | 60% | **63%** | par allows 63% |
+
+**A fifth of everything the bot throws away, and it now makes essentially every contract that was
+makeable.** It also fixed the bidder's search, which was *worse* than counting until this landed —
+mean absolute error against par 1.56 with the biased sampler, 1.14 with it fixed.
+
+**The prediction that failed is the useful part.** I expected the gain to fall on *defence*, since that
+is where the bot does most of its guessing about the missing hand, and it came out even — 22% declaring
+against 20% defending. Imagining a weaker opponent does not specifically damage defence; it damages
+every decision that depends on where the missing cards are, and declarer choosing a line is the same
+mistake as defender choosing a card.
+
+**The constant corrects the average and leaves the per-deal error alone, and `drawTurns` says how to
+fix that.** How often a seat kept card 1 is public, and it predicts their strength strongly: over 400
+deals both seats, mean points run **11.0 at nought keeps, 14.5 at three, 18.2 at six, 19.8 at seven** —
+a slope of **1.09 points per keep**, correlation 0.39. So a global constant fitted to the mean of 15.4
+is wrong by around four points at each end. `bench/keepsignal.ts` is that measurement.
+
+The mechanism that gets it for free is to **simulate the draw** rather than weight by rank: the
+twenty-six unknown cards are exactly the twenty-six the opponent was offered, so shuffling them into
+thirteen pairs and running a draw policy over them produces a hand that is selected the way theirs was
+— and conditioning on the recorded keep-or-reject choices makes it selected *by the same amount*. A
+hand built from turns where they chose the card is strong; one built from sight-unseen takes is close
+to random. That replaces a fitted knob with a mechanism, which is the pattern that has won every time
+here, and `0.71` is now the number it has to beat. The wrinkle: mid-deal the simulation has to produce
+a hand containing the cards they have already played, which means constraining the draw rather than
+rejecting afterwards — so it is clean for bidding, where nothing has been played, and needs work for
+card play.
+
+**Replaying the opponent's draw beats weighting for it, and the reason is not the one I claimed.**
+`drawSimulation.ts` builds the guessed hand by replaying the draw they actually had. Two facts make it
+possible and both are peculiar to this game: each seat's thirteen turns consume twenty-six cards, so
+the cards this seat cannot place are *exactly* the twenty-six the opponent was offered; and
+`drawTurns` records publicly whether they kept the card they were shown or took the unseen one.
+
+**It is shape, not points.** Over 300 deals, both seats:
+
+| | real hands | replayed draw | `KEEP_STRENGTH` alone |
+| --- | --- | --- | --- |
+| longest suit | 5.64 | **5.65** | 4.90 |
+| voids | 0.10 | **0.10** | 0.05 |
+
+The rank weight gets the points right and the distribution wrong — hands three quarters of a suit
+flatter than real ones and half the voids — because a hand assembled by a draw policy is a hand that
+was *building suits*. That is why it improved the searched trick estimate where the point count showed
+nothing: mean absolute error against par went 1.14 to **1.04** and r² 0.659 to **0.699**, against a
+counted estimate's 1.54 and 0.434.
+
+**Two corrections to what I first wrote, both found by testing a result that already looked good.**
+
+The claim that this reproduced the keep-count spread — 11 points at no keeps to 20 at seven — was a
+**confound**. A pool rich in honours *causes* more keeps, so keep count tracks pool strength and any
+honour-weighted draw tracks it too; with the simulation switched off, `KEEP_STRENGTH` alone reproduces
+that table nearly as well (10.9, 14.2, 17.3, 18.6 against 10.8, 14.6, 18.1, 18.9). The mechanism is
+better, but not for the reason given.
+
+**The choice conditioning was broken and is now fixed, and fixing it bought nothing measurable.** The
+reject branch forced the shown card to be one the policy declines and then handed the *other* card
+over — but "the other one, given this was unkeepable" is conditionally *good*, where card two was
+taken sight-unseen and should be plainly random. Thirteen keeps and thirteen rejects came out at 15.70
+and 15.81 points, indistinguishable, and a test asserting a gap is what found it. The two cards a turn
+offers are independent draws and the choice speaks only about the first, so the shown card is now drawn
+from the cards consistent with it and the other from whatever is left. The gap went **-0.12 to +1.20**,
+points stayed right at 15.60 against 15.42, shape stayed exact at 5.64.
+
+**And the trick estimate did not move: 1.07 against 1.04, which is inside the noise on 400 cases.**
+Kept anyway, on two grounds. It is correct rather than accidentally compensating — and there is a real
+possibility the old version was cancelling one bias with another, since an opponent handed
+conditionally-good cards is a *stronger* opponent, which offsets the solver assuming everybody plays
+perfectly. A pair of errors that happen to cancel on today's metric is not a foundation for the bidder.
+
+**Cost per sample is part of sample quality, which I had been treating as separate.** The corrected
+branch asks "would this hand keep that card" of every card in the pool on all thirteen turns, and
+`chooseTake` recomputes the value of an unknown card *per candidate* — a fresh deck and forty
+valuations — when it depends only on the hand. That was **55ms a sample**, which cut the bid search
+from 11.7 samples inside its deadline to 4.6 and turned a better sampler into a worse estimate.
+`keepTest` computes the threshold once and returns a predicate; samples recovered to 9.2.
+
+Also not done: this only runs where the draw can be replayed, which means before the opponent has
+played a card — so it helps bidding and does nothing for card play beyond the opening lead. Mid-deal it
+would have to *guarantee* the cards they have already shown end up in the hand, which means
+constraining the draw rather than rejecting afterwards.
 
 **`bot/samplingBot.ts` is what the solver bought.** It guesses the hand it cannot see — everything
 unaccounted for, minus any suit the opponent has shown out of — 25 times over, solves each guess,
@@ -1196,6 +1345,107 @@ is not a change of opponent worth a rule.
 line converges toward *bot + the player's true gap* and then flattens. That is having found your
 level, not having stopped improving, and the only way past it is a stronger opponent — which is what a
 v3 would be for.
+
+**Bidding by search is costed but not built, and the cost is the whole question.** The bidder is the
+last decision in here made with a rule of thumb — it counts tricks with `evaluate.ts`, whose estimate
+explains about 40% of what happens, and then spreads a fixed-width bell curve over the guess. Card play
+stopped doing anything of the kind long ago and that was the largest single improvement the bot has
+had. The reason bidding never followed is cost, and nobody had measured it.
+
+`bidTiming.ts` measures it and decides nothing. **One solve answers a whole strain**, since double
+dummy depends on the strain and not the level — 4♥ and 5♥ are the same position — so the cost is
+(strains considered) × (samples), not (candidate contracts) × (samples), and one pass prices this hand
+declaring *and* defending because a solution carries both seats.
+
+On this machine, at the first call with thirteen cards each and nothing played, which is the worst
+case: **7.1ms a solve**, so 25 samples over five strains is **889ms** and over two strains is
+**342ms**. `bench/bidcost.ts` is that run.
+
+**The same code is a row in the testing panel — "Time a bid search" — because the number that decides
+the feature cannot be taken anywhere but a phone.** It blocks while it runs, on purpose: bidding by
+search would block too, and hiding it behind an animation would measure the animation.
+
+**Measured, and the prediction was wrong in the useful direction.** I expected a phone to run this two
+to four times *slower* and sized the whole feature around needing a worker. On a real device it is
+**2.6ms a solve against the desktop's 7.1 — nearly three times faster.** Five strains at 25 samples is
+**331ms on the phone** against 889 here, two strains **123ms** against 342.
+
+The reason, in hindsight: the solver is tight integer and bitmask work with a transposition table, which
+is exactly what JavaScriptCore on a current phone SoC is best at, and the baseline is Node under
+`vite-node` on a Windows laptop. **For this workload the dev machine is the slow one.** Worth
+remembering before sizing anything else around an assumed phone penalty.
+
+**The mean was the wrong summary and it hid the decision.** Reported over 40 deals, a 25-sample pass
+over five strains runs **102ms at best and 5,269ms at worst**, median 956 and p90 3,286 — a fiftyfold
+spread. On the newest iPhone, a dozen taps gave half under 500ms and a longest of four seconds. The
+bench printed an average until this was noticed, which read as a settled cost of about 900ms.
+
+**The cost is hand shape, not hardware.** A double-dummy search collapses where there are long suits
+and clear structure and explodes on flat hands with scattered honours. So no per-device tuning of a
+sample count can work, and the feature has to be an **anytime search with a deadline** — see
+`REQUIREMENTS.md` §2.1 for the v4 design. The uncomfortable corollary is recorded there too: the
+expensive hands are the ones a counted estimate serves worst.
+
+**But that number was taken on the newest iPhone, so it is a ceiling and not a floor.** The device that
+decides what ships is the slowest one anybody plays on, and this game is played across a family's
+phones. Guessing at the spread rather than measuring it: an iPhone four or five years old is perhaps
+two to three times slower single-thread, an older or budget Android four to six — so 2.6ms a solve
+could be 6 to 15 elsewhere, and five strains every call becomes one to two seconds an auction.
+
+So the design discipline stands even though the fast device does not need it: **one pass per auction
+over the two or three strains actually in contention**, which is 123ms on the newest phone and
+plausibly three quarters of a second on the oldest. The headroom on a current device is not headroom to
+spend.
+
+The same reasoning **withdraws an idea this measurement first suggested** — raising card play's sample
+count from 60. That is 156ms a card here and 600 on a slow device, eating the animation on exactly the
+phones least able to afford it.
+
+**A sample count chosen from a measured device speed would beat a constant**, and the trade-off is
+worth naming before anybody builds it: timing the first few solves and picking a count to fit a budget
+adapts across devices, but makes the same seed play differently on different phones, which costs the
+reproducibility the seeded engine and the hand log are built on. The way to have both is to measure
+once, fix the count for the whole match, and log it beside `strength` — a match stays replayable
+because the count it used is recorded.
+
+Two caveats on the raw number as well. It is **one deal against the desktop's twenty-deal average**, and
+solve time varies a good deal with shape, so it is the right order of magnitude rather than three
+significant figures.
+
+**The bidder can search for its tricks now, and it wins 65% of rubbers against the same bidder
+counting them** — 78 to 42 over 120 plays, +205 points a rubber, 3.4 standard errors. Off by default;
+`searchBudgetMs` and `searchSamples` turn it on, and `bench/rubber.ts search=200` measures it.
+
+**The value is in the shape, not the centre.** Handing the bidder only the search's *mean* and keeping
+the fitted bell curve around it comes out level at 47.5%. The whole distribution wins. Which is the
+argument the feature was built on: a flat hand with solid honours and a wild two-suiter have different
+uncertainty, and `TRICK_SPREAD` is one number for every hand.
+
+**It measured as a disaster first — 37%, then 33%, then 28% — and all of that was two bugs of mine.**
+
+Replacing `estimateFor` wholesale **deleted the trust in their bid level**, which is worth +651 a
+rubber against +467 and is the largest single thing the bidder knows. A better estimate of one term is
+not a reason to discard another.
+
+And the mirror was wrong. `searchTricks` solves with the opponent on lead, so it answers *this* seat
+declaring — and double-dummy tricks are not independent of who leads, so thirteen minus that number is
+not what they take when they declare. Every pass and double was priced off a position nobody was in.
+The search is now used **only for this seat's own contracts**, which is exactly what it solved.
+
+Scoping those two took it from 28.3% to 47.5% in mean mode and to 65.0% with the full distribution.
+**Both bugs were found by re-reading the code, not by the bench** — the bench said "worse" three times
+and could not say why, and the diagnosis I had built on those numbers (that the counted estimate's
+optimism was load-bearing) was wrong and would have shelved the feature.
+
+**One constant was invented and deleted in the same session.** The searched distribution is narrower
+than the fitted one — its own spread is 1.11 tricks against an error of 1.54 — so widening it to match
+looked obviously right, and it is worth nothing: 64.2% unwidened, 66.7% at a third of a trick, 65.0% at
+a full one. The theory was formed while the two bugs were making the bidder timid, and the fix removed
+the problem the widening was invented for.
+
+Still to decide: whether to switch it on. Doing so changes v3's play materially, so it wants the
+record reset or a version bump, and the phone cost measured — 200ms a call, two or three calls an
+auction.
 
 ### Open threads
 

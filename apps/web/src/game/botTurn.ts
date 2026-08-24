@@ -50,7 +50,7 @@ export function botActionFor({ bot, seat, standing, state }: BotTurn): DealActio
       return { type: "draw-decide", take: bot.chooseDraw(view, state.discards[seat]) };
     }
     case "auction": {
-      return { type: "call", call: bot.chooseCall(view, standing) };
+      return { type: "call", call: bot.chooseCall(view, standing, state.discards[seat]) };
     }
     case "play": {
       return { type: "play", card: bot.choosePlay(view, state.discards[seat]) };
