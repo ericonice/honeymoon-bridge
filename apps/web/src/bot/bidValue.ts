@@ -1,5 +1,6 @@
 import { applyDealScore, opponentOf, scoreDeal, totalScore } from "@hb/engine";
 import type { Card, Contract, Pair, PlayerId, RubberState } from "@hb/engine";
+import { equityOf } from "./equity.js";
 import type { Standing } from "./types.js";
 
 /**
@@ -108,6 +109,23 @@ function outcomeOdds(estimate: number): number[] {
  */
 const DOUBLED_FROM_DOWN = 2;
 
+/**
+ * What a call is priced in.
+ *
+ * `"points"` is how the bidder has always worked: the change in the points
+ * differential, plus a flat credit for the position. `"equity"` prices the same
+ * call by the change in the chance of taking the rubber, which is the thing
+ * actually being played for — see `equity.ts`.
+ *
+ * A choice rather than a replacement because a superseded release has to go on
+ * playing the way it did; `release.ts` names which one each version uses, and
+ * `test/botRelease.test.ts` fails if that ever stops being true. The two are not
+ * on the same scale and nothing may compare a value from one against a value from
+ * the other — see `disguiseValue` in `heuristicBot.ts`, which is the one place
+ * that a constant has to be expressed in both.
+ */
+export type Objective = "equity" | "points";
+
 export interface BidValueOptions {
   readonly contract: Contract;
   /** What a game in hand is worth. `DEFAULT_GAME_EQUITY` unless testing says otherwise. */
@@ -122,6 +140,8 @@ export interface BidValueOptions {
   /** This seat's own hand, which is all it can count honors from. */
   readonly hand: readonly Card[];
   readonly me: PlayerId;
+  /** Defaults to points, so every caller that has not been told otherwise is unchanged. */
+  readonly objective?: Objective;
   readonly standing: Standing;
 }
 
@@ -148,6 +168,10 @@ function differentialAfter(options: BidValueOptions, tricks: number): number {
 
   const score = scoreDeal({ contract, hands, tricksWon }, standing.vulnerable);
   const rubber = applyDealScore(standing.rubber, score);
+
+  if (options.objective === "equity") {
+    return equityOf(rubber, me) - equityOf(standing.rubber, me);
+  }
 
   const after = totalScore(rubber);
   const before = totalScore(standing.rubber);

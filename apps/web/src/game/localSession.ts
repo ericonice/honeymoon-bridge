@@ -16,7 +16,6 @@ import {
 } from "@hb/engine";
 import type { DealAction, DealState, PlayerId, TableState } from "@hb/engine";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BOT_RELEASE } from "../bot/release.js";
 import { DEFAULT_GAME_EQUITY } from "../bot/bidValue.js";
 import { DISGUISE_CREDIT_ON } from "../bot/heuristicBot.js";
 import { createSamplingBot } from "../bot/samplingBot.js";
@@ -25,6 +24,7 @@ import { botActionFor } from "./botTurn.js";
 import { reportHandLog } from "./handLog.js";
 import {
   boldness,
+  preferredRelease,
   disguiseEnabled,
   drawStyle,
   pace,
@@ -153,13 +153,20 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
   const peek = options.peek === true;
   // Read once, when the match starts, for the same reason the format is: a bot
   // that changed how it bid halfway through a rubber would be two opponents.
+  // The release is read once here for the same reason the format is: a bot that
+  // changed how it bid halfway through a rubber would be two opponents in one
+  // match, and the version travels with every record the match produces.
+  const release = useMemo(() => preferredRelease(), []);
   const bot = useMemo(
     () =>
       createSamplingBot(createRng(randomSeed()), samplesFor(strength()), {
+        // The release first, then the player's settings over it — what the
+        // opponent *is*, then what they asked it to be.
+        ...release.tuning,
         disguiseCredit: disguiseEnabled() ? DISGUISE_CREDIT_ON : 0,
         gameEquity: equityFor(boldness()),
       }),
-    [],
+    [release],
   );
   /**
    * The seed the deal on the table was dealt from, kept for the hand log.
@@ -313,7 +320,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
       reportHandLog({
         auction: deal.auction,
         boldness: boldness(),
-        botVersion: BOT_RELEASE.version,
+        botVersion: release.version,
         completedTricks: deal.completedTricks,
         contract: deal.contract,
         disguise: disguiseEnabled(),
@@ -349,7 +356,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     reported.current = true;
     const points = totalScore(summary.rubber);
     reportRobotRubber({
-      botVersion: BOT_RELEASE.version,
+      botVersion: release.version,
       deals: summary.history.length,
       format: summary.rubber.format,
       points: points[HUMAN],

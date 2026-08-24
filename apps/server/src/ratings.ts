@@ -45,8 +45,50 @@ export const K_FACTOR = 32;
  * it about nine times in ten settles near 1600, and somebody it beats sits below
  * 1200. Anchoring the bot at 1500 instead would put the whole family above average,
  * which reads as flattery.
+ *
+ * v3's spacing is measured the same way and, unlike v1's, can be measured again
+ * whenever anybody wants to, because that release is still playable:
+ * `npm run bench:rubber --workspace @hb/web -- 70 8 objective=equity nodouble`.
+ *
+ * **Which card play it is measured under changes the answer, and v3 is anchored
+ * below all of it on purpose.** Against v2 with heuristic card play on both sides
+ * it wins 78.9% of rubbers, a 229-point gap. With eight-sample solver card play it
+ * wins 65.7% over 140 rubbers, a 113-point gap. The shipped strength is sixty
+ * samples, which is neither, and measuring there is too slow to have been done —
+ * but the gap narrowed at every step toward better card play, which is the reason
+ * to distrust the direction rather than the size.
+ *
+ * So it starts at 1250 — a fifty-point gap, below every measurement of it — and
+ * moves up when play says to. Safe to do it that way round because nothing here is
+ * stored: a retuned anchor comes out right on the next read for everybody at once,
+ * so the cost of starting low is a deploy and the cost of starting high is a family
+ * who were quietly told they are better than they are. Level with v2 was considered
+ * and is worse than conservative: the bench separates the two at 3.9 standard
+ * errors, so equality is a claim the evidence refuses rather than a cautious
+ * abstention from one.
+ *
+ * **The cost of being wrong this way is worth naming, because it is not nothing.**
+ * If v3 really is stronger and this says it is not, then somebody beating it less
+ * often than they beat v2 reads as *the player getting worse* — the same error as
+ * flattery, pointing the other way. The chart's version ticks are what explains the
+ * bend when that happens.
+ *
+ * **What would settle it is not more v3.** With one person, opponent strength and
+ * that person improving are the same signal — this account is 6-2 against v1 and
+ * 21-2 against v2, which taken at face value makes v2 the weaker bot, and the same
+ * period is when they got better. The measurement that works is alternating the
+ * releases in one stretch of play, which is what keeping v2 selectable is for:
+ * same person, same week, and the difference between the two records is the gap.
+ *
+ * `nodouble` in both, because the oracle doubler handicaps whichever seat it is
+ * applied to under heuristic card play — see `bench/rubber.ts`.
+ *
+ * **Add a version here before the client that plays it is deployed.** `botRating`
+ * falls back to the unversioned rating for anything it does not recognise, so a
+ * client shipped first would have every one of its matches rated as beating the
+ * weakest bot in this table, quietly inflating everybody.
  */
-const BOT_RATINGS: Record<number, number> = { 1: 1000, 2: 1200 };
+const BOT_RATINGS: Record<number, number> = { 1: 1000, 2: 1200, 3: 1250 };
 
 /**
  * A robot match older than bot versions at all — see `0006_bot_version.sql`, where

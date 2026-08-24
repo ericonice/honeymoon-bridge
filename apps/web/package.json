@@ -8,6 +8,7 @@
     "bench:auction": "vite-node bench/auction.ts",
     "bench:calibrate": "vite-node bench/calibrate.ts",
     "bench:draw": "vite-node bench/draw.ts",
+    "bench:equity": "vite-node bench/equity.ts",
     "bench:head": "vite-node bench/head.ts",
     "bench:par": "vite-node bench/par.ts",
     "bench:rubber": "vite-node bench/rubber.ts",

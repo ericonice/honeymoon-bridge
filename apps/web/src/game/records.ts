@@ -2,7 +2,7 @@ import type { MatchFormat } from "@hb/engine";
 import { useCallback, useEffect, useState } from "react";
 import { storedSession } from "./account.js";
 import { nickname, playerToken } from "./identity.js";
-import { enqueue } from "./outbox.js";
+import { enqueue, flush } from "./outbox.js";
 import { readStored, writeStored } from "./storage.js";
 import { recentMatchesUrl, recordsUrl, resetRecordUrl, robotResultUrl } from "./serverUrl.js";
 
@@ -246,7 +246,17 @@ export function useRecords(active: boolean): RecordsState {
     }
 
     setLoading(true);
-    void fetch(recordsUrl(), { headers: { Authorization: `Bearer ${session}` } })
+    // Sending first is the whole point, not politeness. A rubber's own result is
+    // enqueued the moment it ends and `enqueue` starts a pass immediately, so
+    // asking the server for the record straight afterwards is a race the read
+    // usually wins — the report is still in flight, the answer is the record from
+    // before the match, and nothing refetches. That is exactly the "it only
+    // updates after a refresh" this fixes. `flush` resolves when the pass ends,
+    // joining one already running rather than starting a second, so the wait is
+    // the report's own round trip and nothing when the queue is empty.
+    void flush()
+      .catch(() => undefined)
+      .then(() => fetch(recordsUrl(), { headers: { Authorization: `Bearer ${session}` } }))
       .then(async (response) => (response.ok ? ((await response.json()) as Records) : null))
       .then((fetched) => {
         setRecords(fetched === null ? null : withRating(fetched));
@@ -287,7 +297,11 @@ export function useRecentMatches(active: boolean): RecentMatchesState {
     }
 
     setLoading(true);
-    void fetch(recentMatchesUrl(), { headers: { Authorization: `Bearer ${session}` } })
+    // The same race as `useRecords`, and the match list is where a game somebody
+    // has just played is most obviously missing.
+    void flush()
+      .catch(() => undefined)
+      .then(() => fetch(recentMatchesUrl(), { headers: { Authorization: `Bearer ${session}` } }))
       .then(async (response) =>
         response.ok ? ((await response.json()) as { matches: MatchRecord[] }).matches : null,
       )

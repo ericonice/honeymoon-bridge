@@ -1,4 +1,13 @@
-import { BASE_RULES, createRng, opponentOf, scoreDeal, sortHand, STRAINS } from "@hb/engine";
+import {
+  applyDealScore,
+  BASE_RULES,
+  createRng,
+  opponentOf,
+  scoreDeal,
+  sortHand,
+  STRAINS,
+  totalScore,
+} from "@hb/engine";
 import type {
   AuctionEntry,
   Call,
@@ -9,12 +18,14 @@ import type {
   Pair,
   PlayerId,
   PlayerView,
+  RubberState,
   Strain,
 } from "@hb/engine";
 import { readFileSync } from "node:fs";
 import { estimatedTricks, highCardPoints } from "../src/bot/evaluate.js";
 import { DISGUISE_CREDIT_ON, createHeuristicBot } from "../src/bot/heuristicBot.js";
 import { loveAll } from "../src/game/botTurn.js";
+import type { Standing } from "../src/bot/types.js";
 import { solve, tricksAfter } from "../src/bot/solver.js";
 
 /**
@@ -26,6 +37,13 @@ import { solve, tricksAfter } from "../src/bot/solver.js";
  * is the computer in every robot game, so every number here is reported per seat
  * — a self-play bench cannot tell those apart and this is the only thing that
  * can say whether the bot is losing and to what.
+ *
+ * Reported in the currency the game is settled in — how far each deal moved the
+ * rubber standing it was bid at. This file used to score every deal at love all
+ * because the log carried no standing; `handLog.ts` records one now, and the
+ * difference is not a refinement. The same 238 deals read +6 a deal at love all
+ * and +63 at the score they were played at, which is how a bot losing eight
+ * rubbers in nine could look level here for months.
  *
  * Reported per bot version, never pooled: two versions in one number is two
  * opponents measured as one, which is the whole reason `bot/release.ts` exists.
@@ -46,6 +64,15 @@ interface LoggedDeal {
   readonly initialHands: Pair<readonly Card[]>;
   /** Absent from a deal logged before the house rules existed, which means the base game. */
   readonly rules?: DealRules;
+  /**
+   * The rubber and vulnerability the deal was bid at.
+   *
+   * Absent from a deal logged before `handLog.ts` recorded it, which is why
+   * every number derived from it counts its own deals rather than trusting the
+   * block's total.
+   */
+  readonly standing?: { readonly rubber: RubberState; readonly vulnerable: Pair<boolean> };
+  readonly starter?: PlayerId;
   readonly tricksWon: Pair<number>;
 }
 
@@ -76,10 +103,23 @@ interface Report {
   readonly hcp: Pair<number>;
   readonly index: number;
   readonly mistakes: readonly Mistake[];
+  /**
+   * How far the rubber standing moved, the person's way — the currency the game
+   * is actually settled in.
+   *
+   * Null for a deal logged before the standing was recorded. This is the figure
+   * to read: measured at love all the same 238 deals come out +6 a deal, and at
+   * the score they were played at they come out +63, because a part-score to
+   * protect, a game to stretch for and an opponent who is vulnerable are the
+   * whole of what a bidder is for. A love-all figure marks it on the one part of
+   * its job it does not do.
+   */
+  readonly moved: number | null;
   readonly needed: number;
   readonly par: Pair<number>;
-  /** Love-all deal score, since the log does not record vulnerability. */
+  /** The same deal at love all, kept only so the gap to `moved` stays visible. */
   readonly score: Pair<number>;
+  readonly vulnerable: Pair<boolean> | null;
 }
 
 function without(hand: readonly Card[], card: Card): Card[] {
@@ -112,6 +152,27 @@ function mistakesIn(deal: LoggedDeal, index: number): Mistake[] {
   });
 
   return mistakes;
+}
+
+/**
+ * How far the standing moved, the person's way, on the deal as it was played.
+ *
+ * Nothing here has its own idea of scoring, for the same reason `bidValue.ts`
+ * does not: the engine's `scoreDeal` and `applyDealScore` already know about
+ * game bonuses, the 500 and 700, doubled vulnerable penalties and honors, and a
+ * bench with a private copy of those would drift from the rules the deal was
+ * settled by. A difference rather than a total, because conceding 100 to stop
+ * them scoring 500 is a good night's work and a total cannot say so.
+ */
+function movedFor(deal: LoggedDeal, hands: Pair<readonly Card[]>): number | null {
+  const standing = deal.standing;
+  if (standing === undefined) {
+    return null;
+  }
+  const score = scoreDeal({ contract: deal.contract, hands, tricksWon: deal.tricksWon }, standing.vulnerable);
+  const after = totalScore(applyDealScore(standing.rubber, score));
+  const before = totalScore(standing.rubber);
+  return after[HUMAN] - before[HUMAN] - (after[BOT] - before[BOT]);
 }
 
 function ddTricks(hands: Pair<readonly Card[]>, declarer: PlayerId, strain: Strain): number {
@@ -149,9 +210,11 @@ function reportFor(hand: LoggedHand, index: number): Report {
     hcp: [highCardPoints(hands[0]), highCardPoints(hands[1])],
     index,
     mistakes: mistakesIn(deal, index),
+    moved: movedFor(deal, hands),
     needed: deal.contract.level + 6,
     par,
     score: [score.aboveLine[0] + score.belowLine[0], score.aboveLine[1] + score.belowLine[1]],
+    vulnerable: deal.standing?.vulnerable ?? null,
   };
 }
 
@@ -177,8 +240,9 @@ function percent(count: number, total: number): string {
   return `${((100 * count) / Math.max(1, total)).toFixed(0)}%`;
 }
 
+/** Wide enough for the longest label in here, so no row runs into its own number. */
 function pad(label: string): string {
-  return label.padEnd(36);
+  return label.padEnd(42);
 }
 
 function lostBy(report: Report, seat: PlayerId): number {
@@ -207,6 +271,12 @@ function auctionOf(deal: LoggedDeal): string {
     .join(" ");
 }
 
+/** The score the deal was bid at, or love all for one logged before that was recorded. */
+function standingFor(hand: LoggedHand): Standing {
+  const standing = hand.deal.standing;
+  return standing === undefined ? loveAll() : { rubber: standing.rubber, vulnerable: standing.vulnerable };
+}
+
 /**
  * The bidder as it stands now, asked what it would say at each point in a
  * recorded auction where it actually said something.
@@ -219,9 +289,12 @@ function auctionOf(deal: LoggedDeal): string {
  * on both is a change worth having; one that helps only on the bench is fitted to
  * an opponent nobody plays.
  *
- * Replayed at love all, because the log does not record vulnerability or the
- * standing — the single most valuable thing to add to it. Some of these decisions
- * were really taken with a part-score or a game at stake and would differ.
+ * Replayed at the standing the deal was really bid at, which the log records
+ * now. It used to be love all of necessity, and that was the single most
+ * valuable thing missing from it: `bidValue.ts` prices every call against the
+ * score, so a call taken with a game at stake and replayed at love all is a
+ * different question with the same auction in front of it. A deal logged before
+ * the standing was falls back to love all, and says so.
  */
 function replayCall(hand: LoggedHand, before: number): Call | null {
   const deal = hand.deal;
@@ -245,8 +318,8 @@ function replayCall(hand: LoggedHand, before: number): Call | null {
     pending: null,
     phase: "auction",
     revealedHand: null,
-    rules: BASE_RULES,
-    starter: HUMAN,
+    rules: deal.rules ?? BASE_RULES,
+    starter: deal.starter ?? HUMAN,
     stockRemaining: 0,
     toAct: BOT,
     tricksWon: [0, 0],
@@ -259,7 +332,7 @@ function replayCall(hand: LoggedHand, before: number): Call | null {
     disguiseCredit: hand.disguise ? DISGUISE_CREDIT_ON : 0,
     gameEquity,
   });
-  return bot.chooseCall(view, loveAll());
+  return bot.chooseCall(view, standingFor(hand));
 }
 
 function saidAs(call: Call): string {
@@ -356,13 +429,32 @@ function assess(label: string, reports: readonly Report[], corpus: Corpus): void
   const declaredBy = (seat: PlayerId) => reports.filter((report) => report.contract.declarer === seat).length;
   console.log(`\n  ${pad("declared by person / computer")}${declaredBy(HUMAN)} / ${declaredBy(BOT)}`);
 
+  // Two figures for the same deals, deliberately side by side. The first is what
+  // the deal was worth; the second is what this bench used to report on its own,
+  // and the gap between them is the reason it could not see a bot losing eight
+  // rubbers in nine. Do not quote the love-all line as a result.
+  const scored = reports.filter((report) => report.moved !== null);
+  const movedHuman = scored.map((report) => report.moved!);
+  if (scored.length > 0) {
+    console.log(
+      `  ${pad("standing moved per deal, person's way")}${mean(movedHuman).toFixed(0)} ± ${stderr(movedHuman).toFixed(0)}` +
+        `   (at the score each deal was played at)`,
+    );
+    const sameDealsAtLoveAll = scored.map((report) => report.score[HUMAN] - report.score[BOT]);
+    console.log(
+      `  ${pad("  the same deals at love all")}${mean(sameDealsAtLoveAll).toFixed(0)} ± ${stderr(sameDealsAtLoveAll).toFixed(0)}` +
+        `   (what this line used to say)`,
+    );
+  }
+  if (scored.length < reports.length) {
+    console.log(
+      `  ${pad("  logged before the standing was")}${reports.length - scored.length} deals, love all only`,
+    );
+  }
+
   const netHuman = reports.map((report) => report.score[HUMAN] - report.score[BOT]);
   console.log(
-    `  ${pad("net points per deal, person's way")}${mean(netHuman).toFixed(0)} ± ${stderr(netHuman).toFixed(0)}` +
-      `   (love all, since the log has no vulnerability)`,
-  );
-  console.log(
-    `  ${pad("deals scored to each")}${reports.filter((one) => one.score[HUMAN] > one.score[BOT]).length} / ` +
+    `  ${pad("deals scored to each, love all")}${reports.filter((one) => one.score[HUMAN] > one.score[BOT]).length} / ` +
       `${reports.filter((one) => one.score[BOT] > one.score[HUMAN]).length}`,
   );
 
@@ -378,12 +470,16 @@ function assess(label: string, reports: readonly Report[], corpus: Corpus): void
       `${mean(hcpGap).toFixed(1)} ± ${stderr(hcpGap).toFixed(1)} high-card points`,
   );
 
-  console.log("\nWhere the points go, person's way, love all");
+  console.log("\nWhere the points go, person's way, at the score each deal was played at");
   const bucket = (label: string, chosen: readonly Report[]): void => {
-    const net = chosen.map((report) => report.score[HUMAN] - report.score[BOT]);
+    const net = chosen.filter((report) => report.moved !== null).map((report) => report.moved!);
+    if (net.length === 0) {
+      console.log(`  ${pad(label)}—`);
+      return;
+    }
     console.log(
-      `  ${pad(label)}${String(chosen.length).padStart(2)} deals   ` +
-        `${sum(net) >= 0 ? "+" : ""}${sum(net)} total   ${mean(net).toFixed(0)} per deal`,
+      `  ${pad(label)}${String(net.length).padStart(3)} deals   ` +
+        `${sum(net) >= 0 ? "+" : ""}${sum(net)} total   ${mean(net).toFixed(0)} ± ${stderr(net).toFixed(0)} per deal`,
     );
   };
   const doubled = (report: Report): boolean => report.contract.doubling !== "none";
@@ -391,6 +487,41 @@ function assess(label: string, reports: readonly Report[], corpus: Corpus): void
   bucket("computer declared, undoubled", reports.filter((one) => one.contract.declarer === BOT && !doubled(one)));
   bucket("person declared, doubled", reports.filter((one) => one.contract.declarer === HUMAN && doubled(one)));
   bucket("person declared, undoubled", reports.filter((one) => one.contract.declarer === HUMAN && !doubled(one)));
+
+  /**
+   * The cut that found the thing a love-all bench cannot see.
+   *
+   * Vulnerability is not a modifier on a deal, it is a different game: a
+   * vulnerable opponent's game contract finishes a rubber and takes its bonus,
+   * so letting one through costs several times what the same contract costs at
+   * love all. Split by who declared as well, because the two answers point
+   * opposite ways — the bot is ahead on the deals it declares and a long way
+   * behind on the ones it lets the other seat buy, and one pooled number hides
+   * both.
+   */
+  const vul = (report: Report, seat: PlayerId): boolean => report.vulnerable?.[seat] === true;
+  if (scored.length > 0) {
+    console.log("\nWho was vulnerable, and who bought the contract");
+    bucket("neither vulnerable", reports.filter((one) => !vul(one, HUMAN) && !vul(one, BOT)));
+    bucket("only the person vulnerable", reports.filter((one) => vul(one, HUMAN) && !vul(one, BOT)));
+    bucket("only the computer vulnerable", reports.filter((one) => !vul(one, HUMAN) && vul(one, BOT)));
+    bucket("both vulnerable", reports.filter((one) => vul(one, HUMAN) && vul(one, BOT)));
+    bucket(
+      "person vulnerable, person declared",
+      reports.filter((one) => vul(one, HUMAN) && one.contract.declarer === HUMAN),
+    );
+    bucket(
+      "computer vulnerable, computer declared",
+      reports.filter((one) => vul(one, BOT) && one.contract.declarer === BOT),
+    );
+    bucket(
+      "a part-score was standing",
+      reports.filter((one) => {
+        const part = played[one.index]!.deal.standing?.rubber.partScore;
+        return part !== undefined && (part[HUMAN] > 0 || part[BOT] > 0);
+      }),
+    );
+  }
 
   // A contract in a strain the hand is not its best in is the bidder's own
   // choice, so it separates a misvalued hand from an auction it was pushed up.
@@ -412,7 +543,7 @@ function assess(label: string, reports: readonly Report[], corpus: Corpus): void
   // a disaster, and this is what separates the two.
   const overestimate = botDeclared.map((report) => report.estimate - report.par[BOT]);
   console.log(
-    `\n  ${pad("computer's own trick estimate, vs par")}+${mean(overestimate).toFixed(2)} tricks ` +
+    `\n  ${pad("computer's own trick estimate, vs par")}${mean(overestimate) >= 0 ? "+" : ""}${mean(overestimate).toFixed(2)} tricks ` +
       `(estimated ${mean(botDeclared.map((one) => one.estimate)).toFixed(1)}, par ${mean(botDeclared.map((one) => one.par[BOT])).toFixed(1)})`,
   );
   console.log("\n  every contract the computer was doubled in");

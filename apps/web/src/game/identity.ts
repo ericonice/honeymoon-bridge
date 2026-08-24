@@ -1,7 +1,10 @@
 import type { DealRules, MatchFormat } from "@hb/engine";
+import { LATEST_RELEASE, releaseFor } from "../bot/release.js";
+import type { BotRelease } from "../bot/release.js";
 import { readStored, writeStored } from "./storage.js";
 
 const FORMAT_KEY = "hb.format";
+const OPPONENT_KEY = "hb.opponent";
 const DRAW_STYLE_KEY = "hb.drawStyle";
 const DISGUISE_KEY = "hb.disguise";
 const BOLDNESS_KEY = "hb.boldness";
@@ -63,6 +66,28 @@ export function preferredFormat(): MatchFormat {
 
 export function setPreferredFormat(format: MatchFormat): void {
   writeStored(FORMAT_KEY, format);
+}
+
+/**
+ * Which computer opponent to play, by version.
+ *
+ * The newest unless something older is stored, and unrecognised storage means the
+ * newest too — a version this build has never heard of is what a service worker
+ * serving an older bundle looks like, and the right answer there is the best
+ * opponent this build actually has rather than nothing.
+ *
+ * A superseded release is the best difficulty lever in here, which is why this is
+ * an ordinary setting and not a testing dial. Turning the sampler down makes an
+ * opponent that is *unsure*; an older release is one that was once the best there
+ * was, which is a coherent weaker opponent rather than a crippled one.
+ */
+export function preferredRelease(): BotRelease {
+  const stored = Number(readStored(OPPONENT_KEY));
+  return (Number.isFinite(stored) ? releaseFor(stored) : null) ?? LATEST_RELEASE;
+}
+
+export function setPreferredRelease(version: number): void {
+  writeStored(OPPONENT_KEY, String(version));
 }
 
 /**

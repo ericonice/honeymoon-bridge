@@ -1,6 +1,8 @@
 import { currentDoubling, lastBidEntry, legalActionsForView } from "@hb/engine";
-import type { Bid, Call, Card, Contract, DrawTake, PlayerView, Rng, Strain } from "@hb/engine";
+import type { Bid, Call, Card, Contract, DrawTake, PlayerId, PlayerView, Rng, Strain } from "@hb/engine";
 import { DEFAULT_GAME_EQUITY, expectedValue } from "./bidValue.js";
+import type { Objective } from "./bidValue.js";
+import { pointsAsEquity } from "./equity.js";
 import { chooseCard } from "./cardPlay.js";
 import { chooseTake } from "./drawDecision.js";
 import { cardsIn, defendingTricks, estimatedTricks } from "./evaluate.js";
@@ -163,8 +165,15 @@ export const DISGUISE_CREDIT_ON = 200;
 export interface BotTuning {
   /** What naming a suit that isn't necessarily this hand's best one is worth. Zero is off. */
   readonly disguiseCredit?: number;
-  /** What a game in hand is worth, in points. */
+  /** What a game in hand is worth, in points. Only read by the points objective. */
   readonly gameEquity?: number;
+  /**
+   * What a call is priced in. Points unless a release says otherwise.
+   *
+   * Not a testing dial like its neighbours — this one is what a release *is*, so
+   * `release.ts` sets it and `test/botRelease.test.ts` pins the result.
+   */
+  readonly objective?: Objective;
   /** How far to trust their bid when pricing this seat's own contract. */
   readonly theirBidOnOwnWeight?: number;
 }
@@ -189,6 +198,40 @@ function disguiseValue(view: PlayerView, level: number, strain: Strain, credit: 
     return 0;
   }
   return length === DISGUISE_THIN_LENGTH ? credit * DISGUISE_THIN_FACTOR : credit;
+}
+
+/**
+ * The disguise credit, in whatever currency this release prices calls in.
+ *
+ * The credit is the one number in here that is added to a value rather than being
+ * one, so it is the one place where the two objectives cannot simply ignore each
+ * other: 200 added to a points differential is a nudge, and 200 added to a
+ * probability is a landslide that would have the bot open every deal with its
+ * third-longest suit.
+ *
+ * Converted rather than re-fitted, so what was measured stays measured. The 200
+ * was checked against how often the disguise actually fires — 91 deals in 1000
+ * above the length floor, one at exactly three cards — and `pointsAsEquity` asks
+ * the table what 200 points is worth *here*, which keeps that meaning and adds
+ * something the flat version could not: the credit is worth less at a standing
+ * where points matter less, which is correct and was never expressible before.
+ *
+ * Exported only so `test/equity.test.ts` can check it directly. Driving the whole
+ * bidder instead was tried and the test was vacuous: `honestlyWeak` means the
+ * credit only applies to a hand whose honest bidding would stop at the one level,
+ * and under the equity objective that is rare enough that removing the conversion
+ * altogether changed nothing the test could see.
+ */
+export function creditIn(
+  objective: Objective,
+  standing: Standing,
+  me: PlayerId,
+  credit: number,
+): number {
+  if (credit === 0 || objective === "points") {
+    return credit;
+  }
+  return pointsAsEquity(standing.rubber, me, credit);
 }
 
 /**
@@ -338,6 +381,7 @@ interface Candidate {
 interface CallContext {
   readonly disguiseCredit: number;
   readonly gameEquity: number;
+  readonly objective: Objective;
   readonly standing: Standing;
   readonly theirBidOnOwnWeight: number;
   readonly view: PlayerView;
@@ -353,7 +397,7 @@ interface CallContext {
  * it is a large negative, and a contract that goes down cheaply can beat it.
  */
 function valueOfPassing(context: CallContext): number {
-  const { gameEquity, standing, view } = context;
+  const { gameEquity, objective, standing, view } = context;
   const contract = standingContract(view);
   if (contract === null) {
     return 0;
@@ -363,6 +407,7 @@ function valueOfPassing(context: CallContext): number {
     estimate: estimateFor(contract, context),
     exposedToDouble: false,
     gameEquity,
+    objective,
     hand: view.hand,
     me: view.me,
     standing,
@@ -377,7 +422,7 @@ function valueOfPassing(context: CallContext): number {
  * keeps the two halves of a competitive decision consistent with each other.
  */
 function bidCandidates(context: CallContext, disguiseCredit: number): Candidate[] {
-  const { gameEquity, standing, view } = context;
+  const { gameEquity, objective, standing, view } = context;
   return callsFor(view).flatMap((call) => {
     if (call.type !== "bid") {
       return [];
@@ -397,10 +442,17 @@ function bidCandidates(context: CallContext, disguiseCredit: number): Candidate[
             estimate: estimateFor(contract, context),
             exposedToDouble: true,
             gameEquity,
+            objective,
             hand: view.hand,
             me: view.me,
             standing,
-          }) + disguiseValue(view, call.bid.level, call.bid.strain, disguiseCredit),
+          }) +
+          creditIn(
+            objective,
+            standing,
+            view.me,
+            disguiseValue(view, call.bid.level, call.bid.strain, disguiseCredit),
+          ),
       },
     ];
   });
@@ -416,7 +468,7 @@ function bidCandidates(context: CallContext, disguiseCredit: number): Candidate[
  * being a special case at the moment the bot can estimate what it beats them by.
  */
 function doubleCandidate(context: CallContext): Candidate[] {
-  const { gameEquity, standing, view } = context;
+  const { gameEquity, objective, standing, view } = context;
   const contract = standingContract(view);
   if (contract === null || !callsFor(view).some((call) => call.type === "double")) {
     return [];
@@ -430,6 +482,7 @@ function doubleCandidate(context: CallContext): Candidate[] {
         estimate: estimateFor(doubled, context),
         exposedToDouble: false,
         gameEquity,
+        objective,
         hand: view.hand,
         me: view.me,
         standing,
@@ -497,6 +550,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
   const fallback = createRandomBot(rng);
   const disguiseCredit = tuning.disguiseCredit ?? DISGUISE_CREDIT;
   const gameEquity = tuning.gameEquity ?? DEFAULT_GAME_EQUITY;
+  const objective = tuning.objective ?? "points";
   const theirBidOnOwnWeight = tuning.theirBidOnOwnWeight ?? THEIR_BID_ON_OWN_WEIGHT;
 
   return {
@@ -505,7 +559,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
     name: "Computer",
 
     chooseCall(view: PlayerView, standing: Standing): Call {
-      return bestCall({ disguiseCredit, gameEquity, standing, theirBidOnOwnWeight, view });
+      return bestCall({ disguiseCredit, gameEquity, objective, standing, theirBidOnOwnWeight, view });
     },
 
     chooseDraw(view: PlayerView, remembered: readonly Card[]): DrawTake {

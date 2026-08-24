@@ -1,6 +1,6 @@
 import type { MatchFormat, Unlock } from "@hb/engine";
 import { useEffect, useState } from "react";
-import { BOT_RELEASE } from "../bot/release.js";
+import { BOT_RELEASES, LATEST_RELEASE } from "../bot/release.js";
 import type { CardColor } from "../game/cardColor.js";
 import type { Boldness, Density, DrawStyle, Pace, Strength } from "../game/identity.js";
 import { flush, outboxState } from "../game/outbox.js";
@@ -40,6 +40,7 @@ export interface SettingsOverlayProps {
   /** Temporary, while it is being decided whether the ambiguity works on a person. */
   readonly disguise: boolean;
   readonly boldness: Boldness;
+  readonly opponent: number;
   readonly density: Density;
   readonly pace: Pace;
   readonly sound: boolean;
@@ -48,6 +49,7 @@ export interface SettingsOverlayProps {
   /** Whether the play screen draws each side's trick countdown. */
   readonly trickCount: boolean;
   onBoldnessChange(next: Boldness): void;
+  onOpponentChange(next: number): void;
   onCardColorChange(next: CardColor): void;
   onDensityChange(next: Density): void;
   onPaceChange(next: Pace): void;
@@ -242,12 +244,14 @@ function sinceQueued(at: number): string {
 
 export function SettingsOverlay({
   boldness,
+  opponent,
   cardColor,
   density,
   devTools,
   disguise,
   format,
   onBoldnessChange,
+  onOpponentChange,
   onCardColorChange,
   onClose,
   onDevToolsChange,
@@ -311,6 +315,29 @@ export function SettingsOverlay({
             ]}
           />
         </div>
+
+        {/* The one setting that names the opponent, and an ordinary preference
+            rather than a testing dial: a superseded release is a coherent weaker
+            opponent rather than a crippled one, which makes it the best
+            difficulty lever in here — see `identity.ts`. It sits with match
+            length because it is the same kind of decision, taken before sitting
+            down. Rendered only when there is something to choose. */}
+        {BOT_RELEASES.length > 1 ? (
+          <div className="w-full max-w-sm">
+            <Choice
+              label="Which computer you play"
+              description="Each is a version of the computer as it was when that version shipped, kept playable so the older, gentler opponent stays available. Takes effect on the next match."
+              value={String(opponent)}
+              onChange={(next) => {
+                onOpponentChange(Number(next));
+              }}
+              options={BOT_RELEASES.map((release) => ({
+                label: `${release.name} (v${release.version})`,
+                value: String(release.version),
+              }))}
+            />
+          </div>
+        ) : null}
 
         {/* Directly under match length, because it is the same kind of setting —
             something to decide before sitting down, not while playing — and the
@@ -557,7 +584,7 @@ export function SettingsOverlay({
           {/* Which computer opponent this is. Named here and only here — across
               the table it stays the computer. */}
           <p className="text-sm text-white/55">
-            Bot version v{BOT_RELEASE.version} ({BOT_RELEASE.name})
+            Bot version v{LATEST_RELEASE.version} ({LATEST_RELEASE.name})
           </p>
           <p className="mt-2 text-sm text-white/55">Version {__APP_VERSION__}</p>
           <Unsent />

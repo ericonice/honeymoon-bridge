@@ -26,12 +26,14 @@ function settings(playtester: boolean): SettingsOverlayProps {
     disguise: true,
     drawStyle: "two-card",
     format: "rubber",
+    opponent: 3,
     onBoldnessChange: noop,
     onCardColorChange: noop,
     onClose: noop,
     onDensityChange: noop,
     onDevToolsChange: noop,
     onDisguiseChange: noop,
+    onOpponentChange: noop,
     onDrawStyleChange: noop,
     onFormatChange: noop,
     onPaceChange: noop,
@@ -71,6 +73,10 @@ const ORDINARY = [
   "Game speed",
   "Count the tricks each side needs",
   "Sound",
+  // Choosing the opponent is the same kind of fact as the rest of these: an older
+  // release is a gentler opponent, and a difficulty setting behind a playtester
+  // flag is the exact mistake the trick count made.
+  "Which computer you play",
 ];
 
 test("every ordinary preference is reachable without the playtester flag", () => {

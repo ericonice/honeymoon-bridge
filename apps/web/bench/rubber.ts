@@ -26,6 +26,7 @@ import type {
   TableState,
 } from "@hb/engine";
 import { DEFAULT_GAME_EQUITY } from "../src/bot/bidValue.js";
+import type { Objective } from "../src/bot/bidValue.js";
 import { defensiveTricks, estimatedTricks } from "../src/bot/evaluate.js";
 import { createHeuristicBot } from "../src/bot/heuristicBot.js";
 import type { BotTuning } from "../src/bot/heuristicBot.js";
@@ -332,6 +333,16 @@ interface RunOptions {
   readonly gameEquity: number;
   /** False restores the old reference, which only doubled from the five level. */
   readonly oracle: boolean;
+  /**
+   * What the challenger prices calls in.
+   *
+   * With `equity` the reference becomes *this same bidder pricing in points*,
+   * which is v3 against v2 with everything else held identical — the only
+   * comparison that answers whether the objective is an improvement. The legacy
+   * "can I make it" bidder cannot answer it: it is a worse opponent than either,
+   * so both would beat it and the margin between them would be swamped.
+   */
+  readonly objective: Objective;
   readonly rubbers: number;
   readonly samples: number;
   /**
@@ -347,7 +358,7 @@ interface RunOptions {
   readonly versusWeight: number | null;
 }
 
-function run({ gameEquity, oracle, rubbers, samples, versusWeight }: RunOptions): void {
+function run({ gameEquity, objective, oracle, rubbers, samples, versusWeight }: RunOptions): void {
   const tuning = { gameEquity };
   const cardPlay = (rng: Rng, extra: BotTuning = {}): Bot =>
     samples > 0
@@ -377,10 +388,12 @@ function run({ gameEquity, oracle, rubbers, samples, versusWeight }: RunOptions)
       // only in the weight being tested.
       const make = (rng: Rng, challenger: boolean): Bot =>
         challenger
-          ? cardPlay(rng)
-          : versusWeight === null
-            ? legacyBidder(createHeuristicBot(rng))
-            : cardPlay(rng, { theirBidOnOwnWeight: versusWeight });
+          ? cardPlay(rng, { objective })
+          : versusWeight !== null
+            ? cardPlay(rng, { theirBidOnOwnWeight: versusWeight })
+            : objective === "equity"
+              ? cardPlay(rng, { objective: "points" })
+              : legacyBidder(createHeuristicBot(rng));
       const bots: Pair<Bot> = [
         make(createRng(seed), challengerSeat === 0),
         make(createRng(seed), challengerSeat === 1),
@@ -410,12 +423,13 @@ function run({ gameEquity, oracle, rubbers, samples, versusWeight }: RunOptions)
   const margin = mean(points);
   const error = standardError(points);
 
+  const play = samples > 0 ? `, ${samples}-sample card play` : `, heuristic card play`;
   console.log(
-    versusWeight === null
-      ? `points bidder against the old "can I make it" bidder` +
-          (samples > 0 ? `, ${samples}-sample card play` : `, heuristic card play`)
-      : `the same bidder against itself trusting their bid at ${versusWeight}` +
-      (samples > 0 ? `, ${samples}-sample card play` : `, heuristic card play`),
+    versusWeight !== null
+      ? `the same bidder against itself trusting their bid at ${versusWeight}${play}`
+      : objective === "equity"
+        ? `the equity objective against the same bidder pricing in points${play}`
+        : `points bidder against the old "can I make it" bidder${play}`,
   );
   console.log(`  challenger prices a game at ${gameEquity}`);
   console.log(
@@ -424,10 +438,21 @@ function run({ gameEquity, oracle, rubbers, samples, versusWeight }: RunOptions)
       : `  the reference doubles only from the five level — not comparable to an oracle run`,
   );
   console.log(`${points.length} rubbers, both seats each, in ${((performance.now() - started) / 1000).toFixed(0)}s\n`);
+  // Rubbers won leads, and the reason is not presentation. A bidder maximizing
+  // the chance of taking the rubber will trade points for wins — conceding 200 to
+  // protect a rubber it is winning is the whole point of it — so a bench headlined
+  // on points per rubber would report exactly that as a regression. This file has
+  // recorded three instrument failures of that shape; this one was predictable.
+  const decided = won + lost;
+  const rate = decided === 0 ? 0 : won / decided;
+  const rateError = decided === 0 ? 0 : Math.sqrt((rate * (1 - rate)) / decided);
+  console.log(`  rubbers won      ${won} to ${lost}   ${(100 * rate).toFixed(1)}% ± ${(100 * rateError).toFixed(1)}`);
+  console.log(
+    `  that is          ${(Math.abs(rate - 0.5) / Math.max(1e-9, rateError)).toFixed(1)} standard errors from even`,
+  );
   console.log(`  margin           ${margin >= 0 ? "+" : ""}${margin.toFixed(0)} points per rubber`);
   console.log(`  standard error   ${error.toFixed(0)}`);
   console.log(`  that is          ${(Math.abs(margin) / Math.max(1, error)).toFixed(1)} standard errors`);
-  console.log(`  rubbers won      ${won} to ${lost}`);
   console.log(`  deals per rubber ${mean(dealCounts).toFixed(1)}`);
   console.log(
     `  doubles          ${mean(doubleCounts).toFixed(2)} per rubber, ` +
@@ -448,6 +473,7 @@ const versusArg = process.argv.find((arg) => arg.startsWith("vs="));
 
 run({
   gameEquity: equityArg === undefined ? DEFAULT_GAME_EQUITY : Number(equityArg.slice("equity=".length)),
+  objective: process.argv.includes("objective=equity") ? "equity" : "points",
   oracle: !process.argv.includes("nodouble"),
   rubbers: Number(process.argv[2] ?? 60),
   samples: Number(process.argv[3] ?? 0) || 0,

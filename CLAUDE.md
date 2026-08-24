@@ -48,6 +48,7 @@ npm run bench:calibrate --workspace @hb/web -- 400      # refit the estimates ag
 npm run bench:auction   --workspace @hb/web -- 12       # why the bidder bid that
 npm run bench:strain    --workspace @hb/web -- "S:AK4 H:AK4 D:A43 C:AK32"
 npm run bench:draw      --workspace @hb/web -- 300 open # draw policies; `open` runs the variant
+npm run bench:equity    --workspace @hb/web -- 1500      # what a standing is worth, as a win chance
 
 # Deals a person actually played, from the hand log. Not generated — pass the file.
 npx vite-node bench/hands.ts hands.json         # from apps/web; add v=2 for one version
@@ -61,14 +62,203 @@ census whenever it holds more than one. Its replay section is the exception and 
 deliberately not split: it asks what *today's* bidder would say, so who bid at the time
 has no bearing on the answer.
 
+**What `bench/hands.ts` found once it could see the score, and it is not doubling.** Stripping every
+doubled deal leaves the person **+52 ± 20** a deal over 204 deals, and it splits in opposite
+directions: the computer **gains 66 a deal on contracts it declares** and loses **135 a deal on the
+ones it lets the other seat buy**. Cut by vulnerability instead and almost all of it sits in one
+cell — **person vulnerable and declaring, +255 a deal over 63 deals**, against **+22** for the
+computer in the mirror-image position. At neither-vulnerable it is level.
+
+**The cause is not any of the estimates, all three of which were checked and are sound.** Declaring:
+bias **+0.07** tricks over 2,380 hand-strain pairs, regression slope 1.08. Defending, the blend the
+bidder actually uses: bias **+0.13**, and **+0.11** at the four level. Card play: 0.49 tricks thrown
+away a deal against the person's 0.53. Every component is individually calibrated and the bot still
+loses, which is the signature of a wrong objective rather than a wrong number.
+
+**What it is doing instead is settling for part-scores.** A game was cold at double dummy for the
+computer in **59** of 238 deals and it bid and made one **7** times; the person had **68** and
+converted **36**. Half of its own undoubled contracts — 42 of 84 — are at the one or two level on
+hands worth **8.8 to 9.0 tricks at par**. That is the correct play for what `bidValue.ts` is asked
+to maximize, which is expected points on *this deal* with a game in hand priced as a flat
+`DEFAULT_GAME_EQUITY`. Part-scores are worth more expected points than a game that risks 200; they
+just do not win rubbers, and the side that never wins a game is never the vulnerable one, which is
+why the person's vulnerable contracts are where the whole deficit lives.
+
+So the open thread is the objective, not a constant: **price calls in the probability of winning the
+rubber rather than in points**, replacing `positionalValue`'s linear `equity × (games + part)` with a
+lookup of P(win | standing) fitted from `bench/rubber.ts`'s own self-play. Three things fall out of
+it — the contract that finishes a game gets its real worth, vulnerability gets priced because it is
+part of the standing rather than a future cost nobody charges for (the gap
+`DEFAULT_GAME_EQUITY`'s own comment names and leaves open), and risk posture becomes a consequence of
+the probability curve rather than the `boldness` constant. Two warnings attached: the fit is circular
+in the way the calibration was circular twice before, so it wants fitting, swapping in and refitting
+until the coefficients stop moving; and **`bench/rubber.ts`'s headline has to become rubbers won
+rather than points per rubber in the same commit**, because a bidder maximizing win probability will
+trade points for wins and would otherwise measure as a regression. This file has recorded three
+instrument failures of that exact shape already.
+
+**`bench/equity.ts` measures what a standing is worth.** 3000 rubbers, 36,000 deal-start standings
+recorded from both seats, fitted per games state as a logistic in the part-score and the points
+margin. Three checks that do not depend on the model hold exactly: a level standing wins 0.500, one
+game each wins 0.500, and a game down fits the exact negative of a game up with identical
+coefficients — which is what licences imposing the antisymmetry in `equity.ts` rather than storing
+four independent states.
+
+| | worth, in chance of taking the rubber |
+| --- | --- |
+| holding a game to none | 0.500 → 0.670, **+0.170** |
+| a 60 part-score at no games each | 0.500 → 0.564, **+0.064** |
+| a 60 part-score at one game each | 0.500 → 0.650, **+0.150** |
+| `DEFAULT_GAME_EQUITY`'s 400 points, at no games each | **+0.079** |
+
+So the flat constant is worth **about half a game**, and a part-score is worth **2.3 times as much at
+one game each as at love all** while `positionalValue` prices it as the same fraction of the same
+constant in both. A flat term structurally cannot say the second thing at all.
+
+**One claim here was wrong and the error bars are why it is not still wrong.** An earlier fit off 1500
+rubbers put the margin coefficient at the level standing at +0.01 per hundred points, and that got
+written down as a finding — "points that are not progress toward a game do not bring the rubber
+closer". It was **+0.01 ± 0.02**, a number whose error bar contained everything; at 3000 rubbers it is
+**+0.08 ± 0.01**, in line with every other state. `Fit` carries standard errors now for exactly that
+reason, and they are documented as optimistic, since every standing inside one rubber shares that
+rubber's outcome and the effective sample is nearer the rubber count than the row count. The real
+check is agreement between two sample sizes.
+
+**One thing I had backwards, and the fit corrected it.** I expected the *second* game to be worth more
+than the first, and in the transition that is measurable it is not: equalising when they hold one is
++0.170, the same as winning the first from level, and that equality is *forced* by the symmetry of the
+two states rather than discovered. The real non-linearity is at the end — one game up to two finishes
+the rubber, worth +0.330 from 0.670, and from one game each it is worth +0.500. A constant pricing "a
+game" as one number is wrong by a factor of three across those.
+
+Calibration is monotone and close across six bands (predicted 0.20–0.35 won 0.293, 0.65–0.80 won
+0.707), though in-sample.
+
+**The objective is built, measured, and shipped as v3 Cammi Granato.** `bidValue.ts` takes an `Objective` — `"points"`
+is the existing pricing untouched, `"equity"` returns the change in the chance of taking the rubber —
+and `heuristicBot.ts` threads it from `BotTuning`. Against the same bidder pricing in points, with
+everything else held identical, the equity objective wins **631 rubbers to 169, 78.9% ± 1.4**, twenty
+standard errors from even, and +237 points a rubber as well. For scale, the change that made the
+bidder price in points at all was 77.5%.
+
+**But that number is measured under heuristic card play, and it does not survive the sampler
+intact.** With eight-sample solver card play on both sides it wins 92 rubbers to 48 — 65.7% ± 4.0,
+still 3.9 standard errors from even — while the points margin turns *negative* at -235 ± 128, which is
+not significant but is the opposite sign. Its overreach roughly doubles, down two or more in 18% of
+its own contracts against 11%, costing 508 a rubber, and rubbers stretch from 7.8 deals to 10.9.
+
+The reading: the table learned what a standing is worth in a world where contracts fail more often
+than they do under real card play, so v3 stretches too far. It is still the better bidder by the metric
+it optimises, which is why it ships — but the gap narrows at every step toward better card play, and
+the shipped strength is sixty samples, which is further along that road than anything measured here.
+**Anything quoting 78.9% as v3's strength is quoting the heuristic-card-play number.** The rating
+anchor uses the sampler one.
+
+**The table is an opponent model, not a fixed point, and iterating the fit made it worse.** The
+shipped numbers come from rubbers played by the *points* bidder. Refitting from rubbers the *equity*
+bidder played moves them a long way — `gameLead` 0.71 to 0.20, the part-score term at level to
+nothing — which reads like the circularity warning coming true. It is not: installing the refit drops
+the bidder to **66.6% from 78.9%** and turns the points margin negative. What a standing is worth
+depends on who is opposite, and a table fitted where both sides fight equally hard for games describes
+a world this bidder is not in. So the open question is not convergence, it is **which population to
+fit against** — and the answer is neither bot. The 293 recorded deals in the hand log are the
+population that matters and nothing has fitted against them yet.
+
+**`bench/rubber.ts` leads on rubbers won now, and that had to land in the same change.** A bidder
+maximising the chance of taking the rubber will trade points for wins, so a bench headlined on points
+per rubber would report exactly that as a regression. Predicted in advance this time rather than
+discovered afterwards.
+
+**And the control run found a real fault in that bench.** The same bidder against an exact copy of
+itself must be 50%, and with the oracle doubler on it came out **61.8% ± 2.0 to the challenger, six
+standard errors** — two identical bidders, one of them winning. With `nodouble` it is exactly **300 to
+300 and a margin of exactly zero**, so the harness itself is sound and the asymmetry is entirely the
+oracle. The cause: `oracleDouble` doubles off *double-dummy par*, and with `samples=0` the cards are
+then played by a heuristic bot that cannot realise par, so contracts that are "down two" get made and
+the double pays declarer. **Applying the oracle to a seat costs that seat about twelve points of win
+rate.** It was added to make the reference able to hurt the challenger and it does the opposite under
+heuristic card play. Every margin recorded against the oracle default at `samples=0` is affected;
+`nodouble` is the symmetric harness and the equity result above was measured on it. Whether the oracle
+is sound with a sample count is untested.
+
+**Fitting the equity table against the recorded human deals was tried, and there is not enough of
+it.** `bench/equity.ts hands=<path>` rebuilds rubbers out of the hand log — sort by when they were
+played, start at an untouched standing, fold each deal in with the engine, close the rubber when that
+completes it — and the chain is *checked* rather than trusted, since a run of deals that merely looks
+continuous is how a table would get fitted against standings that never happened. Of 29 candidate
+rubbers in 238 logged deals, **11 chain cleanly and 18 are dropped**, which gives 184 rows. Three of
+the four games states have too few rows to fit at all, and the one that does returns a part-score
+coefficient of **-5.31 ± 2.31** — the wrong sign, with an error bar containing everything.
+
+The reason is structural rather than bad luck: **the table is indexed by rubber outcomes, and 293
+deals is a large number of deals and a tiny number of rubbers.** Self-play needs 3000 rubbers to pin
+these coefficients; the recorded games have eleven.
+
+The fit does need one thing self-play does not, and it is worth keeping for whenever there is enough
+data: a **strength term**, +1 for the person's row and -1 for the computer's, antisymmetric like
+everything else so the two seats' chances still sum to one. Between two copies of one bidder a standing
+is all there is to explain the result. Between a person winning 24 rubbers in 27 and a bot, most of the
+result is *who is playing*, and a table without that term reads the skill gap into the value of a
+part-score — which is exactly what the -5.31 is. It fits at **+3.63 ± 0.86** log-odds, the only number
+in that run with a sign worth believing.
+
+So the table stays fitted from points-bidder self-play, and the honest description of it is in
+`equity.ts`: it is an opponent model of *the points bidder*, which is a real limitation and not one
+this log can currently remove.
+
+**Shipping v3 took four pieces, and one of them was the mistake this file already warned about.**
+`release.ts` is a registry of two entries now, each carrying the `tuning` that makes it itself — which
+is what finally justified that field. `identity.ts` gains `preferredRelease`, read once per match in
+`localSession.ts` for the same reason the format is, and the chosen version travels on every record
+and hand log the match produces. Settings gains a **Which computer you play** row.
+
+That row went in next to "How boldly it bids" first, which is *inside the playtester block* — the
+exact mistake the trick-count toggle made, in the same file, for the same reason: the neighbouring
+rows happened to be there. `test/settingsRows.test.ts` failed on it, which is what that test is for.
+It sits with Match length now, because choosing the opponent is a decision taken before sitting down,
+and it is on the list of rows everyone must be able to reach. **A superseded release is the best
+difficulty lever here** — turning the sampler down makes an opponent that is unsure, where an older
+release is one that was once the best there was.
+
+**Both releases are pinned, and a release with no transcripts fails the test.** `botRelease.test.ts`
+loops the registry rather than naming v2, so adding a version without recording what it does is a
+failure rather than an omission. v3's transcripts are visibly different — 4H where v2 said 3H, and a
+5C sacrifice over 4S.
+
+**The rating anchor goes on the server before the client that plays it.** `botRating` falls back to
+the unversioned rating for a version it does not recognise, so a client deployed first would have
+every v3 match rated as beating the weakest bot in the table and quietly inflate everybody. v3 sits at
+1300, from the sampler measurement rather than the heuristic one, and `ratings.ts` says why.
+
+**Two tests in this change were vacuous first, and both were caught by reverting the fix rather than
+by reading them.** The record-freshness one is above. The other was `creditIn`, the one constant that
+has to exist in both currencies: the first version drove the whole bidder over sixty deals and passed
+with the conversion removed *altogether*, because `honestlyWeak` only lets the credit apply to a hand
+whose honest bidding stops at the one level, and under the equity objective that is rare. It tests the
+function directly now, which is why `creditIn` is exported at all.
+
+**v3 was only v3 in the long format for a while, and the short format now has its own fit.** The
+equity table is over rubbers, so a one-game match originally fell back to the points objective — which
+meant somebody playing single games got v2's bidder recorded and *rated* as v3, and `ratings.ts` pools
+the formats. The fix is `bench/equity.ts format=game`: a short match has exactly one standing to be in,
+since winning a game is winning the match, so nobody is ever a game up and nobody is ever vulnerable,
+and the whole table for it is two coefficients.
+
+**Borrowing the rubber's numbers would have been inventing them, and the fit says so.** A part-score is
+worth **+0.95 ± 0.04** in a single game against **+0.35** at the same nothing-to-nothing standing in a
+rubber — nearly three times — because here it is progress toward the whole match rather than toward the
+first of three. It lands close to the rubber's one-game-each cell (+0.92), which is the same fact from
+the other side: what makes a part-score valuable is how near it is to deciding things. `equityApplies`
+is gone and `bidValue.ts` has no format branch left.
+
 `bench/rubber.ts` takes flags after the counts: `nodouble` restores the old
 five-level-only reference, `equity=N` sets what the challenger prices a game at, and
 `vs=N` replaces the reference with **this same bidder** at a different trust weight.
 That last one is not a variant, it is the answer to a question the legacy reference
 cannot answer — see "the instrument decided this one" below.
 
-`par` and `head` take minutes and report every 25 deals; `rubber`, `calibrate` and `auction` finish
-in seconds. **Piping any of them through `grep` or `tail` re-buffers stdout and hides the progress
+`par` and `head` take minutes and report every 25 deals; `equity` takes about a minute for 1500
+rubbers; `rubber`, `calibrate` and `auction` finish in seconds. **Piping any of them through `grep` or `tail` re-buffers stdout and hides the progress
 until the end**, which makes a working run and a wedged one look identical.
 
 **The reference bidder must be able to hurt you, and for a long time it could not.**
@@ -81,10 +271,18 @@ the hands the estimator misreads. It is a bench-level intercept rather than a `B
 and it is handed the `DealState`: no bot may ever reach the solver for a seat that is
 thinking, so an oracle structurally cannot be one.
 
-**Bidding can only be measured by `bench/rubber.ts`.** Everything else plays deals at love all,
-where a bidder has no part-score to protect, no game to stretch for and nothing to sacrifice
-against — the change that turned out to be worth 464 points a rubber looked like a wash by every
-other bench in the list.
+**Bidding is measured by `bench/rubber.ts` and by `bench/hands.ts`, and by nothing else.** Every
+other bench plays deals at love all, where a bidder has no part-score to protect, no game to stretch
+for and nothing to sacrifice against — the change that turned out to be worth 464 points a rubber
+looked like a wash by every other bench in the list. `bench/hands.ts` used to be in that group and
+is not any more: it scores each logged deal at the standing the deal was actually bid at, which the
+log records now.
+
+**That correction is worth stating as a number, because it hid the bot losing.** The same 238
+recorded deals read **+6 ± 19 a deal** to the person at love all and **+62 ± 27** at the score they
+were played at, while `results` says the account is **24 rubbers to 3** against v2 — about +106 a
+deal. A bench reporting a dead heat over a period when the bot lost eight rubbers in nine was not
+being unlucky, it was being asked the wrong question.
 
 npm workspaces, not pnpm — pnpm is not installed on this machine. Node 24, npm 11.
 
@@ -474,7 +672,8 @@ double-announcement bug three times (the fog horn, the unlock chime, and this), 
 fact about the *contract*: it used to be handed `score.detail.made`, so a defender who had just
 broken a contract heard the triumphant chime for it.
 
-**The bot is versioned, from v1 Angela James; v2 Bobby Orr is current.** `bot/release.ts` holds it; versions are numbered from
+**The bot is versioned, from v1 Angela James; v2 Bobby Orr is current.** `bot/release.ts` holds a *registry*
+of the releases a person can sit down against, with `LATEST_RELEASE` derived from the end of it; versions are numbered from
 one and named alphabetically after hockey players, so a list of them reads in the order they
 existed — Angela James, Bobby Orr, Cammi Granato, Doug Harvey, Eddie Shore, Frank Mahovlich,
 Gordie Howe, Hayley Wickenheiser, Igor Larionov, Jean Béliveau. **The name appears
@@ -488,6 +687,31 @@ not: the column is **nullable, and null means "before versions" rather than "unk
 nothing recorded which bot those games were against and nothing can. And a report *without* a
 version is accepted rather than refused, because the service worker keeps old builds in circulation
 and a rubber somebody played is worth recording whether or not their client knew the question.
+
+**A superseded release stays playable, and it is pinned by a test rather than by a copy.** The reason is a cost
+already paid: v1's code is gone, so `bench/rubber.ts` cannot play it and the 200-point gap between the v1 and v2
+rating anchors rests on a measurement nobody can repeat. Keeping a superseded release playable makes the gap to
+its successor measurable on demand instead of historical. v1 is therefore *not* in the registry — it is still a
+rating anchor on the server, since rubbers were recorded against it, but it cannot be played and listing it
+would offer a choice that does not exist.
+
+Freezing a release's *tuning* would not preserve it. The bot calls the shared engine, the solver and
+`evaluate.ts`'s calibration, so a refit or a scoring change alters how an old release plays while it goes on
+claiming to be that release — a label that lies, which is worse than not keeping it. So
+`test/botRelease.test.ts` pins what it *does*: eight seeded deals, both seats' draw choices and every call, at
+love all and at a part-score and a game to either side. Any change to those transcripts is a change of opponent
+— either the version needs bumping or the change was not meant to reach that release. Checked against a real
+drift on the way in: moving `DEFAULT_GAME_EQUITY` by 100 fails it.
+
+Deliberately the auction and the draw and not the card play. Those are what a bidding change moves, they are
+decided by the heuristic bot with no solver in the loop, and they run in 60ms — where `strength: "strong"` is 60
+samples a card and would make a pinned deal too slow to keep in `npm test`.
+
+**There is no per-release tuning field yet, and that is deliberate.** Two releases that differ have somewhere to
+say so — `BotTuning`, which `createHeuristicBot` already takes — and one release has nothing to say. A field
+with exactly one possible value is not yet a field, for the same reason a knob whose effect on behavior has
+never been observed is not yet a knob. It lands with the release that needs it, and so does the Settings row
+that picks between them: a picker offering one choice is not a choice.
 
 **Found on a real device, and fixed.** A sign-in link cannot reach an installed PWA on iOS. The
 home-screen app has its own storage, Mail opens links in Safari, and a link works once — so tapping
@@ -797,6 +1021,21 @@ not logging. Settings shows unsent reports in the footer beside the build stamp 
 playtester flag — the person who needs to read it out is whoever the game went missing for. **An empty
 outbox alongside a missing record is a different search**, on the server side, and `wrangler d1
 execute --remote` answers that one directly.
+
+**The record read waits for the outbox, and without that it showed yesterday's record.** A rubber's
+result is enqueued the moment the match ends and `enqueue` starts a pass immediately, so `useRecords`
+asking the server straight afterwards is a race the read usually wins: the report is still in flight,
+the answer is the record from before the match, and nothing refetches — which is why it only looked
+right after a reload. `reload` now waits on `flush()` before fetching, and so does `useRecentMatches`,
+where a game somebody has just played is most obviously missing. `flush` joins a pass already running
+rather than starting a second, so the wait is the report's own round trip and nothing at all when the
+queue is empty.
+
+**The test for it was vacuous first, and that is the third time in this file.** It asserted the order
+the two requests were *issued* in — which is report-then-read either way, because the send starts
+synchronously before the screen asks for anything — so it passed against the bug. What distinguishes
+the two is whether the read waits for the report's *response*, so the fake report is held open and the
+assertion is that nothing reads while it is in flight. Checked by reverting the fix, which fails it.
 
 The first version of that row printed a status only for *refused* reports and told everything else it
 would be "filed the next time the app has a connection", which is a guess dressed as an explanation:

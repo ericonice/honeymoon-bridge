@@ -7,6 +7,7 @@ import { destinationFromWire, HOME, takeDestination } from "./game/destination.j
 import { readDevTools, writeDevTools } from "./game/devTools.js";
 import {
   boldness,
+  preferredRelease,
   density as storedDensity,
   disguiseEnabled,
   drawStyle,
@@ -14,6 +15,7 @@ import {
   peeking as storedPeeking,
   preferredFormat,
   setBoldness,
+  setPreferredRelease,
   setDensity,
   setDisguiseEnabled,
   setDrawStyle,
@@ -120,6 +122,7 @@ export function App(): React.JSX.Element {
   // Testing settings, kept in state only so the rows re-render when tapped; the
   // stored value is what anything actually reads.
   const [bold, setBold] = useState(boldness);
+  const [opponent, setOpponent] = useState(() => preferredRelease().version);
   const [level, setLevel] = useState(strength);
   const [speed, setSpeed] = useState(pace);
   const [sound, setSound] = useState(soundEnabled);
@@ -396,6 +399,7 @@ export function App(): React.JSX.Element {
         {showingSettings ? (
           <SettingsOverlay
             boldness={bold}
+            opponent={opponent}
             cardColor={cardColor}
             devTools={devTools}
             format={format}
@@ -437,6 +441,10 @@ export function App(): React.JSX.Element {
             onBoldnessChange={(next) => {
               setBoldness(next);
               setBold(next);
+            }}
+            onOpponentChange={(next) => {
+              setPreferredRelease(next);
+              setOpponent(next);
             }}
             onCardColorChange={(next) => {
               writeCardColor(next);
