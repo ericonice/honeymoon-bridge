@@ -214,6 +214,46 @@ export function unlockKey(unlock: Unlock): string {
   return `${unlock.achievement}:${unlock.tier}`;
 }
 
+/** Bronze, then silver, then gold — the order the tiers imply one another in. */
+export const TIERS: readonly Tier[] = ["bronze", "silver", "gold"];
+
+/**
+ * Every tier a set of unlocks implies, added to it.
+ *
+ * **A held tier implies every lower tier of the same achievement, and nothing
+ * used to say so.** Each tier was awarded on its own, from the single highest
+ * threshold a deal reached — so setting a contract by seven awarded the Axe in
+ * gold and never in silver or bronze, and the screen showed a gold above two
+ * locked rows underneath it. Reported from real play, and it reads as broken
+ * because it is: the tiers are a ladder, and having beaten a contract by seven you
+ * have plainly beaten one by five.
+ *
+ * True of every tiered family here — a redouble cannot happen without a double,
+ * a grand slam takes the twelve tricks a small one needed, a thousand hands
+ * contains fifty — so this is a rule about tiers rather than a table of
+ * exceptions. A family whose tiers are genuinely *not* a ladder would need to opt
+ * out here, and would want a word about why.
+ *
+ * Idempotent, and applied when progress is *read* as well as when it is written,
+ * which is what repairs the accounts that already hold a gold with nothing under
+ * it. No migration: the stored rows stay as they are and the answer comes out
+ * right anyway, the same reasoning `ratings.ts` recomputes for.
+ */
+export function withImpliedTiers(unlocks: readonly Unlock[]): Unlock[] {
+  const held = new Set(unlocks.map(unlockKey));
+  const complete = [...unlocks];
+  for (const unlock of unlocks) {
+    for (const tier of TIERS.slice(0, TIERS.indexOf(unlock.tier))) {
+      const implied: Unlock = { achievement: unlock.achievement, tier };
+      if (!held.has(unlockKey(implied))) {
+        held.add(unlockKey(implied));
+        complete.push(implied);
+      }
+    }
+  }
+  return complete;
+}
+
 /**
  * What an account has already earned, in the shape the unlock functions below
  * need it — not the storage shape. The client and the server each keep their
@@ -312,7 +352,7 @@ export function dealUnlocks(
 
   return {
     counters: counted.counters,
-    unlocked: onlyNew(progress, [...candidates, ...counted.unlocked]),
+    unlocked: onlyNew(progress, withImpliedTiers([...candidates, ...counted.unlocked])),
   };
 }
 
@@ -350,6 +390,6 @@ export function rubberUnlocks(
 
   return {
     counters: counted.counters,
-    unlocked: onlyNew(progress, [...candidates, ...counted.unlocked]),
+    unlocked: onlyNew(progress, withImpliedTiers([...candidates, ...counted.unlocked])),
   };
 }

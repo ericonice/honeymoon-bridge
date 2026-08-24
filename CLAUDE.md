@@ -811,6 +811,23 @@ still in circulation via the service worker gets. Deletes are scoped to the veri
 nothing else can reach them: there is no admin path, and the three branches (off, on, no body at all)
 were each checked against real local D1 rather than read.
 
+**A held tier implies every tier below it, and nothing used to say so.** Each tier was awarded from
+the single highest threshold a deal reached, so setting a contract by seven awarded the Axe in gold and
+never in silver or bronze — the screen showed a gold badge above two locked rows, and the only way to
+fill them in was to set another contract by exactly five. Reported from real play, and it reads as
+broken because it is: the tiers are a ladder.
+
+`withImpliedTiers` in the engine is the rule, and it is a rule rather than a table of exceptions
+because every tiered family here is a ladder — a redouble cannot happen without a double, a grand slam
+takes the twelve tricks a small one needed, a thousand hands contains fifty. A family whose tiers are
+genuinely not a ladder would have to opt out and would owe an explanation.
+
+**Applied on read as well as on write, which is what repairs the accounts that already hold a bare
+gold.** No migration: the stored rows stay short and the answer comes out right anyway, which is the
+same reasoning `ratings.ts` recomputes ratings for. It is idempotent, and it is applied where the badge
+list *enters* the client as well as on the server's way out, so a phone running an older bundle against
+a new server — or the reverse — still draws the ladder correctly.
+
 **`REQUIREMENTS.md` has no section on achievements at all** — the feature was built without one, so
 what each family is for and why it exists lives only in `labels.ts`. Worth writing before the next
 change to them, since the code is currently its own source of truth here.

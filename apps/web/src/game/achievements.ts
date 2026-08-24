@@ -1,4 +1,4 @@
-import { dealUnlocks, rubberUnlocks, unlockKey } from "@hb/engine";
+import { dealUnlocks, rubberUnlocks, unlockKey, withImpliedTiers } from "@hb/engine";
 import type {
   AchievementProgress,
   AchievementUpdate,
@@ -24,7 +24,12 @@ const EMPTY_PROGRESS: AchievementProgress = { counters: {}, unlocked: new Set() 
 function progressFrom(snapshot: AchievementSnapshot | null): AchievementProgress {
   return snapshot === null
     ? EMPTY_PROGRESS
-    : { counters: snapshot.counters, unlocked: new Set(snapshot.unlocked.map(unlockKey)) };
+    : {
+        counters: snapshot.counters,
+        // Completed on read, so a badge list from before tiers implied one another
+        // stops re-offering a rung the player has plainly already climbed.
+        unlocked: new Set(withImpliedTiers(snapshot.unlocked).map(unlockKey)),
+      };
 }
 
 /** The signed-in account's current progress, or null when signed out or unreachable. */
@@ -37,7 +42,14 @@ async function fetchAchievements(): Promise<AchievementSnapshot | null> {
     const response = await fetch(achievementsUrl(), {
       headers: { Authorization: `Bearer ${session}` },
     });
-    return response.ok ? ((await response.json()) as AchievementSnapshot) : null;
+    if (!response.ok) {
+      return null;
+    }
+    // Completed once, here, where the badge list enters the app: the screen reads
+    // this snapshot directly to decide which badges are held, so a list arriving
+    // from a server that has not been redeployed yet still draws correctly.
+    const snapshot = (await response.json()) as AchievementSnapshot;
+    return { counters: snapshot.counters, unlocked: withImpliedTiers(snapshot.unlocked) };
   } catch {
     return null;
   }

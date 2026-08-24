@@ -1,4 +1,4 @@
-import { dealUnlocks, rubberUnlocks, unlockKey } from "@hb/engine";
+import { dealUnlocks, rubberUnlocks, unlockKey, withImpliedTiers } from "@hb/engine";
 import type {
   AchievementId,
   AchievementProgress,
@@ -36,7 +36,12 @@ export async function achievementsFor(env: Env, accountId: string): Promise<Achi
 
   return {
     counters: counts,
-    unlocked: unlocks.results.map((row) => ({ achievement: row.achievement, tier: row.tier })),
+    // Completed on the way out rather than in the table. A row written before a
+    // held tier implied the ones below it is not wrong, only short, and the answer
+    // comes out right without a migration — see `withImpliedTiers`.
+    unlocked: withImpliedTiers(
+      unlocks.results.map((row) => ({ achievement: row.achievement, tier: row.tier })),
+    ),
   };
 }
 

@@ -6,6 +6,7 @@ import {
   rubberUnlocks,
   tierForCount,
   unlockKey,
+  withImpliedTiers,
 } from "../src/achievements.js";
 import type { AchievementProgress, DealFacts } from "../src/achievements.js";
 import { BASE_RULES } from "../src/deal.js";
@@ -172,6 +173,70 @@ describe("the axe", () => {
 
   it("reaches no tier for a set of 2", () => {
     expect(setBy(2).setTier).toEqual([null, null]);
+  });
+
+  /**
+   * The bug this was reported as: a gold with the silver below it still locked,
+   * and no obvious way to get the silver except by setting a contract by exactly
+   * five. Having beaten one by seven, that rung is climbed.
+   */
+  it("awards every tier below the one it reached", () => {
+    const keys = dealUnlocks(NOTHING_HELD, setBy(7), 1)
+      .unlocked.filter((unlock) => unlock.achievement === "axe")
+      .map((unlock) => unlock.tier)
+      .sort();
+    expect(keys).toEqual(["bronze", "gold", "silver"]);
+  });
+
+  it("awards only what a smaller set reached", () => {
+    const keys = dealUnlocks(NOTHING_HELD, setBy(5), 1)
+      .unlocked.filter((unlock) => unlock.achievement === "axe")
+      .map((unlock) => unlock.tier)
+      .sort();
+    expect(keys).toEqual(["bronze", "silver"]);
+  });
+
+  it("does not re-offer a tier already held", () => {
+    const holding: AchievementProgress = {
+      counters: {},
+      unlocked: new Set([unlockKey({ achievement: "axe", tier: "bronze" })]),
+    };
+    const keys = dealUnlocks(holding, setBy(7), 1)
+      .unlocked.filter((unlock) => unlock.achievement === "axe")
+      .map((unlock) => unlock.tier)
+      .sort();
+    expect(keys).toEqual(["gold", "silver"]);
+  });
+});
+
+describe("tiers implying one another", () => {
+  it("fills in the rungs below a held tier", () => {
+    expect(withImpliedTiers([{ achievement: "slam", tier: "gold" }]).map(unlockKey).sort()).toEqual([
+      "slam:bronze",
+      "slam:gold",
+      "slam:silver",
+    ]);
+  });
+
+  it("leaves a bronze alone", () => {
+    expect(withImpliedTiers([{ achievement: "insult", tier: "bronze" }])).toEqual([
+      { achievement: "insult", tier: "bronze" },
+    ]);
+  });
+
+  it("adds nothing twice, so reading a list repeatedly is safe", () => {
+    const once = withImpliedTiers([{ achievement: "axe", tier: "silver" }]);
+    expect(withImpliedTiers(once).map(unlockKey).sort()).toEqual(once.map(unlockKey).sort());
+  });
+
+  it("keeps families apart", () => {
+    const keys = withImpliedTiers([
+      { achievement: "axe", tier: "silver" },
+      { achievement: "slam", tier: "bronze" },
+    ])
+      .map(unlockKey)
+      .sort();
+    expect(keys).toEqual(["axe:bronze", "axe:silver", "slam:bronze"]);
   });
 });
 
