@@ -135,7 +135,7 @@ game" as one number is wrong by a factor of three across those.
 Calibration is monotone and close across six bands (predicted 0.20–0.35 won 0.293, 0.65–0.80 won
 0.707), though in-sample.
 
-**The objective is built, measured, and shipped as v3 Cammi Granato.** `bidValue.ts` takes an `Objective` — `"points"`
+**The objective is built, measured, and shipped as v3 Bobby Orr.** `bidValue.ts` takes an `Objective` — `"points"`
 is the existing pricing untouched, `"equity"` returns the change in the chance of taking the rubber —
 and `heuristicBot.ts` threads it from `BotTuning`. Against the same bidder pricing in points, with
 everything else held identical, the equity objective wins **631 rubbers to 169, 78.9% ± 1.4**, twenty
@@ -707,10 +707,10 @@ double-announcement bug three times (the fog horn, the unlock chime, and this), 
 fact about the *contract*: it used to be handed `score.detail.made`, so a defender who had just
 broken a contract heard the triumphant chime for it.
 
-**The bot is versioned, from v1 Angela James; v2 Bobby Orr is current.** `bot/release.ts` holds a *registry*
+**The bot is versioned, from v1 Angela James; v3 Bobby Orr is current.** `bot/release.ts` holds a *registry*
 of the releases a person can sit down against, with `LATEST_RELEASE` derived from the end of it; versions are numbered from
 one and named alphabetically after hockey players, so a list of them reads in the order they
-existed — Angela James, Bobby Orr, Cammi Granato, Doug Harvey, Eddie Shore, Frank Mahovlich,
+existed — Angela James, Bobby Hull, Bobby Orr, Doug Harvey, Eddie Shore, Frank Mahovlich,
 Gordie Howe, Hayley Wickenheiser, Igor Larionov, Jean Béliveau. **The name appears
 in Settings and nowhere else.** Across the table the opponent stays the computer: a first name in
 the seat opposite promises a personality that is not there.
@@ -737,6 +737,16 @@ claiming to be that release — a label that lies, which is worse than not keepi
 love all and at a part-score and a game to either side. Any change to those transcripts is a change of opponent
 — either the version needs bumping or the change was not meant to reach that release. Checked against a real
 drift on the way in: moving `DEFAULT_GAME_EQUITY` by 100 fails it.
+
+**What the transcripts cannot pin is the bidder people actually play, and that is structural.** The
+bid search lives on the difficulty rung rather than on the release, and the default rung turns it on —
+so the shipped bidder searches and the pinned transcripts do not. Moving the setting would not fix it:
+the search is an *anytime* one bounded by wall-clock time, so it returns whatever it managed on that
+machine at that moment, and a deadline-bounded search is structurally unpinnable. Pinning it by sample
+count instead would pin something nobody plays. So the guarantee is narrower than it looks — the
+transcripts pin a release's *own* bidding, the objective and estimates and disguise that distinguish
+one release from another, while how hard that bidder may think is the rung's business, measured rather
+than pinned, and worth about 108 rating points.
 
 Deliberately the auction and the draw and not the card play. Those are what a bidding change moves, they are
 decided by the heuristic bot with no solver in the loop, and they run in 60ms — where `strength: "strong"` is 60
@@ -1318,7 +1328,7 @@ hundreds — and a line through that would be fiction. Plotted against matches, 
 changes only when you play, so a time axis is long flat stretches meaning "did not play this week".
 
 **The reference is 1500, and drawing the bot's own anchor there was tried and fails on real numbers.**
-The idea was good — a rule at Bobby Orr's 1200 would read "here is where I passed the computer" — and
+The idea was good — a rule at v2's 1200 would read "here is where I passed the computer" — and
 this account is 300 clear of it, so including it squashes the whole line into the top fifth and loses
 the shape. **A reference has to sit inside the data's range to be worth its space**, so the average is
 the rule and the bot's rating is a caption.
@@ -1343,8 +1353,62 @@ is not a change of opponent worth a rule.
 
 **The trap to state before anyone reads a flat line as a plateau:** because the bot is pinned, the
 line converges toward *bot + the player's true gap* and then flattens. That is having found your
-level, not having stopped improving, and the only way past it is a stronger opponent — which is what a
-v3 would be for.
+level, not having stopped improving, and the only way past it is a stronger opponent — which is what
+v3 was for, and what the top of the difficulty ladder is for now.
+
+**How hard it plays is one setting, and it is rated per rung.** Difficulty used to be spread across
+`strength`, `boldness`, the disguise and the opponent picker — four rows that all changed how hard the
+game was, none of which said so, and using them meant knowing what a sample count is. `difficulty.ts`
+replaces them with three rungs named for where the game is played rather than for how hard it is:
+Kitchen, Club, Championship. "Easy" and "hard" describe the player; a kitchen table
+describes the opponent, which is the thing being chosen. It also keeps them clear of the hockey names
+on `release.ts` — one says *who* you are playing, the other says *how hard*.
+
+**Every rung makes the bot wrong the way a person is wrong.** It thinks for less time, and at the
+bottom it stops working the hand out and plays by rules of thumb. No rung makes it play a card it knows
+is bad. An opponent that blunders on purpose is not a weaker player but a broken one, and that failure
+has been rejected here before.
+
+**Forgetting was the lever this was written around, and it turned out to be worth nothing** — see the
+ladder thread below. `forgetful.ts` survives as a decorator wired through `botForLevel`, because
+`botTurn.ts` already hands every decision the cards this seat discarded, so forgetting is exactly "pass
+on less than you were given" and costs nothing to keep available. Its forgetting is **stable for the
+deal**, seeded from the discards themselves: a bot that re-rolled per decision would not be forgetful
+but incoherent, ruling a card out while bidding and dealing that same card to the opponent two tricks
+later. Perfect recall returns the bot *unwrapped*, which is what keeps a pinned release pinned — and is
+now what happens on every rung.
+
+**The version and the rung are rated together, and the offset is per rung rather than per pair.**
+`bot_version` says which computer somebody played; `difficulty` says how hard it was asked to play, and
+beating it on its gentlest setting and beating it on its hardest are not one achievement. An anchor per
+rung *per version* would be a table nobody will ever measure, so `DIFFICULTY_OFFSETS` is one number per
+rung applied to the version's anchor — the assumption being that a rung weakens the bot by about the
+same amount whichever release is underneath it, which is at least plausible because the levers a rung
+pulls are shared by every release. Zero at the top, because `BOT_RATINGS` was measured at the strongest
+setting and that is what the app plays by default, so retuning a rung does not shift the whole table.
+
+**The anchors are sent to the client rather than computed there**, so the number on the difficulty row
+in Settings, the number beside the computer's seat on the play screen and the number the rating walk
+actually used are one number from one place. Three copies of an anchor is three things to forget to
+retune, and this ladder is going to be retuned. `botAnchor` returns **null** rather than a guess when
+nothing has been fetched that says: a rating is the figure somebody quotes at the dinner table, so a
+plausible-looking wrong one is worse than a blank, because nobody checks a number that looks right.
+
+Two nullable-column readings that will look like bugs later and are not, both the same shape as
+`bot_version`'s. **A null difficulty means "before the setting existed", not "unknown"**, and is rated
+at the *top* rung — which is the honest reading rather than a default, since every one of those games
+was played with perfect recall and the full sample count because there was no way to ask for less. And
+**an unrecognised rung is stored raw and rated as the weakest known one**: the client can be deployed
+ahead of the server and the service worker keeps old builds in circulation, so storing the string the
+client sent lets `ratings.ts` come out right by itself once the server learns the name, where dropping
+it to null would silently rate the match at the top rung and never correct. The conservative direction
+throughout, for the reason v3's anchor was set low — being told you are better than you are is the
+error nobody notices and nothing later fixes.
+
+`test/ratings.test.ts` walks the app's own `DIFFICULTIES` list against the server's offset table,
+because the two live in different workspaces and nothing else makes them meet. A rung missing from the
+server is not an error anywhere: it is priced as the weakest, every match on it under-rates the player,
+and nothing says so.
 
 **Bidding by search is costed but not built, and the cost is the whole question.** The bidder is the
 last decision in here made with a rule of thumb — it counts tricks with `evaluate.ts`, whose estimate
@@ -1448,6 +1512,123 @@ record reset or a version bump, and the phone cost measured — 200ms a call, tw
 auction.
 
 ### Open threads
+
+- **The ladder was spaced on its one inert lever, and measuring one lever at a time is what fixed
+  it.** The first ladder guessed four rungs varying recall 3/6/10/13, samples 6/15/30/60 and bid search
+  0/40/120/250ms together. Three of the four turned out to be **the same opponent**: Tournament against
+  Championship was 40–40 over 80 rubbers, Club 37–43. Only Kitchen was distinct, at 23.8%.
+
+  A rung is three levers moved at once, so that pair measurement said the bottom was real and could not
+  say *which* lever made it real. `bench/rubber.ts levels=` takes a `recall/samples/search` triple for
+  exactly this — one run per lever, each moving a single setting away from Championship, 40 rubbers
+  each:
+
+  | change | win rate | worth |
+  | --- | --- | --- |
+  | recall 13 → 3 | 57.5% ± 7.5 | **nothing** |
+  | samples 60 → 6 | 40.0% ± 7.4 | ~70 |
+  | bid search off | 35.0% ± 7.3 | ~108 |
+  | solver off entirely | 17.5% ± 6.1 | ~269 |
+
+  **Memory is worth nothing and it was the lever the ladder varied hardest.** 57.5% is the *forgetful*
+  side ahead, a null with the wrong sign — and that arm pits full recall against almost none, so it is
+  also the draw-replay capability against nothing, since replaying the opponent's draw needs all
+  thirteen. That capability improved the trick estimate when it was built (1.07 → 1.04 against par) and
+  does not survive into rubber outcomes. The same lesson as the auction-reading sampler pointing the
+  other way: **a change measured in tricks and a change measured in points are different claims.**
+
+  The parts compose about additively — Kitchen moved all three and measured ~202 against the 178 the
+  parts predict — so there is no interaction to hunt for.
+
+  **The rebuilt ladder is three rungs, not four, and the fourth was removed because it did not exist.**
+  Four rungs would sit inside the noise of the instrument measuring them. **Kitchen 1050, Club 1200,
+  Championship 1400**, measured at −357 and −191 and rounded toward zero, which is the conservative
+  direction: a rung rated slightly stronger than it plays gives slightly less credit for beating it.
+
+  **`searchBudgetMs: 0` rather than an empty tuning, and this would have shipped wrong.** The rung's
+  tuning is merged *over* the release's, so a rung leaving the key out inherits whatever the release
+  set rather than turning the search off. An empty object reads as "no search" and means "whatever it
+  said". `test/forgetful.test.ts` requires every rung to state a budget explicitly.
+
+  Two things worth knowing before re-measuring anything here. **`nodouble` belongs in every one of
+  these runs**: the oracle doubler handicaps whichever seat it is applied to under solver card play, and
+  a control run of two identical bidders came back 61.8% because of it. And **the rungs are compared to
+  each other rather than to par**, so the offset is what a rubber margin says — the only bench that can
+  price a bidder at all.
+
+  **The levers do not compose, and that is the finding that shaped the final ladder.** With the bid
+  search on, going from 60 samples to none is worth 172 points; with it off, the same change is worth
+  70. Turning off one way of thinking makes the other matter less. So stacking every lever reaches only
+  **−261**, not the −380 the parts suggest — measured, not assumed, after the parts had already been
+  added up once and found wanting. That left Kitchen and Club about seventy points apart, which is the
+  original failure in miniature.
+
+  **The simple bidder is the one lever that did compose**, taking the rung from −261 to **−357**, and
+  the reason is worth keeping: it is not more of the same kind of weakening. Fewer samples and less
+  search are both "think less about what a contract is worth", and they saturate against each other. A
+  bidder that asks a different question does not. Its behavioural signature says the same thing —
+  **down two or more in its own contract fell to 2% of deals from 13%**. It is not losing by
+  overreaching; it bids only what it can make and simply never competes.
+
+  **A floor was expected and there is not one where I guessed.** At 20 rubbers the simple bidder was
+  tracking 10% and I wrote that rubber outcomes have a luck floor around 10–15% that no weakening gets
+  past — the draw being 26 decisions and the deal most of the variance. The second twenty went 1–19 and
+  it finished at **7.5%**. The floor may well exist; it is lower than it looked, and calling it from
+  half a run was the same mistake as reading a win rate off the first five rubbers.
+
+  **So the bottom rung got a different bidder rather than less of the same one.** `simpleBidder` is the
+  rule the bot used before contracts were priced in points — bid the highest contract you think you can
+  make, and otherwise pass — whose replacement was worth **+464 points a rubber, 775 rubbers to 225**.
+  It lived in `bench/rubber.ts` as the reference the current bidder has to beat, described there as "not
+  a bot any more"; it is a bot again, and `bench/rubber.ts` imports it from `src/` rather than keeping
+  a copy.
+
+  **The argument that changed my mind had nothing to do with strength.** Every other lever makes the
+  bot think *less* about the right question. This one asks a **simpler and more natural** question, and
+  "can I make this?" is how a person new to the game bids — nobody who has just learned it is pricing a
+  contract against a rubber standing and weighing a sacrifice. It is the only lever that makes the
+  computer weak in a way you could explain to somebody, which is the standard every rung here is held
+  to. It does cross the release/rung boundary — Kitchen bids what no release ever shipped — and that is
+  written down in `release.ts` rather than left to be discovered.
+
+  Still open: recall was measured worthless **at Championship settings only**. At six samples or none,
+  each guessed hand carries more weight and a misremembered card may cost more. The mechanism stays
+  wired through `botForLevel` for whoever measures that.
+
+  Watching one of these run is also what caught a fault in the read-out: the plain binomial error bar
+  collapses to **exactly zero** at a clean sweep, so a lopsided run opened "0% ± 0" — no uncertainty
+  at all — and the headline, which divides by that bar, would have announced half a billion standard
+  errors off its guard against dividing by zero. `winRate` pads with two imagined wins and two
+  imagined losses, and the tally and the headline share it so they cannot disagree.
+
+  **The range that is left is below the bottom rung, not between the top ones, and it comes from
+  turning the solver off rather than turning it down.** Heuristic card play is a *different kind of
+  player* rather than a less certain one, which is why it does not saturate the way a sample count
+  does — it gives away about twice as many tricks on defence and loses by tens of points a deal. It is
+  also still wrong the way a person is wrong: it plays by rules of thumb, which is how a beginner
+  plays, rather than choosing a card it can see is bad.
+
+  **Random draw was considered for the bottom and rejected, on a reason specific to this game.** A bot
+  drawing at random does not arrive at the auction playing badly, it arrives *holding garbage*, having
+  built its hand out of the cards a sensible player throws away. Every deal would be won by several
+  hundred points with no auction worth having. In a game whose first half is 26 discard decisions, the
+  random opponent is not an easy opponent but an absent one.
+
+  **`samples: 0` was a landmine until `bot/build.ts` existed, and the shape of it is worth keeping.**
+  Zero samples is not a quieter sampler: nothing separates the cards, so the tie-break decides
+  everything and the bot plays its lowest legal card every trick of every deal. `bench/rubber.ts` had
+  always branched to `createHeuristicBot` at zero and `localSession.ts` had not — so a rung written
+  that way would have *measured* as a sane weak opponent and *shipped* as one that never plays a
+  picture card by choice, with nothing in the types saying so. One factory now, used by both, and
+  `test/botForLevel.test.ts` pins both halves: that a no-sample rung is still choosing, and that the
+  bare sampler is not. The second is what stops the first passing for the wrong reason.
+
+  Two things worth knowing before re-measuring. **`nodouble` belongs in every one of these runs**: the
+  oracle doubler handicaps whichever seat it is applied to under solver card play, and a control run of
+  two identical bidders came back 61.8% because of it. And **the rungs are being compared to each
+  other, not to par**, so the rating offset is what a rubber margin says — which is the only bench that
+  can price a bidder at all, for the reason the rest of this file keeps repeating.
+
 
 - **The growing-hand thresholds were tried and left alone, which is not the same as untouched.**
   `rawTricks` counts the opponent's holding against a full thirteen — a finished-hand assumption,
@@ -1561,8 +1742,13 @@ auction.
   match what the row says; `pace()` treats anything unrecognized as fast, so the old spelling carries
   across without a migration.
 
-  Two of the three "settings that exist to answer a question" remain — `boldness` and `strength` —
-  and the note on them in `identity.ts` still says what has to happen when each gets its answer.
+  One of the three "settings that exist to answer a question" remains — `boldness` — and the note on
+  it in `identity.ts` still says what has to happen when it gets its answer. `strength` is gone, and
+  the way it went is worth recording: it did not get an answer, it got a **better question**. It was
+  asking "how much sampling is worth sitting down to", which turned out to be the player's to answer
+  rather than a constant to find, so it became a rung on the difficulty ladder. It was also, briefly,
+  a **dead control** — the rung took ownership of the sample count while the row stayed on screen
+  still promising to change it. A setting that lies is worse than one that is merely unanswered.
 - **How much should the bot remember?** Discards are not shown, so recall is part of the game and a
   perfect-memory bot has a real edge. The `Bot` interface must therefore take "what this bot
   remembers seeing" as explicit state handed to it, never read from engine state directly — which

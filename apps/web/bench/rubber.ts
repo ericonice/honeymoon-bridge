@@ -14,7 +14,6 @@ import {
   vulnerability,
 } from "@hb/engine";
 import type {
-  Bid,
   Call,
   DealAction,
   DealState,
@@ -27,11 +26,14 @@ import type {
 } from "@hb/engine";
 import { DEFAULT_GAME_EQUITY } from "../src/bot/bidValue.js";
 import type { Objective } from "../src/bot/bidValue.js";
+import { DIFFICULTIES, DIFFICULTY_LABEL, levelFor } from "../src/bot/difficulty.js";
+import type { DifficultyLevel } from "../src/bot/difficulty.js";
 import { releaseFor } from "../src/bot/release.js";
 import type { BotRelease } from "../src/bot/release.js";
-import { defensiveTricks, estimatedTricks } from "../src/bot/evaluate.js";
 import { createHeuristicBot } from "../src/bot/heuristicBot.js";
 import type { BotTuning } from "../src/bot/heuristicBot.js";
+import { botForLevel } from "../src/bot/build.js";
+import { simpleBidder } from "../src/bot/simpleBidder.js";
 import { createSamplingBot } from "../src/bot/samplingBot.js";
 import { solve } from "../src/bot/solver.js";
 import type { Bot } from "../src/bot/types.js";
@@ -74,59 +76,6 @@ import { createProgress } from "./progress.js";
 
 const MAX_DEALS = 60;
 
-/**
- * The bidder as it was before contracts were priced in points: take the highest
- * bid the hand can expect to make, and pass when nothing qualifies.
- *
- * Kept here rather than in the bot, because it is not a bot any more — it is the
- * thing the current one has to beat. Leaving it in `heuristicBot.ts` as a mode
- * would mean shipping a second bidder nobody plays.
- */
-function legacyBidder(base: Bot): Bot {
-  return {
-    ...base,
-    chooseCall(view: PlayerView): Call {
-      const calls = legalActionsForView(view).flatMap((action) =>
-        action.type === "call" ? [action.call] : [],
-      );
-      const bids = calls.flatMap((call) => (call.type === "bid" ? [call.bid] : []));
-
-      let best: Bid | null = null;
-      for (const bid of bids) {
-        if (estimatedTricks(view.hand, bid.strain) - (bid.level + 6) < 0) {
-          continue;
-        }
-        if (best === null || bid.level > best.level) {
-          best = bid;
-        }
-      }
-      if (best !== null) {
-        return { type: "bid", bid: best };
-      }
-
-      // The old rule doubled from the five level holding three defensive tricks.
-      // Leaving it out made this reference unable to punish anything, which
-      // quietly rigged every constant measured against it: a bot facing an
-      // opponent who never doubles should of course fear doubles less and bid
-      // games harder. A baseline has to be able to hurt you or it is not one.
-      const entry = lastBidEntry(view.auction);
-      const theirBid = entry !== null && entry.by !== view.me && entry.call.type === "bid"
-        ? entry.call.bid
-        : null;
-      if (
-        theirBid !== null &&
-        theirBid.level >= 5 &&
-        currentDoubling(view.auction) === "none" &&
-        defensiveTricks(view.hand) >= 3 &&
-        calls.some((call) => call.type === "double")
-      ) {
-        return { type: "double" };
-      }
-
-      return { type: "pass" };
-    },
-  };
-}
 
 /**
  * Undertricks the oracle needs to see before it doubles.
@@ -309,6 +258,44 @@ function wreckIn(state: DealState, seat: PlayerId): { cost: number; down: boolea
   return { cost: score.aboveLine[opponentOf(seat)], down: true };
 }
 
+/**
+ * A win rate and how unsure it is, with two imagined wins and two imagined
+ * losses folded in before the error bar is taken.
+ *
+ * The textbook binomial error collapses to *exactly zero* at a clean sweep, which
+ * is the single most misleading thing a bench in here can print: the opening
+ * rubbers of a lopsided run read as "0% ± 0", a measurement claiming no
+ * uncertainty at all. Worse, the headline divides by this to report standard
+ * errors — so a run where one side swept would have announced half a billion of
+ * them, off a guard against dividing by zero. The padding makes an early number
+ * look as unsettled as it is, and washes out entirely by the time the count
+ * matters.
+ *
+ * One function for the running tally and for the headline, because they are the
+ * same claim at two moments and a bench whose progress line and whose conclusion
+ * disagree is one nobody can read.
+ */
+function winRate(won: number, lost: number): {
+  readonly error: number;
+  readonly gap: number;
+  readonly rate: number;
+} {
+  const decided = won + lost;
+  const padded = (won + 2) / (decided + 4);
+  return {
+    error: Math.sqrt((padded * (1 - padded)) / (decided + 4)),
+    // What this win rate is worth as a rating difference, which is the number
+    // that actually gets typed into `DIFFICULTY_OFFSETS` and `BOT_RATINGS`.
+    // Computed here because it was being worked out by hand off the printed
+    // percentage every time, and a constant table filled in by hand arithmetic
+    // is a constant table with a mistake in it. Taken off the padded rate rather
+    // than the raw one so a clean sweep gives a large number instead of an
+    // infinite one.
+    gap: 400 * Math.log10(padded / (1 - padded)),
+    rate: decided === 0 ? 0.5 : won / decided,
+  };
+}
+
 function mean(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0) / Math.max(1, values.length);
 }
@@ -361,6 +348,8 @@ interface RunOptions {
   readonly releases: Pair<BotRelease> | null;
   /** Milliseconds the challenger may spend searching for a trick distribution. Zero is off. */
   readonly search: number;
+  /** Two difficulty rungs to play against each other, challenger first. */
+  readonly levels: Pair<DifficultyLevel> | null;
   /** `mean` takes the search's centre and keeps the fitted spread; `odds` takes both. */
   readonly searchMode: "mean" | "odds";
   readonly rubbers: number;
@@ -382,6 +371,7 @@ function run({
   gameEquity,
   objective,
   oracle,
+  levels,
   releases,
   rubbers,
   samples,
@@ -406,7 +396,12 @@ function run({
   // Twenty seconds with heuristic card play and several minutes with the
   // sampler, so this reports either way rather than only when it is slow —
   // a bench that goes quiet exactly when it is expensive is the wrong way round.
-  const playing = createProgress(rubbers, "rubbers");
+  // Twice the seed count, because every seed is played twice with the seats
+  // exchanged. This said `rubbers N/20` while counting seeds, so a tally of 5-5
+  // sat beside a counter reading 5 — which made a careful reader stop and check
+  // the arithmetic rather than read the result. The summary has always been
+  // right; only the progress line was lying about its unit.
+  const playing = createProgress(rubbers * 2, "rubbers");
 
   for (let seed = 1; seed <= rubbers; seed++) {
     // Every rubber twice with the seats exchanged, so dealing first and the
@@ -417,6 +412,12 @@ function run({
       // reference is the same bidder, so it takes the same equity and differs
       // only in the weight being tested.
       const make = (rng: Rng, challenger: boolean): Bot => {
+        if (levels !== null) {
+          // A rung against a rung, which is the only way to price the ladder. The
+          // number each level shows in Settings should be the one this produced.
+          const level = levels[challenger ? 0 : 1];
+          return botForLevel({ level, rng, tuning: { ...tuning, ...level.tuning } });
+        }
         if (search > 0) {
           // The same bidder, one side searching for its trick distribution and
           // the other counting it. Everything else is held identical, which is
@@ -439,7 +440,7 @@ function run({
             ? cardPlay(rng, { theirBidOnOwnWeight: versusWeight })
             : objective === "equity"
               ? cardPlay(rng, { objective: "points" })
-              : legacyBidder(createHeuristicBot(rng));
+              : simpleBidder(createHeuristicBot(rng));
       };
       const bots: Pair<Bot> = [
         make(createRng(seed), challengerSeat === 0),
@@ -464,7 +465,16 @@ function run({
         lost += 1;
       }
     }
-    playing(seed, `${mean(points) >= 0 ? "+" : ""}${mean(points).toFixed(0)} per rubber, ${won}-${lost}`);
+    // The tally with its error bar, so the number can be watched settling rather
+    // than believed early. A win rate wanders wildly over the first dozen rubbers
+    // and the bar is what says so — reading a result into that wander is a mistake
+    // this file has recorded more than once.
+    const { error: bar, rate } = winRate(won, lost);
+    playing(
+      seed * 2,
+      `${won}-${lost}  ${(100 * rate).toFixed(0)}% ± ${(100 * bar).toFixed(0)}  ` +
+        `${mean(points) >= 0 ? "+" : ""}${mean(points).toFixed(0)}/rubber`,
+    );
   }
 
   const margin = mean(points);
@@ -472,15 +482,17 @@ function run({
 
   const play = samples > 0 ? `, ${samples}-sample card play` : `, heuristic card play`;
   console.log(
-    search > 0
-      ? `the bidder searching its tricks at ${search}ms (${searchMode}) against the same bidder counting them${play}`
-      : releases !== null
+    levels !== null
+      ? `${levelName(levels[0])} against ${levelName(levels[1])}, their own sample counts`
+      : search > 0
+        ? `the bidder searching its tricks at ${search}ms (${searchMode}) against the same bidder counting them${play}`
+        : releases !== null
         ? `v${releases[0].version} ${releases[0].name} against v${releases[1].version} ${releases[1].name}${play}`
-          : versusWeight !== null
-          ? `the same bidder against itself trusting their bid at ${versusWeight}${play}`
-          : objective === "equity"
-            ? `the equity objective against the same bidder pricing in points${play}`
-            : `points bidder against the old "can I make it" bidder${play}`,
+            : versusWeight !== null
+            ? `the same bidder against itself trusting their bid at ${versusWeight}${play}`
+            : objective === "equity"
+              ? `the equity objective against the same bidder pricing in points${play}`
+              : `points bidder against the old "can I make it" bidder${play}`,
   );
   console.log(`  challenger prices a game at ${gameEquity}`);
   console.log(
@@ -494,12 +506,13 @@ function run({
   // protect a rubber it is winning is the whole point of it — so a bench headlined
   // on points per rubber would report exactly that as a regression. This file has
   // recorded three instrument failures of that shape; this one was predictable.
-  const decided = won + lost;
-  const rate = decided === 0 ? 0 : won / decided;
-  const rateError = decided === 0 ? 0 : Math.sqrt((rate * (1 - rate)) / decided);
+  const { error: rateError, gap, rate } = winRate(won, lost);
   console.log(`  rubbers won      ${won} to ${lost}   ${(100 * rate).toFixed(1)}% ± ${(100 * rateError).toFixed(1)}`);
   console.log(
-    `  that is          ${(Math.abs(rate - 0.5) / Math.max(1e-9, rateError)).toFixed(1)} standard errors from even`,
+    `  that is          ${(Math.abs(rate - 0.5) / rateError).toFixed(1)} standard errors from even`,
+  );
+  console.log(
+    `  worth            ${gap >= 0 ? "+" : ""}${gap.toFixed(0)} rating points to the challenger`,
   );
   console.log(`  margin           ${margin >= 0 ? "+" : ""}${margin.toFixed(0)} points per rubber`);
   console.log(`  standard error   ${error.toFixed(0)}`);
@@ -538,12 +551,73 @@ function releasesFrom(arg: string | undefined): Pair<BotRelease> | null {
   return [challenger, reference];
 }
 
+/**
+ * `levels=kitchen:championship` plays one rung against another, challenger first.
+ *
+ * Either side may also be spelled out as `recall/samples/search` — so
+ * `levels=3/60/250:championship` is Championship with only its memory taken away.
+ * That is what prices a *lever* rather than a rung, and the ladder needs it:
+ * Kitchen differs from Club in recall, sample count and search budget all at
+ * once, so measuring the pair says the bottom of the ladder is real and says
+ * nothing about which of the three made it real. A rung is three levers moved
+ * together and a ladder built on the wrong one saturates, which is exactly what
+ * happened at the top.
+ *
+ * `0` samples means no solver at all — heuristic card play. See `botForLevel`,
+ * which is where that stopped being a landmine.
+ */
+function levelsFrom(arg: string | undefined): Pair<DifficultyLevel> | null {
+  if (arg === undefined) {
+    return null;
+  }
+  const [first, second] = arg.slice("levels=".length).split(":");
+  return [levelFromName(first), levelFromName(second)];
+}
+
+function levelFromName(name: string | undefined): DifficultyLevel {
+  const found = DIFFICULTIES.find((one) => one === name);
+  if (found !== undefined) {
+    return levelFor(found);
+  }
+  if (name !== undefined && name.includes("/")) {
+    const [recall, samples, search] = name.split("/").map(Number);
+    if ([recall, samples, search].every((one) => one !== undefined && Number.isFinite(one))) {
+      return {
+        // A spelled-out triple is always the priced bidder. The simple one is a
+        // property of the Kitchen rung rather than a lever on a scale, so it is
+        // named rather than dialled: `levels=kitchen:championship`.
+        bidding: "priced",
+        recall: recall!,
+        samples: samples!,
+        // A budget of zero has to mean *no search*, not a search with no time —
+        // `searchBudgetMs: 0` reads as falsy everywhere downstream, but leaving
+        // the key present is one more thing for a future reader to check.
+        tuning: search! > 0 ? { searchBudgetMs: search!, searchSamples: 25 } : {},
+      };
+    }
+  }
+  throw new Error(
+    `levels= wants two of ${DIFFICULTIES.join(", ")}, or a recall/samples/search triple like 3/60/250`,
+  );
+}
+
+function levelName(level: DifficultyLevel): string {
+  const found = DIFFICULTIES.find((one) => levelFor(one) === level);
+  if (found !== undefined) {
+    return DIFFICULTY_LABEL[found];
+  }
+  const search = level.tuning.searchBudgetMs ?? 0;
+  const play = level.samples === 0 ? "no solver" : `${level.samples} samples`;
+  return `recall ${level.recall}, ${play}, ${search === 0 ? "no search" : `${search}ms search`}`;
+}
+
 const equityArg = process.argv.find((arg) => arg.startsWith("equity="));
 const versusArg = process.argv.find((arg) => arg.startsWith("vs="));
 
 run({
   gameEquity: equityArg === undefined ? DEFAULT_GAME_EQUITY : Number(equityArg.slice("equity=".length)),
   objective: process.argv.includes("objective=equity") ? "equity" : "points",
+  levels: levelsFrom(process.argv.find((arg) => arg.startsWith("levels="))),
   releases: releasesFrom(process.argv.find((arg) => arg.startsWith("releases="))),
   search: Number(process.argv.find((arg) => arg.startsWith("search="))?.slice("search=".length) ?? 0),
   searchMode: process.argv.includes("mean") ? "mean" : "odds",

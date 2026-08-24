@@ -1,6 +1,6 @@
 import type { MatchFormat, PlayerId } from "@hb/engine";
 import type { Env } from "./env.js";
-import { botRating, ratingOf, ratingsFor, START_RATING } from "./ratings.js";
+import { botAnchors, botRating, ratingOf, ratingsFor, START_RATING } from "./ratings.js";
 import type { RatingPoint, Ratings } from "./ratings.js";
 
 /**
@@ -24,6 +24,8 @@ export interface FinishedRubber {
   readonly botVersion?: number | null;
   readonly code: string;
   readonly deals: number;
+  /** Which difficulty rung a robot rubber was played at. Null against a person. */
+  readonly difficulty?: string | null;
   readonly format: MatchFormat;
   readonly seats: readonly [FinishedSeat, FinishedSeat];
   readonly winner: PlayerId;
@@ -40,10 +42,10 @@ export async function recordRubber(env: Env, rubber: FinishedRubber, now: number
   const [first, second] = rubber.seats;
   await env.DB.prepare(
     `INSERT INTO results
-       (id, finished_at, table_code, winner, deals, format, bot_version,
+       (id, finished_at, table_code, winner, deals, format, bot_version, difficulty,
         account0, token0, nickname0, points0,
         account1, token1, nickname1, points1)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       crypto.randomUUID(),
@@ -53,6 +55,7 @@ export async function recordRubber(env: Env, rubber: FinishedRubber, now: number
       rubber.deals,
       rubber.format,
       rubber.botVersion ?? null,
+      rubber.difficulty ?? null,
       first.accountId,
       first.token,
       first.nickname,
@@ -142,6 +145,7 @@ interface ResultRow {
   readonly account0: string | null;
   readonly account1: string | null;
   readonly bot_version: number | null;
+  readonly difficulty: string | null;
   readonly deals: number;
   readonly finished_at: number;
   readonly format: MatchFormat;
@@ -165,6 +169,8 @@ export interface OpponentMatch {
   /** Null for a person, and null for a robot game older than bot versions. */
   readonly botVersion: number | null;
   readonly deals: number;
+  /** Which rung it was played at. Null for a person, or before the setting existed. */
+  readonly difficulty: string | null;
   readonly finishedAt: number;
   readonly pointsAgainst: number;
   readonly pointsFor: number;
@@ -238,6 +244,20 @@ export interface OpponentRecord {
 }
 
 export interface Records {
+  /**
+   * What the computer is worth on each rung, by release.
+   *
+   * Sent rather than computed on the client so the number beside the opponent's
+   * seat, the number on the difficulty row in Settings and the number the rating
+   * walk actually used are **one number from one place**. Three copies of an
+   * anchor is three things to forget to retune, and the ladder is provisional —
+   * it is going to be retuned.
+   *
+   * Keyed by version then rung, both as strings because that is what JSON does to
+   * an object key anyway. Absent from a server too old to send it, which has to
+   * read as "no anchors to show" rather than as an error.
+   */
+  readonly anchors: Record<string, Record<string, number>>;
   readonly opponents: OpponentRecord[];
   /** The asker's own rating, the matches it rests on, and how it got there. */
   readonly rating: {
@@ -317,6 +337,7 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
     // the tail — trimmed once at the end rather than on every row.
     const match: OpponentMatch = {
       botVersion: theirToken === ROBOT_TOKEN ? row.bot_version : null,
+      difficulty: theirToken === ROBOT_TOKEN ? row.difficulty : null,
       deals: row.deals,
       finishedAt: row.finished_at,
       pointsAgainst: theirPoints,
@@ -355,6 +376,7 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
   const mine = ratingOf(ratings, accountId, [...mineTokens]);
 
   return {
+    anchors: botAnchors(),
     opponents: await withNames(
       env,
       all.filter((entry) => entry.token !== ROBOT_TOKEN),
@@ -397,7 +419,12 @@ export function assignOpponentKeys(entries: readonly Tallied[]): Map<string, str
  */
 function ratingFor(entry: Tallied, ratings: Ratings): number {
   if (entry.token === ROBOT_TOKEN) {
-    return botRating(entry.matches[0]?.botVersion ?? null);
+    // The newest match's rung as well as its version — `matches` is newest-first
+    // by the time this runs. One row pools every rung the computer was played at,
+    // so this says what you are facing *now* rather than averaging four opponents
+    // into a number that describes none of them.
+    const newest = entry.matches[0];
+    return botRating(newest?.botVersion ?? null, newest?.difficulty ?? null);
   }
   const identity = entry.account === null ? `token:${entry.token}` : `account:${entry.account}`;
   return Math.round(ratings.rating.get(identity) ?? START_RATING);
@@ -515,6 +542,7 @@ export async function recentMatchesFor(
     return {
       account: theirAccount,
       botVersion: theirToken === ROBOT_TOKEN ? row.bot_version : null,
+      difficulty: theirToken === ROBOT_TOKEN ? row.difficulty : null,
       deals: row.deals,
       finishedAt: row.finished_at,
       format: row.format,

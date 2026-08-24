@@ -1,14 +1,16 @@
 import type { DealRules, MatchFormat } from "@hb/engine";
+import { DIFFICULTIES } from "../bot/difficulty.js";
+import type { Difficulty } from "../bot/difficulty.js";
 import { LATEST_RELEASE, releaseFor } from "../bot/release.js";
 import type { BotRelease } from "../bot/release.js";
 import { readStored, writeStored } from "./storage.js";
 
 const FORMAT_KEY = "hb.format";
 const OPPONENT_KEY = "hb.opponent";
+const DIFFICULTY_KEY = "hb.difficulty";
 const DRAW_STYLE_KEY = "hb.drawStyle";
 const DISGUISE_KEY = "hb.disguise";
 const BOLDNESS_KEY = "hb.boldness";
-const STRENGTH_KEY = "hb.strength";
 const DENSITY_KEY = "hb.density";
 const PACE_KEY = "hb.pace";
 const PEEK_KEY = "hb.peek";
@@ -91,6 +93,28 @@ export function setPreferredRelease(version: number): void {
 }
 
 /**
+ * How hard the computer plays — the one setting that replaces four.
+ *
+ * `strength`, `boldness`, the disguise and the opponent picker all changed how
+ * hard the game was, none of them said so, and using them meant knowing what a
+ * sample count is. This says it, and the rungs below it are measured rather than
+ * asserted — see `bot/difficulty.ts`.
+ *
+ * **Hardest by default.** The alternative is a first game against a deliberately
+ * weakened opponent, which is a poor introduction to a game whose whole appeal is
+ * that the computer is worth playing; anyone who wants it gentler can say so, and
+ * the row explains what each rung means.
+ */
+export function difficulty(): Difficulty {
+  const stored = readStored(DIFFICULTY_KEY);
+  return DIFFICULTIES.find((one) => one === stored) ?? "championship";
+}
+
+export function setDifficulty(next: Difficulty): void {
+  writeStored(DIFFICULTY_KEY, next);
+}
+
+/**
  * How many cards a draw turn offers, which is the house variant in §3.6b.
  *
  * Named for what the player sees rather than for the rule underneath it. The
@@ -162,23 +186,22 @@ export function setDisguiseEnabled(enabled: boolean): void {
 }
 
 /**
- * The three settings that exist to answer a question, not to be preferred.
+ * The one setting left that exists to answer a question rather than to be preferred.
  *
- * Each is a number the benches cannot choose. What a game in hand is worth was
- * fitted against a reference bidder that barely doubles, so its measured
- * optimum flatters overbidding in a way that will not transfer to a person. And
- * how strong the computer should be is not a measurement at all — more sampling
- * is always better play and says nothing about whether the result is worth
- * sitting down to.
+ * It is a number the benches cannot choose. What a game in hand is worth was
+ * fitted against a reference bidder that barely doubles, so its measured optimum
+ * flatters overbidding in a way that will not transfer to a person. Temporary:
+ * when it has an answer it belongs in the code as a constant, and the row goes.
  *
- * Both are temporary. When each has an answer it belongs in the code as a
- * constant, and the row should go.
- *
- * There were three. The pace of the game was the third, and it is the one that
- * got its answer: see `Pace` below.
+ * There were three. The pace of the game got its answer — see `Pace` below — and
+ * how strong the computer is got a better one than a row could give: it is a rung
+ * on the difficulty ladder now, chosen by whoever is playing rather than settled
+ * once for everybody. `difficulty.ts` owns the sample count, so a separate
+ * strength control would have been a second lever on the same number, and the
+ * question it was asking ("is more sampling worth sitting down to") turned out to
+ * be the player's to answer rather than a constant to find.
  */
 export type Boldness = "bold" | "cautious" | "normal";
-export type Strength = "normal" | "strong" | "weak";
 
 /**
  * How fast the game runs, and the one of those three questions that is settled.
@@ -260,15 +283,6 @@ export function boldness(): Boldness {
 
 export function setBoldness(next: Boldness): void {
   writeStored(BOLDNESS_KEY, next);
-}
-
-export function strength(): Strength {
-  const stored = readStored(STRENGTH_KEY);
-  return stored === "normal" || stored === "weak" ? stored : "strong";
-}
-
-export function setStrength(next: Strength): void {
-  writeStored(STRENGTH_KEY, next);
 }
 
 /**

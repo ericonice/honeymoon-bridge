@@ -7,6 +7,7 @@ import { destinationFromWire, HOME, takeDestination } from "./game/destination.j
 import { readDevTools, writeDevTools } from "./game/devTools.js";
 import {
   boldness,
+  difficulty,
   preferredRelease,
   density as storedDensity,
   disguiseEnabled,
@@ -15,6 +16,7 @@ import {
   peeking as storedPeeking,
   preferredFormat,
   setBoldness,
+  setDifficulty,
   setPreferredRelease,
   setDensity,
   setDisguiseEnabled,
@@ -23,11 +25,9 @@ import {
   setPeeking as storePeeking,
   setPreferredFormat,
   setSoundEnabled,
-  setStrength,
   setTapToSelectEnabled,
   setTrickCountEnabled,
   soundEnabled,
-  strength,
   tapToSelectEnabled,
   trickCountEnabled,
 } from "./game/identity.js";
@@ -123,7 +123,7 @@ export function App(): React.JSX.Element {
   // stored value is what anything actually reads.
   const [bold, setBold] = useState(boldness);
   const [opponent, setOpponent] = useState(() => preferredRelease().version);
-  const [level, setLevel] = useState(strength);
+  const [hardness, setHardness] = useState(difficulty);
   const [speed, setSpeed] = useState(pace);
   const [sound, setSound] = useState(soundEnabled);
   const [tapToSelect, setTapToSelect] = useState(tapToSelectEnabled);
@@ -400,13 +400,13 @@ export function App(): React.JSX.Element {
           <SettingsOverlay
             boldness={bold}
             opponent={opponent}
+            difficulty={hardness}
             cardColor={cardColor}
             devTools={devTools}
             format={format}
             drawStyle={draw}
             pace={speed}
             playtester={account.playtester}
-            strength={level}
             peeking={peeking}
             disguise={disguise}
             sound={sound}
@@ -446,14 +446,14 @@ export function App(): React.JSX.Element {
               setPreferredRelease(next);
               setOpponent(next);
             }}
+            onDifficultyChange={(next) => {
+              setDifficulty(next);
+              setHardness(next);
+            }}
             onCardColorChange={(next) => {
               writeCardColor(next);
               applyCardColor(next);
               setCardColor(next);
-            }}
-            onStrengthChange={(next) => {
-              setStrength(next);
-              setLevel(next);
             }}
             onPaceChange={(next) => {
               setPace(next);

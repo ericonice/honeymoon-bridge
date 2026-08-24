@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, test } from "vitest";
+import { DIFFICULTIES } from "../../web/src/bot/difficulty.js";
 import type { Env } from "../src/env.js";
 import {
+  botAnchors,
   botRating,
   expectedScore,
   HISTORY_LENGTH,
@@ -236,5 +238,61 @@ describe("the rating line", () => {
     // The tail, not the head: a line that dropped the recent matches would be
     // drawing a shape that stopped being true.
     expect(line.at(-1)!.rating).toBe(ratingOf(ratings, "ada", []).rating);
+  });
+});
+
+describe("what the computer is worth on each rung", () => {
+  test("a match from before the setting existed is rated at the top rung", () => {
+    // Not a default but the honest reading: those games were played with perfect
+    // recall and the full sample count, because there was no way to ask for less.
+    expect(botRating(3, null)).toBe(botRating(3, "championship"));
+  });
+
+  test("no rung is worth more than the hardest", () => {
+    for (const rung of DIFFICULTIES) {
+      expect(botRating(3, rung)).toBeLessThanOrEqual(botRating(3, "championship"));
+    }
+  });
+
+  /**
+   * The rung this server has never heard of is the one that matters, because it
+   * happens: the client can be deployed first, and the service worker keeps old
+   * builds in circulation for a long time after either. Rating it as the weakest
+   * known rung means beating it earns the fewest points — the conservative
+   * direction, since being told you are better than you are is the error nobody
+   * notices and nothing later corrects.
+   */
+  test("a rung this build has never heard of is rated as the weakest one", () => {
+    const weakest = Math.min(...DIFFICULTIES.map((rung) => botRating(3, rung)));
+    expect(botRating(3, "grandmaster")).toBe(weakest);
+  });
+
+  test("the rung shifts a release without changing which release is stronger", () => {
+    for (const rung of DIFFICULTIES) {
+      expect(botRating(3, rung)).toBeGreaterThan(botRating(2, rung));
+    }
+  });
+
+  /**
+   * The list the client can send and the list this server prices must be the same
+   * list. A rung missing here is not an error anywhere — it is silently priced as
+   * the weakest, so every match played on it under-rates the player and nothing
+   * says so. This is the same rule `BOT_RATINGS` states for versions, and the
+   * reason it is a test rather than a comment is that the two lists live in
+   * different workspaces and nothing else makes them meet.
+   */
+  test("every rung the app offers has a rating here", () => {
+    for (const rung of DIFFICULTIES) {
+      expect(botAnchors()["3"]?.[rung]).toBeTypeOf("number");
+    }
+  });
+
+  test("the anchors sent to the client are the ones the rating walk uses", () => {
+    const anchors = botAnchors();
+    for (const version of Object.keys(anchors)) {
+      for (const rung of Object.keys(anchors[version]!)) {
+        expect(anchors[version]![rung]).toBe(botRating(Number(version), rung));
+      }
+    }
   });
 });

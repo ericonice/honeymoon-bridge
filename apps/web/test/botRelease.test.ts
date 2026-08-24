@@ -30,8 +30,23 @@ import { botActionFor } from "../src/game/botTurn.js";
  * why that was chosen and what would reverse it.
  *
  * The original reason still holds too: these are decided by the heuristic bot with
- * no solver in the loop and run in milliseconds, where `strength: "strong"` is 60
- * samples a card and would make a pinned deal too slow for `npm test`.
+ * no solver in the loop and run in milliseconds, where the top rung's 60 samples a
+ * card would make a pinned deal too slow for `npm test`.
+ *
+ * **What this cannot pin, and it is the bidder people actually play.** The bid
+ * search lives on the difficulty rung rather than on the release, and Championship
+ * — the default — turns it on. So the shipped bidder searches and these
+ * transcripts do not. That is not an oversight that could be fixed by moving the
+ * setting: the search is an *anytime* one bounded by wall-clock time, so it
+ * returns whatever it finished on a given machine at a given moment. A
+ * deadline-bounded search is structurally unpinnable, and pinning it by sample
+ * count instead would pin something nobody plays.
+ *
+ * So the guarantee here is narrower than it looks: these transcripts pin the
+ * release's *own* bidding — the objective, the estimates, the disguise — which is
+ * what distinguishes one release from another. How hard that bidder is allowed to
+ * think is the rung's business, it is measured rather than pinned
+ * (`bench/rubber.ts levels=`), and it is worth about 108 rating points.
  * `test/sampling.test.ts` covers the card play.
  */
 const TRANSCRIPTS: Record<number, readonly string[]> = {
@@ -147,8 +162,8 @@ for (const release of BOT_RELEASES) {
 }
 
 test("the releases are the ones these transcripts were recorded from", () => {
-  expect(releaseFor(2)?.name).toBe("Bobby Orr");
-  expect(releaseFor(3)?.name).toBe("Cammi Granato");
+  expect(releaseFor(2)?.name).toBe("Bobby Hull");
+  expect(releaseFor(3)?.name).toBe("Bobby Orr");
 });
 
 /** The two releases differ, which is the only thing that makes v3 a version. */

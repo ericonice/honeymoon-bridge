@@ -1209,7 +1209,7 @@ deliberately not animated (§1.3): two face-down cards travelling say nothing th
 not, and cost a second on each of their thirteen turns. That reasoning does not survive the third
 choice — **when they lift a card off the pile, the card that moves is face up and one you have been
 looking at.** So that turn alone animates: the card travels from the pile to their hand, and the
-commentary names it outright ("*Bobby Orr* took your ♠Q") while the reveal is still theirs. It is
+commentary names it outright ("*Sam* took your ♠Q") while the reveal is still theirs. It is
 the only moment in the whole draw when you learn a *particular* card in the other hand, and it was
 previously a sentence in small grey text that vanished on the next turn.
 

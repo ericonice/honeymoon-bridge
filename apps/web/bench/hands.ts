@@ -47,7 +47,7 @@ import { solve, tricksAfter } from "../src/bot/solver.js";
  *
  * Reported per bot version, never pooled: two versions in one number is two
  * opponents measured as one, which is the whole reason `bot/release.ts` exists.
- * Note that the version is only the coarse axis — strength, boldness and the
+ * Note that the version is only the coarse axis — the difficulty rung, boldness and the
  * disguise change the play too, and the shipped boldness changed with v2 — so each
  * block prints its own configuration census when it holds more than one.
  *
@@ -82,7 +82,8 @@ interface LoggedHand {
   readonly deal: LoggedDeal;
   readonly disguise: boolean;
   readonly playedAt: number;
-  readonly strength: string;
+  readonly difficulty: string | null;
+  readonly strength: string | null;
 }
 
 interface Mistake {
@@ -404,7 +405,14 @@ interface Corpus {
  */
 function configOf(hand: LoggedHand): string {
   const rules = hand.deal.rules?.openDiscard === true ? ", open discard" : "";
-  return `v${hand.botVersion ?? "?"}, ${hand.strength}, ${hand.boldness}, disguise ${hand.disguise ? "on" : "off"}${rules}`;
+  // The rung where there is one, and the old strength dial where there is not.
+  // Both name how hard the computer was playing, so they belong on the same axis
+  // — but they are not the same scale, and pooling a "strong" deal with a
+  // "championship" one would report a number describing neither. Printing
+  // whichever the log actually carries keeps old deals separable without
+  // pretending the two vocabularies line up.
+  const hardness = hand.difficulty ?? hand.strength ?? "?";
+  return `v${hand.botVersion ?? "?"}, ${hardness}, ${hand.boldness}, disguise ${hand.disguise ? "on" : "off"}${rules}`;
 }
 
 function census(hands: readonly LoggedHand[]): Map<string, number> {
@@ -422,7 +430,7 @@ function assess(label: string, reports: readonly Report[], corpus: Corpus): void
 
   const settings = census(reports.map((report) => played[report.index]!));
   if (settings.size > 1) {
-    // The version is the coarse axis, but strength, boldness and the disguise all
+    // The version is the coarse axis, but the rung, boldness and the disguise all
     // change the opponent too — and the shipped boldness changed with v2, so a
     // version's deals are not automatically one opponent.
     console.log("  more than one configuration in here, so these numbers pool:");

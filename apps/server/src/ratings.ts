@@ -58,16 +58,26 @@ export const K_FACTOR = 32;
  * but the gap narrowed at every step toward better card play, which is the reason
  * to distrust the direction rather than the size.
  *
- * So it starts at 1250 — a fifty-point gap, below every measurement of it — and
- * moves up when play says to. Safe to do it that way round because nothing here is
- * stored: a retuned anchor comes out right on the next read for everybody at once,
- * so the cost of starting low is a deploy and the cost of starting high is a family
- * who were quietly told they are better than they are. Level with v2 was considered
- * and is worse than conservative: the bench separates the two at 3.9 standard
- * errors, so equality is a claim the evidence refuses rather than a cautious
- * abstention from one.
+ * **It started at 1250 and play said to move it, which is what that was for.** The
+ * fifty-point gap was chosen below every measurement, on the reasoning that being
+ * told you are better than you are is the error nobody notices. The predicted cost
+ * then arrived exactly as written: this account went from 21–2 against v2 to losing
+ * repeatedly against v3, which under a too-low anchor reads as *the player getting
+ * worse* rather than as a stronger opponent.
  *
- * **The cost of being wrong this way is worth naming, because it is not nothing.**
+ * It is 1400 now, and the number is the sum of two measurements rather than a
+ * response to a losing streak. The bench puts v3's bidder 113 points above v2's
+ * under solver card play; the bid search, priced separately at 40 rubbers a lever,
+ * is worth about another 108. That is ~1420, and 1400 is that rounded down —
+ * conservative in the same direction as before, just no longer wrong by a factor.
+ *
+ * **What made the correction cheap is that nothing here is stored.** Ratings are
+ * recomputed on every read, so raising an anchor fixes the whole history at once
+ * rather than only future games — every match somebody lost to an under-rated bot
+ * is repriced. That is the property that makes starting low safe, and it is worth
+ * keeping in mind before anyone proposes a stored rating column.
+ *
+ * **The cost of being wrong low is worth naming, because it is not nothing.**
  * If v3 really is stronger and this says it is not, then somebody beating it less
  * often than they beat v2 reads as *the player getting worse* — the same error as
  * flattery, pointing the other way. The chart's version ticks are what explains the
@@ -88,7 +98,7 @@ export const K_FACTOR = 32;
  * client shipped first would have every one of its matches rated as beating the
  * weakest bot in this table, quietly inflating everybody.
  */
-const BOT_RATINGS: Record<number, number> = { 1: 1000, 2: 1200, 3: 1250 };
+const BOT_RATINGS: Record<number, number> = { 1: 1000, 2: 1200, 3: 1400 };
 
 /**
  * A robot match older than bot versions at all — see `0006_bot_version.sql`, where
@@ -99,8 +109,117 @@ const BOT_RATINGS: Record<number, number> = { 1: 1000, 2: 1200, 3: 1250 };
  */
 const UNVERSIONED_BOT_RATING = 1000;
 
-export function botRating(version: number | null): number {
-  return version === null ? UNVERSIONED_BOT_RATING : (BOT_RATINGS[version] ?? UNVERSIONED_BOT_RATING);
+/**
+ * What each difficulty rung is worth, relative to the hardest.
+ *
+ * The version says *which* computer somebody played; this says how hard it was
+ * asked to play, and the two are independent — every release can be played on
+ * every rung, so an anchor per rung per version would be a table of numbers
+ * nobody will ever measure. An offset applied to the version's anchor is the same
+ * claim with one number per rung: **a rung weakens the bot by about this much
+ * whichever release is underneath it.** That is an assumption, and it is the one
+ * worth stating out loud, because the levers a rung pulls — recall, samples,
+ * search time — are shared by every release.
+ *
+ * Zero at the top on purpose. `BOT_RATINGS` is anchored on the strongest setting
+ * because that is what every measurement in `bench/rubber.ts` was taken at and
+ * what the app plays by default, so the rungs hang below it rather than the whole
+ * table shifting when one is retuned.
+ *
+ * **These are measured, and the first set was not.** The original ladder guessed
+ * four rungs and three of them turned out to be the same opponent — Tournament
+ * against Championship came back 40–40 over 80 rubbers. What replaced the guess
+ * was one run per lever, each moving a single setting away from Championship:
+ * memory is worth nothing (57.5% ± 7.5, the wrong sign if anything), the sample
+ * count about 70, the bid search about 108, and turning the solver off entirely
+ * about 269.
+ *
+ * **The levers do not add up, which is why the bottom rung is not simply more of
+ * them.** Stacking no-solver and no-search reached −261 rather than the −380 the
+ * parts predict: turning off one way of thinking makes the other matter less. So
+ * Kitchen bids by `simpleBidder` as well — a different failure mode rather than a
+ * deeper one, and unlike the rest it *did* compose, taking the rung to **7.5% over
+ * 40 rubbers, 8.9 standard errors, −357**.
+ *
+ * Club is Kitchen's old build without the inert memory change and carries that
+ * run's own 80 rubbers at 23.8%, so **−191**.
+ *
+ * Rounded on purpose, and rounded *toward zero* in both cases. The instrument's
+ * error bar is about ±5 on a win rate percentage, which is ±40 here, so quoting
+ * −191 and −357 would claim a precision the measurement does not have. Toward
+ * zero is the conservative direction: a rung rated slightly stronger than it
+ * really plays gives slightly less credit for beating it, and being told you are
+ * better than you are is the error nobody notices.
+ *
+ * **Club's figure is inferred rather than run directly.** It is that 80-rubber
+ * measurement's configuration apart from recall, and recall measured as worth
+ * nothing — a good inference, but not the same as having run it. Worth doing
+ * properly if these are retuned.
+ *
+ * Safe to ship provisional, for the same reason v3's anchor was: nothing here is
+ * stored. A re-spaced ladder comes out right on the next read for everybody at
+ * once, where a stored column would need a migration and a backfill.
+ */
+const DIFFICULTY_OFFSETS: Record<string, number> = {
+  championship: 0,
+  club: -200,
+  kitchen: -350,
+};
+
+/**
+ * The safest reading of a rung this server has never heard of.
+ *
+ * The weakest known one, so an unrecognised rung earns the *fewest* points to
+ * beat. This is the same conservatism as anchoring v3 low, and for the same
+ * reason: the cost of guessing high is telling a family they are better than they
+ * are, which nothing later corrects because they will not notice. A client can
+ * ship a new rung ahead of the server — the service worker keeps old builds in
+ * circulation and deploys are two commands — so this case is real rather than
+ * theoretical, and the rule is the one `BOT_RATINGS` already states: add the rung
+ * here before the client that plays it is deployed.
+ */
+function unknownRungOffset(): number {
+  return Math.min(...Object.values(DIFFICULTY_OFFSETS));
+}
+
+/**
+ * What the computer was worth in one match, from which release it was and how
+ * hard it was set to play.
+ *
+ * A null difficulty is a match from before the setting existed — see
+ * `0009_result_difficulty.sql` — and is rated at the top rung, which is the
+ * honest reading rather than a default: the bot had perfect recall and the full
+ * sample count in every one of those games, because there was no way to ask it
+ * for anything less.
+ */
+export function botRating(version: number | null, difficulty: string | null = null): number {
+  const base =
+    version === null ? UNVERSIONED_BOT_RATING : (BOT_RATINGS[version] ?? UNVERSIONED_BOT_RATING);
+  if (difficulty === null) {
+    return base;
+  }
+  return base + (DIFFICULTY_OFFSETS[difficulty] ?? unknownRungOffset());
+}
+
+/**
+ * What every known release is worth on every known rung.
+ *
+ * Handed to the client so the anchors it displays are the ones the rating walk
+ * used, rather than a second copy that has to be kept in step by hand. Small
+ * enough to send whole — a release times a rung is a dozen numbers — and sending
+ * it whole means a client can show the anchor for a release it is not currently
+ * playing, which the opponent picker needs.
+ */
+export function botAnchors(): Record<string, Record<string, number>> {
+  const anchors: Record<string, Record<string, number>> = {};
+  for (const version of Object.keys(BOT_RATINGS)) {
+    const rungs: Record<string, number> = {};
+    for (const rung of Object.keys(DIFFICULTY_OFFSETS)) {
+      rungs[rung] = botRating(Number(version), rung);
+    }
+    anchors[version] = rungs;
+  }
+  return anchors;
 }
 
 /** The share of a match the first player is expected to take, from the gap alone. */
@@ -112,6 +231,7 @@ interface RatingRow {
   readonly account0: string | null;
   readonly account1: string | null;
   readonly bot_version: number | null;
+  readonly difficulty: string | null;
   readonly token0: string;
   readonly token1: string;
   readonly winner: number;
@@ -165,7 +285,7 @@ export interface Ratings {
  */
 export async function ratingsFor(env: Env): Promise<Ratings> {
   const rows = await env.DB.prepare(
-    `SELECT account0, account1, bot_version, token0, token1, winner
+    `SELECT account0, account1, bot_version, difficulty, token0, token1, winner
      FROM results ORDER BY finished_at`,
   ).all<RatingRow>();
 
@@ -183,7 +303,7 @@ export async function ratingsFor(env: Env): Promise<Ratings> {
     // written back. That is what stops the pool from being a closed loop.
     const of = (seat: (typeof seats)[number]): number =>
       seat.token === ROBOT_TOKEN
-        ? botRating(row.bot_version)
+        ? botRating(row.bot_version, row.difficulty)
         : (rating.get(identityOf(seat.account, seat.token)) ?? START_RATING);
 
     const before = [of(seats[0]), of(seats[1])] as const;

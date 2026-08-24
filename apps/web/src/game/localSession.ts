@@ -18,19 +18,20 @@ import type { DealAction, DealState, PlayerId, TableState } from "@hb/engine";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_GAME_EQUITY } from "../bot/bidValue.js";
 import { DISGUISE_CREDIT_ON } from "../bot/heuristicBot.js";
-import { createSamplingBot } from "../bot/samplingBot.js";
+import { levelFor } from "../bot/difficulty.js";
+import { botForLevel } from "../bot/build.js";
 import { useAchievementTracker } from "./achievements.js";
 import { botActionFor } from "./botTurn.js";
 import { reportHandLog } from "./handLog.js";
 import {
   boldness,
+  difficulty,
   preferredRelease,
   disguiseEnabled,
   drawStyle,
   pace,
   preferredFormat,
   rulesFor,
-  strength,
 } from "./identity.js";
 import { reportRobotRubber } from "./records.js";
 import type { GameSession } from "./session.js";
@@ -54,14 +55,12 @@ const SAMPLES = 25;
  * The testing settings, turned into the numbers the bot and the screen take.
  *
  * Kept here rather than in `identity.ts` so that what a choice *means* lives
- * beside what uses it. "Normal" is still the passthrough in each mapping
- * below, but it is no longer the shipped default — `identity.ts` now returns
- * bold, strong and fast when nothing is stored, so those are the numbers a
- * fresh install actually plays against.
+ * beside what uses it.
+ *
+ * `samplesFor` used to live here and is gone: the difficulty rung owns the sample
+ * count now, along with recall and the search budget, so a second mapping from
+ * `strength` would be a second answer to a question that has one.
  */
-function samplesFor(level: ReturnType<typeof strength>): number {
-  return level === "strong" ? 60 : level === "weak" ? 6 : SAMPLES;
-}
 
 /**
  * Deliberately not symmetric. The measured optimum was above 400 and it was
@@ -151,22 +150,33 @@ export interface LocalSessionOptions {
 
 export function useLocalSession(options: LocalSessionOptions = {}): GameSession {
   const peek = options.peek === true;
-  // Read once, when the match starts, for the same reason the format is: a bot
-  // that changed how it bid halfway through a rubber would be two opponents.
-  // The release is read once here for the same reason the format is: a bot that
-  // changed how it bid halfway through a rubber would be two opponents in one
-  // match, and the version travels with every record the match produces.
+  // Read once, when the match starts, for the same reason the format is: an
+  // opponent that changed how hard it played halfway through a rubber would be
+  // two opponents in one match, and the version and difficulty both travel with
+  // every record the match produces.
   const release = useMemo(() => preferredRelease(), []);
+  // The rung itself, not just what it resolves to. Both the hand log and the
+  // rubber report name it, and re-reading the setting per deal would let a match
+  // record two different opponents if somebody changed it mid-rubber.
+  const rung = useMemo(() => difficulty(), []);
+  const level = useMemo(() => levelFor(rung), [rung]);
   const bot = useMemo(
     () =>
-      createSamplingBot(createRng(randomSeed()), samplesFor(strength()), {
-        // The release first, then the player's settings over it — what the
-        // opponent *is*, then what they asked it to be.
-        ...release.tuning,
-        disguiseCredit: disguiseEnabled() ? DISGUISE_CREDIT_ON : 0,
-        gameEquity: equityFor(boldness()),
+      botForLevel({
+        level,
+        rng: createRng(randomSeed()),
+        // The release, then the rung, then the player's own dials. What the
+        // opponent *is*, then how hard it is asked to play, then the leftovers
+        // from before difficulty existed — `strength` is gone, since the rung
+        // owns the sample count now.
+        tuning: {
+          ...release.tuning,
+          ...level.tuning,
+          disguiseCredit: disguiseEnabled() ? DISGUISE_CREDIT_ON : 0,
+          gameEquity: equityFor(boldness()),
+        },
       }),
-    [release],
+    [level, release],
   );
   /**
    * The seed the deal on the table was dealt from, kept for the hand log.
@@ -339,7 +349,11 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
           vulnerable: summary.vulnerable,
         },
         starter: deal.starter,
-        strength: strength(),
+        // Which rung produced this deal. `strength` stays beside it because the
+        // server has a column for it and older builds still send one, but the rung
+        // is what decides the sample count, the recall and the search budget — a
+        // log naming only the old dial would describe a bot nobody played.
+        difficulty: rung,
         tricksWon: deal.tricksWon,
       });
     }
@@ -358,6 +372,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     reportRobotRubber({
       botVersion: release.version,
       deals: summary.history.length,
+      difficulty: rung,
       format: summary.rubber.format,
       points: points[HUMAN],
       pointsAgainst: points[OPPONENT],

@@ -1,7 +1,8 @@
 import { matchNoun } from "../game/labels.js";
 import { useLocalSession } from "../game/localSession.js";
+import { difficulty, preferredRelease } from "../game/identity.js";
 import type { Density } from "../game/identity.js";
-import { knownRatings } from "../game/records.js";
+import { botAnchor, knownRatings } from "../game/records.js";
 import { GameBoard } from "./GameBoard.js";
 
 export interface RobotGameProps {
@@ -30,6 +31,11 @@ export function RobotGame({
 }: RobotGameProps): React.JSX.Element {
   // Read once a mount. It changes only when a match ends, and this screen is one match.
   const cached = knownRatings();
+  // Which opponent this is: the release, and the rung it is set to play at. Read
+  // on this same first render, which is when `useLocalSession` pins its own copy
+  // — so the number shown beside the seat is the one the match will be recorded
+  // under, even if somebody changes the setting while the rubber is running.
+  const opponent = botAnchor(preferredRelease().version, difficulty());
   const session = useLocalSession({ peek: peeking });
   const noun = matchNoun(session.rubber.format);
 
@@ -47,8 +53,10 @@ export function RobotGame({
       peeking={peeking}
       // Both sides are knowable here and only here: the computer's rating is
       // pinned server-side and yours came down with the record, so neither costs
-      // a request the robot game is not allowed to make.
-      ratings={{ mine: cached.mine, opponent: cached.bot }}
+      // a request the robot game is not allowed to make. The opponent's is looked
+      // up per rung rather than taken from the last match played, since the whole
+      // point of the setting is that those are different opponents.
+      ratings={{ mine: cached.mine, opponent }}
       session={session}
       sound={sound}
       tapToSelect={tapToSelect}

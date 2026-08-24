@@ -9,8 +9,9 @@ import type {
   PlayerId,
   RubberState,
 } from "@hb/engine";
+import type { Difficulty } from "../bot/difficulty.js";
 import { storedSession } from "./account.js";
-import type { Boldness, Strength } from "./identity.js";
+import type { Boldness } from "./identity.js";
 import { playerToken } from "./identity.js";
 import { enqueue } from "./outbox.js";
 import { handLogUrl, handsUrl } from "./serverUrl.js";
@@ -22,6 +23,17 @@ export interface HandLog {
   readonly botVersion: number;
   readonly completedTricks: readonly CompletedTrick[];
   readonly contract: Contract;
+  /**
+   * Which difficulty rung produced the deal.
+   *
+   * The rung decides the sample count, how much the bot remembers and how long it
+   * searches, so it is what says *which opponent* this was — `strength` and
+   * `boldness` beside it are dials from before difficulty existed. Optional on the
+   * way out, for the same reason `botVersion` is: the service worker keeps old
+   * builds in circulation and a deal somebody played is worth recording whether or
+   * not their client knew the question.
+   */
+  readonly difficulty?: Difficulty;
   readonly disguise: boolean;
   /** Which card each seat took on each draw turn — public, and half the deal. */
   readonly drawTurns: readonly DrawTurnRecord[];
@@ -49,7 +61,6 @@ export interface HandLog {
   /** The rubber and vulnerability the deal was bid at, which decides what a call was worth. */
   readonly standing: { readonly rubber: RubberState; readonly vulnerable: Pair<boolean> };
   readonly starter: PlayerId;
-  readonly strength: Strength;
   readonly tricksWon: Pair<number>;
 }
 
@@ -79,6 +90,7 @@ export function reportHandLog(log: HandLog): void {
       completedTricks: log.completedTricks,
       contract: log.contract,
       deviceToken: playerToken(),
+      difficulty: log.difficulty,
       disguise: log.disguise,
       drawTurns: log.drawTurns,
       initialHands0: log.initialHands[0],
@@ -87,7 +99,6 @@ export function reportHandLog(log: HandLog): void {
       seed: log.seed,
       standing: log.standing,
       starter: log.starter,
-      strength: log.strength,
       tricksWon: log.tricksWon,
     }),
   });

@@ -1,14 +1,43 @@
 import type { MatchFormat, Unlock } from "@hb/engine";
 import { useEffect, useState } from "react";
+import {
+  DIFFICULTIES,
+  DIFFICULTY_BLURB,
+  DIFFICULTY_LABEL,
+} from "../bot/difficulty.js";
+import type { Difficulty } from "../bot/difficulty.js";
 import { BOT_RELEASES, LATEST_RELEASE } from "../bot/release.js";
 import { runBidTiming } from "../game/bidCost.js";
+import { preferredRelease } from "../game/identity.js";
+import { botAnchor } from "../game/records.js";
 import type { CardColor } from "../game/cardColor.js";
-import type { Boldness, Density, DrawStyle, Pace, Strength } from "../game/identity.js";
+import type { Boldness, Density, DrawStyle, Pace } from "../game/identity.js";
 import { flush, outboxState } from "../game/outbox.js";
 import type { Theme } from "../game/theme.js";
 import { playAchievement } from "../game/soundEffects.js";
 import { AchievementToast } from "./AchievementToast.js";
 import { HandLogsOverlay } from "./HandLogsOverlay.js";
+
+/**
+ * What a rung plays like, and what beating it is worth.
+ *
+ * The rating is the same number the play screen shows beside the computer's seat
+ * and the same one the server rated the last match with — it comes down with the
+ * record rather than being kept here, so there is one anchor table and it lives
+ * where the rating walk can see it. Omitted entirely when nothing has been
+ * fetched that says, which is the offline case and the never-signed-in case;
+ * a guessed rating is worse than none, because it is the number somebody would
+ * quote at the dinner table.
+ *
+ * Only the chosen rung's, rather than a figure against each of the four. Four
+ * numbers in the picker would invite reading the gaps between them as measured,
+ * and they are not: the ladder is a first guess that is known to need re-spacing.
+ */
+function describeRung(rung: Difficulty): string {
+  const rating = botAnchor(preferredRelease().version, rung);
+  const blurb = DIFFICULTY_BLURB[rung];
+  return rating === null ? blurb : `${blurb} Rated ${rating}.`;
+}
 
 /**
  * One of each tier for the preview below, from three different families so the
@@ -41,21 +70,21 @@ export interface SettingsOverlayProps {
   /** Temporary, while it is being decided whether the ambiguity works on a person. */
   readonly disguise: boolean;
   readonly boldness: Boldness;
+  readonly difficulty: Difficulty;
   readonly opponent: number;
   readonly density: Density;
   readonly pace: Pace;
   readonly sound: boolean;
-  readonly strength: Strength;
   readonly tapToSelect: boolean;
   /** Whether the play screen draws each side's trick countdown. */
   readonly trickCount: boolean;
   onBoldnessChange(next: Boldness): void;
+  onDifficultyChange(next: Difficulty): void;
   onOpponentChange(next: number): void;
   onCardColorChange(next: CardColor): void;
   onDensityChange(next: Density): void;
   onPaceChange(next: Pace): void;
   onSoundChange(enabled: boolean): void;
-  onStrengthChange(next: Strength): void;
   onTapToSelectChange(enabled: boolean): void;
   onTrickCountChange(enabled: boolean): void;
   readonly theme: Theme;
@@ -245,6 +274,7 @@ function sinceQueued(at: number): string {
 
 export function SettingsOverlay({
   boldness,
+  difficulty,
   opponent,
   cardColor,
   density,
@@ -252,6 +282,7 @@ export function SettingsOverlay({
   disguise,
   format,
   onBoldnessChange,
+  onDifficultyChange,
   onOpponentChange,
   onCardColorChange,
   onClose,
@@ -264,7 +295,6 @@ export function SettingsOverlay({
   onPeekingChange,
   onShowHelp,
   onSoundChange,
-  onStrengthChange,
   onTapToSelectChange,
   onTrickCountChange,
   onThemeChange,
@@ -273,7 +303,6 @@ export function SettingsOverlay({
   peeking,
   playtester,
   sound,
-  strength,
   tapToSelect,
   trickCount,
   theme,
@@ -318,28 +347,22 @@ export function SettingsOverlay({
           />
         </div>
 
-        {/* The one setting that names the opponent, and an ordinary preference
-            rather than a testing dial: a superseded release is a coherent weaker
-            opponent rather than a crippled one, which makes it the best
-            difficulty lever in here — see `identity.ts`. It sits with match
-            length because it is the same kind of decision, taken before sitting
-            down. Rendered only when there is something to choose. */}
-        {BOT_RELEASES.length > 1 ? (
-          <div className="w-full max-w-sm">
-            <Choice
-              label="Which computer you play"
-              description="Each is a version of the computer as it was when that version shipped, kept playable so the older, gentler opponent stays available. Takes effect on the next match."
-              value={String(opponent)}
-              onChange={(next) => {
-                onOpponentChange(Number(next));
-              }}
-              options={BOT_RELEASES.map((release) => ({
-                label: `${release.name} (v${release.version})`,
-                value: String(release.version),
-              }))}
-            />
-          </div>
-        ) : null}
+        {/* How hard the computer plays, and the one control that replaced four.
+            Strength, boldness, the disguise and the opponent picker all changed
+            the difficulty, none of them said so, and using them meant knowing
+            what a sample count is. */}
+        <div className="w-full max-w-sm">
+          <Choice
+            label="How hard it plays"
+            description={describeRung(difficulty)}
+            value={difficulty}
+            onChange={onDifficultyChange}
+            options={DIFFICULTIES.map((one) => ({
+              label: DIFFICULTY_LABEL[one],
+              value: one,
+            }))}
+          />
+        </div>
 
         {/* Directly under match length, because it is the same kind of setting —
             something to decide before sitting down, not while playing — and the
@@ -495,6 +518,27 @@ export function SettingsOverlay({
                 onChange={onDisguiseChange}
               />
 
+              {/* A measurement tool now rather than a preference. It was the best
+                  difficulty lever in here until there was a difficulty setting;
+                  now it answers "which opponent", which only matters when
+                  comparing one release against another. */}
+              {BOT_RELEASES.length > 1 ? (
+                <div className="w-full max-w-sm">
+                  <Choice
+              label="Which computer you play"
+              description="Each is a version of the computer as it was when that version shipped, kept playable so the older, gentler opponent stays available. Takes effect on the next match."
+              value={String(opponent)}
+              onChange={(next) => {
+                onOpponentChange(Number(next));
+              }}
+              options={BOT_RELEASES.map((release) => ({
+                label: `${release.name} (v${release.version})`,
+                value: String(release.version),
+              }))}
+                  />
+                </div>
+              ) : null}
+
               <Choice
                 label="How boldly it bids"
                 description="What a game in hand is worth to it. Measured against itself the answer came out higher than what is shipped, because a computer that never doubles you cannot punish overbidding — and you can."
@@ -504,18 +548,6 @@ export function SettingsOverlay({
                   { label: "Cautious", value: "cautious" },
                   { label: "Normal", value: "normal" },
                   { label: "Bold", value: "bold" },
-                ]}
-              />
-
-              <Choice
-                label="How strong it is"
-                description="How many hands it guesses at before each card. Fewer makes an opponent that is unsure rather than one that blunders on purpose. Takes effect on the next match."
-                value={strength}
-                onChange={onStrengthChange}
-                options={[
-                  { label: "Weaker", value: "weak" },
-                  { label: "Normal", value: "normal" },
-                  { label: "Stronger", value: "strong" },
                 ]}
               />
 

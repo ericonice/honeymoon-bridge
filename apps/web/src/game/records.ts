@@ -1,5 +1,6 @@
 import type { MatchFormat } from "@hb/engine";
 import { useCallback, useEffect, useState } from "react";
+import type { Difficulty } from "../bot/difficulty.js";
 import { storedSession } from "./account.js";
 import { nickname, playerToken } from "./identity.js";
 import { enqueue, flush, outboxState } from "./outbox.js";
@@ -59,6 +60,8 @@ export interface OpponentRecord {
 }
 
 export interface Records {
+  /** See `BotAnchors`. Absent from a server too old to send it. */
+  readonly anchors?: BotAnchors;
   readonly opponents: readonly OpponentRecord[];
   /**
    * The asker's own rating.
@@ -77,6 +80,16 @@ export interface Records {
   readonly robot: readonly OpponentRecord[];
 }
 
+/**
+ * What the computer is worth on each rung, by release — `version` then rung.
+ *
+ * The server sends this rather than the client computing it, so the number on the
+ * difficulty row, the number beside the opponent's seat and the number the rating
+ * walk actually used cannot drift apart. Empty from a server too old to send it,
+ * which reads as "nothing to show" rather than as an error.
+ */
+export type BotAnchors = Readonly<Record<string, Readonly<Record<string, number>>>>;
+
 /** One finished match, newest first — what `OpponentRecord` tallies away. */
 export interface MatchRecord {
   readonly botVersion: number | null;
@@ -93,6 +106,12 @@ export interface RobotRubber {
   /** Which computer opponent this was. See `bot/release.ts`. */
   readonly botVersion: number;
   readonly deals: number;
+  /**
+   * Which rung it was set to play at. The release says *which* computer; this
+   * says how hard, and the server rates the two together — beating it on its
+   * gentlest setting and beating it on its hardest are not one achievement.
+   */
+  readonly difficulty: Difficulty;
   readonly format: MatchFormat;
   readonly points: number;
   readonly pointsAgainst: number;
@@ -121,6 +140,7 @@ export function reportRobotRubber(rubber: RobotRubber): void {
       botVersion: rubber.botVersion,
       deals: rubber.deals,
       deviceToken: playerToken(),
+      difficulty: rubber.difficulty,
       // Stamped here rather than on arrival. A queued report can be days late,
       // and a rating that walks the history in order needs the order to be when
       // the games were played.
@@ -198,27 +218,54 @@ export function rememberRatings(records: Records | null): void {
   const bot = records.robot[0]?.rating ?? null;
   writeStored(
     RATING_KEY,
-    JSON.stringify({ bot, mine: records.rating?.value ?? STARTING_RATING }),
+    JSON.stringify({
+      anchors: records.anchors ?? {},
+      bot,
+      mine: records.rating?.value ?? STARTING_RATING,
+    }),
   );
 }
 
 export interface KnownRatings {
-  /** Null until a record has been fetched that had a robot row in it. */
+  /** Every release on every rung, as the server last reported them. */
+  readonly anchors: BotAnchors;
+  /**
+   * What the computer was rated in the most recent match on record.
+   *
+   * Kept for a server too old to send `anchors`, and only for that: it describes
+   * whichever rung was played last rather than the one selected now, so anything
+   * that knows which rung it is asking about should use `botAnchor` instead.
+   */
   readonly bot: number | null;
   readonly mine: number | null;
 }
 
 export function knownRatings(): KnownRatings {
+  const empty: KnownRatings = { anchors: {}, bot: null, mine: null };
   const raw = readStored(RATING_KEY);
   if (raw === null) {
-    return { bot: null, mine: null };
+    return empty;
   }
   try {
     const parsed = JSON.parse(raw) as Partial<KnownRatings>;
-    return { bot: parsed.bot ?? null, mine: parsed.mine ?? null };
+    return { anchors: parsed.anchors ?? {}, bot: parsed.bot ?? null, mine: parsed.mine ?? null };
   } catch {
-    return { bot: null, mine: null };
+    return empty;
   }
+}
+
+/**
+ * What the computer is rated on one release and one rung, or null if nothing has
+ * been fetched that says.
+ *
+ * Null rather than a guess on purpose. The alternative is for the client to keep
+ * its own copy of the anchor table, which is the drift this exists to prevent —
+ * and the ladder is provisional, so a stale local copy would be wrong in exactly
+ * the way that matters. A screen with no number to show should say nothing.
+ */
+export function botAnchor(version: number, difficulty: Difficulty): number | null {
+  const { anchors, bot } = knownRatings();
+  return anchors[String(version)]?.[difficulty] ?? bot;
 }
 
 export interface RecordsState {

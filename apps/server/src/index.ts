@@ -80,6 +80,8 @@ interface RobotRubber {
   readonly format: MatchFormat;
   readonly nickname: string;
   readonly botVersion: number | null;
+  /** Which rung it was set to play at, or null from a build that has no setting. */
+  readonly difficulty: string | null;
   readonly points: number;
   readonly pointsAgainst: number;
   /**
@@ -155,6 +157,13 @@ function robotRubberFrom(body: unknown): RobotRubber | null {
     // predates the question being asked.
     botVersion: whole(value.botVersion, 1000),
     deals,
+    // Stored as the client sent it rather than checked against a list of rungs.
+    // A rung this build has never heard of is a client deployed ahead of the
+    // server, which the service worker makes routine — and recording it raw lets
+    // `ratings.ts` decide what it is worth *and* come out right by itself once
+    // the server learns the name, where dropping it to null would silently rate
+    // the match at the top rung and never correct.
+    difficulty: rung(value.difficulty),
     deviceToken: value.deviceToken,
     // Anything unrecognized is a rubber, which is what a client too old to know
     // about formats would have been playing.
@@ -164,6 +173,21 @@ function robotRubberFrom(body: unknown): RobotRubber | null {
     pointsAgainst,
     won: value.won,
   };
+}
+
+/**
+ * A difficulty rung as a slug, or null.
+ *
+ * Bounded and narrowed to the alphabet a rung name uses, because this string is
+ * stored and later read back as a key. Not validated against the known rungs —
+ * see where it is used.
+ */
+function rung(input: unknown): string | null {
+  if (typeof input !== "string") {
+    return null;
+  }
+  const slug = input.slice(0, 20).toLowerCase();
+  return /^[a-z]+$/.test(slug) ? slug : null;
 }
 
 function tierOrNull(input: unknown): Tier | null | undefined {
@@ -864,6 +888,7 @@ export default {
         {
           botVersion: rubber.botVersion,
           code: "ROBOT",
+          difficulty: rubber.difficulty,
           deals: rubber.deals,
           format: rubber.format,
           seats: [

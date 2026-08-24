@@ -25,6 +25,7 @@ function settings(playtester: boolean): SettingsOverlayProps {
     devTools: false,
     disguise: true,
     drawStyle: "two-card",
+    difficulty: "championship",
     format: "rubber",
     opponent: 3,
     onBoldnessChange: noop,
@@ -32,6 +33,7 @@ function settings(playtester: boolean): SettingsOverlayProps {
     onClose: noop,
     onDensityChange: noop,
     onDevToolsChange: noop,
+    onDifficultyChange: noop,
     onDisguiseChange: noop,
     onOpponentChange: noop,
     onDrawStyleChange: noop,
@@ -40,7 +42,6 @@ function settings(playtester: boolean): SettingsOverlayProps {
     onPeekingChange: noop,
     onShowHelp: noop,
     onSoundChange: noop,
-    onStrengthChange: noop,
     onTapToSelectChange: noop,
     onThemeChange: noop,
     onTrickCountChange: noop,
@@ -48,7 +49,6 @@ function settings(playtester: boolean): SettingsOverlayProps {
     peeking: false,
     playtester,
     sound: true,
-    strength: "normal",
     tapToSelect: false,
     theme: "hockey",
     trickCount: true,
@@ -73,10 +73,10 @@ const ORDINARY = [
   "Game speed",
   "Count the tricks each side needs",
   "Sound",
-  // Choosing the opponent is the same kind of fact as the rest of these: an older
-  // release is a gentler opponent, and a difficulty setting behind a playtester
-  // flag is the exact mistake the trick count made.
-  "Which computer you play",
+  // How hard it plays is the setting that replaced four, and the one everybody
+  // needs. Which *release* they play is a measurement tool and lives behind the
+  // flag — it stopped being the difficulty lever the moment there was one.
+  "How hard it plays",
 ];
 
 test("every ordinary preference is reachable without the playtester flag", () => {

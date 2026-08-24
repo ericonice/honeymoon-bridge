@@ -14,16 +14,40 @@ import type { BotTuning } from "./heuristicBot.js";
  * machine, not against somebody called Angela James, and putting a name in the
  * seat opposite would promise a personality that is not there.
  *
+ * **The bottom difficulty rung plays a bidder no release ever shipped**, and that
+ * is the one place these two axes overlap. Kitchen bids by `simpleBidder` — the
+ * rule the bot used before contracts were priced at all — so "v3 at Kitchen" is
+ * v3's draw and v3's card play with a different auction on top. It was argued
+ * against on exactly this boundary and then allowed, because asking "can I make
+ * this" is how somebody new to the game bids: it is the only lever that makes the
+ * computer weak in a way a person could explain, rather than quietly
+ * under-resourced. Everything above Kitchen bids the release's own bidder, which
+ * is what keeps "which computer you play" and "how hard it plays" separable.
+ *
  * Add a release whenever the bot's play changes enough that results before and
  * after are not measuring the same opponent. It cannot be applied backwards —
  * every rubber recorded before this existed has no version and never will.
  */
 export interface BotRelease {
   /**
-   * Shown in Settings, in full. Ordered alphabetically by *first* name — Angela
-   * James, Bobby Orr, Cammi Granato, Doug Harvey, Eddie Shore, Frank Mahovlich,
-   * Gordie Howe, Hayley Wickenheiser, Igor Larionov, Jean Béliveau — so that a
-   * list of versions reads in the order they existed.
+   * Shown in Settings, in full. Ordered alphabetically so that a list of versions
+   * reads in the order they existed — Angela James, Bobby Hull, Bobby Orr, then
+   * Doug Harvey, Eddie Shore, Frank Mahovlich, Gordie Howe, Hayley Wickenheiser,
+   * Igor Larionov, Jean Béliveau for what comes next.
+   *
+   * **v3 was Cammi Granato and v2 was Bobby Orr, and the names moved on purpose.**
+   * Bobby Orr belongs on the strongest bot rather than on a superseded one, so v3
+   * took the name and v2 became Bobby Hull, which still sorts ahead of it on the
+   * surname. Nothing in the database moved: only `bot_version` is stored, and the
+   * name is a label read from here — so a rename cannot touch a recorded result.
+   * What it does change is prose written before it, including this file's own
+   * history: a note about beating "Bobby Orr" from before this point is about v2.
+   *
+   * It also costs the one-letter-per-release rule, which is a real loss and was
+   * accepted rather than overlooked. The ordering is what the scheme is for and
+   * that survives; a shared first name only muddles a list nobody outside the
+   * playtester flag now sees, since the difficulty ladder took over as the thing
+   * a player chooses.
    */
   readonly name: string;
   /**
@@ -85,7 +109,7 @@ export interface BotRelease {
  * claiming to be that release.
  */
 export const BOT_RELEASES: readonly BotRelease[] = [
-  { name: "Bobby Orr", tuning: { objective: "points" }, version: 2 },
+  { name: "Bobby Hull", tuning: { objective: "points" }, version: 2 },
   /**
    * Prices calls by the chance of taking the rubber rather than by points.
    *
@@ -98,7 +122,7 @@ export const BOT_RELEASES: readonly BotRelease[] = [
    * model of v2 rather than of a person. Fitting against recorded human games was
    * tried and there were eleven usable rubbers in the log; see `equity.ts`.
    */
-  { name: "Cammi Granato", tuning: { objective: "equity" }, version: 3 },
+  { name: "Bobby Orr", tuning: { objective: "equity" }, version: 3 },
 ];
 
 /**
