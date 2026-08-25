@@ -1647,9 +1647,36 @@ auction.
   to. It does cross the release/rung boundary — Kitchen bids what no release ever shipped — and that is
   written down in `release.ts` rather than left to be discovered.
 
-  Still open: recall was measured worthless **at Championship settings only**. At six samples or none,
-  each guessed hand carries more weight and a misremembered card may cost more. The mechanism stays
-  wired through `botForLevel` for whoever measures that.
+  **That open thread got measured and it reversed the conclusion.** Recall was called worthless off one
+  arm at Championship settings, and the note said the low-sample case was untested. Measuring Club
+  directly settled it: at six samples and no search, recall 13 against 3 is worth about **76 points**,
+  where at full strength it measured **+48** — a null with the wrong sign.
+
+  | recall 13 → 3 | worth |
+  | --- | --- |
+  | at 60 samples, search on | +48 |
+  | at 6 samples, no search | −76 |
+
+  The mechanism is plain in hindsight: with sixty sampled hands a card wrongly left in the pool is
+  diluted across all of them; with six it is a sixth of everything the bot believes. **Memory matters
+  exactly when there is little else to lean on** — which is why it is useless at the top of a ladder and
+  a real lever at the bottom, the reverse of how the first ladder used it.
+
+  Neither figure is individually significant — 1.0 and about 1.2 standard errors, the gap between them
+  around 1.8 — so it is evidence rather than proof, and it is used only to place a rung whose combined
+  build has been measured directly. Club ships as recall 3, which is exactly the configuration the old
+  four-rung Kitchen was measured at over 80 rubbers.
+
+  **Kitchen went forgetful too, and there the prediction held.** A ladder where the kitchen-table
+  opponent has the better memory is not a ladder, so `forgetful.test.ts` rejected the mismatch. Recall
+  costs Kitchen nothing — 10.0% against 7.5%, inside the noise — because recall's 13% was earned *in the
+  sampler* and this rung has none. Predicted in advance and then run anyway, which is the only reason
+  it counts.
+
+  So the ladder is measured end to end with nothing interpolated: **Championship 1400, Club 1200 (−191
+  over 80 rubbers), Kitchen 1050 (−321 and −357 across two builds, −368 pooled)**. Both offsets are
+  rounded *toward zero*, which rates a rung slightly stronger than it plays and so gives slightly less
+  credit for beating it.
 
   Watching one of these run is also what caught a fault in the read-out: the plain binomial error bar
   collapses to **exactly zero** at a clean sweep, so a lopsided run opened "0% ± 0" — no uncertainty

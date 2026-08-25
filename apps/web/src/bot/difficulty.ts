@@ -37,17 +37,21 @@ export interface DifficultyLevel {
   /**
    * How many of its own thirteen discards it remembers.
    *
-   * **Held at thirteen on every rung, because it was measured and it is worth
-   * nothing.** Cutting recall from 13 to 3 with everything else at full strength
-   * came out at 57.5% ± 7.5 to the *forgetful* side over 40 rubbers — a null, and
-   * if anything the wrong sign. Memory is not what makes this bot strong.
+   * **Worth nothing at the top of the ladder and something real at the bottom**,
+   * which is the reverse of how the first ladder used it. At full strength,
+   * cutting 13 to 3 measured 57.5% ± 7.5 to the *forgetful* side — a null with
+   * the wrong sign. At six samples and no bid search, the same cut is worth
+   * about **76 points**.
    *
-   * Kept as a field rather than deleted, and the distinction matters: this is a
-   * lever whose effect has been observed and found to be zero, not one that has
-   * never been looked at. The measurement also covers only the top of the ladder
-   * — at six samples or none, each guessed hand carries more weight and a
-   * misremembered card may cost more — so the mechanism stays wired through
-   * `botForLevel` for whenever somebody measures that.
+   * The mechanism is plain in hindsight: with sixty sampled hands a card wrongly
+   * left in the pool is diluted across all of them; with six it is a sixth of
+   * everything the bot believes. Memory matters exactly when there is little
+   * else to lean on.
+   *
+   * **Neither figure is individually significant** — 1.0 and about 1.2 standard
+   * errors — and the gap between them is around 1.8. So it is evidence rather
+   * than proof, and it is used only to place a rung whose *combined* build has
+   * been measured directly, never to interpolate a value nobody has run.
    *
    * There is a cliff in it if it ever moves: replaying the opponent's draw needs
    * the pool to be *exactly* the twenty-six cards they were offered, which
@@ -99,10 +103,16 @@ export const DIFFICULTY_BLURB: Readonly<Record<Difficulty, string>> = {
  *
  * | change | win rate | worth |
  * | --- | --- | --- |
- * | recall 13 → 3 | 57.5% ± 7.5 | nothing |
+ * | recall 13 → 3, at full strength | 57.5% ± 7.5 | nothing |
  * | samples 60 → 6 | 40.0% ± 7.4 | ~70 |
  * | bid search off | 35.0% ± 7.3 | ~108 |
  * | solver off entirely | 17.5% ± 6.1 | ~269 |
+ * | recall 13 → 3, at six samples | — | ~76 |
+ *
+ * **The first and last rows are the same lever and disagree**, which is the
+ * whole reason the ladder is spaced the way it is: memory is worth nothing when
+ * there are sixty sampled hands to dilute a wrong one, and worth something when
+ * there are six.
  *
  * **They do not compose additively, and assuming they did is what cost a
  * measurement.** With the bid search on, going 60 samples to none is worth 172;
@@ -133,8 +143,20 @@ export const DIFFICULTY_LEVELS: Readonly<Record<Difficulty, DifficultyLevel>> = 
   // Zero rather than a small budget: `searchBudgetMs` is inherited from the
   // release's tuning if this leaves the key out, so an empty object would not
   // turn the search off, it would silently keep whatever the release set.
-  club: { bidding: "priced", recall: 13, samples: 6, tuning: { searchBudgetMs: 0 } },
-  kitchen: { bidding: "simple", recall: 13, samples: 0, tuning: { searchBudgetMs: 0 } },
+  // Recall 3 rather than 13, worth about 75 points here where it was worth
+  // nothing at the top. This exact build — forgetful, six samples, no search —
+  // is what the old four-rung Kitchen was measured at over 80 rubbers, so the
+  // rung ships on a direct measurement of itself rather than an interpolation.
+  // At recall 13 it measures −115, which would sit 115 below Championship and
+  // 240 above Kitchen: distinguishable, but lopsided in the direction that
+  // crowds the top of the ladder, which is the failure the first one had.
+  club: { bidding: "priced", recall: 3, samples: 6, tuning: { searchBudgetMs: 0 } },
+  // Forgetful too, so the ladder stays monotone on every lever — a kitchen-table
+  // opponent with a better memory than the club player is not a rung below it.
+  // Expected to cost almost nothing on its own: recall's 13% was *in the
+  // sampler*, and this rung has no sampler, while in the draw it was measured at
+  // +0.00 ± 0.10 tricks. Re-measured anyway rather than reasoned about.
+  kitchen: { bidding: "simple", recall: 3, samples: 0, tuning: { searchBudgetMs: 0 } },
 };
 
 export function levelFor(difficulty: Difficulty): DifficultyLevel {

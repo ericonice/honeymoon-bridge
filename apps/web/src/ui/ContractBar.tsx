@@ -60,11 +60,21 @@ function Figure({
   );
 }
 
-// Wide enough for "Computer" unclipped, which w-14 was not — `Scorepad` widened
-// once before for the same word. It does not need to fit "Computer (1400)": the
-// header stacks the name and the rating rather than running them together, which
-// is what stopped it truncating.
-const CELL = "w-20 text-right tabular-nums";
+// Wide enough for "Computer · 1400" whole, which is what the header carries: a
+// name and, beside it, that side's rating. Sized off the longest thing it will
+// ever hold rather than off the numbers underneath — w-14 clipped "Computer"
+// alone and w-[5.5rem] clipped it again once the rating was added, which is the
+// mistake this width exists to stop repeating. Ratings only ever appear against
+// the computer (a person's rating is theirs and does not travel), so "Computer"
+// really is the longest name this has to fit.
+//
+// Not wider still, and the ceiling is arithmetic rather than taste: the frame is
+// `max-w-md` with `px-4`, so the narrowest phone worth supporting leaves 288px.
+// Two of these plus the gaps plus "Part score" comes to 286. `w-28` would be
+// 302, and the row does not overflow — the label shrinks and wraps instead,
+// which is a worse failure than it sounds because it moves one row out of line
+// with the rest.
+const CELL = "w-[6.5rem] text-right tabular-nums";
 
 /**
  * Which of the two columns is which, stated once rather than on every row below.
@@ -89,20 +99,26 @@ function StandingHeader({
   const rated = ratings.mine !== null && ratings.opponent !== null;
   return (
     <p className="flex justify-end gap-2 text-[0.65rem] text-white/35">
-      {/* Stacked rather than run together, which is what clipped "Computer" to
-          "Comput…" — on its own line neither half comes near the column width.
-          The emphasis is inverted on purpose: the name is a column *label*, read
-          once and then ignored, where the rating is the figure worth looking at.
-          So the name goes quiet and the rating carries the weight — while
-          staying below the score figures underneath, which are still what this
-          strip is for. */}
-      <span className={CELL}>
-        <span className="block truncate text-white/30">You</span>
-        {rated ? <span className="block text-[0.7rem] text-white/70">{ratings.mine}</span> : null}
+      {/* Name and figure are separate spans rather than one string, so if a
+          column ever is too narrow it is the *name* that gives — a shortened
+          name is legible where half a rating is a different number. */}
+      <span className={`${CELL} flex justify-end`}>
+        <span className="truncate">You</span>
+        {rated ? (
+          <span className="shrink-0 tabular-nums">
+            <span className="px-1 text-white/20">·</span>
+            {ratings.mine}
+          </span>
+        ) : null}
       </span>
-      <span className={CELL}>
-        <span className="block truncate text-white/30">{opponentName}</span>
-        {rated ? <span className="block text-[0.7rem] text-white/70">{ratings.opponent}</span> : null}
+      <span className={`${CELL} flex justify-end`}>
+        <span className="truncate">{opponentName}</span>
+        {rated ? (
+          <span className="shrink-0 tabular-nums">
+            <span className="px-1 text-white/20">·</span>
+            {ratings.opponent}
+          </span>
+        ) : null}
       </span>
     </p>
   );

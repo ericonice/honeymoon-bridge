@@ -114,22 +114,16 @@ describe("the difficulty ladder", () => {
   });
 
   /**
-   * Recall is held constant across the ladder because it was measured and it is
-   * worth nothing — 57.5% ± 7.5 to the forgetful side over 40 rubbers. Pinned
-   * here so that varying it again is a deliberate act with a measurement behind
-   * it rather than a plausible-looking edit, which is how the first ladder came
-   * to be spaced on its only inert lever.
+   * Recall has a cliff in it rather than a slope: replaying the opponent's draw
+   * needs the pool to be *exactly* the twenty-six cards they were offered, so it
+   * takes all thirteen or it falls back to weighting by rank. A rung between 3
+   * and 13 is therefore not a proportionally weaker version of the top one — it
+   * is on the other side of a capability — and nothing here should invent one
+   * without measuring the build it lands on.
    */
-  test("every rung remembers the whole deal, so none of them differs by memory", () => {
-    for (const rung of DIFFICULTIES) {
-      expect(levelFor(rung).recall).toBe(13);
-    }
-  });
-
-  /** Perfect recall is what makes the pool exactly the cards they were offered. */
-  test("every rung can therefore replay the opponent's draw", () => {
+  test("only the hardest rung can replay the opponent's draw", () => {
     const perfect = DIFFICULTIES.filter((one) => levelFor(one).recall >= 13);
-    expect(perfect).toEqual([...DIFFICULTIES]);
+    expect(perfect).toEqual(["championship"]);
   });
 
   /**
