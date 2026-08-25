@@ -4,15 +4,6 @@ export interface SeatLabelProps {
   readonly active: boolean;
   readonly name: string;
   /**
-   * What this seat is rated, or null when it is not known.
-   *
-   * Null is the ordinary case rather than an error: the number comes from the last
-   * record fetched, so it is absent until somebody has looked at their record, and
-   * absent for a person across a table because their rating is theirs and does not
-   * travel with a seat. The label simply says less.
-   */
-  readonly rating?: number | null;
-  /**
    * Whether *this* player is vulnerable.
    *
    * It used to be one chip in the top bar reading "You vul" or "Both vul",
@@ -40,7 +31,6 @@ export interface SeatLabelProps {
 export function SeatLabel({
   active,
   name,
-  rating = null,
   vulnerable,
 }: SeatLabelProps): React.JSX.Element {
   return (
@@ -53,11 +43,6 @@ export function SeatLabel({
       {/* Dimmer than the name whether or not the seat is active. It is a fact about
           the player rather than about the turn, and it does not change during a
           deal — so it must not compete with the thing that does. */}
-      {rating === null ? null : (
-        <span className="shrink-0 font-mono text-[0.65rem] tabular-nums text-white/35">
-          {rating}
-        </span>
-      )}
       {active ? (
         <motion.span
           className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300"

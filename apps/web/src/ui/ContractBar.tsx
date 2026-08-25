@@ -11,6 +11,16 @@ export interface ContractBarProps {
   readonly opponentName: string;
   /** Shown phase, same lag as `TopBar` — see its own doc for why. */
   readonly phase: DealPhase;
+  /**
+   * Both sides' ratings, either null until something has said.
+   *
+   * Here and nowhere else on the board. It sat beside the seat labels first,
+   * which put it on the play screen only — so it was missing through the draw
+   * and the auction, which is most of a deal. The standing strip is the one
+   * place a figure about the two players is on screen the whole time, and a
+   * rating shown intermittently invites reading its absence as a change.
+   */
+  readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
   readonly rubber: RubberState;
   readonly view: PlayerView;
   /**
@@ -50,16 +60,50 @@ function Figure({
   );
 }
 
-// Same width as `Scorepad`'s own cell — wide enough for "Computer" to sit
-// unclipped in the header, not just for the numbers underneath it.
-const CELL = "w-14 text-right tabular-nums";
+// Wide enough for "Computer" unclipped, which w-14 was not — `Scorepad` widened
+// once before for the same word. It does not need to fit "Computer (1400)": the
+// header stacks the name and the rating rather than running them together, which
+// is what stopped it truncating.
+const CELL = "w-20 text-right tabular-nums";
 
-/** Which of the two columns is which, stated once rather than on every row below it. */
-function StandingHeader({ opponentName }: { readonly opponentName: string }): React.JSX.Element {
+/**
+ * Which of the two columns is which, stated once rather than on every row below.
+ *
+ * Carries each side's rating too, under its own name. **A rating belongs to a
+ * person, not to this deal** — so it sits with the name rather than as a row of
+ * the standing, where it would read as another figure the rubber is made of.
+ * Under rather than beside, because the columns are fixed width so the numbers
+ * below line up, and "Bobby Orr 1400" does not fit one on a phone.
+ *
+ * Drawn only when both are known. One alone invites comparing it with the blank
+ * beside it, which is half a comparison — the same reason `botAnchor` returns
+ * null rather than a guess.
+ */
+function StandingHeader({
+  opponentName,
+  ratings,
+}: {
+  readonly opponentName: string;
+  readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
+}): React.JSX.Element {
+  const rated = ratings.mine !== null && ratings.opponent !== null;
   return (
     <p className="flex justify-end gap-2 text-[0.65rem] text-white/35">
-      <span className={CELL}>You</span>
-      <span className={`${CELL} truncate`}>{opponentName}</span>
+      {/* Stacked rather than run together, which is what clipped "Computer" to
+          "Comput…" — on its own line neither half comes near the column width.
+          The emphasis is inverted on purpose: the name is a column *label*, read
+          once and then ignored, where the rating is the figure worth looking at.
+          So the name goes quiet and the rating carries the weight — while
+          staying below the score figures underneath, which are still what this
+          strip is for. */}
+      <span className={CELL}>
+        <span className="block truncate text-white/30">You</span>
+        {rated ? <span className="block text-[0.7rem] text-white/70">{ratings.mine}</span> : null}
+      </span>
+      <span className={CELL}>
+        <span className="block truncate text-white/30">{opponentName}</span>
+        {rated ? <span className="block text-[0.7rem] text-white/70">{ratings.opponent}</span> : null}
+      </span>
     </p>
   );
 }
@@ -116,12 +160,14 @@ function StandingLines({
   density,
   handsPlayed,
   opponentName,
+  ratings,
   rubber,
   view,
 }: {
   readonly density: Density;
   readonly handsPlayed: number;
   readonly opponentName: string;
+  readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
   readonly rubber: RubberState;
   readonly view: PlayerView;
 }): React.JSX.Element {
@@ -148,14 +194,28 @@ function StandingLines({
         {rubber.format === "rubber" ? (
           <Figure label="Games" values={rubber.gamesWon} view={view} />
         ) : null}
+        {/* Compact has no names to hang a rating on, so it says "Rated" and
+            keeps the same you–them order as every other figure on the line. It
+            is included rather than dropped because this *is* the always-visible
+            score on a short phone, and leaving it out would hide the number
+            from exactly the devices that cannot reach it anywhere else. One
+            more item on a line that already wraps costs no height. */}
+        {ratings.mine === null || ratings.opponent === null ? null : (
+          <span className="whitespace-nowrap">
+            Rated{" "}
+            <span className="tabular-nums text-white/60">
+              {ratings.mine}&ndash;{ratings.opponent}
+            </span>
+          </span>
+        )}
       </div>
     );
   }
 
   return (
     <div className="text-xs">
-      <p className="pb-0.5 text-white/40">Hand #: {handNumber}</p>
-      <StandingHeader opponentName={opponentName} />
+      <p className="pb-0.5 text-white/40">Hand #{handNumber}</p>
+      <StandingHeader opponentName={opponentName} ratings={ratings} />
       <StandingRow label="Total" values={totalScore(rubber)} view={view} />
       <StandingRow label="Part score" values={rubber.partScore} view={view} />
       {rubber.format === "rubber" ? (
@@ -182,6 +242,7 @@ export function ContractBar({
   onShowScore,
   opponentName,
   phase,
+  ratings,
   rubber,
   view,
 }: ContractBarProps): React.JSX.Element | null {
@@ -204,6 +265,7 @@ export function ContractBar({
           density={density}
           handsPlayed={handsPlayed}
           opponentName={opponentName}
+          ratings={ratings}
           rubber={rubber}
           view={view}
         />

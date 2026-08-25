@@ -1,6 +1,7 @@
 import { totalScore } from "@hb/engine";
 import type { DealScore, Pair, PlayerView, RubberState } from "@hb/engine";
 import { matchNoun } from "../game/labels.js";
+import { ratingChange } from "../game/records.js";
 import type { DealRecord } from "../game/session.js";
 import { Columns, DealResultHeadline, Row } from "./ScoreRows.js";
 import { Scorepad } from "./Scorepad.js";
@@ -10,6 +11,14 @@ export interface DealCompleteProps {
   readonly opponentName: string;
   /** True once the other player has asked to move on and you have not. */
   readonly opponentWaitingToContinue: boolean;
+  /**
+   * What the opponent is rated, or null when nothing has said.
+   *
+   * Only needed to work out what finishing this match did to *your* rating, and
+   * only on the screen that ends one — which is why this takes the number rather
+   * than the pair the standing strip takes.
+   */
+  readonly opponentRating: number | null;
   readonly rubber: RubberState;
   readonly score: DealScore | null;
   readonly view: PlayerView;
@@ -29,6 +38,7 @@ export function DealComplete({
   onDone,
   onNextDeal,
   opponentName,
+  opponentRating,
   opponentWaitingToContinue,
   rubber,
   score,
@@ -81,6 +91,9 @@ export function DealComplete({
     const totals = totalScore(rubber);
     const won = rubber.winner === view.me;
     const noun = matchNoun(rubber.format);
+    // Worked out here rather than waited for. The server is authoritative and
+    // the next record fetch confirms it, but the moment worth showing is now.
+    const rating = ratingChange({ opponent: opponentRating, won });
 
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4">
@@ -102,6 +115,21 @@ export function DealComplete({
           <Row divider label="Below the line" values={rubber.belowLineTotal} view={view} />
           <Row emphasis label="Final score" values={totals} view={view} />
         </div>
+
+        {/* Under the score rather than beside it: the score is what happened,
+            and this is what it was worth. Rendered only when every part of it is
+            known — a rating change is a claim about a specific number, and half
+            of one is worse than none. */}
+        {rating === null ? null : (
+          <p className="text-sm text-white/60">
+            Rating {rating.before} &rarr;{" "}
+            <span className="font-semibold text-white/90 tabular-nums">{rating.after}</span>{" "}
+            <span className={rating.delta >= 0 ? "text-emerald-300/80" : "text-white/45"}>
+              ({rating.delta >= 0 ? "+" : ""}
+              {rating.delta})
+            </span>
+          </p>
+        )}
 
         <Scorepad history={history} opponentName={opponentName} rubber={rubber} view={view} />
 

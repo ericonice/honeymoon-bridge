@@ -48,15 +48,6 @@ export interface PlayPhaseProps {
   readonly onContinue: (() => void) | null;
   readonly opponentName: string;
   /**
-   * What each seat is rated, either null when unknown — see `SeatLabel`.
-   *
-   * On the play screen and nowhere else. The auction and the draw show the same two
-   * names, and a number beside them there would be one more thing on screens that
-   * were deliberately quietened; this is the screen where the two of you are
-   * actually competing.
-   */
-  readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
-  /**
    * True once the other player has asked to move on and you have not —
    * the mirror of `waitingToContinue`, shown here for the same reason
    * `DealComplete` used to show it: without it, a hand you are still
@@ -332,7 +323,6 @@ export function PlayPhase({
   onHandsSettled,
   opponentName,
   opponentWaitingToContinue,
-  ratings,
   release,
   revealedHands,
   trickCount,
@@ -599,7 +589,6 @@ export function PlayPhase({
       <SeatLabel
         active={live && !yourTurn}
         name={opponentName}
-        rating={ratings.opponent}
         vulnerable={vulnerable[view.opponent]}
       />
       {/* The trick slots are only worth looking at while there is something
@@ -670,7 +659,7 @@ export function PlayPhase({
           it has sat in the same footer all game, and by the time hands are
           revealed there is no active turn left for the dot to mean either. */}
       {swept && revealedHands !== null ? null : (
-        <SeatLabel active={yourTurn} name="You" rating={ratings.mine} vulnerable={vulnerable[view.me]} />
+        <SeatLabel active={yourTurn} name="You" vulnerable={vulnerable[view.me]} />
       )}
 
       {flights.map((flight) => (

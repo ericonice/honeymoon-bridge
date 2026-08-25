@@ -82,6 +82,8 @@ export interface Records {
     /** Oldest first, capped server-side — one point per rated match. */
     readonly history: readonly RatingPoint[];
     readonly played: number;
+    /** What the next result moves them by — see the server's `Records`. */
+    readonly step?: number;
     readonly value: number;
   };
   readonly robot: readonly OpponentRecord[];
@@ -229,6 +231,7 @@ export function rememberRatings(records: Records | null): void {
       anchors: records.anchors ?? {},
       bot,
       mine: records.rating?.value ?? STARTING_RATING,
+      step: records.rating?.step ?? null,
     }),
   );
 }
@@ -245,17 +248,31 @@ export interface KnownRatings {
    */
   readonly bot: number | null;
   readonly mine: number | null;
+  /**
+   * What the next result will move this player by, as the server last said.
+   *
+   * Null from a server too old to send it, which has to mean "cannot say" rather
+   * than a default — the provisional period doubles it for a new player, so
+   * guessing the settled value would understate exactly the change most worth
+   * showing.
+   */
+  readonly step: number | null;
 }
 
 export function knownRatings(): KnownRatings {
-  const empty: KnownRatings = { anchors: {}, bot: null, mine: null };
+  const empty: KnownRatings = { anchors: {}, bot: null, mine: null, step: null };
   const raw = readStored(RATING_KEY);
   if (raw === null) {
     return empty;
   }
   try {
     const parsed = JSON.parse(raw) as Partial<KnownRatings>;
-    return { anchors: parsed.anchors ?? {}, bot: parsed.bot ?? null, mine: parsed.mine ?? null };
+    return {
+      anchors: parsed.anchors ?? {},
+      bot: parsed.bot ?? null,
+      mine: parsed.mine ?? null,
+      step: parsed.step ?? null,
+    };
   } catch {
     return empty;
   }
@@ -326,7 +343,10 @@ export function useBotAnchor(version: number, difficulty: Difficulty): number | 
 /** Stores anchors without disturbing the two ratings cached alongside them. */
 export function rememberAnchors(anchors: BotAnchors): void {
   const known = knownRatings();
-  writeStored(RATING_KEY, JSON.stringify({ anchors, bot: known.bot, mine: known.mine }));
+  writeStored(
+    RATING_KEY,
+    JSON.stringify({ anchors, bot: known.bot, mine: known.mine, step: known.step }),
+  );
 }
 
 /** One seat of a finished match, as it was recorded. */
@@ -376,6 +396,41 @@ export async function fetchEveryMatch(limit = 50): Promise<AnyMatch[] | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * What a finished match did to your rating.
+ *
+ * **A rating is the one thing on the final score screen that is not about this
+ * match** — it is what the match was *for*, and the only moment it means
+ * anything is the moment it moves. During a rubber it is inert reference data;
+ * here it is the result.
+ *
+ * Computed rather than waited for, and the two agree by construction: this is
+ * the same arithmetic the server's walk does, handed the same step. The server
+ * remains authoritative — the next record fetch overwrites this — so the worst
+ * case is a number that is briefly right for a few seconds before being
+ * confirmed, rather than one that can drift.
+ *
+ * Null whenever any part is unknown: no rating cached, no anchor for this
+ * opponent, or a server too old to say what the next step is. A rating change is
+ * a claim about a specific number, and a guessed one is worse than none.
+ */
+export function ratingChange(options: {
+  readonly opponent: number | null;
+  readonly won: boolean;
+}): { readonly after: number; readonly before: number; readonly delta: number } | null {
+  const { bot: _bot, mine, step } = knownRatings();
+  const { opponent, won } = options;
+  if (mine === null || opponent === null || step === null) {
+    return null;
+  }
+  // Elo's own expectation. Duplicated from the server rather than sent, because
+  // it is the definition of the scale rather than a choice anybody made — where
+  // `step` is a choice, and is therefore sent.
+  const expected = 1 / (1 + 10 ** ((opponent - mine) / 400));
+  const after = mine + step * ((won ? 1 : 0) - expected);
+  return { after: Math.round(after), before: Math.round(mine), delta: Math.round(after - mine) };
 }
 
 export interface RecordsState {

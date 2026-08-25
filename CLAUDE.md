@@ -1314,9 +1314,35 @@ competent player should sit. Anchoring the bot at 1500 instead would put the who
 average, which reads as flattery.
 
 The number shows in two places. The record screen, above the head-to-head table rather than in it,
-because it is the only figure there that is not relative to somebody. And beside the seat labels on the
-**play screen only** — the auction and the draw show the same two names and were deliberately
-quietened. `knownRatings()` reads the last fetched value out of `localStorage` rather than requesting
+because it is the only figure there that is not relative to somebody. And in the game, **under each
+name in the standing strip and nowhere else**.
+
+**It sat beside the seat labels first, and that was wrong twice over.** The seat labels only carry it on
+the play screen, so it was absent through the draw and the auction — most of a deal — and a figure that
+comes and goes invites reading its absence as a change. It was also on the wrong thing: a rating belongs
+to a *person*, not to the deal being played, so it goes with the name rather than as a row of the
+standing, where it would read as another figure the rubber is made of. Stacked under the name rather than run together with it. Inline was
+tried — `Computer (1400)` — and clipped to "Comput… (1400)" even after widening the column, because the
+combined string is the problem: on its own line neither half comes near the width. **The emphasis is
+inverted from what it first was**, and that is the part worth keeping: the name is a column *label*, read
+once and then ignored, where the rating is the figure worth looking at, so the name goes quiet and the
+rating carries the weight — while staying below the score figures underneath, which are still what the
+strip is for.
+
+**And the match-end screen shows what the match was worth** — `Rating 1361 → 1384 (+23)`. That is the
+one moment the number means anything: a rating does not move during a rubber, so on the standing strip
+it is inert reference data, and half of it is a *pinned* anchor that will never move for anybody. Elo is
+a result of matches, and the result is the event.
+
+Computed on the client rather than waited for, and the two agree by construction. Only one piece is a
+*choice* — the step, which the provisional period doubles — so the server sends `rating.step` with the
+record and the client supplies nothing but Elo's own expectation. The server stays authoritative and the
+next fetch confirms it, so the worst case is a number right a few seconds early rather than one that can
+drift. Null whenever any part is unknown, since a rating change is a claim about a specific number.
+
+The compact layout carries it too, as `Rated 1361–1400`, since it has no names to hang it on. Leaving it
+out was tried and is wrong for one specific reason: **compact is the always-visible score on a short
+phone**, so omitting it hides the number from exactly the devices that cannot reach it anywhere else. `knownRatings()` reads the last fetched value out of `localStorage` rather than requesting
 one, because the robot game must work with no network at all; a person's rating does not travel with a
 seat, so across a table you see only your own.
 

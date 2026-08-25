@@ -1,6 +1,6 @@
 import type { MatchFormat, PlayerId } from "@hb/engine";
 import type { Env } from "./env.js";
-import { botAnchors, botRating, ratingOf, ratingsFor, START_RATING } from "./ratings.js";
+import { botAnchors, botRating, ratingOf, ratingsFor, START_RATING, stepFor } from "./ratings.js";
 import type { RatingPoint, Ratings } from "./ratings.js";
 
 /**
@@ -263,6 +263,16 @@ export interface Records {
   readonly rating: {
     readonly history: readonly RatingPoint[];
     readonly played: number;
+    /**
+     * What their *next* result will move them by.
+     *
+     * Sent rather than derived on the client, which would otherwise need a copy
+     * of both K constants and the provisional rule to say what a finished match
+     * was worth. One number, already accounting for how many they have played,
+     * is the whole of it — and it cannot drift out of step with the walk the way
+     * a second copy of the rule would.
+     */
+    readonly step: number;
     readonly value: number;
   };
   /** Kept apart from the rest — see `recordsFor`. One entry per format played. */
@@ -383,7 +393,12 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
       opponentKeys,
       ratings,
     ),
-    rating: { history: mine.history, played: mine.played, value: mine.rating },
+    rating: {
+      history: mine.history,
+      played: mine.played,
+      step: stepFor(mine.played),
+      value: mine.rating,
+    },
     robot: all
       .filter((entry) => entry.token === ROBOT_TOKEN)
       .map((entry) => strip(entry, opponentKeys, ratings))

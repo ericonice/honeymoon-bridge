@@ -165,7 +165,6 @@ function CurrentPhase({
           }
           opponentName={session.opponentName}
           opponentWaitingToContinue={session.opponentWaitingToContinue}
-          ratings={ratings}
           release={onStartPlay}
           revealedHands={revealedHands}
           trickCount={trickCount}
@@ -182,6 +181,7 @@ function CurrentPhase({
         <DealComplete
           history={history}
           opponentName={session.opponentName}
+          opponentRating={ratings.opponent}
           opponentWaitingToContinue={session.opponentWaitingToContinue}
           rubber={rubber}
           score={score}
@@ -542,6 +542,7 @@ export function GameBoard({
         handsPlayed={session.history.length}
         opponentName={session.opponentName}
         phase={phase}
+        ratings={ratings}
         rubber={session.rubber}
         view={view}
         // The complete screen already shows the scorepad in full, so a
@@ -671,7 +672,6 @@ export function GameBoard({
         <ScoreOverlay
           history={session.history}
           opponentName={session.opponentName}
-          ratings={ratings}
           rubber={session.rubber}
           view={view}
           vulnerable={session.vulnerable}
