@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ScoringOverlay } from "./ScoringOverlay.js";
 import { resetWalkthrough } from "../game/walkthrough.js";
 
 export interface HelpOverlayProps {
@@ -75,11 +76,15 @@ type SectionKey = (typeof SECTION_TITLES)[number];
  * already thinking about — "wait, does one pass really end this?" mid-auction —
  * is also the one that gets them to the answer fastest.
  *
- * Deliberately says nothing about how a deal is scored. The engine computes
- * that and the deal-complete screen already itemises it — honors included, on
- * the line where the points appear. A scoring table written out here would be a
- * second account of the rules with no way to stay honest as the first one
- * changes, which is the one kind of help worth less than none.
+ * It used to say nothing at all about how a deal is scored, on the grounds that
+ * a scoring table written out here would be a second account of the rules with
+ * no way to stay honest as the first one changes — the one kind of help worth
+ * less than none. That objection stands, and `ScoringOverlay` answers it rather
+ * than ignoring it: every figure on that page is asked of the engine's own
+ * scoring functions, so it moves when they move. It is a separate page rather
+ * than a section here for a second reason, which is the line directly below this
+ * one — this screen is explicitly for somebody who already plays bridge, and
+ * scoring is the first thing in the app written for somebody who does not.
  *
  * An overlay rather than a screen so it can be opened from the middle of a
  * game. Somebody wondering whether a pass ends the auction is, by definition,
@@ -89,6 +94,7 @@ export function HelpOverlay({ onClose, openDiscard }: HelpOverlayProps): React.J
   // Local, and only so the button can say it worked. The armed state itself lives in
   // storage, where the draw screen reads it on its next mount.
   const [walkthroughArmed, setWalkthroughArmed] = useState(false);
+  const [showScoring, setShowScoring] = useState(false);
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
     app: false,
     auction: false,
@@ -100,6 +106,16 @@ export function HelpOverlay({ onClose, openDiscard }: HelpOverlayProps): React.J
 
   function toggle(key: SectionKey): void {
     setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  if (showScoring) {
+    return (
+      <ScoringOverlay
+        onClose={() => {
+          setShowScoring(false);
+        }}
+      />
+    );
   }
 
   return (
@@ -213,6 +229,21 @@ export function HelpOverlay({ onClose, openDiscard }: HelpOverlayProps): React.J
             rubber. Settings will shorten a sitting to a single game instead; at a table with
             somebody else, one game wins if either of you asks for it.
           </Rule>
+          {/* A page rather than more rules here. It is what somebody opens mid-auction,
+              and it is the one part of this app written for a person who has never
+              played rubber bridge rather than for one who has. */}
+          <button
+            type="button"
+            className="mt-1 w-full rounded-xl border border-white/25 px-4 py-3 text-left"
+            onClick={() => {
+              setShowScoring(true);
+            }}
+          >
+            <span className="block text-base font-medium">What everything is worth</span>
+            <span className="mt-0.5 block text-xs text-white/55">
+              Trick values, games, penalties, and what they imply when you are bidding.
+            </span>
+          </button>
         </Section>
 
         <Section title="In the app" open={open.app} onToggle={() => toggle("app")}>

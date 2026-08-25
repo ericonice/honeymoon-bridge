@@ -784,6 +784,38 @@ address *and* code, with five attempts before the outstanding codes for that add
 The general lesson is worth more than the bug: anything that leaves the app and comes back cannot
 be assumed to come back to the same app, and desktop Chrome will insist that it does.
 
+**Help now has a scoring page, and it exists against an argument that was right.** `HelpOverlay`
+deliberately said nothing about scoring, on the grounds that a scoring table written out by hand is
+a second account of the rules with no way to stay honest as the first one changes — "the one kind of
+help worth less than none". That objection is not waved away, it is **answered**: every figure on
+the page is asked of the engine's own scoring functions through `game/scoringFacts.ts`, so nothing
+is typed out. 3NT, 4♥ and 5♣ are *searched* for as the cheapest level reaching `GAME_THRESHOLD`
+rather than stated; the doubled penalties come from `undertrickPoints`; honors come from
+`honorsFor` handed a constructed holding. `GAME_THRESHOLD`, `GAME_BONUS` and `matchBonusFor` were
+exported from the engine for exactly this and nothing else.
+
+**`test/scoringPage.test.ts` is what makes the page allowed to exist**, and it computes its
+expectations from `@hb/engine` directly rather than from `scoringFacts.ts` — comparing the page
+against the module feeding it would pass whatever either said. Checked against a real drift on the
+way in: hardcoding one figure in the table fails it.
+
+**Its own destination rather than a section, for two reasons that are not about length.** The help
+screen states at the top that it assumes you play bridge and covers only the differences — and
+scoring is the first thing in this app written for somebody who does not. And it is what a person
+opens *during* an auction, which is not a moment for scrolling past four collapsed headings.
+
+**The one opinion on it is the last block, and the trap it avoids is worth recording.** The obvious
+beginner rule — "bid what you are sure you can make" — is literally `simpleBidder`, which is what
+Kitchen plays and what measured **−464 points a rubber** against pricing contracts properly. So the
+page teaches the *scoring* and lets the consequence follow: the worked example shows eleven tricks
+in hearts scoring 90 below and 60 above at 3♥ against 120 and 30 at 4♥, same tricks, and only one of
+them a game. Both rows are computed, so if overtricks ever counted below the line the argument would
+change with them.
+
+**The tables are real `<table>` markup rather than a grid of spans**, which is the same lesson the
+record screen's row test taught from the other side: a test that selects on a padding class breaks
+when a second control shares it, where `caption` and `tbody tr` are what the thing actually is.
+
 **There is a walkthrough now, and it covers the draw and nothing else** (`REQUIREMENTS.md` §1.3a).
 A four-step spotlight **tour** on the first turn, then two **notes** on the second and third, because
 the auction and the play are ordinary bridge while the draw exists nowhere else.

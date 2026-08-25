@@ -1,7 +1,15 @@
 import type { DealScore } from "./scoring.js";
 import type { Pair, PlayerId } from "./types.js";
 
-const GAME_THRESHOLD = 100;
+/**
+ * What wins a game, below the line.
+ *
+ * Exported because a screen has to be able to say it. Everything the help screen
+ * states about scoring is derived from this module and `scoring.ts` rather than
+ * retyped, which is the condition on that page existing at all — see
+ * `ScoringOverlay`.
+ */
+export const GAME_THRESHOLD = 100;
 
 /**
  * Awarded for winning a one-game match.
@@ -13,7 +21,7 @@ const GAME_THRESHOLD = 100;
  * worth winning. It is the one convention here imported from another form of
  * the game.
  */
-const GAME_BONUS = 300;
+export const GAME_BONUS = 300;
 
 /**
  * How long a sitting runs.
@@ -137,7 +145,7 @@ export function applyDealScore(rubber: RubberState, score: DealScore): RubberSta
     if (gamesWon[player] === target) {
       complete = true;
       gameWinner = player;
-      const bonus = bonusFor(rubber.format, gamesWon[player === 0 ? 1 : 0]);
+      const bonus = matchBonusFor(rubber.format, gamesWon[player === 0 ? 1 : 0]);
       aboveLine[player] += bonus;
       matchBonus[player] = bonus;
     }
@@ -157,7 +165,7 @@ export function applyDealScore(rubber: RubberState, score: DealScore): RubberSta
 }
 
 /** 700 for a rubber the loser never got a game in, 500 otherwise, 300 for a game. */
-function bonusFor(format: MatchFormat, opponentGames: number): number {
+export function matchBonusFor(format: MatchFormat, opponentGames: number): number {
   if (format === "game") {
     return GAME_BONUS;
   }
