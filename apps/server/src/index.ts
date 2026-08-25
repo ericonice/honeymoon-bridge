@@ -27,6 +27,7 @@ import {
   resetRecord,
   ROBOT_TOKEN,
 } from "./results.js";
+import { standingsFor } from "./standings.js";
 
 export { Lobby } from "./lobby.js";
 export { Table } from "./table.js";
@@ -874,6 +875,19 @@ export default {
         return json(request, { error: "Not signed in" }, 401);
       }
       return json(request, await recordsFor(env, accountId));
+    }
+
+    // Where everybody stands, which is the one read here that is not about the
+    // asker — see `standings.ts`. Behind a session because it shows one player
+    // another player's number, and its own route rather than a field on the
+    // record because nobody checking their own w-l should pay for the pool's
+    // rows.
+    if (url.pathname === "/api/standings" && request.method === "GET") {
+      const accountId = await accountFromRequest(request, env, Date.now());
+      if (accountId === null) {
+        return json(request, { error: "Not signed in" }, 401);
+      }
+      return json(request, await standingsFor(env, accountId));
     }
 
     // The individual matches behind that record, newest first — the record

@@ -2,7 +2,9 @@ import { useState } from "react";
 import { matchNoun } from "../game/labels.js";
 import type { MatchRecord, OpponentRecord, Records } from "../game/records.js";
 import { resetRecord, useRecentMatches, useRecords } from "../game/records.js";
+import { useStandings } from "../game/standings.js";
 import { RatingTrend } from "./RatingTrend.js";
+import { Standings } from "./Standings.js";
 
 export interface RecordProps {
   readonly signedIn: boolean;
@@ -39,6 +41,16 @@ export function whenPlayed(at: number): string {
 /** The plural is given rather than guessed, because "matchs" is not a word. */
 function count(n: number, singular: string, plural = `${singular}s`): string {
   return `${n.toLocaleString()} ${n === 1 ? singular : plural}`;
+}
+
+/** A place, written the way it is said. Only ever a small number here. */
+function ordinal(place: number): string {
+  const tens = place % 100;
+  if (tens >= 11 && tens <= 13) {
+    return `${place}th`;
+  }
+  const suffix = { 1: "st", 2: "nd", 3: "rd" }[place % 10] ?? "th";
+  return `${place}${suffix}`;
 }
 
 /** A signed points figure, with the minus sign that reads as one rather than a hyphen. */
@@ -83,6 +95,13 @@ function Rating({
           {rating.played === 0
             ? " · no rated matches yet"
             : ` · ${count(rating.played, "match", "matches")}`}
+          {/* Where the number stands, which is the one fact about the pool that is
+              about *you* — so it rides here while the list of everybody else is a
+              view of its own. Absent while the rating is settling, and from a
+              server too old to say. */}
+          {rating.rank === null || rating.rank === undefined || rating.of === null || rating.of === undefined
+            ? null
+            : ` · ${ordinal(rating.rank)} of ${rating.of}`}
           {recent === null ? null : (
             <>
               {" · "}
@@ -739,8 +758,61 @@ function Body({
   );
 }
 
+/** Which of the two things this screen holds is being read. */
+type View = "everyone" | "you";
+
 /**
- * Who you have played and how it went.
+ * The switch between your own record and everybody's standings.
+ *
+ * **Two views behind one door rather than two doors.** Both answer "how am I
+ * doing", which is what the button on Home already promises, so nothing new has
+ * to be learned to find the board — and the alternative, a fifth entry in Home's
+ * secondary row, drops those buttons from 84px to 64px and wraps two of the four
+ * captions onto a second line.
+ *
+ * The vocabulary is `SettingsOverlay`'s own `Choice`: flex-1 buttons, the live one
+ * filled, `aria-pressed` saying which. Reused rather than invented so the control
+ * reads as a thing this app does.
+ *
+ * It is a real pair of buttons and not a tappable heading, for the reason the
+ * opponent rows are real buttons with `aria-expanded`: a decorated `div` leaves
+ * the keyboard and a screen reader with no way to know there is anywhere to go.
+ */
+function ViewSwitch({
+  onChange,
+  view,
+}: {
+  onChange(next: View): void;
+  readonly view: View;
+}): React.JSX.Element {
+  return (
+    <div className="flex gap-2">
+      {(
+        [
+          { label: "You", value: "you" },
+          { label: "Everyone", value: "everyone" },
+        ] as const
+      ).map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={option.value === view}
+          className={`flex-1 rounded-lg px-2 py-1.5 text-sm font-medium ${
+            option.value === view ? "bg-white text-stone-900" : "border border-white/15 text-white"
+          }`}
+          onClick={() => {
+            onChange(option.value);
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Who you have played and how it went, and where everybody stands.
  *
  * Its own screen rather than a panel in Settings. Settings is where you go to
  * change something and every row in it is short and bounded; this grows with
@@ -751,13 +823,35 @@ function Body({
  * `OpponentSection`. A rubber and a game against the same person used to live
  * in two separate sections, which meant reading their name twice to answer
  * one question: how things stand with them.
+ *
+ * **Two views, because the second one has no point of view.** Everything under
+ * `You` is from your side — a points-for, a win-loss from your seat, and a button
+ * that deletes your history. A board is a list of other people. Sharing one scroll
+ * would mean one screen speaking in two voices, and would put a destructive
+ * control at the foot of a list that is partly somebody else's; sharing one door
+ * costs nothing, since both answer the same question.
+ *
+ * The heading follows the view rather than sitting above the switch, so the
+ * first-person voice stays attached to the first-person half.
  */
 export function Record({ onBack, onSignIn, signedIn }: RecordProps): React.JSX.Element {
+  const [view, setView] = useState<View>("you");
+  // Held here rather than in the board, so the switch is free after the first
+  // look — and fetched only once somebody has actually asked for it.
+  const board = useStandings(signedIn && view === "everyone");
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-8">
-        <h1 className="text-2xl font-semibold">Your record</h1>
-        <Body signedIn={signedIn} onSignIn={onSignIn} />
+        <h1 className="text-2xl font-semibold">
+          {view === "you" ? "Your record" : "Standings"}
+        </h1>
+        {signedIn ? <ViewSwitch view={view} onChange={setView} /> : null}
+        {view === "you" ? (
+          <Body signedIn={signedIn} onSignIn={onSignIn} />
+        ) : (
+          <Standings loading={board.loading} standings={board.standings} />
+        )}
       </div>
 
       <div className="px-6 pb-6">

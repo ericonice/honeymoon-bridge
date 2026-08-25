@@ -36,6 +36,11 @@ export function recordsUrl(): string {
   return `${ORIGIN}/api/results`;
 }
 
+/** Where everybody stands. Behind a session — see the route. */
+export function standingsUrl(): string {
+  return `${ORIGIN}/api/standings`;
+}
+
 export function recentMatchesUrl(): string {
   return `${ORIGIN}/api/results/recent`;
 }

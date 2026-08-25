@@ -284,7 +284,10 @@ export function Home({
         {/* First of the four: the only one answering a question somebody has
             before they have played rather than after. */}
         <Secondary icon={<HelpIcon />} label="How to play" onClick={onShowHelp} />
-        <Secondary icon={<RecordIcon />} label="Your record" onClick={onShowRecord} />
+        {/* "Record" rather than "Your record": the screen holds the standings as
+            well now, and half of that is not yours. Also the shorter label, which
+            is what keeps all four captions on one line. */}
+        <Secondary icon={<RecordIcon />} label="Record" onClick={onShowRecord} />
         <Secondary icon={<AchievementIcon />} label="Achievements" onClick={onShowAchievements} />
         <Secondary icon={<SettingsIcon />} label="Settings" onClick={onShowSettings} />
       </div>

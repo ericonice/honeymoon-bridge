@@ -264,6 +264,36 @@ export function botAnchors(): Record<string, Record<string, number>> {
   return anchors;
 }
 
+/** One of the computers the board is scaled against. */
+export interface PinnedOpponent {
+  readonly difficulty: string;
+  readonly rating: number;
+  readonly version: number;
+}
+
+/**
+ * The computers a leaderboard is measured against, strongest first.
+ *
+ * **The newest release on every rung, and nothing else.** Three rows rather than
+ * one because the rungs are what give the scale points a person can place
+ * themselves between — who has passed a kitchen table, who has passed the club,
+ * who has passed the best it plays. One row would say only whether you are above
+ * or below 1400.
+ *
+ * Superseded releases are left off even though they are still selectable, which
+ * is the one thing here worth arguing about: somebody who plays v2 is being
+ * measured against 1200 and will not find that number on the board. A board is a
+ * scale rather than a catalogue, and every release on every rung is nine rows of
+ * reference data in a list that will hold a handful of people. The difficulty row
+ * in Settings is where the rest of the table lives.
+ */
+export function pinnedOpponents(): readonly PinnedOpponent[] {
+  const version = Math.max(...Object.keys(BOT_RATINGS).map(Number));
+  return Object.keys(DIFFICULTY_OFFSETS)
+    .map((difficulty) => ({ difficulty, rating: botRating(version, difficulty), version }))
+    .sort((a, b) => b.rating - a.rating);
+}
+
 /** The share of a match the first player is expected to take, from the gap alone. */
 export function expectedScore(rating: number, against: number): number {
   return 1 / (1 + 10 ** ((against - rating) / 400));

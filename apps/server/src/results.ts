@@ -1,7 +1,16 @@
 import type { MatchFormat, PlayerId } from "@hb/engine";
 import type { Env } from "./env.js";
-import { botAnchors, botRating, ratingOf, ratingsFor, START_RATING, stepFor } from "./ratings.js";
+import {
+  botAnchors,
+  botRating,
+  pinnedOpponents,
+  ratingOf,
+  ratingsFor,
+  START_RATING,
+  stepFor,
+} from "./ratings.js";
 import type { RatingPoint, Ratings } from "./ratings.js";
+import { buildStandings, poolFor, rankOf } from "./standings.js";
 
 /**
  * The token standing in for the computer.
@@ -262,7 +271,24 @@ export interface Records {
   /** The asker's own rating, the matches it rests on, and how it got there. */
   readonly rating: {
     readonly history: readonly RatingPoint[];
+    /**
+     * How many people are ranked on the board — the "of" in "3rd of 9".
+     *
+     * Null alongside a null `rank`, and for the same reason: a position needs
+     * something to be a position among.
+     */
+    readonly of: number | null;
     readonly played: number;
+    /**
+     * Where this rating stands among everybody's — see `standings.ts`.
+     *
+     * Carried with the record rather than fetched, because the walk that answers
+     * it has already been made to produce the rating above; the board itself is
+     * a route of its own, so nobody reading their own w-l pays for everybody
+     * else's rows. Null while the rating is still settling, which is what the
+     * board does with it too.
+     */
+    readonly rank: number | null;
     /**
      * What their *next* result will move them by.
      *
@@ -384,6 +410,12 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
   // same walk as everybody else's — see `ratingsFor`.
   const ratings = await ratingsFor(env);
   const mine = ratingOf(ratings, accountId, [...mineTokens]);
+  // The same board the standings route serves, so a rank beside a rating and a
+  // rank on the list cannot disagree. Two small queries on top of a walk that has
+  // already happened, which is why the position rides here and the rows do not.
+  const place = rankOf(
+    buildStandings({ bots: pinnedOpponents(), me: accountId, pool: await poolFor(env), ratings }),
+  );
 
   return {
     anchors: botAnchors(),
@@ -395,7 +427,9 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
     ),
     rating: {
       history: mine.history,
+      of: place?.of ?? null,
       played: mine.played,
+      rank: place?.rank ?? null,
       step: stepFor(mine.played),
       value: mine.rating,
     },

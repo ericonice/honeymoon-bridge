@@ -1403,6 +1403,65 @@ line converges toward *bot + the player's true gap* and then flattens. That is h
 level, not having stopped improving, and the only way past it is a stronger opponent — which is what
 v3 was for, and what the top of the difficulty ladder is for now.
 
+**There is a leaderboard, and it is the first thing here with no point of view.** Everything on
+"Your record" is from the reader's side — a points-for, a win-loss from their seat, their recent
+matches, and a button that deletes their history. A board is a list of other people, which is the
+distinction `results.ts` already draws in prose for `AnyMatch`. So it is not another section of that
+screen: it is a second **view** behind the same door, switched by `You` / `Everyone`, with the `h1`
+following the view so the first-person voice stays on the first-person half. Sharing one scroll would
+have put a destructive control at the foot of a list that is partly somebody else's.
+
+**The switch beat a fifth button on Home, and the argument was measurable.** Home's secondary row is
+four `flex-1` buttons across 336px, so 84px each; a fifth drops them to 64px and wraps "Achievements"
+and "How to play" onto a second line. Relabelling one entry from "Your record" to **"Record"** is
+shorter than what was there, so every caption stays on one line — and the label had to change anyway,
+since half the destination is not yours. The control is `SettingsOverlay`'s own `Choice` vocabulary
+rather than new chrome, and it is a real pair of buttons with `aria-pressed`: **a tappable rating
+block was the first design and was wrong**, for the reason the opponent rows are real buttons with
+`aria-expanded` — a decorated `div` leaves the keyboard and a screen reader with no way to know there
+is anywhere to go.
+
+**The rank rides with the record and the rows do not.** `/api/results` has already made the global
+walk to produce a rating, so ranking that rating inside it is arithmetic on data in hand — `1514 ·
+your rating · 3rd of 9`, which is the one fact about the pool that is about *you*. The board itself
+is `GET /api/standings`, fetched only when somebody switches to it, so nobody checking their own
+win-loss pays for everybody else's rows. `test/standingsView.test.ts` pins that laziness, because if
+it goes the whole argument for a separate route goes with it and nothing else would say so.
+
+**Session-gated, and it is the first surface that shows one player another player's number
+unprompted.** The precedent it is measured against is `/api/results/all`, which is playtester-gated
+and answers 404 because it is not scoped to the asker; a board is that kind of thing, and shipping it
+to everybody is a deliberate widening of what the app discloses rather than an oversight. What it may
+not carry is asserted rather than reviewed: no account id and no device token — a token reclaims a
+dropped seat, so it is a credential rather than a label — which leaves a display name, a rating and a
+count, with *which row is yours* as a boolean.
+
+**Three kinds of row are absent, and each would have been wrong in its own way.** An account with no
+name, because a row reading "—" beside a rating is worse than a shorter list. An account that has
+never finished a rated match, because an untouched 1500 is a starting value rather than a rating. And
+a device token no account has claimed, because that is a browser rather than a player. **The fold is
+the part most likely to break**: a person's matches split across their account and every device they
+played on before signing in, so a board built off the rating map alone lists them twice — `ratingOf`
+already resolves that for the asker and `buildStandings` uses the same function, which is what keeps
+a board row agreeing with the number that person reads on their own record.
+
+**Settling ratings are listed apart rather than hidden or ranked.** Everybody starts at 1500, the
+strongest bot is anchored at 1400 and K is doubled for ten matches, so one win puts a brand-new
+account near 1523 — above a settled player at 1500. Ranking that would be ordering the prior rather
+than the players. It is the same choice the rating chart made in shading its opening stretch instead
+of trimming it: `PROVISIONAL_MATCHES` is already the server's own line for "settled", and it is sent
+with the board rather than copied into the client.
+
+**The computers are on the board, drawn as marks on the scale rather than competitors.** A leaderboard
+in a family-sized pool would otherwise say nothing Elo does not conserve away, and the pinned anchors
+are the whole reason the ordering means anything — so `pinnedOpponents` puts the newest release on
+each of the three rungs in the list, unranked, at 1400/1200/1050. This is where it differs from
+`RatingTrend`, which tried the bot's anchor as its reference rule and had to give it up because 1400
+sat outside the data's range; in a ranked list it sits inside. A person sorts above a computer on the
+same rating, because matching it is not passing it. Superseded releases are left off even though they
+are still playable: a board is a scale, not a catalogue, and every release on every rung is nine rows
+of reference data in a list holding a handful of people.
+
 **How hard it plays is one setting, and it is rated per rung.** Difficulty used to be spread across
 `strength`, `boldness`, the disguise and the opponent picker — four rows that all changed how hard the
 game was, none of which said so, and using them meant knowing what a sample count is. `difficulty.ts`

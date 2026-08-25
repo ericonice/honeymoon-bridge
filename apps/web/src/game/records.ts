@@ -81,7 +81,17 @@ export interface Records {
   readonly rating: {
     /** Oldest first, capped server-side — one point per rated match. */
     readonly history: readonly RatingPoint[];
+    /** How many people are ranked — the "of" in "3rd of 9". Null with a null rank. */
+    readonly of?: number | null;
     readonly played: number;
+    /**
+     * Where this rating stands among everybody's.
+     *
+     * Rides with the record because the walk that answers it has already been
+     * made; the board itself is its own request — see `standings.ts`. Null while
+     * the rating is settling, and absent from a server too old to say.
+     */
+    readonly rank?: number | null;
     /** What the next result moves them by — see the server's `Records`. */
     readonly step?: number;
     readonly value: number;

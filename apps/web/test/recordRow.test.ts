@@ -164,11 +164,21 @@ test("a record with nothing in it yet draws an empty bar rather than dividing by
   expect(rowText()).not.toContain("NaN");
 });
 
+/**
+ * The opponent rows.
+ *
+ * Found by `aria-expanded`, which is what a row *is* — the one control on this
+ * screen that opens a panel. Selecting them by a padding class was tried and broke
+ * the moment the screen grew another control that shared it: the view switch is
+ * also a button, also in the same padding, and is not a row.
+ */
+function rows(): readonly HTMLElement[] {
+  return [...document.querySelectorAll("button[aria-expanded]")] as HTMLElement[];
+}
+
 /** Taps the nth opponent row. */
 function tap(index = 0): void {
-  const row = [...document.querySelectorAll("button")].filter((button) =>
-    button.className.includes("py-1.5"),
-  )[index];
+  const row = rows()[index];
   act(() => {
     row?.click();
   });
@@ -196,9 +206,7 @@ test("a row says whether it is open, and only one is", () => {
   show();
 
   const expanded = (): (string | null)[] =>
-    [...document.querySelectorAll("button")]
-      .filter((button) => button.className.includes("py-1.5"))
-      .map((button) => button.getAttribute("aria-expanded"));
+    rows().map((row) => row.getAttribute("aria-expanded"));
 
   expect(expanded()).toEqual(["false", "false"]);
   expect(document.querySelector("dl")).toBeNull();
