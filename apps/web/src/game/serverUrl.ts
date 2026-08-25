@@ -27,6 +27,11 @@ export function botsUrl(): string {
   return `${ORIGIN}/api/bots`;
 }
 
+/** Every recent match by anybody, for a playtester. Gated server-side. */
+export function everyMatchUrl(): string {
+  return `${ORIGIN}/api/results/all`;
+}
+
 export function recordsUrl(): string {
   return `${ORIGIN}/api/results`;
 }

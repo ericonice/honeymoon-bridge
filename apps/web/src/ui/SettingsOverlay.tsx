@@ -17,6 +17,7 @@ import type { Theme } from "../game/theme.js";
 import { playAchievement } from "../game/soundEffects.js";
 import { AchievementToast } from "./AchievementToast.js";
 import { HandLogsOverlay } from "./HandLogsOverlay.js";
+import { LatestGamesOverlay } from "./LatestGamesOverlay.js";
 
 /**
  * What a rung plays like, and what beating it is worth.
@@ -308,6 +309,7 @@ export function SettingsOverlay({
   theme,
 }: SettingsOverlayProps): React.JSX.Element {
   const [showingHandLogs, setShowingHandLogs] = useState(false);
+  const [showingGames, setShowingGames] = useState(false);
   const [previewUnlocks, setPreviewUnlocks] = useState<readonly Unlock[]>([]);
   const [bidCost, setBidCost] = useState<string | null>(null);
 
@@ -613,8 +615,26 @@ export function SettingsOverlay({
                 </span>
               </button>
 
-              {/* Raw for now — see `HandLogsOverlay`. What a later pass will
-                  actually assess the bot against, not a preference. */}
+              {/* Every match anybody has finished, both seats named. A sibling
+                  of the logged hands and gated identically: neither is scoped to
+                  the asker, so a session is not the right permission for either.
+                  Per match where that one is per deal — they answer different
+                  questions and both are wanted. */}
+              <button
+                type="button"
+                className="w-full rounded-xl border border-white/15 px-4 py-3 text-left"
+                onClick={() => {
+                  setShowingGames(true);
+                }}
+              >
+                <span className="block text-base font-medium">Latest games</span>
+                <span className="block pt-1 text-sm text-white/50">
+                  The most recent matches by anyone, with both players and how each finished.
+                </span>
+              </button>
+
+              {/* What a later pass will actually assess the bot against, not a
+                  preference. */}
               <button
                 type="button"
                 className="w-full rounded-xl border border-white/15 px-4 py-3 text-left"
@@ -671,6 +691,14 @@ export function SettingsOverlay({
         <HandLogsOverlay
           onClose={() => {
             setShowingHandLogs(false);
+          }}
+        />
+      ) : null}
+
+      {showingGames ? (
+        <LatestGamesOverlay
+          onClose={() => {
+            setShowingGames(false);
           }}
         />
       ) : null}

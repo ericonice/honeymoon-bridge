@@ -5,7 +5,14 @@ import { storedSession } from "./account.js";
 import { nickname, playerToken } from "./identity.js";
 import { enqueue, flush, outboxState } from "./outbox.js";
 import { readStored, writeStored } from "./storage.js";
-import { botsUrl, recentMatchesUrl, recordsUrl, resetRecordUrl, robotResultUrl } from "./serverUrl.js";
+import {
+  botsUrl,
+  everyMatchUrl,
+  recentMatchesUrl,
+  recordsUrl,
+  resetRecordUrl,
+  robotResultUrl,
+} from "./serverUrl.js";
 
 /**
  * One finished match against one opponent, as their own row shows it.
@@ -320,6 +327,55 @@ export function useBotAnchor(version: number, difficulty: Difficulty): number | 
 export function rememberAnchors(anchors: BotAnchors): void {
   const known = knownRatings();
   writeStored(RATING_KEY, JSON.stringify({ anchors, bot: known.bot, mine: known.mine }));
+}
+
+/** One seat of a finished match, as it was recorded. */
+export interface MatchSeat {
+  readonly name: string;
+  readonly points: number;
+  readonly robot: boolean;
+}
+
+/**
+ * A finished match with no point of view — two seats and a winner.
+ *
+ * Every other shape here answers "how did *you* do" and reports a `pointsFor`.
+ * A list of games other people played has no asker, so it cannot have a side.
+ */
+export interface AnyMatch {
+  readonly botVersion: number | null;
+  readonly deals: number;
+  readonly difficulty: string | null;
+  readonly finishedAt: number;
+  readonly format: MatchFormat;
+  readonly players: readonly [MatchSeat, MatchSeat];
+  readonly winner: 0 | 1;
+}
+
+/**
+ * Every recent match by anybody, or null on anything short of a real answer.
+ *
+ * Null covers signed out, not a playtester, and offline alike — the server
+ * answers 404 rather than 401 to anyone not on the list, so this cannot tell
+ * "you may not" from "there is nothing", and should not pretend to.
+ */
+export async function fetchEveryMatch(limit = 50): Promise<AnyMatch[] | null> {
+  const session = storedSession();
+  if (session === null) {
+    return null;
+  }
+  try {
+    const response = await fetch(`${everyMatchUrl()}?limit=${limit}`, {
+      headers: { Authorization: `Bearer ${session}` },
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const body = (await response.json()) as { matches: AnyMatch[] };
+    return body.matches;
+  } catch {
+    return null;
+  }
 }
 
 export interface RecordsState {

@@ -21,6 +21,12 @@ export interface HandLog {
   readonly completedTricks: readonly CompletedTrick[];
   readonly contract: Contract;
   readonly deviceToken: string;
+  /**
+   * Which rung it was played on. Absent from a build that predates the setting,
+   * and that is not the same as a rung nobody recognises — `simpleBidder` means
+   * the bottom rung is a different bidder, so pooling rungs pools opponents.
+   */
+  readonly difficulty?: string;
   readonly disguise: boolean;
   /** Absent from a build that predates them — see `handLogFrom`. */
   readonly drawTurns?: readonly DrawTurnRecord[];
@@ -30,7 +36,8 @@ export interface HandLog {
   readonly seed?: number;
   readonly standing?: HandLogStanding;
   readonly starter?: PlayerId;
-  readonly strength: string;
+  /** The dial that preceded the difficulty ladder. Absent from any current client. */
+  readonly strength?: string;
   readonly tricksWon: Pair<number>;
 }
 
@@ -65,8 +72,8 @@ export async function recordHandLog(
     `INSERT INTO hand_logs
        (id, played_at, account_id, device_token, bot_version, boldness, strength,
         disguise, declarer, contract_level, contract_strain, made, tricks_declarer,
-        deal_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        difficulty, deal_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       crypto.randomUUID(),
@@ -75,13 +82,17 @@ export async function recordHandLog(
       log.deviceToken,
       log.botVersion,
       log.boldness,
-      log.strength,
+      // The column is NOT NULL and SQLite cannot drop that without rebuilding
+      // the table, so absent is written as the empty string and read back as
+      // null. Not worth a table rebuild for a dial no current client sends.
+      log.strength ?? "",
       log.disguise ? 1 : 0,
       log.contract.declarer,
       log.contract.level,
       log.contract.strain,
       madeTricks,
       log.tricksWon[log.contract.declarer],
+      log.difficulty ?? null,
       dealJson,
     )
     .run();
@@ -108,11 +119,14 @@ export interface HandLogRow {
   readonly contractStrain: Strain;
   readonly deal: HandLogDeal;
   readonly declarer: PlayerId;
+  /** Which rung it was played on. Null from before the column existed. */
+  readonly difficulty: string | null;
   readonly disguise: boolean;
   readonly id: string;
   readonly made: boolean;
   readonly playedAt: number;
-  readonly strength: string;
+  /** Null where the client did not send one, which is every current build. */
+  readonly strength: string | null;
   readonly tricksDeclarer: number;
 }
 
@@ -122,6 +136,7 @@ interface HandLogRecord {
   readonly contract_level: Level;
   readonly contract_strain: Strain;
   readonly deal_json: string;
+  readonly difficulty: string | null;
   readonly declarer: PlayerId;
   readonly disguise: number;
   readonly id: string;
@@ -141,7 +156,7 @@ interface HandLogRecord {
 export async function handLogsFor(env: Env, limit: number): Promise<readonly HandLogRow[]> {
   const rows = await env.DB.prepare(
     `SELECT id, played_at, bot_version, boldness, strength, disguise, declarer,
-            contract_level, contract_strain, made, tricks_declarer, deal_json
+            contract_level, contract_strain, made, tricks_declarer, difficulty, deal_json
      FROM hand_logs ORDER BY played_at DESC LIMIT ?`,
   )
     .bind(limit)
@@ -154,11 +169,12 @@ export async function handLogsFor(env: Env, limit: number): Promise<readonly Han
     contractStrain: row.contract_strain,
     deal: JSON.parse(row.deal_json) as HandLogDeal,
     declarer: row.declarer,
+    difficulty: row.difficulty,
     disguise: row.disguise === 1,
     id: row.id,
     made: row.made === 1,
     playedAt: row.played_at,
-    strength: row.strength,
+    strength: row.strength === "" ? null : row.strength,
     tricksDeclarer: row.tricks_declarer,
   }));
 }

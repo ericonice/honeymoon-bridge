@@ -508,6 +508,70 @@ export interface MatchRecord {
  * than tallied by opponent — `recordsFor` answers "how am I doing against
  * them", this answers "what did I just play".
  */
+/** One seat of a finished match, as it was recorded. */
+export interface MatchSeat {
+  /** The name at the time, not the account's name now — see `everyRecentMatch`. */
+  readonly name: string;
+  readonly points: number;
+  readonly robot: boolean;
+}
+
+/**
+ * A finished match with no point of view.
+ *
+ * Everything else here answers "how did *you* do", which is why it takes an
+ * account and reports a `pointsFor` and a `pointsAgainst`. This one has no
+ * asker: it is two seats and a winner, which is the only honest shape for a
+ * list of games somebody else played.
+ */
+export interface AnyMatch {
+  readonly botVersion: number | null;
+  readonly deals: number;
+  readonly difficulty: string | null;
+  readonly finishedAt: number;
+  readonly format: MatchFormat;
+  readonly players: readonly [MatchSeat, MatchSeat];
+  readonly winner: PlayerId;
+}
+
+/**
+ * The most recently finished matches, by anybody.
+ *
+ * Not scoped to an account, which makes it the same kind of thing as
+ * `/api/hands` rather than the same kind as `recordsFor` — so it is gated on the
+ * playtester list rather than on an ordinary session, and the route answers 404
+ * rather than 401 to anyone else, since a route that says "not authorized" has
+ * admitted it exists.
+ *
+ * Names are the ones recorded on the row rather than what those accounts are
+ * called now. That is the opposite of `withNames`, and deliberate: this list is
+ * for looking at what happened, and somebody who has since renamed themselves
+ * still played that game under the name on it.
+ */
+export async function everyRecentMatch(env: Env, limit: number): Promise<AnyMatch[]> {
+  const rows = await env.DB.prepare(
+    `SELECT * FROM results ORDER BY finished_at DESC LIMIT ?`,
+  )
+    .bind(limit)
+    .all<ResultRow>();
+
+  return rows.results.map((row) => ({
+    // Only a robot seat has a version or a rung, and the robot is always seat 1
+    // on a robot row — but read from the token rather than assumed, since a
+    // networked row has neither and must not borrow one.
+    botVersion: row.token1 === ROBOT_TOKEN ? row.bot_version : null,
+    deals: row.deals,
+    difficulty: row.token1 === ROBOT_TOKEN ? row.difficulty : null,
+    finishedAt: row.finished_at,
+    format: row.format,
+    players: [
+      { name: row.nickname0, points: row.points0, robot: row.token0 === ROBOT_TOKEN },
+      { name: row.nickname1, points: row.points1, robot: row.token1 === ROBOT_TOKEN },
+    ] as const,
+    winner: row.winner as PlayerId,
+  }));
+}
+
 export async function recentMatchesFor(
   env: Env,
   accountId: string,

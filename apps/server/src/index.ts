@@ -19,7 +19,14 @@ import type { Env } from "./env.js";
 import { handLogsFor, recordHandLog } from "./handLogs.js";
 import type { HandLog } from "./handLogs.js";
 import { botAnchors } from "./ratings.js";
-import { recentMatchesFor, recordRubber, recordsFor, resetRecord, ROBOT_TOKEN } from "./results.js";
+import {
+  everyRecentMatch,
+  recentMatchesFor,
+  recordRubber,
+  recordsFor,
+  resetRecord,
+  ROBOT_TOKEN,
+} from "./results.js";
 
 export { Lobby } from "./lobby.js";
 export { Table } from "./table.js";
@@ -575,8 +582,14 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
     value.botVersion > 1000 ||
     typeof value.boldness !== "string" ||
     !BOLDNESS.has(value.boldness) ||
-    typeof value.strength !== "string" ||
-    !STRENGTHS.has(value.strength) ||
+    // `strength` is *not* required, and requiring it was a real outage. The
+    // difficulty rung took ownership of the sample count and the client stopped
+    // sending the old dial — at which point this rejected every hand log with a
+    // 400, and `outbox.ts` treats a 4xx as permanent, so they were dropped rather
+    // than retried. A validator for a field the sender has stopped having is the
+    // same failure as a validator for one it never had: the server must accept
+    // what an older *or newer* client sends, since the service worker guarantees
+    // both are in circulation.
     typeof value.disguise !== "boolean"
   ) {
     return null;
@@ -591,8 +604,14 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
     deviceToken: value.deviceToken,
     disguise: value.disguise,
     initialHands: [hand0, hand1] as HandLog["initialHands"],
-    strength: value.strength,
     tricksWon,
+    // Narrowed the same way a rung is on a result: stored as sent rather than
+    // checked against a list, so a client deployed ahead of the server keeps a
+    // usable log instead of one that reads as "before difficulty existed".
+    ...(rung(value.difficulty) === null ? {} : { difficulty: rung(value.difficulty)! }),
+    ...(typeof value.strength === "string" && STRENGTHS.has(value.strength)
+      ? { strength: value.strength }
+      : {}),
     ...(drawTurns === undefined
       ? {}
       : { drawTurns: drawTurns as NonNullable<HandLog["drawTurns"]> }),
@@ -954,6 +973,21 @@ export default {
     // an ordinary session, and a 404 rather than a 401 for anyone else, same
     // reasoning as `/api/auth/dev`: a route that says "not authorized" has
     // admitted it exists.
+    // Every recently finished match, by anybody. The same kind of route as
+    // `/api/hands` and gated the same way — not scoped to the asker, so a
+    // session is not the right permission and a 404 rather than a 401 keeps it
+    // from admitting it exists.
+    if (url.pathname === "/api/results/all" && request.method === "GET") {
+      const accountId = await accountFromRequest(request, env, Date.now());
+      const account = accountId === null ? null : await accountFor(env, accountId);
+      if (account === null || !isPlaytester(env, account.email)) {
+        return json(request, { error: "Not found" }, 404);
+      }
+      const asked = Number(url.searchParams.get("limit"));
+      const limit = Number.isInteger(asked) && asked > 0 && asked <= 200 ? asked : 50;
+      return json(request, { matches: await everyRecentMatch(env, limit) });
+    }
+
     if (url.pathname === "/api/hands" && request.method === "GET") {
       const accountId = await accountFromRequest(request, env, Date.now());
       const account = accountId === null ? null : await accountFor(env, accountId);

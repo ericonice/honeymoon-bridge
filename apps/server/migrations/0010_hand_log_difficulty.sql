@@ -1,0 +1,14 @@
+-- Which difficulty rung a logged deal was played on.
+--
+-- The client has been sending this since the ladder shipped and nothing stored
+-- it, so every deal logged in between reads as "before difficulty existed" and
+-- cannot be told apart. That is worse here than it sounds: the bottom rung bids
+-- with `simpleBidder` rather than the release's own bidder, so a hand log that
+-- cannot be split by rung would pool two genuinely different opponents into one
+-- average — which is the instrument failure `bench/hands.ts` exists to avoid and
+-- has already made twice.
+--
+-- Nullable, and null means "before this column existed" rather than "unknown",
+-- the same reading as `bot_version` and `results.difficulty`. A deal somebody
+-- played is worth keeping whether or not their client knew the question.
+ALTER TABLE hand_logs ADD COLUMN difficulty TEXT;

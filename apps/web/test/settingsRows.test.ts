@@ -98,3 +98,20 @@ test("the playtester panel adds rows rather than moving them", () => {
     expect(screen.queryByText(label), `"${label}" went missing for a playtester`).not.toBeNull();
   }
 });
+
+/**
+ * The other half of the gate, and the one the reachability test cannot make.
+ *
+ * These two rows show what *other people* have played — every logged hand and
+ * every finished match, by anybody. That is a different permission from "will
+ * try unfinished behavior", and the only thing standing between them is that
+ * the rows sit inside the panel. So assert they are absent without the flag,
+ * rather than trusting the block they happen to be written in.
+ */
+test("the rows that show other people's games are behind the flag", () => {
+  render(createElement(SettingsOverlay, settings(false)));
+
+  for (const label of ["Latest games", "Logged hands"]) {
+    expect(screen.queryByText(label), `"${label}" is reachable without the flag`).toBeNull();
+  }
+});
