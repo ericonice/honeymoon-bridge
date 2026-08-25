@@ -389,7 +389,7 @@ function estimateFor(contract: Contract, context: CallContext): number {
      * one term is not a reason to discard another.
      */
     const own =
-      searched !== undefined && searched.samples > 0
+      searched !== undefined && searched.samples >= MIN_SEARCH_SAMPLES
         ? searched.mean
         : ownEstimate(view, contract.strain);
     const implied = impliedByTheirBid(view, contract.strain);
@@ -419,9 +419,33 @@ function estimateFor(contract: Contract, context: CallContext): number {
  * this hand were declaring it, which is the exact confusion `estimateFor` was
  * written to end.
  */
+/**
+ * How many sampled hands a searched distribution needs before it is worth more
+ * than the fitted one.
+ *
+ * **A deadline-bounded search can come back with one sample, and one sample is
+ * not a distribution — it is a spike.** Measured at the first call, 250ms, three
+ * strains: the median is 12 samples but the minimum is 1, and **8% of deals get
+ * fewer than three while 18% get fewer than five**. Solve cost varies about
+ * fiftyfold with hand shape, so the starved deals are the flat ones with
+ * scattered honours — which are exactly the hands a counted estimate serves
+ * worst, so the search substitutes noise precisely where it was meant to help.
+ *
+ * The arithmetic agrees. The searched spread's own standard deviation is ~1.09
+ * tricks, so a one-sample mean carries that much sampling error on top of its
+ * own 1.24 — about 1.66 all told, against the counted estimate's 1.52. Below
+ * roughly three samples the search is *worse than counting*, and the whole
+ * distribution is worse still, because the bidder reads its shape and the shape
+ * of one sample is a certainty it has no business claiming.
+ *
+ * Five rather than three, since the crossover is where they merely tie and the
+ * fitted spread is calibrated rather than merely unbiased.
+ */
+const MIN_SEARCH_SAMPLES = 5;
+
 function oddsFor(context: CallContext, contract: Contract): readonly number[] | undefined {
   const spread = context.spreads?.get(contract.strain);
-  if (spread === undefined || context.searchMode === "mean") {
+  if (spread === undefined || spread.samples < MIN_SEARCH_SAMPLES || context.searchMode === "mean") {
     return undefined;
   }
   // This seat's own contracts only, for the reason `estimateFor` gives: the search
