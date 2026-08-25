@@ -7,6 +7,9 @@ import {
   expectedScore,
   HISTORY_LENGTH,
   K_FACTOR,
+  PROVISIONAL_K_FACTOR,
+  PROVISIONAL_MATCHES,
+  stepFor,
   ratingOf,
   ratingsFor,
   START_RATING,
@@ -110,10 +113,39 @@ describe("ratingsFor", () => {
     expect(ratings.rating.has(`token:${ROBOT_TOKEN}`)).toBe(false);
   });
 
-  it("moves a rating by the full K when the result was a certainty either way", async () => {
-    // Even money against an equal opponent: a win is exactly half a K.
+  it("moves a first result by the provisional K, not the settled one", async () => {
+    // Even money against an equal opponent: a win is exactly half a step, and a
+    // first match is still settling, so the step is the larger one.
     const drawnLevel = await of([vsPerson(0)]);
-    expect(drawnLevel).toBeCloseTo(START_RATING + K_FACTOR * 0.5, 6);
+    expect(drawnLevel).toBeCloseTo(START_RATING + PROVISIONAL_K_FACTOR * 0.5, 6);
+  });
+
+  /**
+   * The point of the provisional period: everybody starts a hundred points above
+   * the strongest bot, and at the settled K that prior takes tens of games to
+   * wash out. Asserted as a *comparison* rather than against a number, so the
+   * constants can be retuned without rewriting the claim they exist to make.
+   */
+  it("sheds the starting prior faster while a rating is settling", async () => {
+    const losses = Array.from({ length: 6 }, () => vsBot(1));
+    const settling = await of(losses);
+
+    // The same six losses, but arriving after the settling period is over.
+    const seasoned = await of([...Array.from({ length: 10 }, () => vsBot(0)), ...losses]);
+    const afterTen = await of(Array.from({ length: 10 }, () => vsBot(0)));
+
+    expect(START_RATING - settling).toBeGreaterThan(afterTen - seasoned);
+  });
+
+  it("returns to the settled K once the settling period is over", async () => {
+    const played = Array.from({ length: PROVISIONAL_MATCHES }, () => vsPerson(0));
+    const before = await of(played);
+    const after = await of([...played, vsPerson(0)]);
+    // Beating an opponent this far below you is nearly a certainty, so the step
+    // is small — but it must be a `K_FACTOR` step rather than a provisional one.
+    expect(after - before).toBeLessThan(K_FACTOR);
+    expect(stepFor(PROVISIONAL_MATCHES)).toBe(K_FACTOR);
+    expect(stepFor(PROVISIONAL_MATCHES - 1)).toBe(PROVISIONAL_K_FACTOR);
   });
 
   it("pays more for beating somebody better than you", async () => {

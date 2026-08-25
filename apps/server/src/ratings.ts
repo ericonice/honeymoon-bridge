@@ -26,6 +26,48 @@ export const START_RATING = 1500;
 export const K_FACTOR = 32;
 
 /**
+ * How far a result moves a rating that has barely any results behind it.
+ *
+ * **Everybody starts at 1500 and the strongest bot is anchored at 1400, so a new
+ * player's number begins a hundred points too high and stays there.** At the
+ * settled K a break-even run sheds about four points a match, so the starting
+ * prior takes tens of games to wash out — and in a pool that plays a handful of
+ * rubbers a week, tens of games is most of a season. That is structural
+ * flattery: being told you are better than you are, by the arithmetic rather
+ * than by a wrong constant, which is the error this file argues against
+ * everywhere else.
+ *
+ * Measured against one real history of nine matches: a flat K put that player at
+ * 1423 where their own results imply somewhere near 1280. Doubling K for the
+ * first ten puts them at 1361 on identical data — not the right answer, but a
+ * great deal less of the prior.
+ *
+ * A provisional period is what chess federations do for exactly this, and the
+ * trade is worth stating: an early loss moves the number by about 36 points
+ * rather than 18, so a rating in its first ten matches is visibly jumpy. That is
+ * the cost of it meaning something after ten games instead of thirty.
+ *
+ * **It does not make a small sample more informative**, only faster to converge.
+ * Six matches against one opponent is consistent with a range hundreds of points
+ * wide, and a bigger K reaches a point inside that range sooner without knowing
+ * any better which point is right.
+ */
+export const PROVISIONAL_K_FACTOR = 64;
+
+/** How many matches count as still settling. Ten is the chart's own shaded stretch. */
+export const PROVISIONAL_MATCHES = 10;
+
+/**
+ * The step this result should move a rating by, from how much history is behind it.
+ *
+ * Counted per identity rather than globally, so somebody joining a pool that has
+ * been playing for months still gets their own settling period.
+ */
+export function stepFor(played: number): number {
+  return played < PROVISIONAL_MATCHES ? PROVISIONAL_K_FACTOR : K_FACTOR;
+}
+
+/**
  * What each computer opponent is worth, and the one genuinely invented number here.
  *
  * **The ordering is asserted, not measured, and the recorded games cannot settle
@@ -316,7 +358,9 @@ export async function ratingsFor(env: Env): Promise<Ratings> {
       const id = identityOf(seat.account, seat.token);
       const scored = row.winner === index ? 1 : 0;
       const expected = expectedScore(before[index], before[index === 0 ? 1 : 0]);
-      const after = before[index] + K_FACTOR * (scored - expected);
+      // How many *this identity* has played, not how many the pool has, so a
+      // newcomer to an established pool still gets their own settling period.
+      const after = before[index] + stepFor(played.get(id) ?? 0) * (scored - expected);
       rating.set(id, after);
       played.set(id, (played.get(id) ?? 0) + 1);
 

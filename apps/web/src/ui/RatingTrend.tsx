@@ -22,10 +22,17 @@ export interface RatingTrendProps {
  * Matches before the line means anything.
  *
  * Everybody starts at `STARTING_RATING`, and the first results move by nearly a
- * whole K each because the expectation is still wrong — so the opening stretch
- * ramps whatever the player did. **Shaded rather than trimmed**: hiding it would
- * make the line start at an unexplained height, where saying "settling" explains
- * both the shape and why it should be ignored.
+ * whole step each because the expectation is still wrong — so the opening
+ * stretch ramps whatever the player did. **Shaded rather than trimmed**: hiding
+ * it would make the line start at an unexplained height, where saying "settling"
+ * explains both the shape and why it should be ignored.
+ *
+ * Ten because that is the server's `PROVISIONAL_MATCHES` — the stretch where a
+ * result really does move the rating twice as far, so the band marks a fact
+ * about the arithmetic rather than a caution somebody chose. The two are not
+ * imported from one place, because they live in different workspaces; if the
+ * server's changes, this has to follow, and the band is the more forgiving of
+ * the two to be wrong.
  */
 const SETTLING = 10;
 

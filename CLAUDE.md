@@ -1351,6 +1351,27 @@ whenever the thing it names can happen twice.** `test/ratingTrend.test.ts` cover
 release, none, and a person played between two bots — that last because a null either side of a version
 is not a change of opponent worth a rule.
 
+**A rating settles twice as fast for its first ten matches, and the reason is arithmetic rather than
+taste.** Everybody starts at 1500 and the strongest bot is anchored at 1400, so a new player's number
+begins a hundred points too high. At `K_FACTOR` a break-even run sheds about four points a match, so
+that prior survives tens of games — and in a pool playing a handful of rubbers a week, tens of games is
+most of a season. **That is structural flattery**: being told you are better than you are by the
+arithmetic rather than by a wrong constant, which is the error `ratings.ts` argues against everywhere
+else.
+
+Measured against one real nine-match history: a flat K gave 1423 where that player's own results imply
+somewhere near 1280, and doubling K for the first ten gave **1361** on identical data. A provisional
+period is what chess federations do for exactly this. `PROVISIONAL_MATCHES` is counted **per identity**
+rather than per pool, so somebody joining an established family still gets their own settling stretch,
+and the chart's shaded band is the same ten — it now marks a fact about the arithmetic rather than a
+caution somebody chose.
+
+**What it does not do is make a small sample informative.** Six matches against one opponent is
+consistent with a range hundreds of points wide; a bigger K arrives at a point inside that range sooner
+without knowing any better which point is right. The stated cost: an early loss moves the number by
+about 36 rather than 18, so a new rating is visibly jumpy. That buys a number meaning something after
+ten games instead of thirty.
+
 **The trap to state before anyone reads a flat line as a plateau:** because the bot is pinned, the
 line converges toward *bot + the player's true gap* and then flattens. That is having found your
 level, not having stopped improving, and the only way past it is a stronger opponent — which is what
