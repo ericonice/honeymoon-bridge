@@ -92,6 +92,19 @@ function surplusOver(missing: number, count: number, bid: boolean): number {
 }
 
 /**
+ * The chance this hand's trump run has already drawn the other hand's trumps.
+ *
+ * What every side suit under a trump contract is discounted by, since length only
+ * cashes once nothing is left to ruff it. Exported so `bench/calibrate.ts` can bucket
+ * a bias on it rather than keeping a second copy of the same expression — a bucket
+ * keyed on its own re-derivation of a term is a bucket that can drift away from the
+ * term it is meant to be accusing.
+ */
+export function trumpsClearedShare(trumps: readonly Card[], bid = false): number {
+  return exhaustedBy(SUIT_LENGTH - trumps.length, topRun(trumps), bid);
+}
+
+/**
  * Honors held in an unbroken run down from the ace.
  *
  * Distinct from `quickTricks`, which answers how many tricks a *side suit*
@@ -316,7 +329,7 @@ export function rawTricks(options: RawTricksOptions): number {
   // rarely clears them in time, so a balanced hand still gets next to nothing
   // here; this only pays out once the trump suit is genuinely doing the
   // clearing, which is what lets a balanced hand still prefer no-trump.
-  const trumpsDrawn = exhaustedBy(SUIT_LENGTH - trumps.length, topRun(trumps), bid);
+  const trumpsDrawn = trumpsClearedShare(trumps, bid);
   const side = SUITS.reduce(
     (total, suit) =>
       suit === strain
@@ -438,6 +451,32 @@ function voidRuffTricks(hand: readonly Card[], strain: Strain, trumpLength: numb
  * whenever they hold three or more, alive when they do not, which is often
  * enough to matter across four suits. Counting only the certain cards is what
  * left no-trump chronically undervalued.
+ *
+ * **Asking that credit per card was tried and reverted, and the failure is worth
+ * keeping.** Arithmetically the single probability is wrong: it asks whether the
+ * opponent is exhausted by this hand's honour *run*, which is the right question for
+ * the card immediately below the run and too pessimistic for the ones after it — if
+ * they hold `h` of the missing cards, this hand's `i`th card outlasts theirs whenever
+ * `h < i`. Summing that per card is more nearly correct and made the model worse.
+ *
+ * It was aimed at a real bias — side-suit cards past the third ran **+0.26 / −0.26 /
+ * −0.54** over 1,200 declaring observations as their count went 0, 1, 2 — and it barely
+ * moved it (+0.33 / −0.06 / −0.49), because a side suit under a trump contract is
+ * multiplied by `trumpsDrawn`, which is below 0.25 on half of all hands. So the extra
+ * credit went almost entirely to **no-trump**, where the discount is 1 and there are
+ * four suits to collect it in: no-trump went from chosen 14 times in 800 hands to 147
+ * in 1,200 and carried a **+1.08** bias, and the strain choice's cost against par rose
+ * from 0.14 tricks a hand to 0.22.
+ *
+ * That is the same failure `RACE_COST` had in reverse, and the numbers say so exactly:
+ * these notes already record that `RUNOUT` at 1.0 over-values no-trump by 1.3 tricks,
+ * and summing per card is worth about the same as raising `RUNOUT` to 0.9. **A term
+ * fitted under a pessimistic form cannot have the form corrected underneath it without
+ * being refitted**, and the bias the change was aimed at is not in this expression at
+ * all — the cross-tab points at the discount instead: with a long side suit the
+ * shortfall is −0.34 where `trumpsDrawn` is under a half and +0.12 where it is over,
+ * so what is too pessimistic is the chance the trumps have been cleared, not the
+ * chance their suit has run out.
  *
  * The second, gated by `declaring`, is the third-or-later card of an unbroken
  * run beyond what `winners` already caps at two: AKQ cashes all three,

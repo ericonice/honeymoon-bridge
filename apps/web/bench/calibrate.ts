@@ -1,6 +1,13 @@
 import { STRAINS, SUITS, applyAction, createRng, opponentOf, startDeal } from "@hb/engine";
 import type { Card, Pair, PlayerId, Strain } from "@hb/engine";
-import { cardsIn, defenseFromRaw, rawTricks, topRun, tricksFromRaw } from "../src/bot/evaluate.js";
+import {
+  cardsIn,
+  defenseFromRaw,
+  rawTricks,
+  topRun,
+  tricksFromRaw,
+  trumpsClearedShare,
+} from "../src/bot/evaluate.js";
 import { createHeuristicBot } from "../src/bot/heuristicBot.js";
 import { solve } from "../src/bot/solver.js";
 import { botActionFor, loveAll } from "../src/game/botTurn.js";
@@ -265,6 +272,143 @@ function report(
     );
   }
 
+  // Suit contracts only, and keyed directly on the assumption `trumpTricks` makes:
+  // that every trump beneath the run down from the ace wins, either by being high or
+  // by ruffing. `beneath` is exactly how many cards that assumption is being applied
+  // to, so if it is too generous the bias should climb with it.
+  //
+  // Three recorded deals are what this is looking for — 4D on `D:AJ987543` and 4H on
+  // `H:A1096532`, both estimated near nine tricks against a par of six and seven.
+  // Eight diamonds to the AJ is not eight tricks when the opponent holds KQ10, and
+  // nothing in the model currently asks. Measured before anything is changed, which is
+  // the order the no-trump race term was found in.
+  for (let beneath = 0; beneath <= 6; beneath++) {
+    const group = observations.filter((one) => {
+      if (one.strain === "NT" || one.role !== "declare") {
+        return false;
+      }
+      const actual = trumpsBeneathRun(one.hand, one.strain);
+      return beneath === 6 ? actual >= 6 : actual === beneath;
+    });
+    if (group.length === 0) {
+      continue;
+    }
+    const bias = group.reduce((total, one) => total + (predict(one.raw) - one.par), 0) / group.length;
+    console.log(
+      `    trumps under run ${beneath}${beneath === 6 ? "+" : " "} ${bias >= 0 ? "+" : ""}${bias.toFixed(2)}  over ${group.length}`,
+    );
+  }
+
+  // `beneath` and trump length move together, and length is already inside raw — so
+  // the bucket above could be reading a length bias rather than a top-run one. This
+  // holds the length long and varies only the top, which is the version of the claim
+  // that cannot be explained by length.
+  for (let run = 0; run <= 3; run++) {
+    const group = observations.filter((one) => {
+      if (one.strain === "NT" || one.role !== "declare") {
+        return false;
+      }
+      const trumps = cardsIn(one.hand, one.strain);
+      if (trumps.length < 6) {
+        return false;
+      }
+      const actual = topRun(trumps);
+      return run === 3 ? actual >= 3 : actual === run;
+    });
+    if (group.length === 0) {
+      continue;
+    }
+    const bias = group.reduce((total, one) => total + (predict(one.raw) - one.par), 0) / group.length;
+    console.log(
+      `    6+ trumps, run ${run}${run === 3 ? "+" : " "}  ${bias >= 0 ? "+" : ""}${bias.toFixed(2)}  over ${group.length}`,
+    );
+  }
+
+  // The second-suit trend above is a proxy and the notes on it say so, so these are
+  // the two conditions it could actually be. Under a suit contract a side suit gets
+  // `safe` winners plus `RUNOUT * beneath * exhaustedBy(missing, run)` — and that last
+  // probability asks whether the opponent is exhausted by this hand's *honor run*, so a
+  // side suit headed by KQJ9 is asked "do they hold none of the nine missing" and
+  // credited almost nothing for its fourth card. `side past 3` counts exactly those
+  // cards: the fourth and fifth of a long side suit, which a real hand cashes far more
+  // often than that probability says.
+  for (let past = 0; past <= 3; past++) {
+    const group = observations.filter((one) => {
+      if (one.strain === "NT" || one.role !== "declare") {
+        return false;
+      }
+      const actual = sideCardsPastThird(one.hand, one.strain);
+      return past === 3 ? actual >= 3 : actual === past;
+    });
+    if (group.length === 0) {
+      continue;
+    }
+    const bias = group.reduce((total, one) => total + (predict(one.raw) - one.par), 0) / group.length;
+    console.log(
+      `    side past 3: ${past}${past === 3 ? "+" : " "}   ${bias >= 0 ? "+" : ""}${bias.toFixed(2)}  over ${group.length}`,
+    );
+  }
+
+  // The other half of the same expression: `trumpsDrawn` discounts every side suit by
+  // the chance this hand's trumps have cleared theirs. If the shortfall is concentrated
+  // where that discount is *high* — a long solid trump suit, which genuinely does draw
+  // them — then the discount is doing its job and the probability inside `runOutTricks`
+  // is the term at fault. If it is spread evenly, the discount is the suspect instead.
+  for (const [low, high, label] of [
+    [0, 0.25, "0.00-0.25"],
+    [0.25, 0.5, "0.25-0.50"],
+    [0.5, 0.75, "0.50-0.75"],
+    [0.75, 1.01, "0.75-1.00"],
+  ] as const) {
+    const group = observations.filter((one) => {
+      if (one.strain === "NT" || one.role !== "declare") {
+        return false;
+      }
+      const drawn = trumpsDrawnFor(one.hand, one.strain);
+      return drawn >= low && drawn < high;
+    });
+    if (group.length === 0) {
+      continue;
+    }
+    const bias = group.reduce((total, one) => total + (predict(one.raw) - one.par), 0) / group.length;
+    console.log(
+      `    trumps drawn ${label} ${bias >= 0 ? "+" : ""}${bias.toFixed(2)}  over ${group.length}`,
+    );
+  }
+
+  // The two buckets above are suspected of being one condition seen twice: a hand with a
+  // long solid trump suit has a high `trumpsDrawn` *and* short side suits, because the
+  // trumps are where its cards went. So this holds the side length fixed and varies only
+  // the discount. If the shortfall survives, they are two effects; if it flattens, the
+  // second bucket was reading the first, which is the confound the second-suit proxy
+  // already turned out to be.
+  for (const [past, label] of [
+    [0, "no long side"],
+    [1, "1+ long side"],
+  ] as const) {
+    for (const [low, high, band] of [
+      [0, 0.5, "drawn<0.5"],
+      [0.5, 1.01, "drawn≥0.5"],
+    ] as const) {
+      const group = observations.filter((one) => {
+        if (one.strain === "NT" || one.role !== "declare") {
+          return false;
+        }
+        const cards = sideCardsPastThird(one.hand, one.strain);
+        const drawn = trumpsDrawnFor(one.hand, one.strain);
+        return (past === 0 ? cards === 0 : cards >= 1) && drawn >= low && drawn < high;
+      });
+      if (group.length === 0) {
+        continue;
+      }
+      const bias =
+        group.reduce((total, one) => total + (predict(one.raw) - one.par), 0) / group.length;
+      console.log(
+        `    ${label}, ${band}  ${bias >= 0 ? "+" : ""}${bias.toFixed(2)}  over ${group.length}`,
+      );
+    }
+  }
+
   // No-trump only, and keyed on the one thing `rawTricks` has no term for at
   // all: with no dummy, a suit this hand cannot stop is cashed to the end, and
   // every trick of it forces a discard from the winners this hand was counting.
@@ -295,6 +439,37 @@ function secondSuitLength(hand: readonly Card[]): number {
 }
 
 /** Whether some suit other than `strain` holds an unbroken run of three or more from the ace. */
+/**
+ * Trumps not part of the unbroken run down from the ace.
+ *
+ * The cards `trumpTricks` assumes win anyway — high enough or spare enough to ruff
+ * with. AKQ has none; AJ987543 has seven.
+ */
+function trumpsBeneathRun(hand: readonly Card[], strain: Strain): number {
+  if (strain === "NT") {
+    return 0;
+  }
+  const trumps = cardsIn(hand, strain);
+  return trumps.length - topRun(trumps);
+}
+
+/** Side-suit cards past the third — the fourth and fifth of a long side suit. */
+function sideCardsPastThird(hand: readonly Card[], strain: Strain): number {
+  return SUITS.filter((suit) => suit !== strain).reduce(
+    (total, suit) => total + Math.max(0, cardsIn(hand, suit).length - 3),
+    0,
+  );
+}
+
+/** The chance this hand's trump run has cleared theirs, which discounts every side suit. */
+function trumpsDrawnFor(hand: readonly Card[], strain: Strain): number {
+  if (strain === "NT") {
+    return 0;
+  }
+  const trumps = cardsIn(hand, strain);
+  return trumpsClearedShare(trumps);
+}
+
 function hasLongSideRun(hand: readonly Card[], strain: Strain): boolean {
   return SUITS.some((suit) => suit !== strain && topRun(cardsIn(hand, suit)) >= 3);
 }

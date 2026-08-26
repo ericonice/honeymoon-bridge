@@ -2366,14 +2366,72 @@ auction.
   no-trump" regression once before; both fixes were checked against that test and against the full
   bucketed bias, not just the overall number, on the way in.
 
-- **Three of the eight recorded disasters survive, and they are a different bug.** Deals 31, 33 and
-  39 in the log: the bot bids 4♦ on `D:AJ987543` and 4♥ on `H:A1096532`, both estimated near nine
-  tricks against a par of six and seven. Neither is an auction-reading failure — the trust weight
-  only just tips them either way — it is `trumpTricks` over-valuing a long suit with thin honors.
-  Eight diamonds to the AJ is not eight tricks when the opponent holds KQ10, and nothing in the
-  model asks. Same shape as the no-trump race gap, and it wants the same treatment: a bucket in
-  `bench/calibrate.ts` keyed on trump length against trump top-run, measured before anything is
-  changed.
+- **Three surviving disasters were blamed on `trumpTricks` and the measurement cleared it.** Deals
+  31, 33 and 39 in the log: the bot bids 4♦ on `D:AJ987543` and 4♥ on `H:AT96532`, both estimated
+  near nine tricks against a par of six and seven in the deal as played. The diagnosis written here
+  was that `trumpTricks` over-values a long suit with thin honors — eight diamonds to the AJ is not
+  eight tricks when the opponent holds KQ10 — and the prescription was to bucket
+  `bench/calibrate.ts` on trump length against trump top-run before changing anything. **Done, and
+  it says no.** Over 1,200 declaring observations in the strain the bidder actually picks:
+
+  | trumps under the run | 0 | 1 | 2 | 3 | 4 | 5 | 6+ |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | bias | +0.12 | −0.09 | −0.16 | +0.01 | −0.06 | −0.02 | +0.17 |
+
+  Dead flat, and holding the length at six or more and varying only the top gives no trend either
+  (+0.08 / +0.20 / −0.13 / +0.36). `bench/strain.ts` says the same thing about the two hands
+  themselves, which is the sharper test: over 300 shared opponent hands the diamond hand measures
+  **8.81** in diamonds against an estimate of 9.17, and the heart hand **7.66** against 8.27. Both
+  within half a trick, and that is before refitting.
+
+  **So those deals were the lie of the cards, not a systematic bias.** Par in the deal as played was
+  six; par averaged over 300 plausible opponents is 8.81. Those are not in conflict, and reading the
+  first as evidence about the model was the mistake — the same one as reading a win rate off five
+  rubbers. **Three deals is a hypothesis, not a measurement**, and this file had written the
+  hypothesis down as a cause.
+
+- **What the same buckets did find is keyed on side-suit length, and the obvious fix made things
+  worse.** Over 1,200 declaring observations, bias by how many side-suit cards sit past the third:
+
+  | side cards past the third | 0 | 1 | 2 |
+  | --- | --- | --- | --- |
+  | bias | **+0.26** | **−0.26** | **−0.54** |
+
+  Monotone, about 0.8 tricks across the range, on exactly the population the bidder faces. It is one
+  effect rather than two: `trumpsDrawn` showed a matching +0.28 in its top band, and holding side
+  length fixed while varying the discount flattens it — the same hands seen twice, which is what the
+  second-suit-length proxy already turned out to be.
+
+  The term accused is `runOutTricks`, which prices the cards below the honour run as
+  `RUNOUT × beneath × exhaustedBy(missing, run)` — one probability applied to every card. That is
+  arithmetically wrong: if they hold `h` of the missing cards, this hand's `i`th card outlasts theirs
+  whenever `h < i`, so the fourth card of a suit asks about three and the fifth about four, where the
+  code asks about the run for all of them. **Summing the correct question per card was built,
+  measured and reverted.**
+
+  | | before | per-card |
+  | --- | --- | --- |
+  | side past the third, 0 / 1 / 2 | +0.26 / −0.26 / −0.54 | +0.33 / −0.06 / −0.49 |
+  | no-trump chosen | 14 of 800 | **147 of 1,200** |
+  | no-trump bias | +0.55 | **+1.08** |
+  | strain choice against par | 0.14 tricks a hand | **0.22** |
+
+  **It barely moved the bias it was aimed at and broke the strain choice**, because a side suit under
+  a trump contract is multiplied by `trumpsDrawn`, which is under 0.25 on half of all hands — so
+  almost none of the extra credit reached the trump contracts the bias lives in, and all of it
+  reached no-trump, where the discount is 1 and there are four suits to collect it in. This file
+  already records that `RUNOUT` at 1.0 over-values no-trump by 1.3 tricks, and summing per card is
+  worth about as much as raising `RUNOUT` to 0.9, so the outcome was predictable from a number
+  already written down. **A constant fitted under a pessimistic form cannot have the form corrected
+  underneath it without being refitted.**
+
+  Two things are left. The bias is real and unexplained: it is roughly uniform in trump quality, so
+  it is not "the side suit cashes once trumps are drawn" — the likelier mechanism is *establishing* a
+  second suit by ruffing out their high cards in it, which no term prices and which `voidRuffTricks`
+  only touches for an actual void. And the honest reading of the failed attempt is that the per-card
+  form is more nearly correct and would need `RUNOUT` refitted with it; that is a fit of a knob these
+  notes call touchy, so it wants doing deliberately rather than as a side effect. Measure the ruffing
+  condition first, keyed on trump length against second-suit length together.
 
 - **No-trump is chosen on 13 hands in 800 where par ranks it joint-best on 169.** The race term is
   not costing tricks — the strain choice's shortfall against par *improved*, 0.15 to 0.12 — but it
@@ -2382,6 +2440,14 @@ auction.
   estimate it is handed is now about 0.6 tricks lower for no-trump, so the comparison starts behind.
   Worth a bench that scores strain choice in points rather than in tricks before touching
   `RACE_FREE`.
+
+  **One data point on that now, from the failed per-card change above, and it argues the other way.**
+  That change raised no-trump selection from 14 hands in 800 to 147 in 1,200 — from 1.8% to 12%
+  against par's 21% — which is the direction this thread wants, and the strain choice's cost against
+  par got *worse*, 0.14 to 0.22 tricks a hand. So the shortfall is not simply timidity waiting to be
+  corrected: at least some of the hands no-trump is not being chosen on are hands it should not be
+  chosen on. The points bench is still the right instrument; it now has a tricks-side result to beat
+  rather than only a suspicion.
 
 - **Turn clock.** None in v1. Revisit if the 26-turn draw phase drags.
 
