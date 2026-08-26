@@ -28,10 +28,8 @@ import {
   difficulty,
   preferredRelease,
   disguiseEnabled,
-  drawStyle,
   pace,
   preferredFormat,
-  rulesFor,
 } from "./identity.js";
 import { reportRobotRubber } from "./records.js";
 import type { GameSession } from "./session.js";
@@ -194,7 +192,6 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
   const [table, setTable] = useState<TableState>(() =>
     startTable({
       format: preferredFormat(),
-      rules: rulesFor(drawStyle()),
       seed: dealSeed.current,
       // Randomized rather than always the human: every deal after this one
       // already alternates who starts — see `nextDeal` — so this is the only
@@ -336,9 +333,6 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
         disguise: disguiseEnabled(),
         drawTurns: deal.drawTurns,
         initialHands: deal.initialHands,
-        // Off the deal rather than the setting, which may have been changed since
-        // the deal began and would then describe a game nobody played.
-        rules: deal.rules,
         seed: dealSeed.current,
         // The score the deal was *bid* at, which is not the score it left
         // behind. Without it a replayed auction is a different decision from

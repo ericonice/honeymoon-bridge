@@ -114,13 +114,12 @@ describe("player view", () => {
     for (const card of state.hands[1]) {
       expect(view.hand.some((held) => cardId(held) === cardId(card))).toBe(false);
     }
-    // Every card either seat threw away, looked for as a card rather than as a
-    // field name — `discardTop` is a legitimate field that is null under these
-    // rules, and matching the word alone found the name and called it a leak.
+    // Every card either seat threw away, looked for as a card rather than by
+    // field name: the projection is checked for the cards themselves, so a field
+    // added later that happened to carry one would still be caught.
     for (const card of [...state.discards[0], ...state.discards[1]]) {
       expect(serialized).not.toContain(JSON.stringify(card));
     }
-    expect(view.discardTop).toBeNull();
     expect(serialized).not.toContain("stock\"");
     expect(view.handSizes).toEqual([13, 13]);
   });

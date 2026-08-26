@@ -1,6 +1,5 @@
 import {
   applyDealScore,
-  BASE_RULES,
   createRng,
   opponentOf,
   scoreDeal,
@@ -14,7 +13,6 @@ import type {
   Card,
   CompletedTrick,
   Contract,
-  DealRules,
   Pair,
   PlayerId,
   PlayerView,
@@ -62,8 +60,17 @@ interface LoggedDeal {
   readonly completedTricks: readonly CompletedTrick[];
   readonly contract: Contract;
   readonly initialHands: Pair<readonly Card[]>;
-  /** Absent from a deal logged before the house rules existed, which means the base game. */
-  readonly rules?: DealRules;
+  /**
+   * The house rules the deal was played under, for deals played while there were
+   * any.
+   *
+   * The open discard was withdrawn (§3.6b), so no current deal carries this and the
+   * engine has no such type any more — but a deal logged under it really was played
+   * under it, and pooling those with deals of the game as specified would report a
+   * number describing neither. Hence the local shape: it describes what is in the
+   * log, not what the rules are.
+   */
+  readonly rules?: { readonly openDiscard?: boolean };
   /**
    * The rubber and vulnerability the deal was bid at.
    *
@@ -309,7 +316,6 @@ function replayCall(hand: LoggedHand, before: number): Call | null {
     completedTricks: [],
     contract: null,
     currentTrick: [],
-    discardTop: null,
     drawTurns: [],
     hand: sortHand(deal.initialHands[BOT]),
     handSizes: [13, 13],
@@ -319,7 +325,6 @@ function replayCall(hand: LoggedHand, before: number): Call | null {
     pending: null,
     phase: "auction",
     revealedHand: null,
-    rules: deal.rules ?? BASE_RULES,
     starter: deal.starter ?? HUMAN,
     stockRemaining: 0,
     toAct: BOT,

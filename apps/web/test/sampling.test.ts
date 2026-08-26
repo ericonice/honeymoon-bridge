@@ -1,4 +1,4 @@
-import { applyAction, BASE_RULES, cardId, createRng, playableFrom, startDeal } from "@hb/engine";
+import { applyAction, cardId, createRng, playableFrom, startDeal } from "@hb/engine";
 import type { Card, DealState, PlayerId, PlayerView, Rank, Suit } from "@hb/engine";
 import { describe, expect, it } from "vitest";
 import { sampleOpponentHand, shownVoids } from "../src/bot/sample.js";
@@ -23,7 +23,6 @@ function viewWith(overrides: Partial<PlayerView>): PlayerView {
     completedTricks: [],
     contract: { declarer: 0, doubling: "none", level: 3, strain: "NT" },
     currentTrick: [],
-    discardTop: null,
     drawTurns: [],
     hand: [],
     handSizes: [13, 13],
@@ -33,7 +32,6 @@ function viewWith(overrides: Partial<PlayerView>): PlayerView {
     pending: null,
     phase: "play",
     revealedHand: null,
-    rules: BASE_RULES,
     starter: 0,
     stockRemaining: 0,
     toAct: 0,

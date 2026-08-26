@@ -1,4 +1,4 @@
-import { applyAction, BASE_RULES, createRng, dealScoreFor, startDeal } from "@hb/engine";
+import { applyAction, createRng, dealScoreFor, startDeal } from "@hb/engine";
 import type { Card, DealState, PlayerId, PlayerView, Rank, Suit } from "@hb/engine";
 import { describe, expect, it } from "vitest";
 import { bestStrain, defensiveTricks, estimatedTricks, quickTricks } from "../src/bot/evaluate.js";
@@ -120,7 +120,6 @@ function openingView(myHand: Card[]): PlayerView {
     completedTricks: [],
     contract: null,
     currentTrick: [],
-    discardTop: null,
     drawTurns: [],
     hand: myHand,
     handSizes: [13, 13],
@@ -130,7 +129,6 @@ function openingView(myHand: Card[]): PlayerView {
     pending: null,
     phase: "auction",
     revealedHand: null,
-    rules: BASE_RULES,
     starter: 0,
     stockRemaining: 0,
     toAct: 0,

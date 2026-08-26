@@ -3,7 +3,6 @@ import type {
   Card,
   CompletedTrick,
   Contract,
-  DealRules,
   DrawTurnRecord,
   Level,
   Pair,
@@ -12,6 +11,21 @@ import type {
   Strain,
 } from "@hb/engine";
 import type { Env } from "./env.js";
+
+/**
+ * The house rules a deal was played under, for the deals played while there were
+ * any.
+ *
+ * The open discard was withdrawn (§3.6b), so the engine has no such type any more
+ * and no current client sends this — but the deals already logged under it really
+ * were played under it, and a bench pooling them with deals of the game as
+ * specified would report a number describing neither. Declared here rather than
+ * imported for exactly that reason: it describes what is in the table, not what
+ * the rules are.
+ */
+export interface LoggedDealRules {
+  readonly openDiscard: boolean;
+}
 
 /** A completed robot-game deal, as the browser that played it saw it. */
 export interface HandLog {
@@ -31,8 +45,8 @@ export interface HandLog {
   /** Absent from a build that predates them — see `handLogFrom`. */
   readonly drawTurns?: readonly DrawTurnRecord[];
   readonly initialHands: Pair<readonly Card[]>;
-  /** Absent from a build that predates the house rules; absent means the base game. */
-  readonly rules?: DealRules;
+  /** Set only by a build that had house rules to report — see `LoggedDealRules`. */
+  readonly rules?: LoggedDealRules;
   readonly seed?: number;
   readonly standing?: HandLogStanding;
   readonly starter?: PlayerId;
@@ -105,7 +119,7 @@ export interface HandLogDeal {
   readonly contract: Contract;
   readonly drawTurns?: readonly DrawTurnRecord[];
   readonly initialHands: Pair<readonly Card[]>;
-  readonly rules?: DealRules;
+  readonly rules?: LoggedDealRules;
   readonly seed?: number;
   readonly standing?: HandLogStanding;
   readonly starter?: PlayerId;

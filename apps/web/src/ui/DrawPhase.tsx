@@ -69,19 +69,14 @@ function Chose({ children }: { readonly children: React.ReactNode }): React.JSX.
 /**
  * The running commentary on the opponent's turn.
  *
- * Their choice is public even though neither of their cards is, and under the base
- * rules it is the only thing you ever learn about their hand — so it is said in
- * words as well as shown by where their cards go. Under `openDiscard` there is one
- * more thing to say and it is worth far more: which of *your* cards they just
- * picked up.
+ * Their choice is public even though neither of their cards is, and it is the only
+ * thing you ever learn about their hand — so it is said in words as well as shown
+ * by where their cards go.
  */
 function OpponentLine({
-  lastDraw,
   settling,
   view,
 }: {
-  /** The turn that just resolved, which names their card only if they lifted it off the pile. */
-  readonly lastDraw: DrawReveal | null;
   readonly settling: boolean;
   readonly view: PlayerView;
 }): React.JSX.Element {
@@ -117,39 +112,17 @@ function OpponentLine({
         </>
       );
     }
-    case "took-discard": {
-      // Named as *your* card rather than as "the discard", because that is the
-      // fact worth reading: a card you threw away is now in their hand. And named
-      // outright while the reveal is still theirs — it was lying face up when they
-      // took it, so there is nothing here to protect. Once you draw again the card
-      // stops being sent and the sentence goes back to being general, which is the
-      // same rule as every other reveal: it plays once, at the moment of the turn.
-      const took = lastDraw !== null && lastDraw.by === view.opponent ? lastDraw.taken : null;
-      return took === null ? (
-        <>
-          took <Chose>your discard</Chose>
-        </>
-      ) : (
-        <>
-          took your{" "}
-          <Chose>
-            <CardText card={took} on="dark" />
-          </Chose>
-        </>
-      );
-    }
   }
 }
 
 /**
  * The edge that marks a card as one this turn can be spent on.
  *
- * Position is what this screen uses to say what a thing is, and the choices now sit
- * in one row saying it properly — this is no longer carrying that job on its own,
- * which is what it was introduced to do while the third choice was still stranded
- * beside the stock. What is left for it is the other half: *now*. It says the board
- * has settled and the turn is yours, which is a thing the row's mere existence
- * cannot say, and it is why it appears and disappears rather than being painted on.
+ * Position is what this screen uses to say what a thing is, and the two choices sit
+ * in one row saying it properly — so what is left for this is the other half: *now*.
+ * It says the board has settled and the turn is yours, which is a thing the row's
+ * mere existence cannot say, and it is why it appears and disappears rather than
+ * being painted on.
  *
  * Amber because the app already spends amber on exactly one idea — it is your move
  * (`SeatLabel` when active, the current dot in `TurnTrack`) — and "you may take
@@ -296,14 +269,10 @@ const TURNS_PER_PLAYER = 13;
  * decision, which is the whole of what this phase asks. A card that was face up
  * and a card that was not are different bets, and thirteen of them in a row is a
  * record of how somebody played the draw rather than merely how far through it
- * they are. The pile take gets its own fill rather than sharing the face-up one:
- * it is equally a seen card, but it is the only choice that takes a card *the
- * other player threw*, and under the house rule that is the interesting half of
- * what happened.
+ * they are.
  */
 const SPENT_DOT: Record<DrawChoice, string> = {
   "kept-first": "bg-sky-300",
-  "took-discard": "bg-emerald-300",
   "took-second": "bg-violet-400",
 };
 
@@ -411,15 +380,13 @@ function pairFor(
  *
  * Choreographed by card 1 and card 2 rather than by taken and discarded, because
  * which of the two goes where *is* the choice. Both leave from the pair rather
- * than from the stock, since that is where they already are — and on a
- * `took-discard` neither of them goes to a hand at all: they both land on the
- * pile, and the card that comes back the other way is the one lifted off it.
+ * than from the stock, since that is where they already are.
  */
 interface DrawLeg {
   readonly card: Card;
   /** Held face up partway, for a card this seat has not seen before. */
   readonly reads: boolean;
-  readonly source: "discard" | "one" | "two";
+  readonly source: "one" | "two";
   readonly target: "discard" | "hand";
 }
 
@@ -435,15 +402,6 @@ function legsFor(choice: DrawChoice, spend: DrawSpend): DrawLeg[] {
       return [
         { card: spend.discarded[0]!, reads: false, source: "one", target: "discard" },
         { card: spend.taken, reads: false, source: "two", target: "hand" },
-      ];
-    }
-    case "took-discard": {
-      return [
-        { card: spend.taken, reads: false, source: "discard", target: "hand" },
-        { card: spend.discarded[0]!, reads: false, source: "one", target: "discard" },
-        // Card 2 was thrown without ever being looked at, so it is turned over on
-        // the way out exactly as a keep's is. This is the only sight of it.
-        { card: spend.discarded[1]!, reads: true, source: "two", target: "discard" },
       ];
     }
   }
@@ -517,8 +475,8 @@ export function DrawPhase({
    * screen, which is why it reached a real device: the walkthrough is the one thing
    * here that cannot be exercised by the test suite.
    */
-  const lessons = useMemo(() => drawLessons(view.rules.openDiscard), [view.rules.openDiscard]);
-  const tour = useMemo(() => drawTour(view.rules.openDiscard), [view.rules.openDiscard]);
+  const lessons = drawLessons();
+  const tour = drawTour();
   const [teaching, setTeaching] = useState(() => walkthrough && !walkthroughDone());
   const [tourStep, setTourStep] = useState(0);
   const [taught, setTaught] = useState(0);
@@ -540,8 +498,6 @@ export function DrawPhase({
    * after the cards it competes with, which is backwards.
    */
   const mineToAct = shown !== null;
-  /** Whether this deal offers a third card: the top of the discard pile. */
-  const openDiscard = view.rules.openDiscard;
   // The lesson due on this turn, if any. Keyed off the hand's own size rather than a
   // second count of turns taken: every turn nets exactly one card, kept or not, so
   // the hand *is* the count. Held back until the turn is actually this seat's, so a
@@ -560,9 +516,6 @@ export function DrawPhase({
   // reads as "not yet" rather than as a tap that was ignored.
   const decidable =
     mineToAct && !dealArriving && lesson === null && step === undefined;
-  // The pile is a choice only under the rule, only on your turn, and only once there
-  // is something on it — every turn but the first.
-  const takeableDiscard = decidable && openDiscard && view.discardTop !== null;
   // Nothing of this turn's own to show at the choice pair, in any of three
   // ways: still travelling in from the stock, already gone to the hand or
   // the discard, or — the computer's own turn, `pending` null throughout —
@@ -682,20 +635,16 @@ export function DrawPhase({
     // travels on its own. Neither of their two is drawn, because neither is this
     // seat's to see — which is also why this cannot go through `legsFor`, whose
     // every case needs a full `DrawSpend`.
-    const legs =
-      pair !== null
-        ? legsFor(lastDraw.choice, pair)
-        : lastDraw.taken === null
-          ? []
-          : [{ card: lastDraw.taken, reads: false, source: "discard", target: "hand" } as DrawLeg];
+    // No pair means no legs: both of a turn's cards come off the stock, so a seat
+    // that may not see them has nothing of that turn to animate at all.
+    const legs = pair === null ? [] : legsFor(lastDraw.choice, pair);
 
-    // Only the points the legs in hand actually need, which is the whole reason
-    // this is resolved per leg rather than up front. `theirOneRef` and
-    // `theirTwoRef` are attached by `TheirPair`, which is only on screen with the
-    // computer's cards showing — so demanding all four points meant the one flight
-    // that needs neither of them, the pile lift on the computer's own turn, was
-    // silently dropped in exactly the configuration anybody actually plays in.
-    const from: Record<DrawLeg["source"], Point | null> = { discard, one, two };
+    // Only the points the legs in hand actually need, which is the whole reason this
+    // is resolved per leg rather than up front. `theirOneRef` and `theirTwoRef` are
+    // attached by `TheirPair`, which is only on screen with the computer's cards
+    // showing — so demanding every point up front dropped flights in exactly the
+    // configuration anybody actually plays in.
+    const from: Record<DrawLeg["source"], Point | null> = { one, two };
     const to: Record<DrawLeg["target"], Point | null> = { discard, hand };
     const placed = legs.filter((leg) => from[leg.source] !== null && to[leg.target] !== null);
 
@@ -710,10 +659,7 @@ export function DrawPhase({
           from: from[leg.source]!,
           hold: leg.reads ? hold : 0,
           key: `${turn}-${leg.source}`,
-          // A card leaving the pile leaves at the size the pile draws it, whoever
-          // is taking it — the pile is one shared object at one size, unlike the
-          // two pairs, which is what `size` is otherwise saying.
-          size: leg.source === "discard" ? "table" : size,
+          size,
           to: to[leg.target]!,
           // Only a card being read gets a hold to lean on, so only it earns
           // `flightTravel`'s quicker, hold-carried legs; every other trip is
@@ -931,7 +877,7 @@ export function DrawPhase({
               between two items is discarded outright. The space between the label and
               the clause is `gap-x`, for the same reason. */}
           <span>
-            <OpponentLine lastDraw={lastDraw} settling={settling} view={view} />
+            <OpponentLine settling={settling} view={view} />
           </span>
         </div>
       </div>
@@ -940,43 +886,14 @@ export function DrawPhase({
           true left and right edges: that spread the piles across the full width with
           a dead gap between them, out of step with the opponent's pair above and the
           choices below. Close together instead, the way a stock and a waste pile sit
-          side by side on a real table.
-
-          The discard stays here even when it is a choice. Moving it down among the
-          turn's own two cards was tried — three cards abreast is "a turn offers you
-          these cards and you take one" as a picture — and it is cramped across a
-          phone, and it lines the pile up as a third card when it is not the same kind
-          of object: it is a standing pile with a count on it that happens to have a
-          takeable card on top. */}
+          side by side on a real table — neither is a tap target, so proximity here can
+          never be read as a choice. */}
       <div ref={pilesRef} className="flex items-start justify-center gap-6">
         <DrawDeck
           remaining={view.stockRemaining - (pending === null ? 0 : 1)}
           stackRef={deckRef}
         />
-        <DiscardPile
-          count={view.drawTurns.length}
-          edge={takeableDiscard ? TAKEABLE_EDGE : undefined}
-          // A noun, and the same one for as long as the rule is on. "Discard" alone
-          // was tempting and is a trap: under a card you can tap it reads as a verb,
-          // and tapping this does the opposite of discarding. "Last" is exactly true —
-          // turns alternate and every turn covers the pile with a card the player
-          // acting threw, so what is on offer is always their most recent throw.
-          label={openDiscard ? "Last discard" : "discarded"}
-          stackRef={discardRef}
-          // Face up from the moment the turn is this seat's — see `mineToAct`. Hidden
-          // the rest of the time, which is what stopped it blinking: it used to be
-          // suppressed only while a turn *played out*, and the pause before the
-          // computer moves is the same length as that playout, so the card you had
-          // just thrown turned face up and was covered again inside a frame.
-          top={openDiscard && mineToAct ? view.discardTop : null}
-          onTake={
-            takeableDiscard
-              ? () => {
-                  onDecide("discard");
-                }
-              : null
-          }
-        />
+        <DiscardPile count={view.drawTurns.length} label="discarded" stackRef={discardRef} />
       </div>
 
       {/* The decision itself, as the sentence it is: a turn offers you these cards

@@ -33,21 +33,14 @@ export interface DrawLesson {
  * every deal, so a hand-picked seed would buy nothing — it would only be needed to
  * teach *strategy*, which is a different and far larger job than this.
  */
-export function drawLessons(openDiscard: boolean): readonly DrawLesson[] {
+export function drawLessons(): readonly DrawLesson[] {
   return [
-    openDiscard
-      ? {
-          body:
-            "You have now seen both of your own cards. The one you threw is on top of the discard pile, face up — which means the computer gets first refusal on it before it is gone. Turning down a good card is not free.",
-          title: "What you throw is offered to them",
-          turn: 2,
-        }
-      : {
-          body:
-            "You have now seen both of your cards, and the one you did not take is out of the deal for good. There is no pile to look back through and the app will not remind you: remembering what has gone is part of playing well.",
-          title: "What you throw away is gone",
-          turn: 2,
-        },
+    {
+      body:
+        "You have now seen both of your cards, and the one you did not take is out of the deal for good. There is no pile to look back through and the app will not remind you: remembering what has gone is part of playing well.",
+      title: "What you throw away is gone",
+      turn: 2,
+    },
     {
       body:
         "26 cards are thrown away over the phase and never played, so a suit can simply be missing from a deal. Both hands stay hidden the whole way through — there is no dummy and no partner, so nothing you hold is ever on show.",
@@ -88,7 +81,7 @@ export interface TourStep {
  * says so on the rules screen, which is the right place for a fact with nothing on
  * this screen to point at.
  */
-export function drawTour(openDiscard: boolean): readonly TourStep[] {
+export function drawTour(): readonly TourStep[] {
   return [
     {
       body:
@@ -97,23 +90,20 @@ export function drawTour(openDiscard: boolean): readonly TourStep[] {
       title: "Their hand",
     },
     {
-      body: openDiscard
-        ? "The deck on the left, counting down. On the right, the cards thrown away — and on this deal the top one lies face up, because it is the computer's last discard and you are allowed to take it."
-        : "The deck on the left, counting down two cards every turn. On the right, the cards thrown away: 26 of them by the end, face down and out of the deal for good.",
+      body:
+        "The deck on the left, counting down two cards every turn. On the right, the cards thrown away: 26 of them by the end, face down and out of the deal for good.",
       target: "piles",
       title: "The deck, and what is out of play",
     },
     {
-      body: openDiscard
-        ? "Each turn you take one card. This one is face up, this one you cannot see until you have committed — and on this deal the discard above is a third choice."
-        : "Each turn you take one of these two. One you can see; the other you cannot see until you have committed to it, so rejecting a card is a real gamble rather than a mistake.",
+      body:
+        "Each turn you take one of these two. One you can see; the other you cannot see until you have committed to it, so rejecting a card is a real gamble rather than a mistake.",
       target: "choices",
       title: "Your turn is one of these",
     },
     {
-      body: openDiscard
-        ? "Nobody is dealt thirteen cards here. Over 26 turns you build the hand you will bid and play, and the dots are your thirteen turns — each filling in the colour of the card you took: blue for the face-up one, purple for the unseen gamble, green for one off the discard pile."
-        : "Nobody is dealt thirteen cards here. Over 26 turns you build the hand you will bid and play, and the dots are your thirteen turns — each filling in blue if you took the face-up card and purple if you took the unseen one. Then the deck runs out and it is ordinary bridge.",
+      body:
+        "Nobody is dealt thirteen cards here. Over 26 turns you build the hand you will bid and play, and the dots are your thirteen turns — each filling in blue if you took the face-up card and purple if you took the unseen one. Then the deck runs out and it is ordinary bridge.",
       target: "you",
       title: "The hand you are building",
     },

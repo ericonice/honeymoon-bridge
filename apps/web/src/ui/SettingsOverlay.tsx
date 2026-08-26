@@ -11,7 +11,7 @@ import { runBidTiming } from "../game/bidCost.js";
 import { preferredRelease } from "../game/identity.js";
 import { botAnchor } from "../game/records.js";
 import type { CardColor } from "../game/cardColor.js";
-import type { Boldness, Density, DrawStyle, Pace } from "../game/identity.js";
+import type { Boldness, Density, Pace } from "../game/identity.js";
 import { flush, outboxState } from "../game/outbox.js";
 import type { Theme } from "../game/theme.js";
 import { playAchievement } from "../game/soundEffects.js";
@@ -57,7 +57,6 @@ export interface SettingsOverlayProps {
   /** Takes effect on the next match; changing it cannot alter one under way. */
   readonly format: MatchFormat;
   /** The house variant, likewise only from the next match onwards. */
-  readonly drawStyle: DrawStyle;
   /**
    * Whether to offer the settings that are still being decided.
    *
@@ -92,7 +91,6 @@ export interface SettingsOverlayProps {
   onClose(): void;
   onDevToolsChange(enabled: boolean): void;
   onFormatChange(format: MatchFormat): void;
-  onDrawStyleChange(next: DrawStyle): void;
   onPeekingChange(enabled: boolean): void;
   onDisguiseChange(enabled: boolean): void;
   onShowHelp(): void;
@@ -290,7 +288,6 @@ export function SettingsOverlay({
   onDevToolsChange,
   onDensityChange,
   onDisguiseChange,
-  onDrawStyleChange,
   onFormatChange,
   onPaceChange,
   onPeekingChange,
@@ -299,7 +296,6 @@ export function SettingsOverlay({
   onTapToSelectChange,
   onTrickCountChange,
   onThemeChange,
-  drawStyle,
   pace,
   peeking,
   playtester,
@@ -363,25 +359,6 @@ export function SettingsOverlay({
               label: DIFFICULTY_LABEL[one],
               value: one,
             }))}
-          />
-        </div>
-
-        {/* Directly under match length, because it is the same kind of setting —
-            something to decide before sitting down, not while playing — and the
-            only other one here that changes the game rather than the computer or
-            the look of it. A choice rather than a toggle for the same reason match
-            length is one: "take their discard, off" leaves the player to work out
-            what off does, where naming both sides says it outright. */}
-        <div className="w-full max-w-sm">
-          <Choice
-            label="Draw style"
-            description="How many cards a draw turn offers you, of which you take one. Two is the game as written: the face-up card, or the face-down one sight-unseen. Three is a house rule that adds the top of the discard pile, face up — so the card you throw away is a card they can pick up, and turning down a good card is no longer free. Takes effect on the next match."
-            value={drawStyle}
-            onChange={onDrawStyleChange}
-            options={[
-              { label: "Two cards", value: "two-card" },
-              { label: "Three cards", value: "three-card" },
-            ]}
           />
         </div>
 

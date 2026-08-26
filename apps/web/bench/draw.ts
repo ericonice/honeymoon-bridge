@@ -1,5 +1,5 @@
 import { STRAINS, applyAction, createRng, opponentOf, startDeal, viewFor } from "@hb/engine";
-import type { Card, DealRules, DrawTake, Pair, PlayerId, PlayerView } from "@hb/engine";
+import type { Card, DrawTake, Pair, PlayerId, PlayerView } from "@hb/engine";
 import { chooseTake } from "../src/bot/drawDecision.js";
 import { DEFENSE_SHARE } from "../src/bot/evaluate.js";
 import { solve } from "../src/bot/solver.js";
@@ -33,7 +33,6 @@ function policyAt(defenseShare: number): DrawPolicy {
   return (view, remembered) =>
     chooseTake({
       defenseShare,
-      discardTop: view.discardTop,
       first: view.pending!,
       hand: view.hand,
       remembered,
@@ -62,21 +61,14 @@ const alwaysKeep: DrawPolicy = () => "first";
  */
 let disagreements = 0;
 let decisions = 0;
-/**
- * Turns the challenger spent on the pile, counted for the same reason
- * `disagreements` is: under `open` a margin of zero has two causes, a third
- * option that does not help and a third option nothing ever takes.
- */
-let taken = 0;
 
 function drawOut(
   seed: number,
   starter: PlayerId,
   policies: Pair<DrawPolicy>,
   watch: PlayerId,
-  rules: DealRules,
 ): Pair<readonly Card[]> {
-  let state = startDeal({ rules, seed, starter });
+  let state = startDeal({ seed, starter });
   while (state.phase === "draw") {
     const seat = state.toAct;
     // Through `viewFor`, so a policy is offered exactly what a bot would be:
@@ -91,9 +83,6 @@ function drawOut(
       // decisions" while meaning nothing of the kind.
       if (take !== policies[opponentOf(seat)](view, state.discards[seat])) {
         disagreements += 1;
-      }
-      if (take === "discard") {
-        taken += 1;
       }
     }
     state = applyAction(state, seat, { type: "draw-decide", take });
@@ -125,7 +114,7 @@ function standardError(values: readonly number[]): number {
   return Math.sqrt(variance / values.length);
 }
 
-function run(deals: number, rules: DealRules, reference: DrawPolicy): void {
+function run(deals: number, reference: DrawPolicy): void {
   const margins: number[] = [];
   const progress = createProgress(deals, "deals");
 
@@ -137,7 +126,7 @@ function run(deals: number, rules: DealRules, reference: DrawPolicy): void {
         challengerSeat === 0 ? current : reference,
         challengerSeat === 1 ? current : reference,
       ];
-      const hands = drawOut(seed, (seed % 2) as PlayerId, policies, challengerSeat, rules);
+      const hands = drawOut(seed, (seed % 2) as PlayerId, policies, challengerSeat);
       margins.push(
         bestPar(hands, challengerSeat) - bestPar(hands, opponentOf(challengerSeat)),
       );
@@ -156,18 +145,7 @@ function run(deals: number, rules: DealRules, reference: DrawPolicy): void {
     `  decisions changed    ${disagreements} of ${decisions} — ` +
       `${((100 * disagreements) / Math.max(1, decisions)).toFixed(1)}%`,
   );
-  if (rules.openDiscard) {
-    console.log(
-      `  took the discard     ${taken} of ${decisions} — ` +
-        `${((100 * taken) / Math.max(1, decisions)).toFixed(1)}%`,
-    );
-  }
 }
-
-// `open` plays the whole bench under the house variant, so a policy that can take
-// the pile is measured in a game where taking it is legal. Both seats get the same
-// rules — a variant only one side is playing is a handicap, not a variant.
-const rules: DealRules = { openDiscard: process.argv.includes("open") };
 
 /**
  * `vs=N` replaces the fixed reference with **this same policy** at a different
@@ -181,7 +159,7 @@ const reference: DrawPolicy =
   versus === undefined ? alwaysKeep : policyAt(Number(versus.slice(3)));
 
 console.log(
-  `draw policies under ${rules.openDiscard ? "the open discard" : "the base rules"} — ` +
-    `defense ${DEFENSE_SHARE} against ${versus === undefined ? "always-keep" : `defense ${versus.slice(3)}`}`,
+  `draw policies — defense ${DEFENSE_SHARE} against ` +
+    `${versus === undefined ? "always-keep" : `defense ${versus.slice(3)}`}`,
 );
-run(Number(process.argv[2] ?? 300), rules, reference);
+run(Number(process.argv[2] ?? 300), reference);

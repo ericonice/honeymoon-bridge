@@ -3,12 +3,6 @@ import { ScoringOverlay } from "./ScoringOverlay.js";
 import { resetWalkthrough } from "../game/walkthrough.js";
 
 export interface HelpOverlayProps {
-  /**
-   * Whether the house variant is switched on, so its rule is described only when
-   * it is actually being played. A rules screen that lists a move the game does
-   * not offer is worse than one that omits it.
-   */
-  readonly openDiscard: boolean;
   onClose(): void;
 }
 
@@ -90,7 +84,7 @@ type SectionKey = (typeof SECTION_TITLES)[number];
  * game. Somebody wondering whether a pass ends the auction is, by definition,
  * in an auction.
  */
-export function HelpOverlay({ onClose, openDiscard }: HelpOverlayProps): React.JSX.Element {
+export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
   // Local, and only so the button can say it worked. The armed state itself lives in
   // storage, where the draw screen reads it on its next mount.
   const [walkthroughArmed, setWalkthroughArmed] = useState(false);
@@ -144,16 +138,6 @@ export function HelpOverlay({ onClose, openDiscard }: HelpOverlayProps): React.J
             one, which is why half the deck never comes into play at all.
           </Rule>
 
-          {openDiscard ? (
-            <Rule title="You may take their discard instead">
-              A house rule, and it is switched on. The top of the discard pile lies face up, and on
-              your turn you can take it rather than either of your own two cards — it is always the
-              card they threw away last. Both of yours go on the pile instead, so the count still
-              comes out the same. The catch runs both ways: whatever you throw away, they get first
-              refusal on it, so turning down a good card is no longer free.
-            </Rule>
-          ) : null}
-
           <Rule title="What you throw away is not shown again">
             There is no pile to look back through, and the app will not remind you. By the end of
             the draw you will have seen twenty-six cards and kept thirteen; remembering the other
@@ -162,9 +146,8 @@ export function HelpOverlay({ onClose, openDiscard }: HelpOverlayProps): React.J
 
           <Rule title="The row of dots is a record of the choices">
             Each of you has thirteen, one a turn, hollow until it is spent. What it is filled with
-            says which card was taken: blue for the face-up one, purple for the unseen gamble
-            {openDiscard ? ", green for a card off the discard pile" : ""}. Theirs is there for the
-            same reason — what somebody takes is public, and only the cards are not.
+            says which card was taken: blue for the face-up one, purple for the unseen gamble.
+            Theirs is there for the same reason — what somebody takes is public, and only the cards are not.
           </Rule>
         </Section>
 

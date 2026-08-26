@@ -3,7 +3,6 @@ import type {
   Card,
   CompletedTrick,
   Contract,
-  DealRules,
   DrawTurnRecord,
   Pair,
   PlayerId,
@@ -38,15 +37,6 @@ export interface HandLog {
   /** Which card each seat took on each draw turn — public, and half the deal. */
   readonly drawTurns: readonly DrawTurnRecord[];
   readonly initialHands: Pair<readonly Card[]>;
-  /**
-   * The house rules the deal was played under.
-   *
-   * Logged for the same reason `boldness` and `disguise` are: it changes what the
-   * deal was, so a sample that pooled variant deals with ordinary ones would be
-   * measuring two games at once and reporting one number. `bench/hands.ts` counts
-   * it in its configuration census.
-   */
-  readonly rules: DealRules;
   /**
    * The seed the deal was dealt from, which with `starter` reconstructs the
    * stock and so makes the draw phase replayable.
@@ -95,7 +85,6 @@ export function reportHandLog(log: HandLog): void {
       drawTurns: log.drawTurns,
       initialHands0: log.initialHands[0],
       initialHands1: log.initialHands[1],
-      rules: log.rules,
       seed: log.seed,
       standing: log.standing,
       starter: log.starter,

@@ -1,4 +1,4 @@
-import type { DealRules, MatchFormat } from "@hb/engine";
+import type { MatchFormat } from "@hb/engine";
 import { DIFFICULTIES } from "../bot/difficulty.js";
 import type { Difficulty } from "../bot/difficulty.js";
 import { LATEST_RELEASE, releaseFor } from "../bot/release.js";
@@ -8,7 +8,6 @@ import { readStored, writeStored } from "./storage.js";
 const FORMAT_KEY = "hb.format";
 const OPPONENT_KEY = "hb.opponent";
 const DIFFICULTY_KEY = "hb.difficulty";
-const DRAW_STYLE_KEY = "hb.drawStyle";
 const DISGUISE_KEY = "hb.disguise";
 const BOLDNESS_KEY = "hb.boldness";
 const DENSITY_KEY = "hb.density";
@@ -112,49 +111,6 @@ export function difficulty(): Difficulty {
 
 export function setDifficulty(next: Difficulty): void {
   writeStored(DIFFICULTY_KEY, next);
-}
-
-/**
- * How many cards a draw turn offers, which is the house variant in §3.6b.
- *
- * Named for what the player sees rather than for the rule underneath it. The
- * engine's flag is `openDiscard` — the top of the discard pile lies face up and
- * may be taken — and that is the precise statement of the rule; "three cards" is
- * the precise statement of the *choice*, which is what a settings row is for. The
- * same split the match format already uses, where `MatchFormat` is "rubber" and
- * the row says "Match length".
- *
- * **Two cards by default: three is a house variant, not the game.** §1 is the
- * game, and a setting that quietly changed it for everyone would make every number
- * ever measured against the base rules describe something else.
- *
- * It exists because the draw phase has no interaction in it. A turn spends two
- * stock cards whichever card is taken, so nothing either player does changes what
- * the other is offered — 26 of a deal's 52 decisions are two games of solitaire
- * side by side, and the only lever is a keep-or-reject against a pool of 26 cards
- * nobody has seen. On three cards, the card you throw away is a card they may pick
- * up, and rejecting a good card stops being free.
- *
- * What it costs, which is not yet settled: you now see the opponent's discards as
- * they cross the top of the pile, so a player who remembers all thirteen ends the
- * deal knowing their hand. That is a memory the game already wanted to reward and
- * a human will not manage it — the bot would, trivially, which is what finally
- * makes the forgetting lever in §2.1 something that has to be built rather than
- * merely left available. It is handed no more recall than before for now.
- */
-export type DrawStyle = "three-card" | "two-card";
-
-export function drawStyle(): DrawStyle {
-  return readStored(DRAW_STYLE_KEY) === "three-card" ? "three-card" : "two-card";
-}
-
-export function setDrawStyle(next: DrawStyle): void {
-  writeStored(DRAW_STYLE_KEY, next);
-}
-
-/** The engine's own statement of the same choice. */
-export function rulesFor(style: DrawStyle): DealRules {
-  return { openDiscard: style === "three-card" };
 }
 
 /**

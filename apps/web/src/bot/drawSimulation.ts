@@ -54,17 +54,9 @@ export interface DrawSimulationOptions {
  * is a constraint the draw policy does not take. Card play therefore keeps the
  * weighted draw for now; the auction, where nothing has been played, does not need
  * to.
- *
- * `took-discard` is excluded for a different reason: under the open discard the
- * card they took is *known*, which is a stronger constraint than this models
- * rather than a weaker one, and pretending otherwise would throw information away.
  */
 export function canSimulate(pool: readonly Card[], size: number, turns: readonly DrawChoice[]): boolean {
-  return (
-    turns.length === size &&
-    pool.length === size * 2 &&
-    turns.every((choice) => choice === "kept-first" || choice === "took-second")
-  );
+  return turns.length === size && pool.length === size * 2;
 }
 
 /** The opponent's own choices, oldest first. */

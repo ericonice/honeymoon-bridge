@@ -158,21 +158,14 @@ export function drawPlayout(reveal: DrawReveal, theirCardsShowing: boolean): Dra
   // `discarded` is filled in only for the seat's own turn, so it needs no second
   // opinion about whose turn this was.
   const mine = reveal.discarded.length > 0;
-  // `taken` on a turn that is not this seat's own means one thing only: they
-  // lifted a card off the open pile, and it is a card this seat can see. That
-  // travels — the opponent's turn is otherwise a pause precisely because two
-  // face-down cards moving say nothing, and this one is neither face down nor
-  // silent. It is the only moment in the draw where you learn a *particular* card
-  // in their hand, so it is the last thing that should be a line of text.
-  const liftedFromPile = !mine && reveal.taken !== null;
-  const animated = mine || liftedFromPile || theirCardsShowing;
+  // The opponent's turn is a pause rather than a flight unless their cards are
+  // showing: two face-down cards moving say nothing, and neither of them is a card
+  // this seat may see. What their turn says is said by the commentary line instead.
+  const animated = mine || theirCardsShowing;
   // Whether a card 2 is turned over and held to be read. Which turns throw card 2
   // away is a rule and `discardsCardTwo` is where it lives, but the hold also needs
   // this screen to be *allowed* to show the card — so a turn of theirs qualifies
-  // only with their cards showing, and never on the strength of the pile card
-  // alone. The `took-discard` turn spends three cards and still fits this budget:
-  // its two other legs travel at `discard`'s speed, which is shorter than the hold
-  // and the two legs either side of it.
+  // only with their cards showing.
   const holdsReveal = (mine || theirCardsShowing) && discardsCardTwo(reveal.choice);
   return { animated, duration: drawTurnDuration(animated, holdsReveal), holdsReveal };
 }

@@ -85,14 +85,6 @@ describe("replaying the opponent's draw", () => {
     expect(canSimulate(buildDeck().slice(0, 24), 12, turns)).toBe(false);
   });
 
-  test("not when a card came off the open discard, which is known rather than guessed", () => {
-    const turns: DrawChoice[] = [
-      ...Array.from<unknown, DrawChoice>({ length: 12 }, () => "kept-first"),
-      "took-discard",
-    ];
-    expect(canSimulate(buildDeck().slice(0, 26), 13, turns)).toBe(false);
-  });
-
   test("the opponent's own choices are the ones read, in order", () => {
     const state = drawn(9);
     const view = viewFor(state, 0);

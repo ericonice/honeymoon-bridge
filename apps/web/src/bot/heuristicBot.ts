@@ -710,7 +710,6 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
       return view.pending === null
         ? fallback.chooseDraw(view, remembered)
         : chooseTake({
-            discardTop: view.discardTop,
             first: view.pending,
             hand: view.hand,
             remembered,

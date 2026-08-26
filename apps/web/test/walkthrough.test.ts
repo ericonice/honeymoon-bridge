@@ -1,32 +1,33 @@
 import { describe, expect, it } from "vitest";
 import { drawLessons, drawTour } from "../src/game/walkthrough.js";
 
-const STYLES = [true, false];
-
 describe("the tour of the draw screen", () => {
   it("points at each part of the board once, in reading order down it", () => {
-    for (const open of STYLES) {
-      const targets = drawTour(open).map((step) => step.target);
-      expect(targets).toEqual(["opponent", "piles", "choices", "you"]);
-    }
+    expect(drawTour().map((step) => step.target)).toEqual([
+      "opponent",
+      "piles",
+      "choices",
+      "you",
+    ]);
   });
 
   it("says something in every step, since a blank step is worse than none", () => {
-    for (const open of STYLES) {
-      for (const step of drawTour(open)) {
-        expect(step.title.length).toBeGreaterThan(0);
-        expect(step.body.length).toBeGreaterThan(40);
-      }
+    for (const step of drawTour()) {
+      expect(step.title.length).toBeGreaterThan(0);
+      expect(step.body.length).toBeGreaterThan(40);
     }
   });
 
-  /** Pointing at a face-up discard on a deal where the pile is face down is a lie. */
-  it("mentions the third card only on a deal that has one", () => {
-    const three = drawTour(true).map((step) => step.body).join(" ");
-    const two = drawTour(false).map((step) => step.body).join(" ");
-
-    expect(three).toContain("take it");
-    expect(two).not.toContain("third choice");
+  /**
+   * What a step may describe is decided by what its cutout frames, and the
+   * `opponent` step anchors on their row of card backs alone — so their turn track
+   * is outside the highlight and the tour must not narrate it. The dot colours are
+   * named on the `you` step, which does take in the track below the hand.
+   */
+  it("names the dot colours on the step whose cutout includes them", () => {
+    const step = drawTour().find((one) => one.target === "you")!;
+    expect(step.body).toContain("blue");
+    expect(step.body).toContain("purple");
   });
 });
 
@@ -40,40 +41,33 @@ describe("the draw lessons", () => {
    * about something that has to have *happened* first — "what you threw is gone" means
    * nothing before anything has been thrown.
    */
-  it.each(STYLES)("lands one lesson on each turn after the tour (open: %s)", (open) => {
-    const turns = drawLessons(open).map((lesson) => lesson.turn);
+  it("lands one lesson on each turn after the tour", () => {
+    const turns = drawLessons().map((lesson) => lesson.turn);
     expect(turns).toEqual(turns.map((_, index) => index + 2));
   });
 
   it("fits inside the draw phase, which is thirteen turns a side", () => {
-    for (const open of STYLES) {
-      for (const lesson of drawLessons(open)) {
-        expect(lesson.turn).toBeLessThanOrEqual(13);
-      }
+    for (const lesson of drawLessons()) {
+      expect(lesson.turn).toBeLessThanOrEqual(13);
     }
   });
 
   /**
-   * Under a three-card draw a discard is not gone — they may take it — so the lesson
-   * that says otherwise has to be the one thing that changes with the rule.
+   * The one rule of this game a person cannot see on the screen: a discard is gone,
+   * there is no pile to look back through, and nothing will remind you. It is the
+   * reason the lessons exist at all, so a version that stopped saying it would be a
+   * walkthrough that taught the parts and not the point.
    */
-  it("does not claim a discard is gone when it is on offer", () => {
-    const three = drawLessons(true).map((lesson) => lesson.body).join(" ");
-    const two = drawLessons(false).map((lesson) => lesson.body).join(" ");
-
-    expect(two).toContain("for good");
-    expect(three).not.toContain("for good");
-    expect(three).toContain("first refusal");
+  it("says a discard is gone for good", () => {
+    expect(drawLessons().map((lesson) => lesson.body).join(" ")).toContain("for good");
   });
 
   it("says something in every lesson", () => {
-    for (const open of STYLES) {
-      const lessons = drawLessons(open);
-      expect(lessons.length).toBeGreaterThan(0);
-      for (const lesson of lessons) {
-        expect(lesson.title.length).toBeGreaterThan(0);
-        expect(lesson.body.length).toBeGreaterThan(40);
-      }
+    const lessons = drawLessons();
+    expect(lessons.length).toBeGreaterThan(0);
+    for (const lesson of lessons) {
+      expect(lesson.title.length).toBeGreaterThan(0);
+      expect(lesson.body.length).toBeGreaterThan(40);
     }
   });
 });

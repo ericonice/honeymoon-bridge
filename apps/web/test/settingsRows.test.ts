@@ -24,7 +24,6 @@ function settings(playtester: boolean): SettingsOverlayProps {
     density: "normal",
     devTools: false,
     disguise: true,
-    drawStyle: "two-card",
     difficulty: "championship",
     format: "rubber",
     opponent: 3,
@@ -36,7 +35,6 @@ function settings(playtester: boolean): SettingsOverlayProps {
     onDifficultyChange: noop,
     onDisguiseChange: noop,
     onOpponentChange: noop,
-    onDrawStyleChange: noop,
     onFormatChange: noop,
     onPaceChange: noop,
     onPeekingChange: noop,
@@ -68,7 +66,6 @@ function settings(playtester: boolean): SettingsOverlayProps {
  */
 const ORDINARY = [
   "Match length",
-  "Draw style",
   "Layout",
   "Game speed",
   "Count the tricks each side needs",

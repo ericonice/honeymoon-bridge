@@ -49,11 +49,6 @@ export interface DrawOptions {
    * weights against each other in one process; nothing in the app passes it.
    */
   readonly defenseShare?: number;
-  /**
-   * The face-up top of the discard pile, or null when there is nothing on offer
-   * — every turn under the base rules, and the first turn under `openDiscard`.
-   */
-  readonly discardTop: Card | null;
   /** Card 1, face up and awaiting the decision. */
   readonly first: Card;
   readonly hand: readonly Card[];
@@ -62,7 +57,7 @@ export interface DrawOptions {
 }
 
 /**
- * Which of the cards on offer to take into the hand.
+ * Which of the two cards on offer to take into the hand.
  *
  * The question is never "is this a good card" but "is it better than the average
  * card I have not seen" — rejecting card 1 is not throwing it away, it is
@@ -82,12 +77,6 @@ export interface DrawOptions {
  * coarse enough that ties are common, and a card in the hand is worth an unknown
  * one of the same expectation.
  *
- * **What this deliberately does not price: the gift.** Under `openDiscard` the
- * card this turn throws is a card the opponent may pick up, so rejecting a good
- * card is not free — and only one of the three choices has a priceable cost,
- * since the other two hand over a card 2 this decision has not seen. Weighting
- * that would be a constant nothing here has measured, and `bench/draw.ts` pits
- * policies against each other for exactly this reason. Left unpriced until it is.
  */
 /**
  * A cheap "would this hand keep that card" test, for asking it many times.
@@ -121,7 +110,6 @@ export function keepTest(
 
 export function chooseTake({
   defenseShare = DEFENSE_SHARE,
-  discardTop,
   first,
   hand,
   remembered,
@@ -131,32 +119,27 @@ export function chooseTake({
   const base = rawHandValue(hand, true, defenseShare);
   const keeping = gainFrom(hand, base, first, defenseShare);
 
-  const pool = unseenPool(hand, [first, discardTop], remembered);
+  const pool = unseenPool(hand, [first], remembered);
   const expected =
     pool.length === 0
       ? -Infinity
       : pool.reduce((sum, unseen) => sum + gainFrom(hand, base, unseen, defenseShare), 0) /
         pool.length;
-  const offered =
-    discardTop === null ? -Infinity : gainFrom(hand, base, discardTop, defenseShare);
 
-  if (keeping >= offered && keeping >= expected) {
-    return "first";
-  }
-  return offered >= expected ? "discard" : "second";
+  return keeping >= expected ? "first" : "second";
 }
 
 /**
  * Whether to keep card 1, or reject it and take card 2 sight-unseen.
  *
- * The base game's two-way form of the decision above, kept because it is the
- * question `bench/draw.ts` and the draw tests ask — and expressed through the
- * same arithmetic rather than beside it, so there is one valuation to be wrong.
+ * The same decision as a boolean, which is the shape `bench/draw.ts` and the draw
+ * tests ask it in — expressed through `chooseTake` rather than beside it, so there
+ * is one valuation to be wrong.
  */
 export function shouldKeepCard(
   hand: readonly Card[],
   card: Card,
   remembered: readonly Card[] = [],
 ): boolean {
-  return chooseTake({ discardTop: null, first: card, hand, remembered }) === "first";
+  return chooseTake({ first: card, hand, remembered }) === "first";
 }

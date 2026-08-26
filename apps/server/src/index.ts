@@ -530,8 +530,12 @@ function standingOrNull(input: unknown): NonNullable<HandLog["standing"]> | unde
 }
 
 /**
- * The house rules a deal was played under, or undefined from a build predating
- * them — which means the base game, since that is all there was.
+ * The house rules a deal was played under, or undefined — which is every current
+ * client, since the open discard was withdrawn and there are no house rules left.
+ *
+ * Still parsed rather than dropped: the service worker keeps old builds in
+ * circulation, and a deal somebody played under the variant is worth recording as
+ * having been played under it.
  */
 function rulesOrNull(input: unknown): NonNullable<HandLog["rules"]> | undefined {
   if (typeof input !== "object" || input === null) {

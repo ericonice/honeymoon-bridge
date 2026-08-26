@@ -9,7 +9,6 @@ import {
   withImpliedTiers,
 } from "../src/achievements.js";
 import type { AchievementProgress, DealFacts } from "../src/achievements.js";
-import { BASE_RULES } from "../src/deal.js";
 import { newRubber } from "../src/rubber.js";
 import { scoreDeal } from "../src/scoring.js";
 import type { DealRecord } from "../src/table.js";
@@ -60,7 +59,6 @@ function baseDeal(overrides: Partial<DealState> = {}): DealState {
     contract: null,
     currentTrick: [],
     discards: [[], []],
-    discardTop: null,
     drawTurns: [],
     hands: [[], []],
     initialHands: [[], []],
@@ -69,7 +67,6 @@ function baseDeal(overrides: Partial<DealState> = {}): DealState {
     pending: null,
     phase: "complete",
     revealed: null,
-    rules: BASE_RULES,
     starter: 0,
     stock: [],
     toAct: 0,

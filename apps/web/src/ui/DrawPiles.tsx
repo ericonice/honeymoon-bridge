@@ -148,70 +148,29 @@ export function DrawDeck({
 }
 
 /**
- * Where both players' thrown-away cards go — and, under `openDiscard`, a third thing
- * this turn can be spent on.
+ * Where both players' thrown-away cards go.
  *
- * It stays here beside the stock either way. Putting it into the choice row with the
- * turn's own two cards was tried, on §1.3's reasoning that the choice should be the
- * rule as a picture: "a turn offers you these cards and you take one" is three cards
- * abreast. Three of them across a phone is cramped, and the pile is not the same kind
- * of object as the two cards — it is a standing pile with a count on it that happens
- * to have a takeable card on top, and lining it up as a third card said otherwise.
- *
- * Inert under the game's own rules: a place for cards to land, never something to
- * open, every card in it face down and permanently gone including your own — which
- * is why it is dimmed. Under `openDiscard` the top lies face up on your turn and can
- * be taken, so it stops being dimmed and takes the amber edge like any other choice.
+ * Inert, and dimmed to say so: a place for cards to land and never something to
+ * open, every card in it face down and permanently gone including your own. What it
+ * carries is the count, which is the one thing about the pile a player needs — and
+ * `stackRef`, so a card thrown away has somewhere to fly to.
  */
 export function DiscardPile({
   count,
-  edge,
   label,
-  onTake,
   stackRef,
-  top,
 }: {
   readonly count: number;
-  /** Classes marking the pile takeable, or undefined — see `TAKEABLE_EDGE` in `DrawPhase`. */
-  readonly edge: string | undefined;
   readonly label: string;
-  readonly onTake: (() => void) | null;
-  /** Where a flight leaves from or lands, so it aims at the card and not the label. */
+  /** Where a flight lands, so it aims at the card and not the label. */
   readonly stackRef: React.RefObject<HTMLDivElement | null>;
-  /** The face-up top, under the open discard and while the turn is this seat's. */
-  readonly top: Card | null;
 }): React.JSX.Element {
-  const takeable = onTake !== null;
-  const body = (
-    <div className="flex flex-col items-center gap-2">
-      <div ref={stackRef} className={edge}>
-        <PileStack
-          count={count}
-          dimmed={top === null && !takeable}
-          face={top}
-          max={TOTAL_DISCARDS}
-        />
-      </div>
-      <p className={`text-xs ${takeable ? "font-medium text-amber-200" : "text-white/50"}`}>
-        {label}
-      </p>
-    </div>
-  );
-
-  if (!takeable) {
-    return body;
-  }
-  // Padded past the card like the choice pair's own halves, and for the same reason:
-  // this is a way to spend a turn that cannot be taken back. The negative margin
-  // cancels the padding for layout, so growing a tap target does not shunt the pile
-  // out of line with the stock beside it.
   return (
-    <button
-      type="button"
-      className="-m-3 rounded-2xl p-3 transition-transform active:scale-95"
-      onClick={onTake}
-    >
-      {body}
-    </button>
+    <div className="flex flex-col items-center gap-2">
+      <div ref={stackRef}>
+        <PileStack count={count} dimmed face={null} max={TOTAL_DISCARDS} />
+      </div>
+      <p className="text-xs text-white/50">{label}</p>
+    </div>
   );
 }

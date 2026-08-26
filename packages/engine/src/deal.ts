@@ -11,9 +11,7 @@ import type {
   Card,
   CompletedTrick,
   DealAction,
-  DealRules,
   DealState,
-  Discard,
   DrawChoice,
   DrawSpend,
   DrawTake,
@@ -27,12 +25,7 @@ const HAND_SIZE = 13;
 /** Exported so a claim's decision-maker can compute how many tricks remain without a second constant naming the same number. */
 export const TRICKS_PER_DEAL = 13;
 
-/** The game as §1 specifies it, with every variant switched off. */
-export const BASE_RULES: DealRules = { openDiscard: false };
-
 export interface StartDealOptions {
-  /** Defaults to `BASE_RULES` — the game, rather than a variant of it. */
-  readonly rules?: DealRules;
   readonly seed: number;
   /** The player who draws first and makes the first call. Alternates deal to deal. */
   readonly starter: PlayerId;
@@ -49,7 +42,6 @@ export function startDeal(options: StartDealOptions): DealState {
     contract: null,
     currentTrick: [],
     discards: [[], []],
-    discardTop: null,
     drawTurns: [],
     hands: [[], []],
     initialHands: null,
@@ -58,7 +50,6 @@ export function startDeal(options: StartDealOptions): DealState {
     pending,
     phase: "draw",
     revealed: null,
-    rules: options.rules ?? BASE_RULES,
     starter: options.starter,
     stock: deck.slice(1),
     toAct: options.starter,
@@ -68,16 +59,15 @@ export function startDeal(options: StartDealOptions): DealState {
 }
 
 /**
- * Which of the three cards this turn offers may be taken.
+ * Which cards this turn offers, and therefore what a draw decision may name.
  *
- * Stated over the pieces rather than over `DealState` so the rule exists once and
- * can also be applied by someone holding only a `PlayerView` — the same split
- * `playableFrom` and `legalPlays` already use for the follow-suit rule.
+ * A constant rather than a function of the state, because it is the same two every
+ * turn of every deal. Kept named and exported anyway: `legalActions` and
+ * `legalActionsForView` both answer from it, and the reducer validates an incoming
+ * decision against it, so the set exists once rather than as three literals that
+ * have to agree.
  */
-export function takesFrom(rules: DealRules, discardTop: Card | null): DrawTake[] {
-  const own: DrawTake[] = ["first", "second"];
-  return rules.openDiscard && discardTop !== null ? [...own, "discard"] : own;
-}
+export const DRAW_TAKES: readonly DrawTake[] = ["first", "second"];
 
 export function legalActions(state: DealState, player: PlayerId): DealAction[] {
   if (state.toAct !== player || state.phase === "complete") {
@@ -86,9 +76,7 @@ export function legalActions(state: DealState, player: PlayerId): DealAction[] {
 
   switch (state.phase) {
     case "draw": {
-      return takesFrom(state.rules, state.discardTop?.card ?? null).map(
-        (take) => ({ type: "draw-decide", take }) as const,
-      );
+      return DRAW_TAKES.map((take) => ({ type: "draw-decide", take }) as const);
     }
     case "auction": {
       return legalCalls(state.auction, player).map((call) => ({ type: "call", call }) as const);
@@ -160,20 +148,17 @@ export function applyAction(state: DealState, player: PlayerId, action: DealActi
 }
 
 const CHOICE_FOR: Record<DrawTake, DrawChoice> = {
-  discard: "took-discard",
   first: "kept-first",
   second: "took-second",
 };
 
 /**
- * The card that enters the hand and the cards the turn throws, for one choice.
+ * The card that enters the hand and the card the turn throws, for one choice.
  *
  * Both stock cards are spent whichever is taken — that is what keeps the deck
- * exhausting exactly on turn 26 — so taking the pile's top card is the one choice
- * that throws two, and the pile still nets exactly one card a turn: minus the one
- * lifted off it, plus the two laid on top.
+ * exhausting exactly on turn 26 with thirteen cards in each hand.
  */
-function spendFor(take: DrawTake, first: Card, second: Card, top: Discard | null): DrawSpend {
+function spendFor(take: DrawTake, first: Card, second: Card): DrawSpend {
   switch (take) {
     case "first": {
       return { discarded: [second], taken: first };
@@ -181,25 +166,15 @@ function spendFor(take: DrawTake, first: Card, second: Card, top: Discard | null
     case "second": {
       return { discarded: [first], taken: second };
     }
-    case "discard": {
-      if (top === null) {
-        throw new Error("The discard pile is empty");
-      }
-      // Card 1 first, so card 2 ends up on top and the next turn is offered the
-      // card this one never saw before committing — the same card it would have
-      // been offered had this turn simply kept card 1.
-      return { discarded: [first, second], taken: top.card };
-    }
   }
 }
 
 /**
  * Resolves one draw turn. Two cards leave the stock and exactly one enters the
- * hand: card 1 is kept and card 2 is drawn and discarded, or card 1 is discarded
- * and card 2 is taken sight-unseen, or — under `openDiscard` — both are thrown
- * and the face-up top of the pile is taken instead. Every card the turn spends is
- * seen by the acting player, which is why the discards are recorded: so the
- * engine can reason about what that player knows, not so they can be shown back.
+ * hand: either card 1 is kept and card 2 is drawn and discarded, or card 1 is
+ * discarded and card 2 is taken sight-unseen. Every card the turn spends is seen
+ * by the acting player, which is why the discards are recorded: so the engine can
+ * reason about what that player knows, not so they can be shown back.
  */
 function applyDrawDecision(state: DealState, player: PlayerId, take: DrawTake): DealState {
   if (state.phase !== "draw") {
@@ -213,23 +188,16 @@ function applyDrawDecision(state: DealState, player: PlayerId, take: DrawTake): 
   if (second === undefined) {
     throw new Error("Stock is exhausted mid-turn");
   }
-  if (!takesFrom(state.rules, state.discardTop?.card ?? null).includes(take)) {
+  if (!DRAW_TAKES.includes(take)) {
     throw new Error(`Taking the ${take} card is not allowed`);
   }
 
-  const top = state.discardTop;
-  const spend = spendFor(take, first, second, top);
+  const spend = spendFor(take, first, second);
 
   const hands: Pair<readonly Card[]> = [state.hands[0], state.hands[1]];
   hands[player] = [...hands[player], spend.taken];
 
   const discards: Pair<readonly Card[]> = [state.discards[0], state.discards[1]];
-  if (take === "discard" && top !== null) {
-    // Off whoever's list it was on, which is always the opponent's: turns
-    // alternate and each one ends by covering the pile with a card the player
-    // acting threw, so the top of the pile on your turn is never your own.
-    discards[top.by] = removeCard(discards[top.by], top.card);
-  }
   discards[player] = [...discards[player], ...spend.discarded];
 
   const lastDraws: Pair<DrawSpend | null> = [state.lastDraws[0], state.lastDraws[1]];
@@ -237,7 +205,6 @@ function applyDrawDecision(state: DealState, player: PlayerId, take: DrawTake): 
 
   const remaining = state.stock.slice(1);
   const drawTurns = [...state.drawTurns, { by: player, choice: CHOICE_FOR[take] }];
-  const discardTop: Discard = { by: player, card: spend.discarded[spend.discarded.length - 1]! };
 
   const drawPhaseOver = remaining.length === 0;
   if (drawPhaseOver) {
@@ -247,7 +214,6 @@ function applyDrawDecision(state: DealState, player: PlayerId, take: DrawTake): 
     return {
       ...state,
       discards,
-      discardTop,
       drawTurns,
       hands,
       initialHands: [hands[0], hands[1]],
@@ -262,7 +228,6 @@ function applyDrawDecision(state: DealState, player: PlayerId, take: DrawTake): 
   return {
     ...state,
     discards,
-    discardTop,
     drawTurns,
     hands,
     lastDraws,

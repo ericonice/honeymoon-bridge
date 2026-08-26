@@ -51,8 +51,7 @@ export interface Bot {
    */
   chooseCall(view: PlayerView, standing: Standing, remembered: readonly Card[]): Call;
   /**
-   * Which card on offer to take: card 1, card 2 sight-unseen, or — under
-   * `openDiscard` — the face-up top of the discard pile.
+   * Which card on offer to take: card 1, or card 2 sight-unseen.
    *
    * `remembered` is what this seat has seen and thrown away — the explicit state
    * this interface always said recall would arrive as, rather than something read
