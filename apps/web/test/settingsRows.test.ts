@@ -25,7 +25,6 @@ function settings(playtester: boolean): SettingsOverlayProps {
     devTools: false,
     disguise: true,
     difficulty: "championship",
-    format: "rubber",
     opponent: 3,
     onBoldnessChange: noop,
     onCardColorChange: noop,
@@ -35,7 +34,6 @@ function settings(playtester: boolean): SettingsOverlayProps {
     onDifficultyChange: noop,
     onDisguiseChange: noop,
     onOpponentChange: noop,
-    onFormatChange: noop,
     onPaceChange: noop,
     onPeekingChange: noop,
     onShowHelp: noop,
@@ -65,7 +63,8 @@ function settings(playtester: boolean): SettingsOverlayProps {
  * taste, and a preference nobody can find is not a preference.
  */
 const ORDINARY = [
-  "Match length",
+  // Not "Match length": what is being played moved to Home, above the buttons
+  // that start a match. `test/homeFormat.test.ts` is what holds it there.
   "Layout",
   "Game speed",
   "Count the tricks each side needs",

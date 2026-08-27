@@ -1,14 +1,16 @@
 import {
+  bonusFor,
   contractTrickPoints,
   GAME_BONUS,
   GAME_THRESHOLD,
   honorsFor,
   matchBonusFor,
   overtrickPoints,
+  scoreDuplicateDeal,
   slamBonus,
   undertrickPoints,
 } from "@hb/engine";
-import type { Card, Level, Rank, Strain, Suit } from "@hb/engine";
+import type { Card, Level, Pair, Rank, Strain, Suit } from "@hb/engine";
 
 /**
  * Every number the scoring page prints, asked of the engine rather than retyped.
@@ -181,4 +183,62 @@ export function scoreIfBid(options: {
     below,
     game: below >= GAME_THRESHOLD,
   };
+}
+
+export interface DuplicateBonuses {
+  /** A game, paid on the deal that makes one. */
+  readonly game: number;
+  readonly gameVulnerable: number;
+  /** A part-score: a flat figure, since there is nothing to accumulate toward. */
+  readonly partScore: number;
+}
+
+/**
+ * What a duplicate deal pays beyond its tricks.
+ *
+ * Asked of `bonusFor` with trick totals either side of the threshold rather than
+ * stated, so the page cannot drift from the rule — and so the one thing about it a
+ * player might not expect stays true on the page: the bonus is decided by the trick
+ * points, not the level, which is why a doubled two-level contract can be a game.
+ */
+export function duplicateBonuses(): DuplicateBonuses {
+  return {
+    game: bonusFor(GAME_THRESHOLD, false),
+    gameVulnerable: bonusFor(GAME_THRESHOLD, true),
+    partScore: bonusFor(GAME_THRESHOLD - 1, false),
+  };
+}
+
+/** No hands, so honors never turn up in a figure the page is using to show something else. */
+const NO_HANDS: Pair<readonly Card[]> = [[], []];
+
+/**
+ * What one hand is worth at two different bids, settled the duplicate way.
+ *
+ * The same worked example the rubber page leans on, and it lands harder here: with
+ * nothing carried forward, the whole difference between stopping short and bidding
+ * the game is paid on the spot. Every figure comes from `scoreDuplicateDeal`, which
+ * is the function the game itself uses.
+ */
+export function duplicateIfBid(options: {
+  readonly bid: Level;
+  readonly strain: Strain;
+  readonly tookLevel: Level;
+}): { readonly bonus: number; readonly total: number } {
+  const { bid, strain, tookLevel } = options;
+  const tricks = tookLevel + 6;
+  const scored = scoreDuplicateDeal(
+    {
+      contract: { declarer: 0, doubling: "none", level: bid, strain },
+      hands: NO_HANDS,
+      tricksWon: [tricks, 13 - tricks],
+    },
+    [false, false],
+  );
+  return { bonus: scored.bonus, total: scored.points[0] };
+}
+
+/** What a contract that went down pays its declarer, which is the point: nothing. */
+export function duplicateFailedBonus(): number {
+  return duplicateIfBid({ bid: 4, strain: "H", tookLevel: 3 }).bonus;
 }

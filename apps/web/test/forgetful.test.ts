@@ -1,35 +1,55 @@
 import { buildDeck } from "@hb/engine";
-import type { Call, Card, DrawTake, PlayerView } from "@hb/engine";
+import type { Call, Card, DrawTake, Pair, PlayerView } from "@hb/engine";
 import { describe, expect, test } from "vitest";
 import { DIFFICULTIES, DIFFICULTY_LEVELS, levelFor } from "../src/bot/difficulty.js";
 import { forgetful } from "../src/bot/forgetful.js";
-import type { Bot, Standing } from "../src/bot/types.js";
+import type { BoardMemory, Bot, Standing } from "../src/bot/types.js";
 
 /** A bot that decides nothing and records what it was told it remembered. */
-function spy(): { bot: Bot; seen: Card[][] } {
+function spy(): { bot: Bot; boards: BoardMemory[]; seen: Card[][] } {
+  const boards: BoardMemory[] = [];
   const seen: Card[][] = [];
   const remember = (remembered: readonly Card[]): void => {
     seen.push([...remembered]);
   };
   return {
+    boards,
     bot: {
       name: "Spy",
-      chooseCall(_view: PlayerView, _standing: Standing, remembered: readonly Card[]): Call {
+      chooseCall(
+        _view: PlayerView,
+        _standing: Standing,
+        remembered: readonly Card[],
+        told: BoardMemory = [],
+      ): Call {
         remember(remembered);
+        boards.push(told);
         return { type: "pass" };
       },
       chooseDraw(_view: PlayerView, remembered: readonly Card[]): DrawTake {
         remember(remembered);
         return "first";
       },
-      choosePlay(_view: PlayerView, remembered: readonly Card[]): Card {
+      choosePlay(_view: PlayerView, remembered: readonly Card[], told: BoardMemory = []): Card {
         remember(remembered);
+        boards.push(told);
         return buildDeck()[0]!;
       },
     },
     seen,
   };
 }
+
+/** Thirteen pairs off the top of the deck — a stand-in for one remembered board. */
+function boardOf(cards: readonly Card[]): BoardMemory {
+  const offers: Pair<Card>[] = [];
+  for (let turn = 0; turn < 13; turn++) {
+    offers.push([cards[turn * 2]!, cards[turn * 2 + 1]!]);
+  }
+  return [{ board: 0, offers }];
+}
+
+const oneBoard = boardOf(buildDeck().slice(0, 26));
 
 const view = {} as PlayerView;
 const standing = {} as Standing;
@@ -93,6 +113,39 @@ describe("a bot that forgets", () => {
     const { bot, seen } = spy();
     forgetful(bot, 6).chooseDraw(view, thirteen.slice(0, 2));
     expect(seen[0]).toHaveLength(2);
+  });
+});
+
+describe("a board that comes round again", () => {
+  /**
+   * **The harder thing goes first, and entirely.** A board's memory is thirteen exact
+   * pairs from a deal played some time ago, where the discards are thirteen cards this
+   * seat threw a moment before — so a bot told it forgets loses the harder feat
+   * outright rather than in proportion. Anything in between would be an invented
+   * constant, and `sampleFromOffers` needs a complete set of pairs anyway.
+   */
+  test("a forgetful bot recognises no board, whatever it is handed", () => {
+    const { bot, boards } = spy();
+    const wrapped = forgetful(bot, 6);
+
+    wrapped.chooseCall(view, standing, thirteen, oneBoard);
+    wrapped.choosePlay(view, thirteen, oneBoard);
+
+    expect(boards).toEqual([[], []]);
+  });
+
+  /**
+   * The anti-vacuity half: perfect recall must pass the memory *through*. It returns
+   * the bot unwrapped, so this is really asserting that the decorator is the only thing
+   * standing between the host's record and the bot — remove the pass-through above and
+   * this still passes, which is why both are here.
+   */
+  test("perfect recall is handed the whole memory", () => {
+    const { bot, boards } = spy();
+
+    forgetful(bot, 13).chooseCall(view, standing, thirteen, oneBoard);
+
+    expect(boards).toEqual([oneBoard]);
   });
 });
 

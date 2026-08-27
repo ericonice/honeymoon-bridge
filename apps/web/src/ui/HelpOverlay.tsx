@@ -55,7 +55,7 @@ function Section({
   );
 }
 
-const SECTION_TITLES = ["draw", "auction", "play", "scoring", "app", "known"] as const;
+const SECTION_TITLES = ["draw", "auction", "play", "scoring", "duplicate", "app", "known"] as const;
 type SectionKey = (typeof SECTION_TITLES)[number];
 
 /**
@@ -93,6 +93,7 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
     app: false,
     auction: false,
     draw: false,
+    duplicate: false,
     known: false,
     play: false,
     scoring: false,
@@ -209,8 +210,9 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
         <Section title="Scoring" open={open.scoring} onToggle={() => toggle("scoring")}>
           <Rule title="Rubber scoring">
             Best of three games, with vulnerability following from having won one, exactly as at a
-            rubber. Settings will shorten a sitting to a single game instead; at a table with
-            somebody else, one game wins if either of you asks for it.
+            rubber. The home screen will shorten a sitting to a single game instead, or swap it for a
+            duplicate session; at a table with somebody else, one game wins if either of you asks for
+            it.
           </Rule>
           {/* A page rather than more rules here. It is what somebody opens mid-auction,
               and it is the one part of this app written for a person who has never
@@ -227,6 +229,61 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
               Trick values, games, penalties, and what they imply when you are bidding.
             </span>
           </button>
+        </Section>
+
+        {/* Its own section rather than a rule under Scoring. Duplicate changes what a
+            deal is *for*, not only what it pays — and a rubber player can skip the
+            whole heading, which is the argument for a heading. */}
+        <Section title="Duplicate" open={open.duplicate} onToggle={() => toggle("duplicate")}>
+          <Rule title="The deck repeats, not the hand">
+            At a real duplicate you and everybody else play the same thirteen cards. Nobody is dealt
+            a hand here — you build one — so what repeats is the <em>deck</em>. A board is one
+            shuffle, played twice.
+          </Rule>
+          <Rule title="The second time, you swap sides">
+            Whoever drew first draws second, which hands you exactly the cards your opponent was
+            offered the first time. The board is worth the difference between the two halves, so
+            what is left when you subtract is what the two of you did with one deck — the luck of
+            the shuffle cancels out.
+          </Rule>
+          <Rule title="You are told it is a repeat, never which one">
+            Working out which board you are on is part of it, and the app will not do it for you —
+            though it does tell you what the deal came to when you played it before.
+          </Rule>
+          <Rule title="Three orders, and they are different games">
+            <em>Back to back</em> plays a board's two halves one after the other, so the comparison
+            is immediate and you remember everything — the clearest way to see what duplicate is.{" "}
+            <em>Halves</em> plays every board once and then brings them round again in a random
+            order, which is what a duplicate evening is. <em>Shuffled</em> mixes the lot. The home
+            screen picks; at a table it takes both of you asking for the same one.
+          </Rule>
+          <Rule title="One score a deal, plus or minus">
+            No line and no part-score: every deal is settled where it is played, and the session is
+            just the sum. A game pays at once, so there is nothing to gain by stopping short of one.
+          </Rule>
+          <Rule title="Vulnerability is dealt, not earned">
+            It comes with the board rather than from having won a game — and it is the same on both
+            halves, so it cancels out along with everything else about the deck.
+          </Rule>
+          <Rule title="A passed-out board is a result">
+            It is not redealt. Nobody found a contract worth bidding, so whatever the other half
+            comes to is the whole of what the board is worth.
+          </Rule>
+          {/* Said out loud because it is a fact about the opponent rather than about the
+              app. Somebody who works out mid-session that the computer knew the board
+              all along would reasonably feel cheated; somebody told up front has a
+              reason to pick a shorter session or an easier rung. */}
+          <Rule title="The computer remembers too">
+            On its hardest setting it recognises a board it has played and remembers the cards it
+            was offered — which tells it a great deal about the hand you are holding, since those
+            are the cards you were offered this time. Worth about fifteen points a deal, so it
+            matters without deciding things. The gentler settings meet every board fresh.
+          </Rule>
+          <Rule title="How long, and who with">
+            The home screen sets the length in deals — always even, since every board is played
+            twice. Two deals is one board and a real session. Against the computer only for now: a
+            session runs on this device.
+          </Rule>
         </Section>
 
         <Section title="In the app" open={open.app} onToggle={() => toggle("app")}>

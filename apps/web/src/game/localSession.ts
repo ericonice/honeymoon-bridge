@@ -1,20 +1,21 @@
 import {
-  applyTableAction,
+  actOn,
+  boardsForDeals,
   createRng,
   dealFacts,
+  currentDeal,
+  dealOf,
   drawRevealFor,
-  nextDeal,
+  nextIn,
   ownDrawPairFor,
   randomSeed,
   rubberFacts,
   sortHand,
-  startTable,
-  summarize,
-  totalScore,
+  startMatch,
+  summarizeMatch,
   viewFor,
-  vulnerability,
 } from "@hb/engine";
-import type { DealAction, DealState, PlayerId, TableState } from "@hb/engine";
+import type { Card, DealAction, DealState, MatchState, Pair, PlayerId } from "@hb/engine";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_GAME_EQUITY } from "../bot/bidValue.js";
 import { DISGUISE_CREDIT_ON } from "../bot/heuristicBot.js";
@@ -30,6 +31,8 @@ import {
   disguiseEnabled,
   pace,
   preferredFormat,
+  sessionDeals,
+  sessionOrder,
 } from "./identity.js";
 import { reportRobotRubber } from "./records.js";
 import type { GameSession } from "./session.js";
@@ -186,11 +189,36 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
    * server only once the deal is over and there is nothing left to spoil.
    */
   const dealSeed = useRef(randomSeed());
+  /**
+   * What the computer was offered on each board it has finished, so it can recognise a
+   * board that comes round again.
+   *
+   * Here rather than on `DealState` for the reason `dealSeed` is: that shape is what
+   * `viewFor` projects from, and a pairing of cards inside it would be a leak waiting
+   * for somebody to forget to strip it. This is the host's own note of what the bot
+   * saw, handed back to it explicitly — which is the rule the `Bot` interface has
+   * always stated, and what keeps a forgetful opponent a matter of passing less.
+   *
+   * `inPlay` is the deal being played *now*, held aside and committed only when it
+   * finishes. Without that the bot would be handed a partial record of the board in
+   * front of it and try to identify itself by it.
+   */
+  const boardOffers = useRef(new Map<number, readonly Pair<Card>[]>());
+  const inPlay = useRef<{ board: number; pairs: Pair<Card>[] } | null>(null);
 
   // Read once, when the match starts. Changing the setting mid-match would move
   // the goalposts on a sitting already under way.
-  const [table, setTable] = useState<TableState>(() =>
-    startTable({
+  const [match, setMatch] = useState<MatchState>(() =>
+    startMatch({
+      // In deals, which is what the player chose, converted where the two units
+      // meet rather than doubled here.
+      boards: boardsForDeals(sessionDeals()),
+      schedule: sessionOrder(),
+      // Where a session's board numbers begin. Random for now, which is the
+      // honest version until a catalogue exists: nobody is being scored against
+      // a field yet, so what matters is only that a session's boards are
+      // recorded, and `dealSeed` is what records them.
+      firstBoard: randomSeed() % 1_000_000,
       format: preferredFormat(),
       seed: dealSeed.current,
       // Randomized rather than always the human: every deal after this one
@@ -205,7 +233,9 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
   // consequence beyond the next animation being faster.
   setPacing(pacingFor(pace()));
 
-  const { deal } = table;
+  const deal = dealOf(match);
+  const summary = summarizeMatch(match);
+  const board = match.kind === "duplicate" ? currentDeal(match.session).board : null;
   const waitingOnBot = deal.toAct === OPPONENT && deal.phase !== "complete";
 
   // Set the instant a trick resolves, however either seat gets there, and
@@ -255,57 +285,75 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     const timer = setTimeout(() => {
       // The action is chosen out here rather than inside the updater: the bot's
       // generator is stateful, and React may call an updater more than once.
+      // What this turn offered the computer, noted before the turn consumes it. Keyed
+      // by which of its own draw turns this is, so a re-render that reaches here twice
+      // overwrites rather than appends.
+      if (board !== null && deal.phase === "draw" && deal.pending !== null) {
+        const second = deal.stock[0];
+        if (second !== undefined) {
+          if (inPlay.current?.board !== board) {
+            inPlay.current = { board, pairs: [] };
+          }
+          const turn = deal.drawTurns.filter((one) => one.by === OPPONENT).length;
+          inPlay.current.pairs[turn] = [deal.pending, second];
+        }
+      }
+
       const action = botActionFor({
+        boards: [...boardOffers.current].map(([one, offers]) => ({ board: one, offers })),
         bot,
         seat: OPPONENT,
-        standing: { rubber: table.rubberBefore, vulnerable: vulnerability(table.rubberBefore) },
+        standing: summary.botStanding,
         state: deal,
       });
-      setTable((current) =>
-        current === table ? applyTableAction(current, OPPONENT, action) : current,
-      );
+      setMatch((current) => (current === match ? actOn(current, OPPONENT, action) : current));
     }, pauseBefore(deal, peek));
 
     return () => {
       clearTimeout(timer);
     };
-  }, [awaitingDismissal, bot, deal, peek, table, waitingOnBot]);
+  }, [awaitingDismissal, bot, deal, match, peek, summary.botStanding, waitingOnBot]);
 
   const act = useCallback((action: DealAction) => {
-    setTable((current) =>
-      current.deal.toAct === HUMAN ? applyTableAction(current, HUMAN, action) : current,
-    );
+    setMatch((current) => (dealOf(current).toAct === HUMAN ? actOn(current, HUMAN, action) : current));
   }, []);
 
   const skipPhase = useCallback(() => {
-    const phase = table.deal.phase;
+    const phase = dealOf(match).phase;
     if (phase === "complete") {
       return;
     }
     // Resolved out here rather than inside the updater: the bot's generator is
     // stateful, and React may call an updater more than once.
-    let next = table;
-    while (next.deal.phase === phase) {
+    let next = match;
+    while (dealOf(next).phase === phase) {
+      const state = dealOf(next);
       const action = botActionFor({
         bot,
-        seat: next.deal.toAct,
-        standing: { rubber: next.rubberBefore, vulnerable: vulnerability(next.rubberBefore) },
-        state: next.deal,
+        seat: state.toAct,
+        standing: summarizeMatch(next).botStanding,
+        state,
       });
-      next = applyTableAction(next, next.deal.toAct, action);
+      next = actOn(next, state.toAct, action);
     }
-    setTable(next);
-  }, [bot, table]);
+    setMatch(next);
+  }, [bot, match]);
 
   const advance = useCallback(() => {
+    // A finished session is followed by a fresh set of boards, so what the computer
+    // remembers of the old ones goes. Not housekeeping: a person does not carry a
+    // board across sessions either, and leaving it would make the memory grow for as
+    // long as the tab is open in exchange for records that can never match again.
+    if (summarizeMatch(match).complete) {
+      boardOffers.current.clear();
+    }
     dealSeed.current = randomSeed();
     // `randomSeed` is not pure, so the deal is dealt out here rather than
-    // inside an updater React may call more than once.
-    const dealt = nextDeal(table, dealSeed.current);
-    setTable(dealt);
-  }, [table]);
+    // inside an updater React may call more than once. A session ignores the
+    // seed — it already knows every board it is going to play.
+    setMatch(nextIn(match, dealSeed.current));
+  }, [match]);
 
-  const summary = summarize(table);
   const achievements = useAchievementTracker();
 
   // Evaluated the instant a deal completes, whether or not the rubber it
@@ -321,8 +369,22 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     processedDeal.current = deal;
     achievements.applyDeal(dealFacts(deal, summary.score, summary.vulnerable), HUMAN);
 
+    // The finished deal's offers become memory. Only the *first* run of a board is
+    // kept: by the time the second is over the board is done and will not come round
+    // again, so overwriting would replace a useful record with a spent one.
+    const noted = inPlay.current;
+    if (noted !== null && noted.pairs.length === 13 && !boardOffers.current.has(noted.board)) {
+      boardOffers.current.set(noted.board, noted.pairs);
+    }
+    inPlay.current = null;
+
     // Nothing to log for a passed-out deal: no contract, no play, nothing a
     // later solver-based assessment could do anything with.
+    //
+    // Duplicate deals go in now that the log can say what they were bid at. It could
+    // not before — `standing` was a rubber, and a session has none — and sending a
+    // fresh one would have put a standing that never existed into stored data, which
+    // is how a bench comes to report a figure describing neither of two games.
     if (!deal.passedOut && deal.contract !== null && deal.initialHands !== null) {
       reportHandLog({
         auction: deal.auction,
@@ -334,12 +396,19 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
         drawTurns: deal.drawTurns,
         initialHands: deal.initialHands,
         seed: dealSeed.current,
-        // The score the deal was *bid* at, which is not the score it left
-        // behind. Without it a replayed auction is a different decision from
-        // the one that was taken — `bidValue` prices every call against the
-        // standing, so a part-score or a game in hand changes the answer.
+        format: summary.format,
+        // The score the deal was *bid* at, which is not the score it left behind.
+        // Without it a replayed auction is a different decision from the one that
+        // was taken — `bidValue` prices every call against the standing, so a
+        // part-score or a game in hand changes the answer.
+        //
+        // A session has no rubber, and the omission is the fact rather than a
+        // missing field: what a duplicate call is priced against is vulnerability,
+        // which a board prescribes, and that is here either way.
         standing: {
-          rubber: table.rubberBefore,
+          ...(summary.standing.kind === "rubber"
+            ? { rubber: summary.botStanding.rubber }
+            : {}),
           vulnerable: summary.vulnerable,
         },
         starter: deal.starter,
@@ -353,41 +422,63 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     }
   }, [achievements, deal, summary.score, summary.vulnerable]);
 
-  // Reported the moment the rubber is won rather than when the player taps on,
-  // because tapping on is optional: closing the tab on a won rubber is a
+  // Reported the moment the match is decided rather than when the player taps
+  // on, because tapping on is optional: closing the tab on a won rubber is a
   // perfectly ordinary way to finish, and it would otherwise go unrecorded.
+  //
+  // A drawn match is reported too, which it was not at first. `results` had no way
+  // to say nobody won, and duplicate turned that from a curiosity into an ordinary
+  // outcome: a board is flat whenever both of its runs score the same, so a short
+  // session is level a fair fraction of the time — and a match somebody played
+  // going missing is the failure `outbox.ts` exists to prevent. A rubber can tie on
+  // exactly equal totals as well, and that was silently unrecorded.
   const reported = useRef(false);
   useEffect(() => {
-    if (!summary.rubber.complete || summary.rubber.winner === null || reported.current) {
+    if (!summary.complete || reported.current) {
       return;
     }
     reported.current = true;
-    const points = totalScore(summary.rubber);
     reportRobotRubber({
       botVersion: release.version,
-      deals: summary.history.length,
+      deals: summary.dealsPlayed,
       difficulty: rung,
-      format: summary.rubber.format,
-      points: points[HUMAN],
-      pointsAgainst: points[OPPONENT],
-      won: summary.rubber.winner === HUMAN,
+      format: summary.format,
+      points: summary.points[HUMAN],
+      pointsAgainst: summary.points[OPPONENT],
+      drawn: summary.winner === null,
+      won: summary.winner === HUMAN,
     });
-    achievements.applyRubber(rubberFacts(summary), HUMAN);
-  }, [achievements, summary.history.length, summary.rubber]);
+    // Rubber achievements are about a rubber. Taking the rubber cannot be earned
+    // in a session and must not fire in one — which is the whole reason this is
+    // gated on the standing's shape rather than on the match merely finishing.
+    if (summary.standing.kind === "rubber") {
+      achievements.applyRubber(
+        rubberFacts({
+          history: summary.standing.history,
+          rubber: summary.standing.rubber,
+          score: summary.score,
+          vulnerable: summary.vulnerable,
+        }),
+        HUMAN,
+      );
+    }
+  }, [achievements, summary.complete, summary.dealsPlayed, summary.winner]);
 
-  // A new rubber is a new thing to report. `nextDeal` starts one once the last
-  // was won, which is the only way past a completed rubber.
+  // A new match is a new thing to report. `nextDeal` starts a fresh rubber once
+  // the last was won, which is the only way past a completed one.
   useEffect(() => {
-    if (!summary.rubber.complete) {
+    if (!summary.complete) {
       reported.current = false;
     }
-  }, [summary.rubber.complete]);
+  }, [summary.complete]);
 
   return {
     act,
     clearUnlocks: achievements.clear,
+    dealBonus: summary.bonus,
+    dealsPlayed: summary.dealsPlayed,
     dismissTrick,
-    history: summary.history,
+    format: summary.format,
     justTaken:
       deal.phase === "draw" ? (deal.hands[HUMAN][deal.hands[HUMAN].length - 1] ?? null) : null,
     justUnlocked: achievements.justUnlocked,
@@ -404,8 +495,9 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
       peek && deal.phase === "draw" && deal.toAct === OPPONENT ? deal.pending : null,
     // The computer neither waits nor asks: `nextDeal` simply deals.
     opponentWaitingToContinue: false,
-    rubber: summary.rubber,
+    matchComplete: summary.complete,
     score: summary.score,
+    standing: summary.standing,
     skipPhase,
     trickAwaitingDismissal: awaitingDismissal,
     view: viewFor(deal, HUMAN),

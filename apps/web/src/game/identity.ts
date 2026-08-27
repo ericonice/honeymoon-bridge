@@ -1,4 +1,4 @@
-import type { MatchFormat } from "@hb/engine";
+import type { DuplicateSchedule, MatchFormat } from "@hb/engine";
 import { DIFFICULTIES } from "../bot/difficulty.js";
 import type { Difficulty } from "../bot/difficulty.js";
 import { LATEST_RELEASE, releaseFor } from "../bot/release.js";
@@ -6,6 +6,8 @@ import type { BotRelease } from "../bot/release.js";
 import { readStored, writeStored } from "./storage.js";
 
 const FORMAT_KEY = "hb.format";
+const SESSION_DEALS_KEY = "hb.sessionDeals";
+const SESSION_ORDER_KEY = "hb.sessionOrder";
 const OPPONENT_KEY = "hb.opponent";
 const DIFFICULTY_KEY = "hb.difficulty";
 const DISGUISE_KEY = "hb.disguise";
@@ -60,13 +62,96 @@ export function resetPlayerToken(): void {
  * A preference rather than a decision: at a table with somebody else it is one
  * of two, and the shorter one wins — see `formatFor` on the server. Rubber is
  * the default because it is the game this was built to play.
+ *
+ * Rubber is the default because it is the game this was built to play, and
+ * anything unrecognised reads as a rubber for the same reason — the service
+ * worker keeps old builds in circulation, and a stored value from a future one
+ * should fall back to the game rather than to nothing.
  */
 export function preferredFormat(): MatchFormat {
-  return readStored(FORMAT_KEY) === "game" ? "game" : "rubber";
+  const stored = readStored(FORMAT_KEY);
+  if (stored === "game" || stored === "duplicate") {
+    return stored;
+  }
+  return "rubber";
 }
 
 export function setPreferredFormat(format: MatchFormat): void {
   writeStored(FORMAT_KEY, format);
+}
+
+/**
+ * How long a duplicate session runs, in deals.
+ *
+ * **In deals rather than boards**, because that is the question a player answers —
+ * how long is this game — and it is how a rubber is experienced too. Boards are the
+ * engine's unit, and `boardsForDeals` is the one place the two meet.
+ *
+ * **A range with a step rather than a list of choices**, which is the third shape
+ * this took and the one that holds. A fixed list of five was a row of five tap
+ * targets that had to fit a phone, so it could not reach a longer session at all —
+ * and the row it lived on appeared and disappeared with the format, shifting the
+ * primary button out from under the thumb reaching for it. A stepper is two targets,
+ * one line, always the same height, and every length is reachable.
+ *
+ * Even throughout, and that is a rule rather than a tidy choice: a board is worth
+ * the difference between its two runs, so an odd count would leave one board played
+ * once — a score with nothing to compare against.
+ *
+ * Ten is the default because it is the length of a rubber, so everything that
+ * assumes a match is about that long still holds, and because five intervening deals
+ * is the working guess at how long it takes to forget a board. **That guess is why
+ * this is a control at all**: it is the one thing no bench can settle.
+ *
+ * Two deals is the shortest and it is a real session — one board played twice, the
+ * replay immediately after, so recall is complete and the board turns purely on what
+ * each side did with the same stock. The clearest demonstration of what the format
+ * is, and the least interesting test of memory.
+ */
+export const MIN_SESSION_DEALS = 2;
+export const MAX_SESSION_DEALS = 30;
+export const SESSION_DEALS_STEP = 2;
+const DEFAULT_SESSION_DEALS = 10;
+
+/** Rounded to an even count inside the range. Anything unreadable reads as the default. */
+export function cleanSessionDeals(deals: number): number {
+  if (!Number.isFinite(deals)) {
+    return DEFAULT_SESSION_DEALS;
+  }
+  const even = Math.round(deals / SESSION_DEALS_STEP) * SESSION_DEALS_STEP;
+  return Math.min(MAX_SESSION_DEALS, Math.max(MIN_SESSION_DEALS, even));
+}
+
+export function sessionDeals(): number {
+  const stored = readStored(SESSION_DEALS_KEY);
+  return stored === null ? DEFAULT_SESSION_DEALS : cleanSessionDeals(Number(stored));
+}
+
+export function setSessionDeals(deals: number): void {
+  writeStored(SESSION_DEALS_KEY, String(cleanSessionDeals(deals)));
+}
+
+/**
+ * How a session orders its deals — see `DuplicateSchedule` for what each one is.
+ *
+ * A real setting rather than a constant because the three are different *games*
+ * rather than three arrangements of one, and which is the better game is not
+ * something a bench has an opinion about. Playing a board's two halves back to back
+ * makes the comparison immediate and the strategy about beating a line you have just
+ * seen; shuffling makes recognising the board part of it. Both are wanted.
+ *
+ * `halves` is the default because it is what a duplicate evening is: everybody plays
+ * every board once, then they come round again.
+ */
+export const SESSION_ORDERS: readonly DuplicateSchedule[] = ["adjacent", "halves", "random"];
+
+export function sessionOrder(): DuplicateSchedule {
+  const stored = readStored(SESSION_ORDER_KEY);
+  return SESSION_ORDERS.find((one) => one === stored) ?? "halves";
+}
+
+export function setSessionOrder(order: DuplicateSchedule): void {
+  writeStored(SESSION_ORDER_KEY, order);
 }
 
 /**

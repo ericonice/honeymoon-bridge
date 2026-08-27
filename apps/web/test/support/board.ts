@@ -84,7 +84,7 @@ function Harness({
   const [state, setState] = useState(table);
   const [, setProcessed] = useState(0);
   const [unlocked, setUnlocked] = useState<readonly Unlock[]>([]);
-  const snapshot = snapshotFor(state, seat);
+  const snapshot = snapshotFor({ kind: "rubber", table: state }, seat);
   controller.apply = (player, action) => {
     setState((current) => applyTableAction(current, player, action));
   };
@@ -116,7 +116,6 @@ function Harness({
       setUnlocked([]);
     },
     dismissTrick: () => {},
-    history: snapshot.history,
     justTaken: snapshot.justTaken,
     justUnlocked: unlocked,
     lastDraw: snapshot.lastDraw,
@@ -129,7 +128,14 @@ function Harness({
     opponentName: "Them",
     opponentPending: null,
     opponentWaitingToContinue: false,
-    rubber: snapshot.rubber,
+    // Straight off the snapshot rather than reassembled here. The server decides
+    // what a seat is told, and a client rebuilding the standing from parts would be
+    // a second answer to that question.
+    standing: snapshot.standing,
+    matchComplete: snapshot.matchComplete,
+    dealBonus: snapshot.dealBonus,
+    dealsPlayed: snapshot.dealsPlayed,
+    format: snapshot.format,
     score: snapshot.score,
     skipPhase: null,
     trickAwaitingDismissal: false,

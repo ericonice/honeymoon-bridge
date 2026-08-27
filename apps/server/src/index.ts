@@ -20,6 +20,7 @@ import { handLogsFor, recordHandLog } from "./handLogs.js";
 import type { HandLog } from "./handLogs.js";
 import { botAnchors } from "./ratings.js";
 import {
+  DRAWN,
   everyRecentMatch,
   recentMatchesFor,
   recordRubber,
@@ -86,6 +87,7 @@ function json(
 interface RobotRubber {
   readonly deals: number;
   readonly deviceToken: string;
+  readonly drawn: boolean;
   readonly format: MatchFormat;
   readonly nickname: string;
   readonly botVersion: number | null;
@@ -175,11 +177,19 @@ function robotRubberFrom(body: unknown): RobotRubber | null {
     difficulty: rung(value.difficulty),
     deviceToken: value.deviceToken,
     // Anything unrecognized is a rubber, which is what a client too old to know
-    // about formats would have been playing.
-    format: value.format === "game" ? "game" : "rubber",
+    // about formats would have been playing. Duplicate is stored on the same
+    // terms as an unrecognised difficulty rung: keep what the client said, so
+    // `ratings.ts` can come out right by itself once it learns what to do with
+    // it, rather than flattening it to something it is not.
+    format:
+      value.format === "game" || value.format === "duplicate" ? value.format : "rubber",
     nickname: nickname === "" ? "Player" : nickname,
     points,
     pointsAgainst,
+    // Optional and additive, because every client the service worker still has in
+    // circulation sends `won` alone and never a draw. Absent means somebody won,
+    // which is what a client that could not draw was reporting.
+    drawn: value.drawn === true,
     won: value.won,
   };
 }
@@ -523,10 +533,18 @@ function standingOrNull(input: unknown): NonNullable<HandLog["standing"]> | unde
   }
   const value = input as Record<string, unknown>;
   const vulnerable = booleanPair(value.vulnerable);
-  if (vulnerable === null || typeof value.rubber !== "object" || value.rubber === null) {
+  if (vulnerable === null) {
     return undefined;
   }
-  return { rubber: value.rubber as NonNullable<HandLog["standing"]>["rubber"], vulnerable };
+  // A duplicate deal has vulnerability and no rubber, which is not a partial
+  // standing but the whole of the one it was bid at. Kept out of the object
+  // altogether rather than sent as null, so a reader asking "was there a rubber"
+  // gets the same answer as one asking "was this a session".
+  const rubber =
+    typeof value.rubber === "object" && value.rubber !== null
+      ? (value.rubber as NonNullable<NonNullable<HandLog["standing"]>["rubber"]>)
+      : undefined;
+  return { ...(rubber === undefined ? {} : { rubber }), vulnerable };
 }
 
 /**
@@ -620,6 +638,13 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
     ...(drawTurns === undefined
       ? {}
       : { drawTurns: drawTurns as NonNullable<HandLog["drawTurns"]> }),
+    // Absent means a rubber, which is all there was before there were formats. It is
+    // load-bearing rather than a label: `objectiveFor` reads it to decide what the
+    // bidder was pricing in, and a session's call replayed as a rubber's is a
+    // different decision with the same auction in front of it.
+    ...(value.format === "duplicate" || value.format === "game"
+      ? { format: value.format }
+      : {}),
     ...(rules === undefined ? {} : { rules }),
     ...(seed === null ? {} : { seed }),
     ...(standing === undefined ? {} : { standing }),
@@ -634,6 +659,7 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
       initialHands: log.initialHands,
       tricksWon: log.tricksWon,
       ...(log.drawTurns === undefined ? {} : { drawTurns: log.drawTurns }),
+      ...(log.format === undefined ? {} : { format: log.format }),
       ...(log.rules === undefined ? {} : { rules: log.rules }),
       ...(log.seed === undefined ? {} : { seed: log.seed }),
       ...(log.standing === undefined ? {} : { standing: log.standing }),
@@ -961,7 +987,12 @@ export default {
               token: ROBOT_TOKEN,
             },
           ],
-          winner: rubber.won ? 0 : 1,
+          // A drawn session is a real result and has to be recordable, or a match
+          // somebody played goes missing — the same failure `outbox.ts` exists to
+          // prevent. Duplicate made it common rather than theoretical: a board is
+          // flat whenever both of its runs score the same, so a short session is
+          // level a fair fraction of the time.
+          winner: rubber.drawn ? DRAWN : rubber.won ? 0 : 1,
         },
         playedAt(rubber.finishedAt, Date.now()),
       );

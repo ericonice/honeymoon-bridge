@@ -1,6 +1,14 @@
 import { useState } from "react";
+import type { DuplicateSchedule, MatchFormat } from "@hb/engine";
 import type { Account } from "../game/account.js";
 import { storedSession } from "../game/account.js";
+import {
+  MAX_SESSION_DEALS,
+  MIN_SESSION_DEALS,
+  SESSION_DEALS_STEP,
+  SESSION_ORDERS,
+  cleanSessionDeals,
+} from "../game/identity.js";
 import { createTableUrl } from "../game/serverUrl.js";
 import { AchievementIcon, HelpIcon, RecordIcon, SettingsIcon } from "./icons.js";
 
@@ -8,6 +16,14 @@ export interface HomeProps {
   /** Null when signed out, which is most of what this screen has to say. */
   readonly account: Account | null;
   readonly checkingAccount: boolean;
+  readonly format: MatchFormat;
+  onFormatChange(format: MatchFormat): void;
+  /** How long a duplicate session runs, in deals. Only shown while one is chosen. */
+  readonly sessionDeals: number;
+  onSessionDealsChange(deals: number): void;
+  /** How a duplicate session orders its deals. Only shown while one is chosen. */
+  readonly sessionOrder: DuplicateSchedule;
+  onSessionOrderChange(order: DuplicateSchedule): void;
   onFindOpponent(): void;
   onJoinTable(code: string): void;
   onPlayComputer(): void;
@@ -50,6 +66,264 @@ function Secondary({
     >
       {icon}
       <span className="text-[11px] leading-none">{label}</span>
+    </button>
+  );
+}
+
+/**
+ * What you are about to play, above the buttons that start it.
+ *
+ * On Home rather than in Settings, and it is the only match set-up that moved.
+ * The test is not *when* a setting is read — all of them are read once, when a
+ * match starts — but **how often the answer changes**. This changes session to
+ * session; how hard it plays, which computer and the two dials beside them are
+ * set once and left for months, so they stay where they are and keep their
+ * "takes effect on the next match" caveat, which is fair for something touched
+ * twice a year.
+ *
+ * Two things a Settings row could not do. Duplicate gets *found*, which a mode
+ * nobody has heard of does not when it lives behind a gear. And there is no
+ * staleness to explain, because the row sits directly above the button that
+ * consumes it.
+ *
+ * One row rather than one per action: play-the-computer and the two table
+ * buttons would each carry their own copy of the same three options, and two
+ * controls for one preference is a preference that can disagree with itself —
+ * set duplicate on one, tap the other, get a rubber.
+ */
+function Format({
+  format,
+  onChange,
+}: {
+  readonly format: MatchFormat;
+  onChange(format: MatchFormat): void;
+}): React.JSX.Element {
+  const labels: Record<MatchFormat, string> = {
+    duplicate: "Duplicate",
+    game: "One game",
+    rubber: "Rubber",
+  };
+  const options = FORMAT_ORDER.map((value) => ({ label: labels[value], value }));
+
+  return (
+    <div className="flex gap-1 rounded-xl bg-white/5 p-1">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={format === option.value}
+          className={`flex-1 rounded-lg px-2 py-2 text-xs font-medium ${
+            format === option.value ? "bg-white/15 text-white" : "text-white/55"
+          }`}
+          onClick={() => {
+            onChange(option.value);
+          }}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** "1 board" rather than "1 boards", which the shortest session would otherwise read as. */
+/**
+ * How the session orders its deals, on the second of the two lines under the format
+ * row.
+ *
+ * **Two lines, always, whichever format is chosen**, and the second is empty for the
+ * two rubber formats. That is not waste: it is what keeps the block a fixed height so
+ * nothing below it can move — a fault this control has already had twice — and the
+ * space it leaves is the separation between choosing what to play and the buttons
+ * that act on the choice, which the group wanted anyway.
+ *
+ * The three orders are different *games* rather than three arrangements of one. Back
+ * to back makes the comparison immediate and the strategy about beating a line you
+ * have just seen; halves is what a duplicate evening actually is, everybody playing
+ * every board once before they come round again; shuffled makes recognising the board
+ * part of it. Which is better is not something a bench has an opinion about, so it is
+ * a setting rather than a decision.
+ */
+function OrderRow({
+  format,
+  onChange,
+  order,
+}: {
+  readonly format: MatchFormat;
+  onChange(order: DuplicateSchedule): void;
+  readonly order: DuplicateSchedule;
+}): React.JSX.Element {
+  if (format !== "duplicate") {
+    return <div className={NOTE_HEIGHT} aria-hidden="true" />;
+  }
+
+  return (
+    <div className={`${NOTE_HEIGHT} gap-2 px-1 text-xs text-white/45`}>
+      <span className="whitespace-nowrap">Order</span>
+      <div className="flex flex-1 gap-1">
+        {SESSION_ORDERS.map((one) => (
+          <button
+            key={one}
+            type="button"
+            aria-pressed={order === one}
+            className={`flex-1 truncate rounded-md py-0.5 text-xs font-medium ${
+              order === one ? "bg-white/15 text-white" : "text-white/45"
+            }`}
+            onClick={() => {
+              onChange(one);
+            }}
+          >
+            {ORDER_LABEL[one]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** "1 board" rather than "1 boards", which the shortest session would otherwise read as. */
+function boardWord(boards: number): string {
+  return `${boards} ${boards === 1 ? "board" : "boards"}`;
+}
+
+/**
+ * What each format means, in the one line under the row that picks it.
+ *
+ * Short on purpose. The first version of this line ran to sixty characters, which
+ * wraps to two at 12px in a phone's column — so choosing Duplicate *shrank* the
+ * block and moved the primary button, which is the exact fault the line was added
+ * to fix. Its height is pinned in CSS as well, so no future edit can reintroduce it.
+ */
+/** The order the row draws them, which is also what `leanFor` reads. */
+const FORMAT_ORDER: readonly MatchFormat[] = ["game", "rubber", "duplicate"];
+
+const FORMAT_NOTE: Record<"game" | "rubber", string> = {
+  game: "First to 100 below the line",
+  rubber: "Best of three games",
+};
+
+/** The line's height, pinned so nothing below it can ever move. */
+const NOTE_HEIGHT = "flex h-6 items-center";
+
+/** What each order is called on the row, and what it means underneath. */
+const ORDER_LABEL: Record<DuplicateSchedule, string> = {
+  adjacent: "Back to back",
+  halves: "Halves",
+  random: "Shuffled",
+};
+
+/**
+ * Which way the line under the row leans, so it reads as being *about* the option
+ * that is selected.
+ *
+ * The row is three equal cells, so the selected one's centre sits at a sixth, a
+ * half, or five sixths across. Leaning the text that way points at it without
+ * drawing anything, and costs nothing when the line is longer than a third of the
+ * width — which every one of them is, so actually centring under the cell would
+ * mean wrapping three short lines instead of one.
+ *
+ * Derived from the option's position rather than listed per format, so a fourth
+ * format needs nothing here.
+ */
+function leanFor(index: number, count: number): string {
+  if (index === 0) {
+    return "justify-start text-left";
+  }
+  return index === count - 1 ? "justify-end text-right" : "justify-center text-center";
+}
+
+/**
+ * The line under the format row: what the chosen format means, or — for a session —
+ * how long it runs.
+ *
+ * **One line, always, whatever is chosen.** The length control used to appear only
+ * for duplicate, inserting a row above the primary button and moving "Play the
+ * computer" out from under the thumb reaching for it. A control that shifts the
+ * thing you are about to tap is worse than one slightly out of place.
+ *
+ * It is not a placeholder for the other two formats either: what a rubber is and
+ * what a single game is were explained by the Settings row's own description until
+ * that row moved to Home, and the explanation had nowhere to go. So the constant
+ * height costs nothing — the space was already earning its keep for two of three.
+ *
+ * **A stepper rather than a row of lengths**, which is the third shape this took. A
+ * fixed list was five tap targets competing for a phone's width, which capped the
+ * session at whatever fitted; two arrows reach any length, take one line, and leave
+ * room for the sentence around them to say what the number *is*.
+ */
+function FormatNote({
+  deals,
+  format,
+  onDealsChange,
+}: {
+  readonly deals: number;
+  readonly format: MatchFormat;
+  onDealsChange(deals: number): void;
+}): React.JSX.Element {
+  const lean = leanFor(FORMAT_ORDER.indexOf(format), FORMAT_ORDER.length);
+
+  if (format !== "duplicate") {
+    return (
+      <p className={`${NOTE_HEIGHT} ${lean} px-1 text-xs text-white/45`}>{FORMAT_NOTE[format]}</p>
+    );
+  }
+
+  return (
+    <div className={`${NOTE_HEIGHT} ${lean} gap-1 px-1 text-xs text-white/45`}>
+      <span>A session of</span>
+      <Step
+        label="Shorter session"
+        disabled={deals <= MIN_SESSION_DEALS}
+        onClick={() => {
+          onDealsChange(cleanSessionDeals(deals - SESSION_DEALS_STEP));
+        }}
+      >
+        &lsaquo;
+      </Step>
+      <output className="w-6 text-center font-semibold tabular-nums text-white/90">{deals}</output>
+      <Step
+        label="Longer session"
+        disabled={deals >= MAX_SESSION_DEALS}
+        onClick={() => {
+          onDealsChange(cleanSessionDeals(deals + SESSION_DEALS_STEP));
+        }}
+      >
+        &rsaquo;
+      </Step>
+      <span>deals</span>
+    </div>
+  );
+}
+
+/**
+ * One arrow of the stepper.
+ *
+ * Padded well past the glyph it draws: a chevron at this size is a four-pixel target
+ * and §1.5 allocates size by how badly a mis-tap hurts — a wrong step here is
+ * harmless and instantly undone, so it does not need the draw's 64px, but it does
+ * need to be hittable. The negative margin gives the padding back to the layout so
+ * growing the target cannot push the sentence around.
+ */
+function Step({
+  children,
+  disabled,
+  label,
+  onClick,
+}: {
+  readonly children: React.ReactNode;
+  readonly disabled: boolean;
+  readonly label: string;
+  onClick(): void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      className="-my-2 -mx-1 px-2 py-2 text-base leading-none text-white/70 disabled:text-white/20"
+      onClick={onClick}
+    >
+      {children}
     </button>
   );
 }
@@ -153,8 +427,14 @@ function Choice({
 export function Home({
   account,
   checkingAccount,
+  format,
   onFindOpponent,
+  onFormatChange,
   onJoinTable,
+  onSessionDealsChange,
+  onSessionOrderChange,
+  sessionDeals,
+  sessionOrder,
   onPlayComputer,
   onShowAccount,
   onShowAchievements,
@@ -219,22 +499,49 @@ export function Home({
       </div>
 
       <div className="flex flex-col gap-3 py-6">
+        {/* The row and its one line of explanation are one control, so they sit close
+            to each other — and well clear of the buttons below, which act on the
+            choice rather than being part of making it. Without that gap the note read
+            as a caption on the primary button. */}
+        <div className="mb-2 flex flex-col gap-1.5">
+          <Format format={format} onChange={onFormatChange} />
+          <FormatNote deals={sessionDeals} format={format} onDealsChange={onSessionDealsChange} />
+          <OrderRow format={format} order={sessionOrder} onChange={onSessionOrderChange} />
+        </div>
+
         <Choice
           primary
           label="Play the computer"
-          description="On this device. Works offline, and needs nobody else."
+          description={
+            format === "duplicate"
+              ? `On this device. ${sessionDeals} deals: ${boardWord(sessionDeals / 2)}, each played twice from both sides.`
+              : "On this device. Works offline, and needs nobody else."
+          }
           onClick={onPlayComputer}
         />
 
+        {/* No longer shut for duplicate: a table can run a session now. It still
+            takes *both* seats to have asked for one — a session is a different game
+            rather than a longer or shorter one, so being put into it unasked is a
+            worse mistake than getting the rubber you know. See `formatFor` on the
+            server, which is where that rule lives. */}
         <Choice
           label="Find an opponent"
-          description="Get put together with whoever else is looking for a game."
+          description={
+            format === "duplicate"
+              ? "Get put together with whoever else is looking. A session needs you both to want one."
+              : "Get put together with whoever else is looking for a game."
+          }
           onClick={onFindOpponent}
         />
 
         <Choice
           label="Start a table"
-          description="Create a table and send one particular person the link."
+          description={
+            format === "duplicate"
+              ? "Send one person the link. A session needs you both to want one."
+              : "Create a table and send one particular person the link."
+          }
           disabled={busy}
           onClick={() => {
             void startTable();

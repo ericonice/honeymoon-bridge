@@ -3,7 +3,7 @@ import { applyAction, startDeal } from "./deal.js";
 import { applyDealScore, newRubber, vulnerability } from "./rubber.js";
 import { scoreDeal } from "./scoring.js";
 import type { DealScore } from "./scoring.js";
-import type { MatchFormat, RubberState } from "./rubber.js";
+import type { RubberFormat, RubberState } from "./rubber.js";
 import type { Contract, DealAction, DealState, Pair, PlayerId } from "./types.js";
 
 /**
@@ -47,7 +47,7 @@ export interface TableState {
 
 export interface StartTableOptions {
   /** Defaults to a rubber, which is what this game was until it was not. */
-  readonly format?: MatchFormat;
+  readonly format?: RubberFormat;
   readonly seed: number;
   readonly starter: PlayerId;
 }

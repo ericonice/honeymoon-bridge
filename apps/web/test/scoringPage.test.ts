@@ -5,6 +5,7 @@ import {
   honorsFor,
   matchBonusFor,
   overtrickPoints,
+  scoreDuplicateDeal,
   slamBonus,
   undertrickPoints,
 } from "@hb/engine";
@@ -171,4 +172,41 @@ test("it explains the line and what vulnerability is", () => {
   expect(said).toContain("above");
   expect(said).toContain("vulnerable");
   expect(said).toContain(String(GAME_THRESHOLD));
+});
+
+/**
+ * The duplicate figures, against `scoreDuplicateDeal` itself.
+ *
+ * Same discipline as everything above: the expectations come from the engine
+ * function the game actually settles a session with, not from `scoringFacts.ts`.
+ * A page compared against the module feeding it would agree with whatever either
+ * of them said.
+ */
+test("the duplicate bonuses are the ones a session is settled with", () => {
+  show();
+  const shown = text();
+
+  const scored = (bid: 3 | 4, tricks: number): ReturnType<typeof scoreDuplicateDeal> =>
+    scoreDuplicateDeal(
+      {
+        contract: { declarer: 0, doubling: "none", level: bid, strain: "H" },
+        hands: [[], []],
+        tricksWon: [tricks, 13 - tricks],
+      },
+      [false, false],
+    );
+
+  // A game, a part-score, and a contract that failed.
+  expect(shown).toContain(String(scored(4, 10).bonus));
+  expect(shown).toContain(String(scored(3, 9).bonus));
+  // Stated in words rather than as a digit, so the test guards the sentence: if a
+  // failed contract ever paid something, the page would be lying and this fails.
+  expect(scored(4, 9).bonus).toBe(0);
+  expect(shown).toContain("no bonus at all");
+
+  // The worked example: the same eleven tricks, bid two ways.
+  expect(shown).toContain(String(scored(3, 11).points[0]));
+  expect(shown).toContain(String(scored(4, 11).points[0]));
+  // And the point of it — bidding the game is worth more.
+  expect(scored(4, 11).points[0]).toBeGreaterThan(scored(3, 11).points[0]);
 });

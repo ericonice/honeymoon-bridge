@@ -8,6 +8,7 @@ import { Record } from "../src/ui/Record.js";
 const match = (over: Partial<OpponentMatch> = {}): OpponentMatch => ({
   botVersion: 2,
   deals: 8,
+  drawn: false,
   finishedAt: Date.UTC(2026, 7, 22, 16, 42),
   pointsAgainst: 410,
   pointsFor: 890,
@@ -17,6 +18,7 @@ const match = (over: Partial<OpponentMatch> = {}): OpponentMatch => ({
 
 const record = (over: Partial<OpponentRecord> = {}): OpponentRecord => ({
   deals: 146,
+  drawn: 0,
   format: "rubber",
   lastPlayed: Date.now(),
   lost: 7,
@@ -143,6 +145,50 @@ test("an opponent played in both formats names them, on a line each", () => {
     "Computer cpu rubbers 13–7 146 +641",
     "Computer cpu single games 2–1 9 +90",
   ]);
+});
+
+/**
+ * The bug this replaced. An opponent's formats were two named slots — a rubber
+ * and a game — so a third simply had nowhere to land and **was dropped without
+ * failing**: duplicate sessions were being recorded and never appeared. A list is
+ * the honest shape for "whichever formats have been played", and it is what makes
+ * a fourth format need no change here at all.
+ */
+test("a third format lands on the list rather than falling off it", () => {
+  robot = [
+    record(),
+    record({ deals: 9, format: "game", lost: 1, pointsAgainst: 200, pointsFor: 290, won: 2 }),
+    record({ deals: 20, format: "duplicate", lost: 1, pointsAgainst: 0, pointsFor: 340, won: 1 }),
+  ];
+  show();
+
+  expect(lines().map((line) => line.replace(/ \d[\d,]* points for.*against/, ""))).toEqual([
+    "Computer cpu rubbers 13–7 146 +641",
+    "Computer cpu single games 2–1 9 +90",
+    "Computer cpu duplicate sessions 1–1 20 +340",
+  ]);
+});
+
+/**
+ * A drawn match is a third outcome, and duplicate makes it ordinary: a board is
+ * flat whenever both of its runs score the same, so a short session is level a fair
+ * fraction of the time. The third figure appears only when there is one — every
+ * rubber row would otherwise carry a "–0" for something that cannot happen to it,
+ * on a row that is scanned rather than read.
+ */
+test("a drawn match is counted as neither won nor lost", () => {
+  robot = [record({ drawn: 2, format: "duplicate", lost: 3, won: 5 })];
+  show();
+
+  expect(lines()[0]).toContain("5–3–2");
+});
+
+test("a record with no draws says nothing about them", () => {
+  robot = [record()];
+  show();
+
+  expect(lines()[0]).toContain("13–7");
+  expect(lines()[0]).not.toContain("13–7–");
 });
 
 test("a losing record shows the margin as negative, with a real minus sign", () => {

@@ -3,7 +3,7 @@ import type { DealAction, PlayerId, Unlock } from "@hb/engine";
 import type { ClientMessage, ServerMessage, SessionSnapshot, TableInfo } from "@hb/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { storedSession } from "./account.js";
-import { playerToken, preferredFormat } from "./identity.js";
+import { playerToken, preferredFormat, sessionDeals, sessionOrder } from "./identity.js";
 import type { GameSession } from "./session.js";
 import { tableSocketUrl } from "./serverUrl.js";
 
@@ -48,7 +48,6 @@ function sessionFrom(
     // `GameSession.trickAwaitingDismissal` — so holding this side of a resolved
     // trick would be a screen with no effect on the game underneath it.
     dismissTrick: () => {},
-    history: snapshot.history,
     justTaken: snapshot.justTaken,
     justUnlocked,
     lastDraw: snapshot.lastDraw,
@@ -62,7 +61,14 @@ function sessionFrom(
     opponentName: them?.nickname ?? "Opponent",
     opponentPending: null,
     opponentWaitingToContinue: !table.ready[seat] && table.ready[opponentOf(seat)],
-    rubber: snapshot.rubber,
+    // Straight off the snapshot rather than reassembled here. The server decides
+    // what a seat is told, and a client rebuilding the standing from parts would be
+    // a second answer to that question.
+    standing: snapshot.standing,
+    matchComplete: snapshot.matchComplete,
+    dealBonus: snapshot.dealBonus,
+    dealsPlayed: snapshot.dealsPlayed,
+    format: snapshot.format,
     score: snapshot.score,
     // Not on offer: the server decides what a seat may do and would refuse it.
     skipPhase: null,
@@ -134,6 +140,14 @@ export function useNetworkSession(code: string): NetworkGame {
           JSON.stringify({
             type: "join",
             format: preferredFormat(),
+            // Only consulted when the other seat asked for duplicate too — see
+            // `formatFor`. Sent unconditionally because it is a preference rather
+            // than a claim, and the server decides what the table plays.
+            sessionDeals: sessionDeals(),
+            // Consulted only when the other seat asked for the same order, for the
+            // reason duplicate itself takes both: an order nobody asked for is a
+            // different game handed over unasked.
+            sessionOrder: sessionOrder(),
             session: storedSession(),
             token: playerToken(),
           } satisfies ClientMessage),

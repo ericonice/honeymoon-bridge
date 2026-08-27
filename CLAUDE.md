@@ -50,6 +50,8 @@ npm run bench:bidcost   --workspace @hb/web -- 25       # what bidding by search
 npm run bench:strain    --workspace @hb/web -- "S:AK4 H:AK4 D:A43 C:AK32"
 npm run bench:draw      --workspace @hb/web -- 300      # draw policies against each other
 npm run bench:equity    --workspace @hb/web -- 1500      # what a standing is worth, as a win chance
+# What remembering a board is worth. Ten minutes; needs a sample count to do anything.
+npm run bench:rubber --workspace @hb/web -- 60 8 format=duplicate control nodouble memory
 
 # Deals a person actually played, from the hand log. Not generated — pass the file.
 npx vite-node bench/hands.ts hands.json         # from apps/web; add v=2 for one version
@@ -281,7 +283,13 @@ five-level-only reference, `equity=N` sets what the challenger prices a game at,
 `releases=3:2` plays one release against another, challenger first, reading both
 tunings out of the registry — **prefer that to `objective=equity`**, which compares
 one pricing against another and only happens to name v3 against v2 for as long as
-that is the only thing separating them.
+that is the only thing separating them. `format=duplicate` plays sessions, `control`
+puts the challenger's exact tuning on both seats, and `memory` gives the challenger a
+board's pairs on its replay (`memory=both` gives them to both, which is a symmetry
+check rather than a measurement — see below). **`memory` needs a sample count to do
+anything**, since it only reaches the game through the sampler and the bid search;
+run at `0` samples with no search it is two identical bots, and the recognition census
+in the read-out is there to say so.
 
 **Release-versus-release is what makes releases comparable, and it is the reason they
 do not need freezing.** Card play is shared, so a fix there moves both sides of any
@@ -443,7 +451,10 @@ from ordinary bridge:
   its seed and its starter and nothing else. Deals in the hand log may still carry
   `rules: { openDiscard: true }`, which means what it says — that deal really was played that way, and
   `bench/hands.ts` keeps them separable rather than pooling them with the game as specified.
-- Rubber scoring, not Chicago or duplicate. Vulnerability comes from having won a game.
+- **Rubber scoring, and duplicate as a second format.** A rubber earns vulnerability by winning a
+  game; a duplicate session prescribes it by board and pays for a game on the spot. Not Chicago.
+  `MatchFormat` is the wide vocabulary and `RubberFormat` is the narrow one the rubber machinery
+  keeps, so nothing has to invent a meaning for a rubber that is a duplicate.
 
 ## Conventions
 
@@ -1316,6 +1327,293 @@ deal *count* and each side's points; there is no per-deal outcome, so it would n
 every game already recorded. It is also weaker than the margin beside it: a deal can be passed out
 with nobody winning it, and a rubber is settled in points.
 
+**Duplicate is a second format, and a board is a seed rather than a hand.** `packages/engine/src/duplicate.ts`
+is the whole of the rules: N boards, each played twice with the starter reversed, scored on the
+difference between its two runs. Ordinary duplicate fixes the cards and has different people play
+them; this game has no cards to fix, so what gets duplicated is the **stock**.
+
+**Two properties of the reducer make that exact, and both are asserted rather than assumed.** A turn
+spends exactly two stock cards and turns alternate unconditionally, so each seat's thirteen offers
+are a function of the seed alone and cannot be perturbed by anything either player does — checked by
+driving one seed under two opposite policies. And `startDeal` hands the starter the first pair, so
+flipping the starter swaps the two streams exactly, which is the seat swap and needs no engine change
+at all.
+
+**The test to keep is the control run: two identical players score a dead heat on every board.**
+Driven by one policy from both seats, a replay is its own first run with the seats relabelled, so
+every margin must be exactly zero. It is the duplicate counterpart of `bench/rubber.ts`'s own control
+— one bidder against a copy of itself must be 50% — which is what caught the oracle doubler
+handicapping whichever seat it was applied to. A format claiming to cancel the deal has to cancel it
+exactly when nothing else separates the players. It is asserted twice, in the engine and again in
+`test/match.test.ts`, because the second is the path the app takes and a host that dealt a board
+wrong would still pass the first.
+
+**The memory advantage on a replayed board is not closeable, and every dial attacks retrieval rather
+than knowledge.** Every deal is played to all thirteen tricks, so both hands are public by the end —
+`finishedHandsFor` says so in as many words. So the second half of a session is inherently
+memory-advantaged, and the dials only decide how *usable* that is: the board count sets the average
+gap, `minGapFor` sets the worst one, and the replay order is a **random permutation** so that
+withholding a board's identity means something — under a fixed order the identity is implicit in the
+count. Deferring the hands reveal was designed and rejected: it withholds nothing, it is the only
+feedback on 26 draw decisions, and it is what makes a replay "I know this one" rather than a blind
+repeat. **If memory dominates in play, the length is what to move**, which is why it is a control.
+
+**The length is chosen in deals and the floor scales with it.** A session's length is a *deal* count
+because that is the question a player answers — how long is this game — while the engine's unit is the
+board, and `boardsForDeals` is the one place the two meet. Every count is even, and that is a rule
+rather than a tidy choice: a board is worth the difference between its two runs, so an odd count would
+leave one board played once, which is a score with nothing to compare against.
+
+Making it configurable forced one change that is worth more than the control. `MIN_REPLAY_GAP` was a
+flat 3, and **a flat floor does not compose with a variable count**: at three boards a floor of three
+admits only the identity permutation, so the schedule stops being random at all, and at twelve boards
+the same floor lets a board back after three deals when the average is twelve. So it is
+`minGapFor(boards)` — a fraction of the average rather than a number of deals. It exists at all because
+how many deals it takes to forget a board is the one thing no bench can settle, and the draw's pacing
+spent months as a setting for exactly the same reason before it was answered.
+
+**The computer plays duplicate, and it now remembers a board it has played.** `botActionFor` hands the
+bot `state.discards[seat]` — *this deal's* discards — and `DealState` is per-deal, so there was nowhere
+for a previous board to live and the first version of this section recorded that as a happy accident:
+no cross-deal memory, nothing to switch off, and a session's memory advantage entirely the person's.
+That was a description of a missing feature rather than a design, and `boardRecall.ts` is the feature.
+
+**What it remembers is the thirteen pairs it was offered, and the reason that is enough is the seat
+swap.** A replay hands each seat the *other* stream, so the pairs a seat faced on the first run are
+precisely what its opponent faces on the second. `sampleOpponentHand` then takes one card from each of
+thirteen pairs instead of any thirteen of twenty-six — **about ten million hands down to 8,192**, and
+every one of them a hand they could actually be holding. The mirror is the pleasant half: its memory
+says **nothing about its own draw**, because its own stream is the one it has never seen, so knowing
+the board structurally cannot let it see card 2 before deciding. That is why `chooseDraw` takes no
+memory while `chooseCall` and `choosePlay` do.
+
+**It is not told which board it is on, and that was the decision worth taking slowly.** The host
+knows — the whole design is built on a board being a seed — and passing it over is one field. But
+being told is not remembering, it is being handed the answer, and working out where you are from the
+cards is most of what a person does on a replay. So the memory arrives unlabelled and
+`offersFacingOpponent` matches it: every card offered to this seat this deal must belong to the
+*other* twenty-six of exactly one remembered board. **Ambiguity reads as not knowing** rather than as
+a guess between two, because a wrong pairing makes every sampled hand confidently impossible, which is
+worse than sampling without one. The pleasant consequence is that lossy recall then costs the bot
+twice — in what it remembers *and* in whether it can tell where it is, which is how a person fails.
+
+**Worth +157 ± 52 points a session, three standard errors**, over 120 sessions of one bidder against an
+exact copy of itself with memory the only difference. On sessions won it is 57.7% ± 4.6, only 1.7
+standard errors — the same result through a less sensitive statistic, since the winner is the sign of
+the margin and throws away its size. **The lever's own census is what made the number believable and
+the first run of it was worthless**: it reported *0 of 480 deals recognised*, which reads exactly like
+a capability that does not work. The bug was in the observable, not the bot — it asked at the deal's
+first action, which is during the draw, when the seat has been offered almost nothing to identify a
+board by. Asked at the first call instead it is **50% of deals: every replay, every time.** A census
+taken at the wrong moment is the same instrument failure this file keeps recording, moved into the
+read-out.
+
+**Perfect recall only, so it lives on the top rung and nowhere else.** `forgetful.ts` hands over no
+boards at all — all or nothing, because thirteen exact pairs from a deal played some time ago is a
+strictly harder feat than the thirteen cards this seat just threw, and `sampleFromOffers` needs a
+complete set anyway, so half a board was already worth nothing. Interpolating would be an invented
+constant. So the championship computer knows a board when it meets it again and the club one does not,
+which is a difference you could explain to somebody.
+
+**And it un-cancels the deal, which is worth stating against the format's own selling point.** With
+memory off, the control is `0 to 0` — *every session a dead heat*, because a replay is its own first
+run with the seats relabelled. With both seats remembering it is 54 to 54 across 108 decided sessions
+and none drawn. **Memory is the first thing that makes a board's two runs different games**, so
+duplication no longer cancels the deal exactly. That is the point of the format having memory content
+at all, and it is also a real cost to the thing duplication was for.
+
+Note what that symmetric run does and does not check. Its mean margin is **exactly zero and forced to
+be** — in `control` both seats play identically, so exchanging which one is called the challenger
+scores the same game from two sides and the margins are exact negatives. It is a configuration check,
+not a result. The challenger-only arm is a real measurement precisely because its two runs are
+different games.
+
+`test/boardRecall.test.ts` drives a real board and its replay and asserts the property the sampler
+lives on: exactly one card of each remembered pair is in the opponent's hand. **Its anti-vacuity half
+corrected the claim it was written to make.** I asserted that an unconstrained sampler deals cards the
+opponent was never offered, and it does not — 26 turns spend two stock cards each, so the deck is
+exactly exhausted and the pool a seat cannot place *already is* the 26 they faced. Nothing impossible
+was ever being dealt. What memory buys is the structure inside those 26: they were offered them two at
+a time and kept one of each, so a hand holding **both** cards of a pair is impossible, and that is
+what the test pins.
+
+**`bidValue.ts` takes a third `Objective`, and it is the format's choice rather than a release's.** A
+session has no standing, so the equity table has nothing to look up and the positional credit has
+nothing to price — which makes duplicate the *simplest* of the three rather than a special case.
+`objectiveFor` is where the two sources meet, as a function, because a single-game match was once
+played by one bidder and recorded as another for want of exactly that. One claim was wrong first: the
+duplicate objective ignores the **rubber standing**, not vulnerability, which a board prescribes
+rather than earns.
+
+**Scoring is points, and `impsFor` is written and unused.** IMPs was the first proposal, on the
+grounds that a concave scale stops one doubled disaster deciding a session. What weakened it is that
+duplication has *already* cancelled the deal, so a duplicate margin is far better behaved than a
+rubber margin to begin with. It cannot be a setting either — a session can be won on points and lost
+on IMPs, so offering both is offering two formats, two rating pools and two things for the bidder to
+maximise. So it is settled by measurement: a session records its board seeds, its schedule seed and
+both runs' scores, so any played session can be re-scored the other way and the two answers compared.
+Honors stay in, against duplicate bridge's own practice, because here a hand is built over 26
+decisions and four aces is something a player did.
+
+**`game/match.ts` is the abstraction both formats satisfy**, as a tagged union with free functions
+rather than a common base — there is no common base. `MatchSummary` is shaped so almost nothing needs
+a branch at the call site; only three displays read the union. `SessionPad` is one row a **board**, not
+one a deal, since half a board is a score with nothing to compare it to, and **open boards are not
+listed at all** because a first run's score alone invites being read as a result.
+
+**What is being played moved from Settings to Home, and the test is not when a setting is read.** All
+of them are read once, when a match starts — the useful question is **how often the answer changes**.
+The format changes session to session; how hard it plays, which computer and the two dials beside them
+are set once and left for months, so they stay put and keep their "takes effect on the next match"
+caveat, which is fair for something touched twice a year. Moved rather than copied: a preference in
+two places can disagree with itself. `test/homeFormat.test.ts` holds it there, because
+`settingsRows.test.ts` structurally cannot — its list is of rows everyone must be able to *reach*, and
+a format row in either place satisfies it.
+
+**Duplicate results are recorded and deliberately excluded from the rating walk.** Not because they
+could not be rated — the computer plays them — but because **the anchor cannot come from a bench**. A
+bench plays bot against bot, where *neither* side has cross-deal memory, and a person does; so a bench
+measurement describes a game nobody is playing and errs by over-crediting the player, which is the
+mistake nobody notices. The bench can give the spread between releases and rungs, since both sides
+there are equally memoryless; the single invented number waits for played sessions. Rating a session
+against the *rubber* anchor meanwhile would be worse than not rating it.
+
+**Vulnerability was assigned to a player rather than to a position, and the doc comment said it was
+not.** `vulnerableFor` read `board.starter` — a fixed seat — so the *same person* was vulnerable on
+both runs of a board; and since the replay hands them the second draw, the vulnerable seat sat in a
+different position each time and boards on the vulnerable rungs never cancelled. It takes the run now
+and resolves against whoever draws first on it.
+
+**What let it survive is worth more than the bug: the control run was passing vacuously.** The plain
+driver takes the first legal action, which passes most deals out — and a passed-out deal scores
+nothing whether anybody is vulnerable or not, so the control never exercised the thing that was
+broken. A second control driven by a policy that *bids* found it immediately, at 800 points on a
+three-board session that had to be flat. The old unit test missed it for a related reason: it faked
+the mirror by swapping the board's own `starter` instead of asking for the replay, so it tested a
+hypothetical rather than the call the game makes. **A control only tests what its driver exercises**,
+and this file has now recorded four vacuous tests found by reverting the fix rather than by reading
+them.
+
+**The score runs now rather than waiting for a board to close.** It totalled closed boards only,
+which on a short session left it at nil for most of the way. Summing every deal played agrees with
+summing the boards once they are all shut — a board's margin *is* the sum of its two runs read from
+one seat — so nothing about the final answer changed, only whether the figure moves while you play
+it. It is also the honest reading of what a session is: one signed score a deal, and the total is
+their sum.
+
+**Two bugs worth recording, both found by reasoning rather than by playing.** "New session" is wired to
+the same call that advances the schedule, and a finished session has none left — so it appended its
+last result again, growing a third run onto the last board while `complete` stayed true. Chasing that
+found a second in `summarizeDuplicate`, which folded the deal on the table in whenever it was complete:
+right everywhere except at the end, where the last deal is committed and then *left* on the table. A
+rubber has no equivalent state, because dealing always hands it a fresh deal. The invariant is exact —
+`results[i]` describes `schedule[i]`, so "already committed" is `results.length > at`.
+
+**`REQUIREMENTS.md` §1.8 is the rules and §3.6a is where the choice lives**, so the format is
+documented where every other rule is rather than only in a working note. The help screen has a
+Duplicate section of its own — a format that changes what a deal is *for* is not a rule under
+Scoring, and a rubber player can skip a whole heading. And the scoring page's duplicate figures come
+from `duplicateBonuses` and `scoreDuplicateDeal` through `scoringFacts.ts`, on the same terms as
+every other figure there: `test/scoringPage.test.ts` compares them against the engine directly,
+never against the module feeding the page. One figure is stated in words instead — a failed contract
+pays "no bonus at all" rather than "0", which reads as English and is guarded by the test asserting
+the engine really does return zero.
+
+**A drawn match is a third outcome now, and reading it as a loss was the wrong answer twice.**
+`results.winner` is `NOT NULL` and held a seat, so `winner === seat` came out false for *both*
+players on a level match — and before that, a drawn match was not recorded at all. Duplicate is what
+forced it: a board is flat whenever both of its runs come to the same score, so a short session is
+genuinely level a fair fraction of the time, and a match somebody played going missing is the failure
+`outbox.ts` exists to prevent. A rubber can tie on exactly equal totals too, and that was silently
+unrecorded.
+
+`DRAWN` is a **negative sentinel in the existing column** rather than a migration — the column can
+already hold it, and negative keeps it out of the range a seat can take. `outcomeOf` is its own
+function because the comparison was wrong inline at four call sites, and a rule about hidden state
+should have one testable answer. `drawn` rides on the report as an optional additive field, since
+every build the service worker keeps in circulation sends `won` alone.
+
+**And the rating line had to be suppressed for a session, which would otherwise have been a lie on
+screen.** Duplicate results are recorded and left out of the rating walk, so the server will never
+move the rating for one — a client showing `1361 → 1384` would be inventing a number that never
+arrives. Null rather than a guess, for the same reason `botAnchor` returns null: nobody checks a
+figure that looks right.
+
+**A table plays duplicate now, and the negotiation rule is a second rule rather than the existing
+one widened.** `formatFor` used to answer one question — the shorter of a rubber and a single game
+wins, because being held in a rubber you did not agree to costs an hour and being given a game you
+did not ask for costs nothing. Duplicate is not shorter or longer but a **different game**, so that
+ordering has nothing to say about it, and the same asymmetry argument points the other way: being
+put into a format you have never played is worse than getting the rubber you know. **So duplicate
+takes both seats**, and a seat that asked for one and did not get it falls back to a rubber rather
+than being allowed to impose a single game it never asked for. Between two seats that both want
+duplicate, the shorter session wins for the original reason.
+
+**The stored match is read through a migration rather than migrated.** A Durable Object held a bare
+`TableState` under the key `table`, and `matchFrom` wraps that as a rubber on read — so a sitting
+already under way survives the deploy that introduced this. The old shape stays in storage until the
+next save. Same reasoning as `withImpliedTiers` repairing a stored achievement on read: a rubber
+somebody is in the middle of is not worth a migration to lose.
+
+**Verified against a real `wrangler dev`, which is the only thing that could say it works.** Two
+sockets, both seats asking for duplicate, a whole two-board session played out: format `duplicate`,
+four deals, complete, standing `duplicate`, boards 2 closed 2 — and **no seed anywhere in the
+payload**. The margin came out 0/0, which is the control run over the wire: one policy driving both
+seats means every board is flat. The drawn session was recorded with `winner: -1` in real D1, which is
+the `DRAWN` path end to end. And the negotiation was checked both ways — two seats asking duplicate
+got duplicate, one asking rubber got a rubber.
+
+Two things that setup will cost the next person an hour if they are not written down: `wrangler dev`
+needs **`SESSION_SECRET`** passed as well as `DEV_SIGNIN` or every sign-in throws an HMAC error at
+`/api/auth/dev`, and the table socket is **`/api/tables/{code}/ws`** rather than `/socket`.
+
+**Duplicate deals are hand-logged now, and what made it possible is the log admitting it has no
+rubber.** `HandLogStanding.rubber` is optional and a session simply omits it — which is not a partial
+standing but the whole of the one it was bid at, since what a duplicate call is priced against is
+vulnerability and nothing else. Sending a fresh rubber instead would have put a standing that never
+existed into stored data, and a bench reading it would price a session's call against it.
+
+`HandLog.format` rides along and is **load-bearing rather than a label**: `bench/hands.ts` reads it
+through `objectiveFor` to decide what the bidder was pricing in, because a session's call replayed as
+a rubber's is a different decision with the same auction in front of it. It joins the configuration
+census for the reason the withdrawn house rule did — a session and a rubber are two games, and a
+figure pooling them describes neither. `movedFor` scores a duplicate deal with `scoreDuplicateDeal`
+rather than folding it into a rubber, since a session settles where it is played.
+
+Absent means a rubber, so **no migration**: a rubber log stores `format` as null and reads back
+correctly, and every deal already in the table is untouched.
+
+**Verified by posting both shapes to a real `wrangler dev` and reading them back**, which is worth
+doing here specifically: `outbox.ts` treats a 4xx as *permanent*, so a body the server refuses is a
+log lost forever rather than retried. Both came back 201, and the stored rows have
+`format: "duplicate"` with no rubber and `format: null` with one.
+
+That probe also turned up a local-setup trap worth naming, because the symptom does not point at the
+cause: an unapplied migration makes `/api/hands/log` return **500 with an empty-looking error**, not a
+clear failure. `npx wrangler d1 migrations apply honeymoon-bridge --local` is the fix, and it needs
+re-running whenever a migration lands rather than only once.
+
+**The replay order is a setting, because the three orders are different games rather than three
+arrangements of one.** Back to back makes the comparison immediate and recall complete, so the board
+turns purely on what each side did with one stock; halves is what a duplicate evening is, and working
+out which board you are on is part of it; shuffled has no floor at all, because a floor is what would
+stop it being shuffled. `minGapFor` therefore applies to halves alone. Every order still deals each
+board exactly twice with the replay after its first run, and **all three cancel between identical
+players** — asserted, because that is the property the format exists for.
+
+Agreeing it at a table takes both seats, on the same reasoning duplicate itself does: there is no
+"shorter wins" between two different games, and an order nobody asked for is one handed over unasked.
+A disagreement falls back to halves.
+
+`scheduleKindOf` reads the order back off a session's own schedule rather than storing it twice, so a
+new session inherits how the last one was played with nothing to disagree with itself about.
+
+There was a `DUPLICATE.md` while this was being built, deliberately temporary and deliberately never
+cited from here or from `REQUIREMENTS.md`. It is gone: the rules are §1.8, the choice is §3.6a, and
+the engineering is above. **A working design document earns its keep only while the design is
+unsettled** — kept afterwards it becomes a third account of the rules with nothing keeping it honest,
+which is the argument `HelpOverlay` already lost once over the scoring page.
+
 **There is a rating now, and the computer is what makes it mean anything.** `apps/server/src/ratings.ts`
 walks every match ever recorded, in order, as Elo. In a family-sized pool that is normally circular —
 Elo conserves points, so two people who only play each other trade the same points back and forth and
@@ -1685,6 +1983,12 @@ auction.
   The parts compose about additively — Kitchen moved all three and measured ~202 against the 178 the
   parts predict — so there is no interaction to hunt for.
 
+  **There is a fifth lever now and it deliberately does not rate the rungs**: remembering a *board*
+  across deals, worth +157 ± 52 points a session. It rides on the same `keeps` value, so the top rung
+  has it and the rungs below do not — but it exists only in duplicate, where a stock comes round
+  twice, so it cannot appear in a table of rubber margins and the offsets above are untouched by it.
+  A rung is priced by the format it was measured in.
+
   **The rebuilt ladder is three rungs, not four, and the fourth was removed because it did not exist.**
   Four rungs would sit inside the noise of the instrument measuring them. **Kitchen 1050, Club 1200,
   Championship 1400**, measured at −357 and −191 and rounded toward zero, which is the conservative
@@ -1901,10 +2205,14 @@ auction.
   rather than a constant to find, so it became a rung on the difficulty ladder. It was also, briefly,
   a **dead control** — the rung took ownership of the sample count while the row stayed on screen
   still promising to change it. A setting that lies is worse than one that is merely unanswered.
-- **How much should the bot remember?** Discards are not shown, so recall is part of the game and a
-  perfect-memory bot has a real edge. The `Bot` interface must therefore take "what this bot
-  remembers seeing" as explicit state handed to it, never read from engine state directly — which
-  keeps lossy memory available as a difficulty lever. Whether v1's bot forgets is undecided.
+- **How much should the bot remember? Closed, and it turned out to be two questions with opposite
+  answers.** Discards are not shown, so recall is part of the game and a perfect-memory bot has a real
+  edge; the `Bot` interface therefore takes every kind of memory as explicit state handed to it, never
+  read from engine state, which is what keeps lossy memory a difficulty lever. *Within* a deal that
+  memory is worth nothing at the top of the ladder and about 76 points at the bottom — the ladder
+  thread above has why. *Across* deals it exists only in duplicate, where it is worth +157 ± 52 points
+  a session. Both are rung business, so "whether the bot forgets" has no single answer: the top rung
+  remembers everything including the boards it has played, and every rung below forgets both.
 - **The bot bids in points now, and the auction is the last thing it cannot read.** Contracts are
   priced by `bidValue.ts`: play the deal out at each plausible number of tricks, hand it to the
   engine's own `scoreDeal`, fold it in with `applyDealScore`, and read how far the standing moved.

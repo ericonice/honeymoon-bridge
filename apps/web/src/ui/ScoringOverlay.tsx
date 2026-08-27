@@ -3,6 +3,9 @@ import { strainIsRed, strainSymbol } from "../game/labels.js";
 import {
   GAME_THRESHOLD,
   honorValues,
+  duplicateBonuses,
+  duplicateFailedBonus,
+  duplicateIfBid,
   matchBonuses,
   plainUndertrick,
   scoreIfBid,
@@ -139,6 +142,9 @@ export function ScoringOverlay({ onClose }: { onClose(): void }): React.JSX.Elem
   // whole of the "bid the game" argument, so it is computed rather than claimed.
   const timid = scoreIfBid({ bid: 3, strain: "H", tookLevel: 5 });
   const brave = scoreIfBid({ bid: 4, strain: "H", tookLevel: 5 });
+  const duplicate = duplicateBonuses();
+  const timidSession = duplicateIfBid({ bid: 3, strain: "H", tookLevel: 5 });
+  const braveSession = duplicateIfBid({ bid: 4, strain: "H", tookLevel: 5 });
 
   return (
     <div className="safe-inset absolute inset-0 z-40 flex flex-col bg-table-dark/97">
@@ -274,6 +280,31 @@ export function ScoringOverlay({ onClose }: { onClose(): void }): React.JSX.Elem
             Above the line, so a slam does not win a game by itself — though{" "}
             <Contract level={6} strain="H" /> is{" "}
             {scoreIfBid({ bid: 6, strain: "H", tookLevel: 6 }).below} below the line, which does.
+          </p>
+        </Note>
+
+        {/* Last of the scoring notes and before the closing argument, because it is
+            the one section a rubber player can skip — and because it only makes
+            sense once the line, the part-score and the game bonus above have been
+            read. */}
+        <Note title="A duplicate session settles every deal on the spot">
+          <p>
+            No line, no part-score, nothing carried. A game pays {duplicate.game} the moment you
+            make one, or {duplicate.gameVulnerable} vulnerable; anything short of a game pays{" "}
+            {duplicate.partScore}. A contract that goes down pays{" "}
+            <em>{duplicateFailedBonus() === 0 ? "no bonus at all" : duplicateFailedBonus()}</em> —
+            the defender's penalty is the whole of what the deal paid. Tricks, overtricks,
+            penalties, slams and honors are exactly as above.
+          </p>
+          <p>
+            So the same eleven tricks in hearts are worth {timidSession.total} at{" "}
+            <Contract level={3} strain="H" /> and {braveSession.total} at{" "}
+            <Contract level={4} strain="H" /> — the whole difference paid at once, where a rubber
+            would have banked it toward a game. Nothing rewards stopping short here.
+          </p>
+          <p className="text-white/45">
+            Vulnerability is dealt to you rather than earned, and it is the same on both halves of a
+            board — so it cancels out of the comparison the session is scored on.
           </p>
         </Note>
 

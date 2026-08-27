@@ -1,5 +1,5 @@
-import { buildDeck, cardId, shuffle } from "@hb/engine";
-import type { Card, PlayerView, Rng, Suit } from "@hb/engine";
+import { buildDeck, cardId, sameCard, shuffle } from "@hb/engine";
+import type { Card, Pair, PlayerId, PlayerView, Rng, Suit } from "@hb/engine";
 import { canSimulate, simulateDraw, theirChoices } from "./drawSimulation.js";
 
 /**
@@ -163,11 +163,30 @@ export function sampleOpponentHand(
   view: PlayerView,
   rng: Rng,
   remembered: readonly Card[] = [],
+  theirOffers: readonly Pair<Card>[] | null = null,
 ): Card[] {
   const size = view.handSizes[view.opponent];
   const pool = unaccounted(view, remembered);
   const voids = shownVoids(view);
   const possible = pool.filter((card) => !voids.has(card.suit));
+
+  // **A remembered board collapses the guess from a combination to thirteen coin
+  // flips.** Without it the opponent's hand is any thirteen of twenty-six, which is
+  // C(26,13) — about ten million. Knowing the *pairs* they were offered, which this
+  // seat knows because it faced exactly those pairs on the board's other run, makes
+  // it one card from each of thirteen pairs: 8,192. Every sampled hand is then a hand
+  // they could actually be holding, rather than one the arithmetic allows.
+  //
+  // The pairs are known rather than guessed because the offers are fixed by the seed
+  // (`REQUIREMENTS.md` §1.8) — so this is recall, not inference, and it is exactly as
+  // strong as the memory handed over.
+  const fromMemory =
+    theirOffers === null
+      ? null
+      : sampleFromOffers({ played: playedBy(view, view.opponent), rng, size, theirOffers });
+  if (fromMemory !== null) {
+    return fromMemory;
+  }
 
   // The voids cannot make the pool too small to fill a hand — the cards they
   // are void in are precisely the ones they no longer hold — but a hand that
@@ -189,4 +208,82 @@ export function sampleOpponentHand(
     (card) => keepWeight(card) * (bid.has(card.suit) ? BID_WEIGHT : 1),
     rng,
   );
+}
+
+/**
+ * A hand built by choosing one card from each remembered pair.
+ *
+ * Weighted by which card a sensible player takes, using the same `keepTest` the draw
+ * itself uses — so a remembered board produces hands selected the way a real hand was
+ * selected, rather than uniformly from the pairs.
+ *
+ * Returns null rather than a wrong answer when the memory cannot account for what is
+ * already on the table: a card the opponent has played must be in the hand, and if the
+ * remembered pairs cannot produce it then the memory does not describe this deal and
+ * the caller should fall back. That is a real case rather than defensive coding —
+ * partial recall is a difficulty lever, and a half-remembered board must degrade to a
+ * guess instead of to a lie.
+ */
+function sampleFromOffers(options: {
+  readonly played: readonly Card[];
+  readonly rng: Rng;
+  readonly size: number;
+  readonly theirOffers: readonly Pair<Card>[];
+}): Card[] | null {
+  const { played, rng, size, theirOffers } = options;
+  const needed = new Set(played.map(cardId));
+  const hand: Card[] = [];
+
+  for (const [first, second] of theirOffers) {
+    // A card they have already played settles its own pair outright.
+    const forced = needed.has(cardId(first)) ? first : needed.has(cardId(second)) ? second : null;
+    if (forced !== null) {
+      hand.push(forced);
+      continue;
+    }
+    hand.push(rng.next() < keepShare(first, second) ? first : second);
+  }
+
+  if (hand.length !== size + played.length && hand.length !== size) {
+    return null;
+  }
+  // Every card they have shown has to be in there, or these pairs are not this deal's.
+  if (!played.every((card) => hand.some((held) => sameCard(held, card)))) {
+    return null;
+  }
+  // Trimmed to the hand they hold *now*: the cards already played are gone from it.
+  const remaining = hand.filter((card) => !needed.has(cardId(card)));
+  return remaining.length === size ? remaining : null;
+}
+
+/**
+ * How likely the first of a pair is the one kept, by how much better it is.
+ *
+ * The draw's own valuation would need the hand as it stood at that turn, which is not
+ * recoverable; this asks the cheaper question — which card is worth more on its own —
+ * and leaves it a weighting rather than a certainty, because the opponent chose with
+ * a hand this does not have.
+ */
+function keepShare(first: Card, second: Card): number {
+  const one = keepWeight(first);
+  const two = keepWeight(second);
+  return one + two === 0 ? 0.5 : one / (one + two);
+}
+
+/** Cards this seat has watched the named player put on the table. */
+function playedBy(view: PlayerView, player: PlayerId): Card[] {
+  const played: Card[] = [];
+  for (const trick of view.completedTricks) {
+    for (const card of trick.cards) {
+      if (card.by === player) {
+        played.push(card.card);
+      }
+    }
+  }
+  for (const card of view.currentTrick) {
+    if (card.by === player) {
+      played.push(card.card);
+    }
+  }
+  return played;
 }

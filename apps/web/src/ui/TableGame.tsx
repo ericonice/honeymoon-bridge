@@ -169,9 +169,9 @@ function TheyLeft({
   readonly session: GameSession;
   onLeave(): void;
 }): React.JSX.Element {
-  const noun = matchNoun(session.rubber.format);
+  const noun = matchNoun(session.format);
 
-  if (session.rubber.complete) {
+  if (session.matchComplete) {
     return (
       <Message
         title={`${session.opponentName} has left`}
@@ -238,7 +238,7 @@ export function TableGame({
     return <Waiting code={code} game={game} onLeave={quit} />;
   }
 
-  const noun = matchNoun(session.rubber.format);
+  const noun = matchNoun(session.format);
 
   return (
     <>

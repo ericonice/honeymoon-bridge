@@ -28,6 +28,42 @@ export interface FinishedSeat {
   readonly token: string;
 }
 
+/**
+ * What `results.winner` holds when neither side won.
+ *
+ * A sentinel rather than a nullable column, because the column is `NOT NULL` and a
+ * migration is not needed to add a value it can already hold — the same reasoning
+ * `ratings.ts` gives for recomputing rather than storing. Negative so it can never
+ * be mistaken for a seat: `PlayerId` is 0 or 1, and every comparison here is
+ * against a seat.
+ *
+ * It exists because duplicate made a draw *common*. A board is flat whenever both
+ * of its runs come to the same score, so a short session really is level a good
+ * fraction of the time — and a drawn match was previously not recorded at all,
+ * which is the same shape of loss as the missing rubber `outbox.ts` was built for.
+ * A rubber can tie as well, on exactly equal totals, and that was silently
+ * unrecorded too.
+ */
+export const DRAWN = -1;
+
+/**
+ * How a stored row came out, from one seat.
+ *
+ * Its own function because it was wrong inline, in the way that produces the wrong
+ * answer *twice*: `winner === seat` reads a draw as a loss for both players. Three
+ * outcomes need three names, and a rule about hidden state — which a sentinel in a
+ * `NOT NULL` column is — should have one testable answer rather than a comparison
+ * repeated at four call sites.
+ */
+export type Outcome = "drawn" | "lost" | "won";
+
+export function outcomeOf(winner: number, seat: PlayerId): Outcome {
+  if (winner === DRAWN) {
+    return "drawn";
+  }
+  return winner === seat ? "won" : "lost";
+}
+
 export interface FinishedRubber {
   /** Which computer opponent, for a robot rubber. Null for a game between people. */
   readonly botVersion?: number | null;
@@ -37,7 +73,8 @@ export interface FinishedRubber {
   readonly difficulty?: string | null;
   readonly format: MatchFormat;
   readonly seats: readonly [FinishedSeat, FinishedSeat];
-  readonly winner: PlayerId;
+  /** The seat that won, or `DRAWN`. */
+  readonly winner: PlayerId | typeof DRAWN;
 }
 
 /**
@@ -183,6 +220,8 @@ export interface OpponentMatch {
   readonly finishedAt: number;
   readonly pointsAgainst: number;
   readonly pointsFor: number;
+  /** Neither won nor lost. `won` false with this false is a loss. */
+  readonly drawn: boolean;
   readonly won: boolean;
 }
 
@@ -205,6 +244,8 @@ const MATCHES_PER_OPPONENT = 20;
 export interface OpponentRecord {
   /** Deals across all of these matches, which is how long the sittings ran. */
   readonly deals: number;
+  /** Matches that ended level. Zero for every format but duplicate, in practice. */
+  readonly drawn: number;
   readonly format: MatchFormat;
   readonly lastPlayed: number;
   readonly lost: number;
@@ -367,7 +408,15 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
     // Split by format as well, so a rubber record and a game record stay apart.
     const key = `${theirAccount ?? `token:${theirToken}`}|${row.format}`;
     const running = tally.get(key);
-    const won = row.winner === seat;
+    // Three outcomes, not two. `winner` is a seat or `DRAWN`, and reading a draw
+    // as `winner === seat` would have made it a **loss for both players** — which
+    // is not a rounding error but the wrong answer twice. Duplicate is what
+    // brought it up: a board is flat whenever both runs come to the same score, so
+    // a short session really is drawn a good fraction of the time. A rubber can
+    // tie too, on equal totals, and that was silently unrecorded before this.
+    const outcome = outcomeOf(row.winner, seat);
+    const drawn = outcome === "drawn";
+    const won = outcome === "won";
 
     // Rows arrive oldest-first, so this appends in order and the newest end is
     // the tail — trimmed once at the end rather than on every row.
@@ -378,6 +427,10 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
       finishedAt: row.finished_at,
       pointsAgainst: theirPoints,
       pointsFor: myPoints,
+      // A drawn match is neither won nor lost, and the pair says which without a
+      // third field: `won` false and `drawn` true is a draw, `won` false and
+      // `drawn` false is a loss.
+      drawn,
       won,
     };
 
@@ -386,7 +439,8 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
       deals: (running?.deals ?? 0) + row.deals,
       format: row.format,
       lastPlayed: row.finished_at,
-      lost: (running?.lost ?? 0) + (won ? 0 : 1),
+      drawn: (running?.drawn ?? 0) + (drawn ? 1 : 0),
+      lost: (running?.lost ?? 0) + (won || drawn ? 0 : 1),
       matches: [...(running?.matches ?? []), match],
       // The most recent one stored on the row. For an opponent with an account
       // this is overwritten below by the name they go by now; it survives only
@@ -549,6 +603,8 @@ export interface MatchRecord {
   readonly opponentName: string;
   readonly pointsAgainst: number;
   readonly pointsFor: number;
+  /** Neither won nor lost. `won` false with this false is a loss. */
+  readonly drawn: boolean;
   readonly won: boolean;
 }
 
@@ -580,7 +636,8 @@ export interface AnyMatch {
   readonly finishedAt: number;
   readonly format: MatchFormat;
   readonly players: readonly [MatchSeat, MatchSeat];
-  readonly winner: PlayerId;
+  /** The seat that won, or `DRAWN`. */
+  readonly winner: PlayerId | typeof DRAWN;
 }
 
 /**
@@ -617,7 +674,10 @@ export async function everyRecentMatch(env: Env, limit: number): Promise<AnyMatc
       { name: row.nickname0, points: row.points0, robot: row.token0 === ROBOT_TOKEN },
       { name: row.nickname1, points: row.points1, robot: row.token1 === ROBOT_TOKEN },
     ] as const,
-    winner: row.winner as PlayerId,
+    // `DRAWN` passes straight through: this is the playtester view of every match
+    // ever recorded, and a reader wanting to know a session was level is better
+    // served by the sentinel than by a seat that did not win.
+    winner: row.winner as PlayerId | typeof DRAWN,
   }));
 }
 
@@ -662,7 +722,8 @@ export async function recentMatchesFor(
       name: them === 0 ? row.nickname0 : row.nickname1,
       pointsAgainst: them === 0 ? row.points0 : row.points1,
       pointsFor: seat === 0 ? row.points0 : row.points1,
-      won: row.winner === seat,
+      drawn: outcomeOf(row.winner, seat) === "drawn",
+      won: outcomeOf(row.winner, seat) === "won",
     };
   });
 
@@ -677,6 +738,7 @@ export async function recentMatchesFor(
     finishedAt: p.finishedAt,
     format: p.format,
     opponentName: (p.account === null ? null : names.get(p.account)) ?? p.name,
+    drawn: p.drawn,
     pointsAgainst: p.pointsAgainst,
     pointsFor: p.pointsFor,
     won: p.won,

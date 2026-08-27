@@ -1,9 +1,23 @@
 import { newRubber, viewFor, vulnerability } from "@hb/engine";
 import type { DealAction, DealState, PlayerId } from "@hb/engine";
 import { shouldAcceptClaim } from "../bot/claimDecision.js";
-import type { Bot, Standing } from "../bot/types.js";
+import type { BoardMemory, Bot, Standing } from "../bot/types.js";
 
 export interface BotTurn {
+  /**
+   * Boards this seat has played before, for a session that replays them.
+   *
+   * Optional, and empty for every rubber — a board only comes round in duplicate.
+   * The host records it and hands it over, which is the same rule the discards
+   * follow: never read from engine state, so that handing over less is all a
+   * forgetful opponent takes.
+   *
+   * Deliberately *not* accompanied by which board this is, though the host knows.
+   * Working that out from the cards is most of what a person does on a replay, and
+   * being told would make the bot strong in a way no person could be — see
+   * `offersFacingOpponent`.
+   */
+  readonly boards?: BoardMemory;
   readonly bot: Bot;
   readonly seat: PlayerId;
   /**
@@ -30,7 +44,7 @@ export function loveAll(): Standing {
  * standing travels beside the view rather than inside it, for the same reason
  * `GameSession` keeps it beside: it belongs to the sitting, not to the deal.
  */
-export function botActionFor({ bot, seat, standing, state }: BotTurn): DealAction {
+export function botActionFor({ boards = [], bot, seat, standing, state }: BotTurn): DealAction {
   // Not a phase of its own — a claim is a sub-state of "play" — so it is
   // checked ahead of the phase switch below rather than inside it. The bot
   // never originates a "claim" action itself (§4: human-only for now), so this
@@ -50,10 +64,13 @@ export function botActionFor({ bot, seat, standing, state }: BotTurn): DealActio
       return { type: "draw-decide", take: bot.chooseDraw(view, state.discards[seat]) };
     }
     case "auction": {
-      return { type: "call", call: bot.chooseCall(view, standing, state.discards[seat]) };
+      return {
+        type: "call",
+        call: bot.chooseCall(view, standing, state.discards[seat], boards),
+      };
     }
     case "play": {
-      return { type: "play", card: bot.choosePlay(view, state.discards[seat]) };
+      return { type: "play", card: bot.choosePlay(view, state.discards[seat], boards) };
     }
     default: {
       throw new Error("A completed deal has nothing left to decide");

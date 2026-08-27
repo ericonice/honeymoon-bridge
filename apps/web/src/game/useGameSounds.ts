@@ -27,7 +27,7 @@ export interface GameSounds {
    * True once the final score screen is actually on screen, which is later than
    * the rubber being won.
    *
-   * The two look like the same moment and are not. `rubber.complete` flips the
+   * The two look like the same moment and are not. `matchComplete` flips the
    * instant the last deal is scored, while the board is still holding the last
    * trick and revealing both hands — so the horn used to sound over the end of
    * the play rather than over the result, several seconds before anything said
@@ -39,7 +39,7 @@ export interface GameSounds {
 }
 
 export function useGameSounds({ enabled, session, showingFinalScore }: GameSounds): void {
-  const { justUnlocked, lastDraw, rubber, score, view } = session;
+  const { justUnlocked, lastDraw, matchComplete, score, view } = session;
   const auction = view.auction;
 
   const drawTurn = useRef(lastDraw?.turn ?? null);
@@ -130,9 +130,9 @@ export function useGameSounds({ enabled, session, showingFinalScore }: GameSound
     hadUnlocks.current = has;
   }, [enabled, justUnlocked]);
 
-  // Keyed on the screen rather than on the rubber, so the horn lands with the
-  // headline that says who won. `rubber.complete` is still what makes it a
-  // *rubber* horn — `showingFinalScore` is only ever true alongside it — but it
+  // Keyed on the screen rather than on the match, so the horn lands with the
+  // headline that says who won. `matchComplete` is still what makes it a
+  // *match* horn — `showingFinalScore` is only ever true alongside it — but it
   // is no longer what decides the moment.
   //
   // Once per match, not once per rising edge of that screen. The two are not
@@ -144,7 +144,7 @@ export function useGameSounds({ enabled, session, showingFinalScore }: GameSound
   // the first screen that shows one that is.
   const horned = useRef(false);
   useEffect(() => {
-    if (!rubber.complete) {
+    if (!matchComplete) {
       horned.current = false;
       return;
     }
@@ -155,5 +155,5 @@ export function useGameSounds({ enabled, session, showingFinalScore }: GameSound
     if (enabled) {
       playRubberWon();
     }
-  }, [enabled, rubber.complete, showingFinalScore]);
+  }, [enabled, matchComplete, showingFinalScore]);
 }

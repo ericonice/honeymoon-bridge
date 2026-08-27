@@ -1,13 +1,21 @@
 import type { AchievementId, Call, Card, MatchFormat, Rank, Strain, Suit, Tier } from "@hb/engine";
 
 /**
- * What to call the thing being played, given how long it runs.
+ * What to call the thing being played, given what it is.
  *
- * Every screen that says "rubber" has to say "game" in the short format, and
- * getting one of them wrong is how a player learns the setting did not take.
- * One place to be wrong is better than eight.
+ * Every screen that says "rubber" has to say "game" in the short format and
+ * "session" in duplicate, and getting one of them wrong is how a player learns
+ * the setting did not take. One place to be wrong is better than eight.
+ *
+ * "Session" rather than "match" for duplicate, because that is what a duplicate
+ * evening is called — and because "match" is the word this app already uses for
+ * all three of them at once, so borrowing it for one would make the general term
+ * ambiguous.
  */
 export function matchNoun(format: MatchFormat): string {
+  if (format === "duplicate") {
+    return "session";
+  }
   return format === "game" ? "game" : "rubber";
 }
 

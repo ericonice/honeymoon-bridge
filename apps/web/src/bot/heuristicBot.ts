@@ -3,13 +3,14 @@ import type { Bid, Call, Card, Contract, DrawTake, PlayerId, PlayerView, Rng, St
 import { DEFAULT_GAME_EQUITY, expectedValue } from "./bidValue.js";
 import type { Objective } from "./bidValue.js";
 import { pointsAsEquity } from "./equity.js";
+import { offeredSoFar, offersFacingOpponent } from "./boardRecall.js";
 import { mirrorOdds, searchTricks, spreadOdds } from "./searchTricks.js";
 import type { TrickSpread } from "./searchTricks.js";
 import { chooseCard } from "./cardPlay.js";
 import { chooseTake } from "./drawDecision.js";
 import { cardsIn, defendingTricks, estimatedTricks } from "./evaluate.js";
 import { createRandomBot } from "./randomBot.js";
-import type { Bot, Standing } from "./types.js";
+import type { BoardMemory, Bot, Standing } from "./types.js";
 
 const TRICKS = 13;
 const BOOK = 6;
@@ -238,6 +239,11 @@ function disguiseValue(view: PlayerView, level: number, strain: Strain, credit: 
  * something the flat version could not: the credit is worth less at a standing
  * where points matter less, which is correct and was never expressible before.
  *
+ * Only the equity objective needs converting. Duplicate prices calls in points
+ * like the original objective did, so 200 means there what it has always meant —
+ * which is why the condition names equity rather than listing the others, and why
+ * a fourth objective priced in points would need no change here.
+ *
  * Exported only so `test/equity.test.ts` can check it directly. Driving the whole
  * bidder instead was tried and the test was vacuous: `honestlyWeak` means the
  * credit only applies to a hand whose honest bidding would stop at the one level,
@@ -250,7 +256,7 @@ export function creditIn(
   me: PlayerId,
   credit: number,
 ): number {
-  if (credit === 0 || objective === "points") {
+  if (credit === 0 || objective !== "equity") {
     return credit;
   }
   return pointsAsEquity(standing.rubber, me, credit);
@@ -678,7 +684,12 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
     // opponent rather than as an implementation.
     name: "Computer",
 
-    chooseCall(view: PlayerView, standing: Standing, remembered: readonly Card[]): Call {
+    chooseCall(
+      view: PlayerView,
+      standing: Standing,
+      remembered: readonly Card[],
+      boards: BoardMemory = [],
+    ): Call {
       // One search for the whole call, not one per candidate: a solve answers a
       // strain rather than a contract, and every candidate in that strain reads
       // the same distribution. Strains nobody could legally bid are left out,
@@ -691,6 +702,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
               remembered,
               rng,
               strains: strainsWorthPricing(view),
+              theirOffers: offersFacingOpponent(boards, offeredSoFar(view, remembered)),
               view,
             }).spreads
           : null;

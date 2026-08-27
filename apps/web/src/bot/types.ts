@@ -1,7 +1,13 @@
-import type { Call, Card, DrawTake, Pair, PlayerView, RubberState } from "@hb/engine";
+import type { Call, Card, DrawTake, PlayerView, Standing } from "@hb/engine";
+import type { BoardMemory } from "./boardRecall.js";
 
 /**
  * The score the auction is being held over.
+ *
+ * Declared in the engine now and re-exported here under the name the bot uses.
+ * Two hosts have to be able to produce one — the browser for the game against the
+ * computer and a Durable Object for a game between people — which is the same
+ * argument `table.ts` makes for the sitting living there rather than in a host.
  *
  * Kept out of `PlayerView` on purpose. That shape is one *deal* as one seat is
  * entitled to see it, and the rubber is not part of a deal — `GameSession`
@@ -15,15 +21,23 @@ import type { Call, Card, DrawTake, Pair, PlayerView, RubberState } from "@hb/en
  * A bidder that only asks "can I make this" is answering a question nobody is
  * paid on.
  */
-export interface Standing {
-  /**
-   * The rubber as it stood when this deal *began*, which is what the deal is
-   * bid and scored against — see `rubberBefore` in `table.ts`.
-   */
-  readonly rubber: RubberState;
-  /** Vulnerability for this deal, which follows from the rubber before it. */
-  readonly vulnerable: Pair<boolean>;
-}
+export type { Standing };
+
+/**
+ * Boards this seat has played before, for the two decisions that can use them.
+ *
+ * Optional, and separate from `remembered` rather than folded into it, because the two
+ * are different kinds of recall: `remembered` is a flat set of cards that are provably
+ * nowhere, where this is a *pairing* — which card was offered against which — and it
+ * is that structure the sampler exploits. An implementation with no use for it simply
+ * omits the parameter, which is why adding it broke nothing.
+ *
+ * Handed over per decision like everything else the bot remembers, so a rung can hand
+ * over less of it. `chooseDraw` does not take it: on a replay this seat knows the pool
+ * it is being offered but not the order, which is a much weaker fact than the pairing
+ * the other two get, and nothing has measured it.
+ */
+export type { BoardMemory };
 
 /**
  * A computer opponent, as three decision points: keep-or-reject during the
@@ -49,7 +63,12 @@ export interface Bot {
    * are ones it watched itself bury — and in this game that is half of what it
    * cannot place.
    */
-  chooseCall(view: PlayerView, standing: Standing, remembered: readonly Card[]): Call;
+  chooseCall(
+    view: PlayerView,
+    standing: Standing,
+    remembered: readonly Card[],
+    boards?: BoardMemory,
+  ): Call;
   /**
    * Which card on offer to take: card 1, or card 2 sight-unseen.
    *
@@ -67,5 +86,5 @@ export interface Bot {
    * bot guessing at their hand without that will deal them cards it watched go
    * face down itself.
    */
-  choosePlay(view: PlayerView, remembered: readonly Card[]): Card;
+  choosePlay(view: PlayerView, remembered: readonly Card[], boards?: BoardMemory): Card;
 }

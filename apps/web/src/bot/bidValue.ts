@@ -1,5 +1,5 @@
-import { applyDealScore, opponentOf, scoreDeal, totalScore } from "@hb/engine";
-import type { Card, Contract, Pair, PlayerId, RubberState } from "@hb/engine";
+import { applyDealScore, duplicateFrom, opponentOf, scoreDeal, totalScore } from "@hb/engine";
+import type { Card, Contract, MatchFormat, Pair, PlayerId, RubberState } from "@hb/engine";
 import { equityOf } from "./equity.js";
 import type { Standing } from "./types.js";
 
@@ -115,16 +115,37 @@ const DOUBLED_FROM_DOWN = 2;
  * `"points"` is how the bidder has always worked: the change in the points
  * differential, plus a flat credit for the position. `"equity"` prices the same
  * call by the change in the chance of taking the rubber, which is the thing
- * actually being played for — see `equity.ts`.
+ * actually being played for — see `equity.ts`. `"duplicate"` prices it by the
+ * deal's own duplicate score and nothing else.
  *
  * A choice rather than a replacement because a superseded release has to go on
  * playing the way it did; `release.ts` names which one each version uses, and
- * `test/botRelease.test.ts` fails if that ever stops being true. The two are not
- * on the same scale and nothing may compare a value from one against a value from
- * the other — see `disguiseValue` in `heuristicBot.ts`, which is the one place
- * that a constant has to be expressed in both.
+ * `test/botRelease.test.ts` fails if that ever stops being true. No two of them
+ * are on the same scale and nothing may compare a value from one against a value
+ * from another — see `creditIn` in `heuristicBot.ts`, which is the one place a
+ * constant has to be expressed in more than one.
+ *
+ * **`"duplicate"` is not a release's choice but the format's**, which is what
+ * makes it different in kind from the other two: a session has no standing to be
+ * a game up in, so the equity table has nothing to look up and the positional
+ * credit has nothing to price. `objectiveFor` is where the two sources meet.
  */
-export type Objective = "equity" | "points";
+export type Objective = "duplicate" | "equity" | "points";
+
+/**
+ * What a call has to be priced in, from what is being played and what the
+ * release would otherwise use.
+ *
+ * The format wins, and only for duplicate. Every rubber format has a standing, so
+ * a release's own objective describes it; a duplicate session has none, and a
+ * bidder pricing a session against a rubber standing that will never change is
+ * answering a question nobody asked. Stated as a function so the app and the
+ * bench cannot disagree about it — which is exactly how a single-game match once
+ * came to be played by one bidder and recorded as another.
+ */
+export function objectiveFor(format: MatchFormat, release: Objective): Objective {
+  return format === "duplicate" ? "duplicate" : release;
+}
 
 export interface BidValueOptions {
   readonly contract: Contract;
@@ -180,6 +201,20 @@ function differentialAfter(options: BidValueOptions, tricks: number): number {
   hands[me] = hand;
 
   const score = scoreDeal({ contract, hands, tricksWon }, standing.vulnerable);
+
+  // Before the rubber is folded in, because there is no rubber to fold into: a
+  // board is settled where it is played and the session is the sum of the boards.
+  // So the value of a call is the whole of what the deal would pay, which makes
+  // this the simplest of the three objectives rather than a special case of one.
+  if (options.objective === "duplicate") {
+    const points = duplicateFrom(
+      score,
+      contract.declarer,
+      standing.vulnerable[contract.declarer],
+    ).points;
+    return points[me] - points[them];
+  }
+
   const rubber = applyDealScore(standing.rubber, score);
 
   if (options.objective === "equity") {

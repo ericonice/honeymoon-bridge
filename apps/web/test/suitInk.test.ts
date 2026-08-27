@@ -99,7 +99,7 @@ afterEach(() => {
 function step(prefer: "bid" | "pass" | "any"): void {
   const state = board.state;
   const actor = state.deal.toAct;
-  const view = snapshotFor(state, actor).view;
+  const view = snapshotFor({ kind: "rubber", table: state }, actor).view;
   const legal = legalActionsForView(view).filter((action) => action.type !== "claim");
   // A red bid on purpose: a printed red is the half of this that can be got
   // wrong quietly, and bidding clubs would walk straight past every one of them.

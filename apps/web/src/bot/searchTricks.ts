@@ -51,6 +51,14 @@ export interface SearchOptions {
   readonly maxSamples: number;
   /** Cards this seat threw away, so they are not dealt to the opponent. */
   readonly remembered?: readonly Card[];
+  /**
+   * The pairs the opponent was offered, when this seat recognises the board.
+   *
+   * The auction is where this is worth most and where it is cleanest: nothing has
+   * been played, so every one of the thirteen pairs is still open and the guess is
+   * one card from each rather than any thirteen of twenty-six.
+   */
+  readonly theirOffers?: readonly Pair<Card>[] | null;
   readonly rng: Rng;
   /** The strains worth pricing. Two or three in practice, not all five. */
   readonly strains: readonly Strain[];
@@ -67,7 +75,7 @@ export interface SearchOptions {
  * same worlds. Stopping *within* a sample would leave the last strains short.
  */
 export function searchTricks(options: SearchOptions): SearchResult {
-  const { budgetMs, maxSamples, remembered = [], rng, strains, view } = options;
+  const { budgetMs, maxSamples, remembered = [], rng, strains, theirOffers = null, view } = options;
   const me = view.me;
   const them = opponentOf(me);
   const started = performance.now();
@@ -85,7 +93,7 @@ export function searchTricks(options: SearchOptions): SearchResult {
       break;
     }
 
-    const theirs = sampleOpponentHand(view, rng, remembered);
+    const theirs = sampleOpponentHand(view, rng, remembered, theirOffers);
     const hands: Pair<readonly Card[]> = [[], []];
     hands[me] = view.hand;
     hands[them] = theirs;

@@ -1,5 +1,12 @@
-import { totalScore } from "@hb/engine";
-import type { DealPhase, Pair, PlayerView, RubberState } from "@hb/engine";
+import { netTo, totalScore } from "@hb/engine";
+import type {
+  DealPhase,
+  DuplicateSummary,
+  MatchStanding,
+  Pair,
+  PlayerId,
+  PlayerView,
+} from "@hb/engine";
 import type { Density } from "../game/identity.js";
 import { ContractText } from "./CardText.js";
 
@@ -21,7 +28,7 @@ export interface ContractBarProps {
    * rating shown intermittently invites reading its absence as a change.
    */
   readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
-  readonly rubber: RubberState;
+  readonly standing: MatchStanding;
   readonly view: PlayerView;
   /**
    * Opens the rubber scorepad. Null on the screen that already shows it in
@@ -145,6 +152,97 @@ function StandingRow({
 }
 
 /**
+ * A session's standing: **one signed score, and what the hand before it came to.**
+ *
+ * No two columns, and no boards. A rubber has two running totals because both sides
+ * really do have one; a session has a single number that is positive or negative,
+ * and drawing it twice — once negated — was the same fact said twice in the space a
+ * phone has for five short rows. Boards went for the same reason: the total is the
+ * sum of every hand's own score, so counting boards was arithmetic nobody needed to
+ * follow.
+ *
+ * What replaced them is the fact the strip could not say at all: **whether this deal
+ * is one you have played before**, and if so what it came to the first time. Which
+ * board it is stays hidden — the replay order is random precisely so that
+ * identifying it is the player's job.
+ *
+ * "Played before" hands you a number your memory was otherwise meant to supply, and
+ * that is a deliberate trade rather than an oversight: it is the score, not the
+ * cards, and knowing you were +170 on this deal does not tell you which
+ * twenty-six cards are about to be offered.
+ */
+function playedBefore(summary: DuplicateSummary, seat: PlayerId): number | null {
+  const current = summary.current;
+  if (current === null || !current.replay) {
+    return null;
+  }
+  const board = summary.boards[current.board];
+  const first = board?.played.find((run) => !run.replay);
+  return board === undefined || first === undefined ? null : netTo(board, first, seat);
+}
+
+function signed(value: number): string {
+  return value === 0 ? "0" : `${value > 0 ? "+" : "−"}${Math.abs(value)}`;
+}
+
+function SessionRows({
+  summary,
+  view,
+}: {
+  readonly summary: DuplicateSummary;
+  readonly view: PlayerView;
+}): React.JSX.Element {
+  const before = playedBefore(summary, view.me);
+
+  return (
+    <>
+      {/* Always rendered, reading "—" on a deal nobody has seen, so the strip keeps
+          the same number of rows from deal to deal. A row that came and went would
+          move the board underneath it, which is the fault the format row just had. */}
+      <p className="flex items-baseline justify-between gap-2 text-white/40">
+        <span>Played before</span>
+        <span className="tabular-nums text-white/60">
+          {before === null ? "—" : signed(before)}
+        </span>
+      </p>
+      <p className="flex items-baseline justify-between gap-2 text-white/40">
+        <span>Score</span>
+        <span className="font-semibold tabular-nums text-white/90">
+          {signed(summary.margin[view.me])}
+        </span>
+      </p>
+    </>
+  );
+}
+
+/** The same two figures on one wrapping line, for a phone with no room for rows. */
+function SessionFigures({
+  summary,
+  view,
+}: {
+  readonly summary: DuplicateSummary;
+  readonly view: PlayerView;
+}): React.JSX.Element {
+  const before = playedBefore(summary, view.me);
+
+  return (
+    <>
+      {before === null ? null : (
+        <span className="whitespace-nowrap">
+          Before <span className="tabular-nums text-white/60">{signed(before)}</span>
+        </span>
+      )}
+      <span className="whitespace-nowrap">
+        Score{" "}
+        <span className="font-semibold tabular-nums text-white/90">
+          {signed(summary.margin[view.me])}
+        </span>
+      </span>
+    </>
+  );
+}
+
+/**
  * The rubber standing — total, part score and games won.
  *
  * Part score is `rubber.partScore`, not `rubber.belowLineTotal`: on a real
@@ -177,14 +275,14 @@ function StandingLines({
   handsPlayed,
   opponentName,
   ratings,
-  rubber,
+  standing,
   view,
 }: {
   readonly density: Density;
   readonly handsPlayed: number;
   readonly opponentName: string;
   readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
-  readonly rubber: RubberState;
+  readonly standing: MatchStanding;
   readonly view: PlayerView;
 }): React.JSX.Element {
   // `handsPlayed` counts deals already scored into the rubber, which is one
@@ -205,11 +303,17 @@ function StandingLines({
     return (
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 text-xs text-white/45">
         <span className="whitespace-nowrap">Hand {handNumber}</span>
-        <Figure label="Total" values={totalScore(rubber)} view={view} />
-        <Figure label="Part" values={rubber.partScore} view={view} />
-        {rubber.format === "rubber" ? (
-          <Figure label="Games" values={rubber.gamesWon} view={view} />
-        ) : null}
+        {standing.kind === "duplicate" ? (
+          <SessionFigures summary={standing.summary} view={view} />
+        ) : (
+          <>
+            <Figure label="Total" values={totalScore(standing.rubber)} view={view} />
+            <Figure label="Part" values={standing.rubber.partScore} view={view} />
+            {standing.rubber.format === "rubber" ? (
+              <Figure label="Games" values={standing.rubber.gamesWon} view={view} />
+            ) : null}
+          </>
+        )}
         {/* Compact has no names to hang a rating on, so it says "Rated" and
             keeps the same you–them order as every other figure on the line. It
             is included rather than dropped because this *is* the always-visible
@@ -230,13 +334,28 @@ function StandingLines({
 
   return (
     <div className="text-xs">
-      <p className="pb-0.5 text-white/40">Hand #{handNumber}</p>
-      <StandingHeader opponentName={opponentName} ratings={ratings} />
-      <StandingRow label="Total" values={totalScore(rubber)} view={view} />
-      <StandingRow label="Part score" values={rubber.partScore} view={view} />
-      {rubber.format === "rubber" ? (
-        <StandingRow label="Games won" values={rubber.gamesWon} view={view} />
-      ) : null}
+      <p className="pb-0.5 text-white/40">
+        {standing.kind === "duplicate"
+          ? `Deal ${handNumber} of ${standing.summary.boards.length * 2}`
+          : `Hand #${handNumber}`}
+        {standing.kind === "duplicate" && standing.summary.current?.replay === true
+          ? " · replay"
+          : ""}
+      </p>
+      {standing.kind === "duplicate" ? null : (
+        <StandingHeader opponentName={opponentName} ratings={ratings} />
+      )}
+      {standing.kind === "duplicate" ? (
+        <SessionRows summary={standing.summary} view={view} />
+      ) : (
+        <>
+          <StandingRow label="Total" values={totalScore(standing.rubber)} view={view} />
+          <StandingRow label="Part score" values={standing.rubber.partScore} view={view} />
+          {standing.rubber.format === "rubber" ? (
+            <StandingRow label="Games won" values={standing.rubber.gamesWon} view={view} />
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
@@ -259,7 +378,7 @@ export function ContractBar({
   opponentName,
   phase,
   ratings,
-  rubber,
+  standing,
   view,
 }: ContractBarProps): React.JSX.Element | null {
   // Contract and trick count only apply once there is a contract, and only
@@ -282,7 +401,7 @@ export function ContractBar({
           handsPlayed={handsPlayed}
           opponentName={opponentName}
           ratings={ratings}
-          rubber={rubber}
+          standing={standing}
           view={view}
         />
       )}

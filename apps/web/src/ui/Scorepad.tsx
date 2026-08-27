@@ -2,6 +2,7 @@ import type { PlayerId, PlayerView, RubberState } from "@hb/engine";
 import { matchNoun } from "../game/labels.js";
 import type { DealRecord } from "../game/session.js";
 import { ContractText } from "./CardText.js";
+import { dealResultText } from "./ScoreRows.js";
 
 export interface ScorepadProps {
   readonly history: readonly DealRecord[];
@@ -50,18 +51,6 @@ function Points({
   );
 }
 
-function resultText(record: DealRecord): string {
-  if (record.score === null) {
-    return "passed out";
-  }
-  const { detail } = record.score;
-  return detail.made
-    ? detail.overtricks > 0
-      ? `made +${detail.overtricks}`
-      : "made"
-    : `down ${detail.undertricks}`;
-}
-
 function DealLine({
   index,
   record,
@@ -88,7 +77,7 @@ function DealLine({
               <ContractText contract={record.contract} on="dark" />
               <span className="text-white/45">
                 {" "}
-                {record.contract.declarer === view.me ? "you" : "opp"} · {resultText(record)}
+                {record.contract.declarer === view.me ? "you" : "opp"} · {dealResultText(record.score)}
               </span>
             </>
           )}

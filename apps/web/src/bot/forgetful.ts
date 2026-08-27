@@ -1,6 +1,6 @@
 import { cardId, createRng } from "@hb/engine";
 import type { Call, Card, DrawTake, PlayerView, Rng } from "@hb/engine";
-import type { Bot, Standing } from "./types.js";
+import type { BoardMemory, Bot, Standing } from "./types.js";
 
 /**
  * A bot that forgets some of what it threw away.
@@ -53,6 +53,27 @@ function seedFrom(discards: readonly Card[]): number {
 }
 
 /**
+ * Boards a forgetful bot recognises when it meets them again: none.
+ *
+ * **All or nothing, and the bluntness is the point.** A board's memory is thirteen
+ * exact pairs from a deal played some time ago, which is a strictly harder feat than
+ * remembering the thirteen cards this seat has just thrown — so a bot that has been
+ * told it forgets should lose the harder thing first, and entirely. Interpolating
+ * ("remembers 3 of 13, so keeps a quarter of the boards") would be an invented
+ * constant nothing has measured, and this file argues against those everywhere else.
+ *
+ * It also degrades the way partial recall would anyway. `sampleFromOffers` needs a
+ * complete set of pairs to build a hand and returns null otherwise, so half a board
+ * is already worth nothing — a half-remembered board falls back to a guess rather
+ * than to a lie, which is the property that mattered.
+ *
+ * So the ladder reads: the championship computer recognises a board it has played
+ * before, and the club one does not. If that turns out too coarse a step, the graded
+ * version is forgetting whole boards rather than pairs within one.
+ */
+const BOARDS_WHEN_FORGETFUL: BoardMemory = [];
+
+/**
  * Wraps a bot so it is only ever told `keeps` of the cards it threw away.
  *
  * `keeps` at or above thirteen is perfect recall and the bot is returned
@@ -69,13 +90,13 @@ export function forgetful(bot: Bot, keeps: number): Bot {
   return {
     name: bot.name,
     chooseCall(view: PlayerView, standing: Standing, discards: readonly Card[]): Call {
-      return bot.chooseCall(view, standing, recall(discards));
+      return bot.chooseCall(view, standing, recall(discards), BOARDS_WHEN_FORGETFUL);
     },
     chooseDraw(view: PlayerView, discards: readonly Card[]): DrawTake {
       return bot.chooseDraw(view, recall(discards));
     },
     choosePlay(view: PlayerView, discards: readonly Card[]): Card {
-      return bot.choosePlay(view, recall(discards));
+      return bot.choosePlay(view, recall(discards), BOARDS_WHEN_FORGETFUL);
     },
   };
 }

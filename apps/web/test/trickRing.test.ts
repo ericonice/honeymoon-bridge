@@ -84,7 +84,7 @@ function checked(mine: boolean): boolean {
 }
 
 function outlookNow(seat: PlayerId): TrickOutlook | null {
-  const { view } = snapshotFor(board.state, seat);
+  const { view } = snapshotFor({ kind: "rubber", table: board.state }, seat);
   if (view.contract === null) {
     return null;
   }
@@ -108,7 +108,7 @@ function driveToPlay(seat: PlayerId, seed: number, trickCount = true): void {
       break;
     }
     const actor = state.deal.toAct;
-    const legal = legalActionsForView(snapshotFor(state, actor).view).filter(
+    const legal = legalActionsForView(snapshotFor({ kind: "rubber", table: state }, actor).view).filter(
       (action) => action.type !== "claim",
     );
     const spades = legal.find(
@@ -147,7 +147,7 @@ function driveToPlay(seat: PlayerId, seed: number, trickCount = true): void {
  */
 function playOne(ms = 4000): void {
   const state = board.state;
-  const legal = legalActionsForView(snapshotFor(state, state.deal.toAct).view).filter(
+  const legal = legalActionsForView(snapshotFor({ kind: "rubber", table: state }, state.deal.toAct).view).filter(
     (action) => action.type === "play",
   );
   board.apply(state.deal.toAct, legal[0]!);
@@ -166,7 +166,7 @@ function playOne(ms = 4000): void {
  */
 function playToTheLastTrick(): void {
   const played = (): number => {
-    const { view } = snapshotFor(board.state, 0);
+    const { view } = snapshotFor({ kind: "rubber", table: board.state }, 0);
     return view.completedTricks.length * 2 + view.currentTrick.length;
   };
   while (board.state.deal.phase === "play") {

@@ -3,6 +3,7 @@ import {
   createRng,
   opponentOf,
   scoreDeal,
+  scoreDuplicateDeal,
   sortHand,
   STRAINS,
   totalScore,
@@ -13,6 +14,7 @@ import type {
   Card,
   CompletedTrick,
   Contract,
+  MatchFormat,
   Pair,
   PlayerId,
   PlayerView,
@@ -20,7 +22,9 @@ import type {
   Strain,
 } from "@hb/engine";
 import { readFileSync } from "node:fs";
+import { objectiveFor } from "../src/bot/bidValue.js";
 import { estimatedTricks, highCardPoints } from "../src/bot/evaluate.js";
+import { releaseFor } from "../src/bot/release.js";
 import { DISGUISE_CREDIT_ON, createHeuristicBot } from "../src/bot/heuristicBot.js";
 import { loveAll } from "../src/game/botTurn.js";
 import type { Standing } from "../src/bot/types.js";
@@ -78,7 +82,17 @@ interface LoggedDeal {
    * every number derived from it counts its own deals rather than trusting the
    * block's total.
    */
-  readonly standing?: { readonly rubber: RubberState; readonly vulnerable: Pair<boolean> };
+  /**
+   * What the deal was bid at. `rubber` is absent for a duplicate deal, which is the
+   * fact rather than a missing field: a session has no rubber, and what a duplicate
+   * call is priced against is vulnerability alone.
+   */
+  readonly standing?: {
+    readonly rubber?: RubberState;
+    readonly vulnerable: Pair<boolean>;
+  };
+  /** What was being played. Absent means a rubber, which is all there was. */
+  readonly format?: MatchFormat;
   readonly starter?: PlayerId;
   readonly tricksWon: Pair<number>;
 }
@@ -178,6 +192,16 @@ function movedFor(deal: LoggedDeal, hands: Pair<readonly Card[]>): number | null
     return null;
   }
   const score = scoreDeal({ contract: deal.contract, hands, tricksWon: deal.tricksWon }, standing.vulnerable);
+  // A duplicate deal is settled where it was played, so what it moved *is* its own
+  // score — there is no standing to fold it into, and folding it into an untouched
+  // rubber would credit a game bonus the format does not pay that way.
+  if (standing.rubber === undefined) {
+    const settled = scoreDuplicateDeal(
+      { contract: deal.contract, hands, tricksWon: deal.tricksWon },
+      standing.vulnerable,
+    );
+    return settled.points[HUMAN] - settled.points[BOT];
+  }
   const after = totalScore(applyDealScore(standing.rubber, score));
   const before = totalScore(standing.rubber);
   return after[HUMAN] - before[HUMAN] - (after[BOT] - before[BOT]);
@@ -282,7 +306,27 @@ function auctionOf(deal: LoggedDeal): string {
 /** The score the deal was bid at, or love all for one logged before that was recorded. */
 function standingFor(hand: LoggedHand): Standing {
   const standing = hand.deal.standing;
-  return standing === undefined ? loveAll() : { rubber: standing.rubber, vulnerable: standing.vulnerable };
+  if (standing === undefined) {
+    return loveAll();
+  }
+  // A duplicate deal has no rubber, and the untouched one substituted here is never
+  // read: `formatOf` gives that deal the duplicate objective, which prices a call
+  // from `vulnerable` and nothing else — `test/duplicateObjective.test.ts` is what
+  // asserts it. Supplying a *fitted* rubber instead would be inventing the standing
+  // the log deliberately does not claim.
+  return { rubber: standing.rubber ?? loveAll().rubber, vulnerable: standing.vulnerable };
+}
+
+/**
+ * What the deal was played as, which decides what its call was priced in.
+ *
+ * Absent means a rubber, which is all there was before there were formats. Read
+ * rather than assumed, because replaying a session's call as a rubber's is a
+ * different decision with the same auction in front of it — the exact mistake a
+ * single-game match once made when it was pooled with rubbers.
+ */
+function formatOf(hand: LoggedHand): MatchFormat {
+  return hand.deal.format ?? "rubber";
 }
 
 /**
@@ -337,6 +381,14 @@ function replayCall(hand: LoggedHand, before: number): Call | null {
   const bot = createHeuristicBot(createRng(1), {
     disguiseCredit: hand.disguise ? DISGUISE_CREDIT_ON : 0,
     gameEquity,
+    // What the call was priced in, from what the deal was played as. Through
+    // `objectiveFor` rather than a branch here, so the bench and the app cannot
+    // disagree about it — which is exactly how a single-game match came to be played
+    // by one bidder and recorded as another.
+    objective: objectiveFor(
+      formatOf(hand),
+      releaseFor(hand.botVersion ?? 2)?.tuning.objective ?? "points",
+    ),
   });
   // The bot's own discards, which the sampler needs to rule out cards it watched
   // itself bury. `initialHands` is what the draw produced, so the discards are
@@ -410,6 +462,9 @@ interface Corpus {
  */
 function configOf(hand: LoggedHand): string {
   const rules = hand.deal.rules?.openDiscard === true ? ", open discard" : "";
+  // The format is in the census for the reason the house rules are: a session and a
+  // rubber are two games, and a figure pooling them describes neither.
+  const format = formatOf(hand) === "rubber" ? "" : `, ${formatOf(hand)}`;
   // The rung where there is one, and the old strength dial where there is not.
   // Both name how hard the computer was playing, so they belong on the same axis
   // — but they are not the same scale, and pooling a "strong" deal with a
@@ -417,7 +472,7 @@ function configOf(hand: LoggedHand): string {
   // whichever the log actually carries keeps old deals separable without
   // pretending the two vocabularies line up.
   const hardness = hand.difficulty ?? hand.strength ?? "?";
-  return `v${hand.botVersion ?? "?"}, ${hardness}, ${hand.boldness}, disguise ${hand.disguise ? "on" : "off"}${rules}`;
+  return `v${hand.botVersion ?? "?"}, ${hardness}, ${hand.boldness}, disguise ${hand.disguise ? "on" : "off"}${format}${rules}`;
 }
 
 function census(hands: readonly LoggedHand[]): Map<string, number> {
@@ -535,7 +590,9 @@ function assess(label: string, reports: readonly Report[], corpus: Corpus): void
     bucket(
       "a part-score was standing",
       reports.filter((one) => {
-        const part = played[one.index]!.deal.standing?.rubber.partScore;
+        // A duplicate deal has no rubber and so never has a part-score standing —
+        // which is the point of the bucket rather than a gap in it.
+        const part = played[one.index]!.deal.standing?.rubber?.partScore;
         return part !== undefined && (part[HUMAN] > 0 || part[BOT] > 0);
       }),
     );

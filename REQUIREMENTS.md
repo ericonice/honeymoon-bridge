@@ -634,6 +634,157 @@ distinction the whole rubber turns on.
 
 ---
 
+### 1.8 Scoring — Duplicate
+
+A third format, alongside the rubber of §1.7 and the single game of §3.6a. It exists to take the
+luck of the cards out of the result, which is what duplicate bridge is for — and it reaches
+something no other format here can, because the half of this game that nobody can measure is the
+draw.
+
+**A board is a seed, not a hand.** Ordinary duplicate fixes the four hands and has different people
+play them. This game has no hands to fix: they are built over 26 decisions out of a shuffled stock.
+So what gets duplicated is the **stock**, and a board is played twice — once from each side — with
+the result being the difference between the two.
+
+**Two properties of §1.2 make that exact rather than approximate**, and both are consequences of
+the draw rather than conventions laid over it:
+
+- A turn spends exactly two stock cards whichever card is taken, and turns strictly alternate. So
+  **each seat's thirteen offered pairs are fixed by the seed** and cannot be perturbed by anything
+  either player does.
+- Whoever draws first takes the first pair. So **reversing who draws first swaps the two streams
+  exactly**, which is the whole mechanic: the replay is the same stock offered the other way round.
+
+The consequence worth stating: if two players make identical choices, every board is flat and the
+session is a dead heat, however large the individual scores were. Nothing else in this project has a
+control that sharp.
+
+**A session is a fixed number of deals, even, chosen before sitting down.** Ten by default, which is
+a rubber's length; two at the shortest, which is one board played twice. The count must be even —
+seven deals is not a short session but a session with one board played once, and a board played once
+is a score with nothing to compare against.
+
+**How the deals are ordered is chosen, and the three orders are different games.** What changes is
+how much of a board you can still remember when it comes round, and that is most of what a session
+*is*:
+
+- **Back to back** plays a board's two runs consecutively. The comparison is immediate and recall is
+  complete, so the board turns purely on what each side did with the same stock. The clearest
+  statement of what duplicate is, and no test of memory at all.
+- **Halves** plays every board once and then replays them in a random order — what a duplicate
+  evening actually is. Memory matters most here, and working out which board you are on is part of
+  it: under a *fixed* order you would know which board is coming and could spend the gap rehearsing
+  it, where a random one forces you to recognise it from the cards, which is slow because it is
+  circular. To know the pool you are about to be offered you have to recall your own 26 from that
+  board's first run, and to know which board that is you need evidence you only get by drawing.
+- **Shuffled** shuffles the lot. A board's replay may land anywhere after its first run, immediately
+  included — no floor, because being completely random is the point of asking for it.
+
+**Under halves alone, no board is replayed sooner than a floor allows**, and the floor scales with
+the length rather than being a fixed number of deals: a flat floor cannot serve both a two-board
+session and a fifteen-board one. So the length sets the average gap and the floor sets the worst. The
+other two orders have nothing for it to constrain — back to back brings a board straight back by
+definition, and a floor is what would stop shuffled being shuffled.
+
+**Whichever order is played, every board is dealt exactly twice and a replay never precedes the run
+it replays.** That is what keeps the format the format, and it holds in all three.
+
+**The score is one signed number per deal, and the session is their sum.** Not two columns. A rubber
+keeps two running totals because both sides genuinely have one; a board is worth a single figure —
+what one side did with the stock minus what the other did with it — and a session is the sum of every
+deal's own signed score. That the two are the same arithmetic is not a coincidence but a consequence:
+a board is signed toward whoever drew first the first time, and the replay hands that seat to the
+other player, so subtracting their run is adding your own.
+
+**Each deal is settled where it is played.** Nothing carries.
+
+- A made contract's trick points are as §1.7: 20, 30, and 40-then-30 for no-trump, doubled and
+  redoubled as usual.
+- **A game pays 300, or 500 vulnerable**, immediately. Read off the trick points, not the level, so a
+  doubled part-score that reaches 100 is the game it is.
+- **A part-score pays 50.** A flat bonus, not progress toward anything: there is nothing to
+  accumulate toward and no line to redraw.
+- **A failed contract pays no bonus at all.** The defenders' penalty is the whole of what the deal
+  paid, which is what makes overreaching expensive without any rule saying so.
+- Overtricks, undertrick penalties, slam bonuses and the doubled insult are all as §1.7.
+- **There is no rubber bonus**, because there is no rubber.
+
+**Honors are in, against duplicate bridge's own practice.** Real duplicate drops them because holding
+four aces is pure luck of the deal. Here it is not: a hand is built over 26 decisions, so holding
+four aces is something a player *did*. It is the same reason honors are in at all — see §1.7.
+
+**Vulnerability is prescribed by the board rather than earned**, on a four-board cycle: neither, the
+first drawer, the second drawer, both. Two properties are load-bearing and neither is decoration. It
+is **identical on both runs of a board**, and it attaches to the **position** — whoever draws first —
+rather than to a person. Together those are what make it cancel out of the comparison: whoever sits
+in the vulnerable seat is vulnerable both times.
+
+**A passed-out deal is a result and the board is not redealt.** In a rubber it must be, since nothing
+was scored and the standing has not moved. Here it says nobody found a contract worth bidding, and
+whatever the other run comes to is then the whole of what the board is worth — which is the sharpest
+thing a board can say. Redealing would substitute a different stock and leave nothing to compare.
+
+**The memory advantage on a replayed board cannot be removed, only made harder to use.** Every deal
+is played out to all thirteen tricks (§1.6), so both hands are public by the end of every deal —
+which means the second half of a session is inherently memory-advantaged and no rule here makes it
+ignorant. What the length, the floor and the random order all attack is *retrieval*: how usable that
+memory is, not whether you have it. If it turns out to dominate, the length is the thing to move.
+
+**The hands reveal stays immediate**, and holding it back until a board closed was designed and
+rejected. It withholds nothing, since both hands were played face up over thirteen tricks; it is the
+only feedback a player ever gets on 26 draw decisions; and having seen them is what makes meeting the
+board again "I know this one" rather than a blind repeat. What it costs is a sorted, readable thirteen
+cards arriving at the moment they are most useful to memorise — a convenience, not a secret.
+
+**The screen says that a deal is a replay, and never which board it is.** Without the first, a session
+reads as ten unrelated deals and the premise is invisible until the final score. With the second,
+recognising the board would stop being the player's job, which is the whole of what the random order
+buys.
+
+**Against the computer only, for now.** A session runs on one device; the two ways of playing another
+person are refused while duplicate is chosen, and say so.
+
+**The computer remembers a board it has played, and that reversed what this section used to say.** It
+was written when the bot had no cross-deal memory at all, and read the resulting one-sidedness as the
+format working — the memory advantage in a session was entirely the person's. That was a description
+of a missing feature, not a design.
+
+What it remembers is **the thirteen pairs it was offered**, and how it uses them is the interesting
+part: a replay swaps the streams, so those pairs are precisely what its *opponent* now faces. It
+therefore knows the other hand is one card from each of thirteen pairs rather than any thirteen of
+twenty-six — about ten million possibilities down to 8,192 — which is a far sharper guess than
+anything it can infer from a fresh deal. The mirror of that is a property worth stating: its memory
+tells it **nothing about its own draw**, because the stream it is being offered is the one it has
+never seen. So knowing the board cannot let it see card 2 before deciding, which is the thing §1.3
+exists to prevent.
+
+**It is not told which board it is on.** The host knows, and handing that over would make the
+computer strong in a way no person could be — working out where you are from the cards is most of
+what a person does on a replay. So the memory arrives as an unlabelled set and the bot has to match
+it: every card it has been offered this deal must belong to the *other* twenty-six of exactly one
+board it remembers. Ambiguity reads as not knowing rather than as a guess between two boards.
+
+**Measured at +157 ± 52 points a session**, three standard errors, over 120 sessions of one bidder
+against an exact copy of itself with memory the only difference — it recognised the board in every
+one of the 600 replays. On the coarser count of sessions won it is 57.7% ± 4.6, which is the same
+result read through a less sensitive statistic. So memory is a real component and not a dominant one,
+which is what this format was asked for.
+
+**Perfect recall only, so it sits on the top difficulty rung and nowhere else.** A forgetful bot
+recognises no board at all — all or nothing, because recognising a board is a strictly harder feat
+than remembering the thirteen cards you have just thrown, and half a board's pairs cannot build a
+hand anyway. So the championship computer knows a board when it meets it again and the club one does
+not.
+
+**Sessions are recorded and not rated, and the reason survives the bot learning to remember — with
+its reasoning replaced.** The old argument was that a bench plays the computer against itself where
+*neither* side has memory across deals. That is no longer true and the conclusion still holds, for a
+better reason: the bot's recall is **perfect and a person's is not**. It recognises every replay and
+holds thirteen exact pairs; a person recognises some boards vaguely. So self-play still describes a
+game nobody is playing — it just errs in the other direction now, crediting the player too little
+rather than too much. §3.7's ratings therefore skip duplicate results until enough real sessions
+exist to place it.
+
 ## 2. The Two Versions
 
 ### 2.1 Human vs. Robot
@@ -716,6 +867,14 @@ purpose, which is the shape the difficulty question below actually wants.
   nothing measurable: 0.6% of decisions change and hand quality moves not at all. In card play it
   is worth 13% of everything the bot throws away, because there the discards are not a bias in an
   average but cards the opponent provably cannot hold.
+
+- **Memory across deals is built too, and it exists only in duplicate.** A rubber never replays a
+  stock, so there is nothing to recognise; a session does, and the bot is handed the pairs it was
+  offered on the boards it has finished. Two things about the shape rather than the effect. It is
+  handed over by the host and never read from engine state, which is the same rule the discards
+  follow and is what lets a rung hand over less. And it arrives **unlabelled** — the bot is not told
+  which board it is on, because working that out from the cards is most of what a person does on a
+  replay. Worth +157 ± 52 points a session, and §1.8 has the rest.
 
 - **Bot memory is a tunable, not a given.** Since discards are not displayed back (§1.4), a human
   will forget some of the 13 cards they discarded and the bot would otherwise never forget
@@ -1075,12 +1234,34 @@ browser.
 1. Before the phone layout is locked down (end of phase 2).
 2. Once networking works, to validate reconnection against real iOS backgrounding (end of phase 3).
 
-### 3.6a Match Length
+### 3.6a What You Are Playing
 
-A sitting runs to a **rubber** by default — best of three games, as §1.7 describes — or to a
-**single game**, ending the moment somebody first reaches 100 below the line. A rubber is the game
-this was built to play; a single game exists because a rubber runs the better part of an hour and
-not every sitting has that in it.
+Three formats: a **rubber** by default — best of three games, as §1.7 describes — a **single game**,
+ending the moment somebody first reaches 100 below the line, and a **duplicate session** of §1.8. A
+rubber is the game this was built to play; a single game exists because a rubber runs the better part
+of an hour and not every sitting has that in it; duplicate exists to take the luck of the cards out of
+the result.
+
+**Chosen on the home screen, above the buttons that start a match, and not in Settings.** The test is
+not *when* a setting is read — every one of these is read once, when a match starts — but **how often
+the answer changes.** This changes from one sitting to the next; how hard the computer plays, which
+release it is, and the two dials beside them are set once and left for months, so they stay in Settings
+and keep their "takes effect on the next match" caveat, which is fair for something touched twice a
+year. Two things a Settings row could not do: a format nobody has heard of stays unheard of behind a
+gear, and there is no staleness to explain when the control sits directly above the button that
+consumes it.
+
+**One row, not one per action.** The two ways of starting a match would each carry their own copy of
+the same three options, and two controls for one preference is a preference that can disagree with
+itself. Joining a table takes the format from the table it is joining, so it needs none.
+
+**A duplicate session's length is chosen with it, in deals**, on a line under that row whose height
+never changes. In deals rather than boards because how long is this game is the question being
+answered, and it is how a rubber is experienced too. That line is not blank for the other two formats
+— it says what a rubber and a single game are, which is the explanation the Settings row's own
+description used to carry. Its constant height is the point: a control that appears and disappears
+shifts the primary button out from under the thumb reaching for it, which this did twice before it
+was fixed.
 
 **A single game pays 300.** Rubber bridge has no bonus for winning a *game* — its 700/500 is
 specifically for taking the rubber — so a single game played by the rubber rules would end with no
@@ -1419,10 +1600,17 @@ are shown side by side and never summed into a single record.
 
 ## 5. Open Questions
 
-1. **How much should the bot be allowed to remember?** Decided that discards are not shown
-   (§1.4), which makes recall part of the game and hands a perfect-memory bot a real edge.
-   Whether v1's bot has full recall, or is deliberately given a lossy memory of the cards it
-   has seen, is open — see §2.1. Best answered by playing against it.
+1. **How much should the bot be allowed to remember? Settled by measurement, in both currencies.**
+   Discards are not shown (§1.4), so recall is part of the game and a perfect-memory bot has a real
+   edge. Two separate questions turned out to hide inside that one, and they came out opposite ways.
+   *Within* a deal, remembering its own discards is worth 13% of everything the bot throws away in
+   card play and nothing at all in the draw — and against a whole rubber's outcome it is worth
+   nothing at the top of the difficulty ladder and about 76 points at the bottom, because a card
+   wrongly left in the pool is diluted across sixty sampled hands and is a sixth of everything the
+   bot believes across six. *Across* deals it only exists in duplicate, where it is worth +157 ± 52
+   points a session. Both are levers on the ladder rather than fixed properties: the top rung
+   remembers everything and the rungs below forget, which is why an old note here asking whether v1
+   forgets no longer has a single answer.
 2. ~~**Robot bidding approach.**~~ **Settled, and not the way it was framed.** Point counting is
    a tool for finding a *partnership* fit — it answers "how much do we have between us". With no
    partner there is nothing to add up: a bid has to be supported by thirteen cards alone. So the

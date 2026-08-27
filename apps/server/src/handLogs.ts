@@ -3,6 +3,7 @@ import type {
   Card,
   CompletedTrick,
   Contract,
+  MatchFormat,
   DrawTurnRecord,
   Level,
   Pair,
@@ -45,6 +46,15 @@ export interface HandLog {
   /** Absent from a build that predates them — see `handLogFrom`. */
   readonly drawTurns?: readonly DrawTurnRecord[];
   readonly initialHands: Pair<readonly Card[]>;
+  /**
+   * What was being played. Absent from a build that predated more than one format,
+   * which means a rubber — the only thing there was.
+   *
+   * Load-bearing for a replay rather than a label: `objectiveFor` reads it to decide
+   * what the bidder was pricing in, and a session's call replayed as a rubber's is a
+   * different decision with the same auction in front of it.
+   */
+  readonly format?: MatchFormat;
   /** Set only by a build that had house rules to report — see `LoggedDealRules`. */
   readonly rules?: LoggedDealRules;
   readonly seed?: number;
@@ -57,7 +67,16 @@ export interface HandLog {
 
 /** The score a deal was bid at. Nothing about a call can be replayed without it. */
 export interface HandLogStanding {
-  readonly rubber: RubberState;
+  /**
+   * The rubber the deal was bid at, or absent for a duplicate deal — a session has
+   * no rubber to have been at.
+   *
+   * Optional rather than a fresh rubber standing in for one, which would be a lie in
+   * stored data: a bench reading it would price a session's call against a standing
+   * that never existed. What a duplicate call actually needs is `vulnerable`, which
+   * a board prescribes, and that is here either way.
+   */
+  readonly rubber?: RubberState;
   readonly vulnerable: Pair<boolean>;
 }
 
@@ -118,6 +137,7 @@ export interface HandLogDeal {
   readonly completedTricks: readonly CompletedTrick[];
   readonly contract: Contract;
   readonly drawTurns?: readonly DrawTurnRecord[];
+  readonly format?: MatchFormat;
   readonly initialHands: Pair<readonly Card[]>;
   readonly rules?: LoggedDealRules;
   readonly seed?: number;

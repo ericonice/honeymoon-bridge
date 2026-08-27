@@ -65,7 +65,7 @@ function playDeals({
         break;
       }
       const actor = state.deal.toAct;
-      const view = snapshotFor(state, actor).view;
+      const view = snapshotFor({ kind: "rubber", table: state }, actor).view;
       const legal = legalActionsForView(view).filter((action) => action.type !== "claim");
       const where = `deal ${deal}, ${state.deal.phase}, trick ${state.deal.completedTricks.length + 1}`;
       expect(legal.length, `no legal action at ${where}`).toBeGreaterThan(0);

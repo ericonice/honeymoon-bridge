@@ -11,18 +11,20 @@ import {
   startTable,
   summarize,
   totalScore,
+  viewFor,
   vulnerability,
 } from "@hb/engine";
 import type {
   Call,
+  Card,
   DealAction,
   DealState,
+  MatchFormat,
   Pair,
   PlayerId,
   PlayerView,
   Rng,
   Strain,
-  TableState,
 } from "@hb/engine";
 import { DEFAULT_GAME_EQUITY } from "../src/bot/bidValue.js";
 import type { Objective } from "../src/bot/bidValue.js";
@@ -36,8 +38,10 @@ import { botForLevel } from "../src/bot/build.js";
 import { simpleBidder } from "../src/bot/simpleBidder.js";
 import { createSamplingBot } from "../src/bot/samplingBot.js";
 import { solve } from "../src/bot/solver.js";
-import type { Bot } from "../src/bot/types.js";
+import type { BoardMemory, Bot } from "../src/bot/types.js";
+import { offeredSoFar, offersFacingOpponent } from "../src/bot/boardRecall.js";
 import { botActionFor } from "../src/game/botTurn.js";
+import { actOn, currentDeal, dealOf, nextIn, startMatch, summarizeMatch } from "@hb/engine";
 import { createProgress } from "./progress.js";
 
 /**
@@ -159,6 +163,16 @@ function solvedTricks(
 
 interface Outcome {
   readonly deals: number;
+  /**
+   * Deals where the challenger could tell which board it was on.
+   *
+   * Reported because a knob whose effect on behavior has never been observed is not
+   * yet a knob — the rule this directory opens with, and one this bench has broken
+   * before by spending two hundred rubbers comparing a psych setting against itself.
+   * Memory can only bite through the sampler, so an arm run at zero samples and no
+   * bid search would be two identical bots and would measure as a clean null.
+   */
+  readonly recognised: number;
   /** Deals the oracle doubled in. A knob whose firing has never been observed is not yet a knob. */
   readonly doubles: number;
   readonly points: Pair<number>;
@@ -177,68 +191,142 @@ interface Outcome {
   readonly winner: PlayerId | null;
 }
 
-interface RubberOptions {
+interface MatchOptions {
   readonly bots: Pair<Bot>;
+  /**
+   * Seats that carry what they were offered from one board to its replay.
+   *
+   * A bench arm rather than a permanent property, because this is the one capability
+   * where the bot and the person are structurally unequal: both hands are face up by
+   * the end of every deal, so a computer that keeps the pairs recognises a board
+   * perfectly and a person recognises it vaguely. What that is worth is a number
+   * nobody had, and pooling an arm that has it with one that does not would be the
+   * instrument failure this whole directory exists to avoid.
+   */
+  readonly boardMemory: Pair<boolean>;
   /** The seat whose disasters are counted. */
   readonly challenger: PlayerId;
+  readonly format: MatchFormat;
   /** The seat whose doubles come from the solver, or null for neither. */
   readonly oracleSeat: PlayerId | null;
   readonly seed: number;
 }
 
-function playRubber({ bots, challenger, oracleSeat, seed }: RubberOptions): Outcome {
+/**
+ * One match, through the same machine the app plays.
+ *
+ * It drives `game/match.ts` rather than keeping its own rubber loop, which is the
+ * lesson `bot/build.ts` already taught from the other side: this bench once
+ * branched to the heuristic bot at zero samples while the app did not, so a rung
+ * measured as one opponent and shipped as another with nothing in the types saying
+ * so. A bench with its own copy of the match machine can measure a format the app
+ * plays differently, and would not say so either.
+ */
+function playMatch({ boardMemory, bots, challenger, format, oracleSeat, seed }: MatchOptions): Outcome {
+  // Recorded exactly as `localSession` records it: read off `pending` and the top of
+  // the stock before the turn spends them, held aside for the deal in progress, and
+  // committed when it finishes. A bench that recorded it some other way would be
+  // measuring a capability the app does not ship.
+  const recalled: Pair<Map<number, readonly Pair<Card>[]>> = [new Map(), new Map()];
+  const noting: Pair<{ board: number; pairs: Pair<Card>[] } | null> = [null, null];
+  const memoryOf = (seat: PlayerId): BoardMemory =>
+    boardMemory[seat]
+      ? [...recalled[seat]].map(([board, offers]) => ({ board, offers }))
+      : [];
   const rng = createRng(seed);
-  let table: TableState = startTable({ seed, starter: 0 });
+  // Board numbers spaced well apart, so no two seeds share a board and a session
+  // is a fresh set of stocks. Both seat-exchanged runs of one seed get the same
+  // boards, which is what makes the pairing a pairing.
+  let match = startMatch({ firstBoard: seed * 1000, format, seed, starter: 0 });
   let deals = 0;
   let doubles = 0;
+  let recognised = 0;
   let wrecks = 0;
   let wreckPoints = 0;
 
   while (deals < MAX_DEALS) {
     const solved = new Map<string, number>();
-    while (table.deal.phase !== "complete") {
-      const seat = table.deal.toAct;
-      const forced =
-        seat === oracleSeat ? oracleDouble(table.deal, seat, solved) : null;
+    // Hoisted out of the action loop: the standing a call is priced against is
+    // fixed for the whole of a deal, in both formats — a rubber reads the rubber
+    // as it stood when the deal began, and a session reads the board's prescribed
+    // vulnerability.
+    const standing = summarizeMatch(match).botStanding;
+    let asked = false;
+    while (dealOf(match).phase !== "complete") {
+      const deal = dealOf(match);
+      const seat = deal.toAct;
+      const board = match.kind === "duplicate" ? currentDeal(match.session).board : null;
+      if (board !== null && deal.phase === "draw" && deal.pending !== null && deal.stock[0] !== undefined) {
+        if (noting[seat]?.board !== board) {
+          noting[seat] = { board, pairs: [] };
+        }
+        noting[seat]!.pairs[deal.drawTurns.filter((one) => one.by === seat).length] = [
+          deal.pending,
+          deal.stock[0],
+        ];
+      }
+      // Asked once a deal, of the challenger, off exactly what the bot is handed —
+      // **at the first call rather than at the deal's first action.** Asking earlier is
+      // what the first version did and it reported 0 of 480: during the draw the seat
+      // has been offered almost nothing, so there is nothing to identify a board by.
+      // A census taken at the wrong moment reads exactly like a capability that does
+      // not work, which is the failure this bench keeps finding in its own read-outs.
+      if (!asked && boardMemory[challenger] && deal.phase === "auction") {
+        asked = true;
+        const seen = offeredSoFar(viewFor(deal, challenger), deal.discards[challenger]);
+        if (offersFacingOpponent(memoryOf(challenger), seen) !== null) {
+          recognised += 1;
+        }
+      }
+      const forced = seat === oracleSeat ? oracleDouble(deal, seat, solved) : null;
       if (forced !== null) {
         doubles += 1;
       }
-      table = applyTableAction(
-        table,
+      match = actOn(
+        match,
         seat,
         forced ??
-          botActionFor({
-            bot: bots[seat],
-            seat,
-            standing: {
-              rubber: table.rubberBefore,
-              vulnerable: vulnerability(table.rubberBefore),
-            },
-            state: table.deal,
-          }),
+          botActionFor({ boards: memoryOf(seat), bot: bots[seat]!, seat, standing, state: deal }),
       );
     }
 
     deals += 1;
-    const wreck = wreckIn(table.deal, challenger);
+    // Only the first run of a board is kept: by the time the second is over the board
+    // is spent, so overwriting would replace a useful record with a useless one.
+    for (const seat of [0, 1] as const) {
+      const noted = noting[seat];
+      if (noted !== null && noted.pairs.length === 13 && !recalled[seat].has(noted.board)) {
+        recalled[seat].set(noted.board, noted.pairs);
+      }
+      noting[seat] = null;
+    }
+    const wreck = wreckIn(dealOf(match), challenger);
     wrecks += wreck.down ? 1 : 0;
     wreckPoints += wreck.cost;
-    const summary = summarize(table);
-    if (summary.rubber.complete) {
+    const summary = summarizeMatch(match);
+    if (summary.complete) {
       return {
         deals,
         doubles,
-        points: totalScore(summary.rubber),
-        winner: summary.rubber.winner,
+        recognised,
+        points: summary.points,
+        winner: summary.winner,
         wreckPoints,
         wrecks,
       };
     }
-    table = nextDeal(table, Math.floor(rng.next() * 0xffffffff));
+    match = nextIn(match, Math.floor(rng.next() * 0xffffffff));
   }
 
-  const summary = summarize(table);
-  return { deals, doubles, points: totalScore(summary.rubber), winner: null, wreckPoints, wrecks };
+  return {
+    deals,
+    doubles,
+    points: summarizeMatch(match).points,
+    recognised,
+    winner: null,
+    wreckPoints,
+    wrecks,
+  };
 }
 
 /** A contract this seat declared and went down two or more in, and what it paid above the line. */
@@ -333,6 +421,45 @@ interface RunOptions {
    */
   readonly objective: Objective;
   /**
+   * What the two bidders are playing.
+   *
+   * A duplicate session is the one format where the *reference* has to be this
+   * same bidder pricing in points rather than the legacy "can I make it" one: the
+   * question is whether pricing a call in duplicate scoring beats pricing it in
+   * rubber points, and the legacy bidder is a worse opponent than either, so it
+   * would lose to both and the margin between them would be swamped.
+   */
+  readonly format: MatchFormat;
+  /**
+   * Both seats get the challenger's exact tuning, which must come out at even.
+   *
+   * **There was no way to ask for this and there should have been.** Every other
+   * mode picks a *different* reference — the legacy bidder, an older release, the
+   * same bidder at another trust weight — so "two of the same" was unreachable, and
+   * the nearest thing to it silently answered another question: the first attempt
+   * at a duplicate control passed `objective=points`, which selects the legacy "can
+   * I make it" bidder, and came back **84.8% over 80 sessions**. A control that is
+   * not a control is worse than none, and this file has already recorded the oracle
+   * doubler reading 61.8% between two identical bidders for want of one.
+   *
+   * In duplicate it is an unusually sharp check: two identical bidders on one stock
+   * should not merely score evenly, every single board should be flat.
+   */
+  readonly control: boolean;
+  /**
+   * Which seats carry a board's pairs into its replay: neither, the challenger, or
+   * both.
+   *
+   * `memory` gives it to the challenger alone, which is the arm that prices the
+   * capability. `memory=both` is what a bot-against-bot session looks like when
+   * *neither* side has the human disadvantage, and is the honest control for it —
+   * asking whether the format is still fair when both seats recognise every board.
+   *
+   * Duplicate only. A rubber never replays a stock, so there is nothing to recognise
+   * and the flag would silently do nothing.
+   */
+  readonly memory: "both" | "challenger" | "none";
+  /**
    * Two releases to play against each other, challenger first.
    *
    * The point of keeping a superseded release playable, and the reason it does not
@@ -367,7 +494,15 @@ interface RunOptions {
   readonly versusWeight: number | null;
 }
 
+/** Whether a seat carries what it was offered from a board into that board's replay. */
+function remembers(seat: PlayerId, challengerSeat: PlayerId, memory: RunOptions["memory"]): boolean {
+  return memory === "both" || (memory === "challenger" && seat === challengerSeat);
+}
+
 function run({
+  control,
+  format,
+  memory,
   gameEquity,
   objective,
   oracle,
@@ -391,6 +526,8 @@ function run({
   const wreckCounts: number[] = [];
   const wreckCosts: number[] = [];
   let won = 0;
+  let recognitions = 0;
+  let dealsPlayed = 0;
   let lost = 0;
   const started = performance.now();
   // Twenty seconds with heuristic card play and several minutes with the
@@ -401,7 +538,12 @@ function run({
   // sat beside a counter reading 5 — which made a careful reader stop and check
   // the arithmetic rather than read the result. The summary has always been
   // right; only the progress line was lying about its unit.
-  const playing = createProgress(rubbers * 2, "rubbers");
+  // Named for what is actually being played. A read-out calling a session a
+  // rubber is the same class of mistake as the progress line that counted seeds
+  // and said "rubbers" — the summary was right and only the label lied, which is
+  // exactly the sort of thing that makes a careful reader stop and re-derive.
+  const noun = format === "duplicate" ? "sessions" : "rubbers";
+  const playing = createProgress(rubbers * 2, noun);
 
   for (let seed = 1; seed <= rubbers; seed++) {
     // Every rubber twice with the seats exchanged, so dealing first and the
@@ -434,13 +576,19 @@ function run({
         if (releases !== null) {
           return cardPlay(rng, releases[challenger ? 0 : 1].tuning);
         }
+        if (control) {
+          return cardPlay(rng, { objective });
+        }
         return challenger
           ? cardPlay(rng, { objective })
           : versusWeight !== null
             ? cardPlay(rng, { theirBidOnOwnWeight: versusWeight })
-            : objective === "equity"
-              ? cardPlay(rng, { objective: "points" })
-              : simpleBidder(createHeuristicBot(rng));
+            : objective === "points"
+              ? simpleBidder(createHeuristicBot(rng))
+              : // Anything that is not the points objective is measured *against*
+                // it, which is the only comparison that says whether the pricing
+                // is an improvement rather than merely different.
+                cardPlay(rng, { objective: "points" });
       };
       const bots: Pair<Bot> = [
         make(createRng(seed), challengerSeat === 0),
@@ -448,9 +596,14 @@ function run({
       ];
 
       const them = challengerSeat === 0 ? 1 : 0;
-      const outcome = playRubber({
+      const outcome = playMatch({
+        boardMemory: [
+          remembers(0, challengerSeat, memory),
+          remembers(1, challengerSeat, memory),
+        ],
         bots,
         challenger: challengerSeat,
+        format,
         oracleSeat: oracle ? them : null,
         seed,
       });
@@ -459,6 +612,8 @@ function run({
       doubleCounts.push(outcome.doubles);
       wreckCounts.push(outcome.wrecks);
       wreckCosts.push(outcome.wreckPoints);
+      recognitions += outcome.recognised;
+      dealsPlayed += outcome.deals;
       if (outcome.winner === challengerSeat) {
         won += 1;
       } else if (outcome.winner === them) {
@@ -473,7 +628,7 @@ function run({
     playing(
       seed * 2,
       `${won}-${lost}  ${(100 * rate).toFixed(0)}% ± ${(100 * bar).toFixed(0)}  ` +
-        `${mean(points) >= 0 ? "+" : ""}${mean(points).toFixed(0)}/rubber`,
+        `${mean(points) >= 0 ? "+" : ""}${mean(points).toFixed(0)}/${noun.slice(0, -1)}`,
     );
   }
 
@@ -482,7 +637,11 @@ function run({
 
   const play = samples > 0 ? `, ${samples}-sample card play` : `, heuristic card play`;
   console.log(
-    levels !== null
+    control
+      ? `one bidder against an exact copy of itself, pricing in ${objective} — the control${play}`
+      : format === "duplicate" && objective === "duplicate"
+        ? `duplicate scoring against the same bidder pricing in rubber points, over sessions${play}`
+        : levels !== null
       ? `${levelName(levels[0])} against ${levelName(levels[1])}, their own sample counts`
       : search > 0
         ? `the bidder searching its tricks at ${search}ms (${searchMode}) against the same bidder counting them${play}`
@@ -495,37 +654,56 @@ function run({
               : `points bidder against the old "can I make it" bidder${play}`,
   );
   console.log(`  challenger prices a game at ${gameEquity}`);
+  if (memory !== "none") {
+    console.log(
+      memory === "both"
+        ? "  both seats carry a board's pairs into its replay"
+        : "  the challenger carries a board's pairs into its replay; the reference does not",
+    );
+    console.log(
+      `  it knew which board it was on in ${((100 * recognitions) / Math.max(dealsPlayed, 1)).toFixed(0)}% ` +
+        `of deals (${recognitions} of ${dealsPlayed})`,
+    );
+  }
   console.log(
     oracle
       ? `  the reference doubles off the solver, from down ${ORACLE_FROM_DOWN}`
       : `  the reference doubles only from the five level — not comparable to an oracle run`,
   );
-  console.log(`${points.length} rubbers, both seats each, in ${((performance.now() - started) / 1000).toFixed(0)}s\n`);
+  console.log(
+    `${points.length} ${noun}, both seats each, in ${((performance.now() - started) / 1000).toFixed(0)}s
+`,
+  );
   // Rubbers won leads, and the reason is not presentation. A bidder maximizing
   // the chance of taking the rubber will trade points for wins — conceding 200 to
   // protect a rubber it is winning is the whole point of it — so a bench headlined
   // on points per rubber would report exactly that as a regression. This file has
   // recorded three instrument failures of that shape; this one was predictable.
   const { error: rateError, gap, rate } = winRate(won, lost);
-  console.log(`  rubbers won      ${won} to ${lost}   ${(100 * rate).toFixed(1)}% ± ${(100 * rateError).toFixed(1)}`);
+  console.log(
+    `  ${noun} won${" ".repeat(Math.max(1, 14 - noun.length))}${won} to ${lost}   ` +
+      `${(100 * rate).toFixed(1)}% ± ${(100 * rateError).toFixed(1)}`,
+  );
   console.log(
     `  that is          ${(Math.abs(rate - 0.5) / rateError).toFixed(1)} standard errors from even`,
   );
   console.log(
     `  worth            ${gap >= 0 ? "+" : ""}${gap.toFixed(0)} rating points to the challenger`,
   );
-  console.log(`  margin           ${margin >= 0 ? "+" : ""}${margin.toFixed(0)} points per rubber`);
+  console.log(
+    `  margin           ${margin >= 0 ? "+" : ""}${margin.toFixed(0)} points per ${noun.slice(0, -1)}`,
+  );
   console.log(`  standard error   ${error.toFixed(0)}`);
   console.log(`  that is          ${(Math.abs(margin) / Math.max(1, error)).toFixed(1)} standard errors`);
-  console.log(`  deals per rubber ${mean(dealCounts).toFixed(1)}`);
+  console.log(`  deals per ${noun.slice(0, -1)}  ${mean(dealCounts).toFixed(1)}`);
   console.log(
-    `  doubles          ${mean(doubleCounts).toFixed(2)} per rubber, ` +
+    `  doubles          ${mean(doubleCounts).toFixed(2)} per ${noun.slice(0, -1)}, ` +
       `${(mean(doubleCounts) / Math.max(0.01, mean(dealCounts)) * 100).toFixed(0)}% of deals`,
   );
   console.log(
-    `  challenger down 2+ in its own contract, ${mean(wreckCounts).toFixed(2)} deals per rubber ` +
+    `  challenger down 2+ in its own contract, ${mean(wreckCounts).toFixed(2)} deals per ${noun.slice(0, -1)} ` +
       `(${(mean(wreckCounts) / Math.max(0.01, mean(dealCounts)) * 100).toFixed(0)}% of deals), ` +
-      `costing ${mean(wreckCosts).toFixed(0)} per rubber`,
+      `costing ${mean(wreckCosts).toFixed(0)} per ${noun.slice(0, -1)}`,
   );
 }
 
@@ -614,9 +792,35 @@ function levelName(level: DifficultyLevel): string {
 const equityArg = process.argv.find((arg) => arg.startsWith("equity="));
 const versusArg = process.argv.find((arg) => arg.startsWith("vs="));
 
+/**
+ * `format=duplicate` plays sessions instead of rubbers.
+ *
+ * It carries the objective with it, because in duplicate they are the same
+ * question: a session has no standing, so pricing a call the rubber way is
+ * pricing it against a standing that will never change. Pass `objective=points`
+ * as well to hold both sides on the points objective, which is the **control** —
+ * two identical bidders on the same stock must come out at even, and in duplicate
+ * that is unusually sharp, since every board should be flat.
+ */
+const format: MatchFormat = process.argv.includes("format=duplicate") ? "duplicate" : "rubber";
+const objective: Objective = process.argv.includes("objective=points")
+  ? "points"
+  : process.argv.includes("objective=equity")
+    ? "equity"
+    : format === "duplicate"
+      ? "duplicate"
+      : "points";
+
 run({
+  control: process.argv.includes("control"),
+  format,
+  memory: process.argv.includes("memory=both")
+    ? "both"
+    : process.argv.includes("memory")
+      ? "challenger"
+      : "none",
   gameEquity: equityArg === undefined ? DEFAULT_GAME_EQUITY : Number(equityArg.slice("equity=".length)),
-  objective: process.argv.includes("objective=equity") ? "equity" : "points",
+  objective,
   levels: levelsFrom(process.argv.find((arg) => arg.startsWith("levels="))),
   releases: releasesFrom(process.argv.find((arg) => arg.startsWith("releases="))),
   search: Number(process.argv.find((arg) => arg.startsWith("search="))?.slice("search=".length) ?? 0),

@@ -4,6 +4,7 @@ import type {
   CompletedTrick,
   Contract,
   DrawTurnRecord,
+  MatchFormat,
   Pair,
   PlayerId,
   RubberState,
@@ -49,7 +50,21 @@ export interface HandLog {
    */
   readonly seed: number;
   /** The rubber and vulnerability the deal was bid at, which decides what a call was worth. */
-  readonly standing: { readonly rubber: RubberState; readonly vulnerable: Pair<boolean> };
+  /**
+   * The score the deal was *bid* at.
+   *
+   * `rubber` is absent for a duplicate deal, because a session has no rubber to have
+   * been at — and that is not a partial standing but the whole of the one it was bid
+   * at, since what a duplicate call is priced against is vulnerability and nothing
+   * else. Sending a fresh rubber instead would put a standing that never existed
+   * into stored data.
+   */
+  readonly standing: {
+    readonly rubber?: RubberState;
+    readonly vulnerable: Pair<boolean>;
+  };
+  /** What was being played. Read back by `objectiveFor` to replay the call. */
+  readonly format: MatchFormat;
   readonly starter: PlayerId;
   readonly tricksWon: Pair<number>;
 }
@@ -86,6 +101,7 @@ export function reportHandLog(log: HandLog): void {
       initialHands0: log.initialHands[0],
       initialHands1: log.initialHands[1],
       seed: log.seed,
+      format: log.format,
       standing: log.standing,
       starter: log.starter,
       tricksWon: log.tricksWon,

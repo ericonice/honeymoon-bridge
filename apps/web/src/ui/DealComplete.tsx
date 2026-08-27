@@ -1,13 +1,14 @@
 import { totalScore } from "@hb/engine";
-import type { DealScore, Pair, PlayerView, RubberState } from "@hb/engine";
+import type { DealScore, MatchStanding, Pair, PlayerView } from "@hb/engine";
 import { matchNoun } from "../game/labels.js";
 import { ratingChange } from "../game/records.js";
-import type { DealRecord } from "../game/session.js";
 import { Columns, DealResultHeadline, Row } from "./ScoreRows.js";
 import { Scorepad } from "./Scorepad.js";
+import { SessionPad } from "./SessionPad.js";
 
 export interface DealCompleteProps {
-  readonly history: readonly DealRecord[];
+  /** What a duplicate deal paid beyond its tricks. Zero in a rubber. */
+  readonly dealBonus: number;
   readonly opponentName: string;
   /** True once the other player has asked to move on and you have not. */
   readonly opponentWaitingToContinue: boolean;
@@ -19,7 +20,7 @@ export interface DealCompleteProps {
    * than the pair the standing strip takes.
    */
   readonly opponentRating: number | null;
-  readonly rubber: RubberState;
+  readonly standing: MatchStanding;
   readonly score: DealScore | null;
   readonly view: PlayerView;
   readonly vulnerable: Pair<boolean>;
@@ -34,18 +35,33 @@ export interface DealCompleteProps {
 }
 
 export function DealComplete({
-  history,
+  dealBonus,
   onDone,
   onNextDeal,
   opponentName,
   opponentRating,
   opponentWaitingToContinue,
-  rubber,
   score,
+  standing,
   view,
   vulnerable,
   waitingToContinue,
 }: DealCompleteProps): React.JSX.Element {
+  // The two pads are the one place the formats genuinely differ, and this screen
+  // shows one on all four of its paths — so it is resolved once here rather than
+  // branched at each of them.
+  const pad =
+    standing.kind === "duplicate" ? (
+      <SessionPad summary={standing.summary} view={view} />
+    ) : (
+      <Scorepad history={standing.history} opponentName={opponentName} rubber={standing.rubber} view={view} />
+    );
+  const complete =
+    standing.kind === "duplicate" ? standing.summary.complete : standing.rubber.complete;
+  const noun = matchNoun(
+    standing.kind === "duplicate" ? "duplicate" : standing.rubber.format,
+  );
+
   const button = (
     <div className="flex w-full max-w-sm flex-col items-center gap-3">
       <button
@@ -54,11 +70,7 @@ export function DealComplete({
         disabled={waitingToContinue}
         onClick={onNextDeal}
       >
-        {waitingToContinue
-          ? `Waiting for ${opponentName}…`
-          : rubber.complete
-            ? `New ${matchNoun(rubber.format)}`
-            : "Next deal"}
+        {waitingToContinue ? `Waiting for ${opponentName}…` : complete ? `New ${noun}` : "Next deal"}
       </button>
 
       {/* The other half of "Waiting for X…". Moving on takes both, and without
@@ -66,9 +78,7 @@ export function DealComplete({
           there waiting on you. */}
       {opponentWaitingToContinue ? (
         <p className="text-xs text-white/50">
-          {rubber.complete
-            ? `${opponentName} wants another ${matchNoun(rubber.format)}`
-            : `${opponentName} is ready`}
+          {complete ? `${opponentName} wants another ${noun}` : `${opponentName} is ready`}
         </p>
       ) : null}
 
@@ -87,34 +97,59 @@ export function DealComplete({
     </div>
   );
 
-  if (rubber.complete) {
-    const totals = totalScore(rubber);
-    const won = rubber.winner === view.me;
-    const noun = matchNoun(rubber.format);
+  if (complete) {
+    // A drawn match is a third outcome rather than a loss, which duplicate makes
+    // ordinary: a board is flat whenever both of its runs score the same, so a short
+    // session really is level a fair fraction of the time.
+    const winner = standing.kind === "duplicate" ? standing.summary.winner : standing.rubber.winner;
+    const drawn = winner === null;
+    const won = winner === view.me;
     // Worked out here rather than waited for. The server is authoritative and
     // the next record fetch confirms it, but the moment worth showing is now.
-    const rating = ratingChange({ opponent: opponentRating, won });
+    // **No rating line for a session, and this would have been a lie on screen.**
+    // Duplicate results are recorded and deliberately left out of the rating walk —
+    // the anchor for the format cannot come from self-play, since a bench has no
+    // memory on either side and a person does. So the server will never move the
+    // rating for this match, and a client showing "1361 → 1384" would be inventing
+    // a number that never arrives. A blank is the honest answer, for the same reason
+    // `botAnchor` returns null rather than guessing: nobody checks a figure that
+    // looks right.
+    const rating =
+      standing.kind === "duplicate" ? null : ratingChange({ opponent: opponentRating, won });
 
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4">
         <div className="text-center">
           <h2 className="text-2xl font-semibold">
-            {won ? `You win the ${noun}` : `${opponentName} wins the ${noun}`}
+            {drawn
+              ? `The ${noun} is level`
+              : won
+                ? `You win the ${noun}`
+                : `${opponentName} wins the ${noun}`}
           </h2>
           {/* A single game is won one game to nothing by definition, so saying so
-              is noise. The margin that means something there is the score. */}
-          {rubber.format === "rubber" ? (
+              is noise. The margin that means something there is the score. A
+              session says how many boards it took, since that is not fixed by the
+              format the way a rubber's two games are. */}
+          {standing.kind === "duplicate" ? (
             <p className="mt-1 text-sm text-white/60">
-              {rubber.gamesWon[view.me]} games to {rubber.gamesWon[view.opponent]}
+              {standing.summary.boards.length} boards, {standing.summary.dealsPlayed} deals
+            </p>
+          ) : standing.rubber.format === "rubber" ? (
+            <p className="mt-1 text-sm text-white/60">
+              {standing.rubber.gamesWon[view.me]} games to{" "}
+              {standing.rubber.gamesWon[view.opponent]}
             </p>
           ) : null}
         </div>
-        <div className="w-full max-w-sm text-sm">
-          <Columns opponentName={opponentName} />
-          <Row label="Above the line" values={rubber.aboveLine} view={view} />
-          <Row divider label="Below the line" values={rubber.belowLineTotal} view={view} />
-          <Row emphasis label="Final score" values={totals} view={view} />
-        </div>
+        {standing.kind === "duplicate" ? null : (
+          <div className="w-full max-w-sm text-sm">
+            <Columns opponentName={opponentName} />
+            <Row label="Above the line" values={standing.rubber.aboveLine} view={view} />
+            <Row divider label="Below the line" values={standing.rubber.belowLineTotal} view={view} />
+            <Row emphasis label="Final score" values={totalScore(standing.rubber)} view={view} />
+          </div>
+        )}
 
         {/* Under the score rather than beside it: the score is what happened,
             and this is what it was worth. Rendered only when every part of it is
@@ -131,7 +166,7 @@ export function DealComplete({
           </p>
         )}
 
-        <Scorepad history={history} opponentName={opponentName} rubber={rubber} view={view} />
+        {pad}
 
         {button}
       </div>
@@ -143,10 +178,11 @@ export function DealComplete({
       <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4 text-center">
         <h2 className="text-2xl font-semibold">Passed out</h2>
         <p className="max-w-xs text-sm text-white/60">
-          Neither of you bid, so the deal is thrown in and redealt with the same player drawing
-          first. Nothing is scored.
+          {standing.kind === "duplicate"
+            ? "Neither of you bid, so nothing is scored — and the board is not redealt. A passed-out run is a result: whatever the other run comes to is the whole of what the board is worth."
+            : "Neither of you bid, so the deal is thrown in and redealt with the same player drawing first. Nothing is scored."}
         </p>
-        <Scorepad history={history} opponentName={opponentName} rubber={rubber} view={view} />
+        {pad}
         {button}
       </div>
     );
@@ -159,9 +195,15 @@ export function DealComplete({
           deal from there, never reaching this screen at all. A claim never
           has a reveal to have shown it in, so this is still this path's to
           show. */}
-      <DealResultHeadline opponentName={opponentName} score={score} view={view} vulnerable={vulnerable} />
+      <DealResultHeadline
+        bonus={dealBonus}
+        opponentName={opponentName}
+        score={score}
+        view={view}
+        vulnerable={vulnerable}
+      />
 
-      <Scorepad history={history} opponentName={opponentName} rubber={rubber} view={view} />
+      {pad}
 
       {button}
     </div>

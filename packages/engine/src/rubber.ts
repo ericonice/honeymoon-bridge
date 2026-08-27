@@ -36,7 +36,7 @@ export const GAME_BONUS = 300;
  * doubled vulnerable penalties and the whole pressure of being vulnerable when
  * the opponent is not.
  */
-export type MatchFormat = "game" | "rubber";
+export type RubberFormat = "game" | "rubber";
 
 export interface RubberState {
   /** Bonuses, penalties, overtricks and honors. Never counts toward game. Includes `matchBonus`. */
@@ -45,7 +45,7 @@ export interface RubberState {
   readonly belowLineTotal: Pair<number>;
   readonly complete: boolean;
   /** What it takes to finish. Fixed when the match starts and never changes. */
-  readonly format: MatchFormat;
+  readonly format: RubberFormat;
   readonly gamesWon: Pair<number>;
   /**
    * 700 or 500 for taking the rubber, 300 for a one-game match, folded into
@@ -68,7 +68,7 @@ export interface RubberState {
   readonly winner: PlayerId | null;
 }
 
-export function newRubber(format: MatchFormat = "rubber"): RubberState {
+export function newRubber(format: RubberFormat = "rubber"): RubberState {
   return {
     aboveLine: [0, 0],
     belowLineTotal: [0, 0],
@@ -165,7 +165,7 @@ export function applyDealScore(rubber: RubberState, score: DealScore): RubberSta
 }
 
 /** 700 for a rubber the loser never got a game in, 500 otherwise, 300 for a game. */
-export function matchBonusFor(format: MatchFormat, opponentGames: number): number {
+export function matchBonusFor(format: RubberFormat, opponentGames: number): number {
   if (format === "game") {
     return GAME_BONUS;
   }

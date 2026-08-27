@@ -2,9 +2,10 @@ import { cardId, playableFrom } from "@hb/engine";
 import type { Call, Card, DrawTake, Pair, PlayerView, Rng } from "@hb/engine";
 import { createHeuristicBot } from "./heuristicBot.js";
 import type { BotTuning } from "./heuristicBot.js";
+import { offeredSoFar, offersFacingOpponent } from "./boardRecall.js";
 import { sampleOpponentHand } from "./sample.js";
 import { evaluateMoves } from "./solver.js";
-import type { Bot, Standing } from "./types.js";
+import type { BoardMemory, Bot, Standing } from "./types.js";
 
 /**
  * Plays by guessing the hand it cannot see, many times over, and solving each
@@ -46,17 +47,23 @@ function chooseBySampling(
   rng: Rng,
   samples: number,
   remembered: readonly Card[],
+  boards: BoardMemory,
 ): Card {
   const legal = playableFrom(view.hand, view.currentTrick);
   if (legal.length === 1) {
     return legal[0]!;
   }
 
+  // Worked out once for the whole decision rather than per sample: which board this is
+  // does not change between two guesses at the same position, and identifying it walks
+  // every remembered board.
+  const theirOffers = offersFacingOpponent(boards, offeredSoFar(view, remembered));
+
   const totals = new Map<string, number>();
   for (let sample = 0; sample < samples; sample++) {
     const hands: Pair<readonly Card[]> = [[], []];
     hands[view.me] = view.hand;
-    hands[view.opponent] = sampleOpponentHand(view, rng, remembered);
+    hands[view.opponent] = sampleOpponentHand(view, rng, remembered, theirOffers);
 
     const values = evaluateMoves({
       hands,
@@ -87,18 +94,23 @@ export function createSamplingBot(
   return {
     name: "Computer",
 
-    chooseCall(view: PlayerView, standing: Standing, remembered: readonly Card[]): Call {
-      return heuristic.chooseCall(view, standing, remembered);
+    chooseCall(
+      view: PlayerView,
+      standing: Standing,
+      remembered: readonly Card[],
+      boards: BoardMemory = [],
+    ): Call {
+      return heuristic.chooseCall(view, standing, remembered, boards);
     },
 
     chooseDraw(view: PlayerView, remembered: readonly Card[]): DrawTake {
       return heuristic.chooseDraw(view, remembered);
     },
 
-    choosePlay(view: PlayerView, remembered: readonly Card[]): Card {
+    choosePlay(view: PlayerView, remembered: readonly Card[], boards: BoardMemory = []): Card {
       return view.contract === null
         ? heuristic.choosePlay(view, remembered)
-        : chooseBySampling(view, rng, samples, remembered);
+        : chooseBySampling(view, rng, samples, remembered, boards);
     },
   };
 }

@@ -1,14 +1,22 @@
 import { DurableObject } from "cloudflare:workers";
 import {
-  applyTableAction,
+  actOn,
   dealFacts,
-  nextDeal,
+  dealOf,
+  nextIn,
   rubberFacts,
-  startTable,
-  summarize,
-  totalScore,
+  startMatch,
+  summarizeMatch,
 } from "@hb/engine";
-import type { MatchFormat, PlayerId, TableState, TableSummary, Unlock } from "@hb/engine";
+import type {
+  DuplicateSchedule,
+  MatchFormat,
+  MatchState,
+  MatchSummary,
+  PlayerId,
+  TableState,
+  Unlock,
+} from "@hb/engine";
 import { snapshotFor } from "@hb/protocol";
 import type { ClientMessage, Seating, ServerMessage, TableInfo } from "@hb/protocol";
 import { applyDealAchievements, applyRubberAchievements } from "./achievements.js";
@@ -16,7 +24,7 @@ import { accountFor, verifySession } from "./auth.js";
 import { dealSeed } from "./codes.js";
 import type { Env } from "./env.js";
 import { formatFor } from "./matchFormat.js";
-import { recordRubber } from "./results.js";
+import { DRAWN, recordRubber } from "./results.js";
 import type { SeatedAccount } from "./seating.js";
 import { refuseSeat } from "./seating.js";
 
@@ -40,7 +48,12 @@ interface SeatRecord {
    */
   readonly accountId: string | null;
   /** What this player asked for. Only consulted when the match starts. */
+  /** What this player asked for. Only consulted when the match starts. */
   readonly format: MatchFormat;
+  /** How long a session they asked for, in deals. Only consulted for duplicate. */
+  readonly deals: number;
+  /** How they want a session ordered. Only consulted when both asked for the same. */
+  readonly order: DuplicateSchedule;
   readonly nickname: string;
   /** The opaque value in the client's `localStorage`. This is what holds a seat. */
   readonly token: string;
@@ -69,7 +82,16 @@ interface Stored {
   readonly recorded: boolean;
   readonly seats: [SeatRecord | null, SeatRecord | null];
   /** Null until both seats are filled and the first deal is dealt. */
-  readonly table: TableState | null;
+  /**
+   * The match on the table, or null before both seats are filled.
+   *
+   * Persisted under the key `table` and read through `matchFrom`, which is what
+   * keeps a sitting already under way alive across the deploy that introduced this:
+   * the stored value used to be a bare `TableState`. Applied on read rather than as
+   * a migration, the same way `withImpliedTiers` repairs a stored achievement — the
+   * old shape stays in storage and the answer comes out right anyway.
+   */
+  readonly match: MatchState | null;
 }
 
 /** Kept on the socket so a hibernated object still knows who is on the other end. */
@@ -94,6 +116,53 @@ const SEATS: readonly PlayerId[] = [0, 1];
  * doing nothing (§3.3). Between messages this object may cease to exist
  * entirely; everything it needs is either in storage or attached to the socket.
  */
+/**
+ * What is actually in storage, which is not quite `Stored`.
+ *
+ * A sitting under way when this deploys has a bare `TableState` under `table`,
+ * because that is what the object held before a match could be a session. Read
+ * through rather than migrated: the old shape stays where it is and comes out right
+ * anyway, which is the same reasoning `ratings.ts` gives for recomputing and
+ * `withImpliedTiers` for repairing on read. A rubber somebody is in the middle of is
+ * not worth a migration to lose.
+ */
+type StoredOnDisk = Omit<Stored, "match"> & {
+  readonly match?: MatchState | null;
+  /** The pre-duplicate shape: a bare table, before a match could be a session. */
+  readonly table?: TableState | null;
+};
+
+/**
+ * The match two filled seats have agreed to play, or null while one is empty.
+ *
+ * Every seed is minted here and never leaves the object. For a rubber that is one
+ * deal's stock order; for a session it is also every board nobody has played yet,
+ * which is why `snapshotFor` sends the standing's summary and never its state.
+ */
+function startingMatch(seats: readonly [SeatRecord | null, SeatRecord | null]): MatchState | null {
+  const [first, second] = seats;
+  if (first === null || second === null) {
+    return null;
+  }
+  const agreed = formatFor(first, second);
+  return startMatch({
+    ...(agreed.format === "duplicate"
+      ? { boards: agreed.boards, schedule: agreed.order }
+      : {}),
+    firstBoard: dealSeed(),
+    format: agreed.format,
+    seed: dealSeed(),
+    starter: 0,
+  });
+}
+
+function matchFrom(stored: StoredOnDisk): MatchState | null {
+  if (stored.match !== undefined) {
+    return stored.match;
+  }
+  return stored.table == null ? null : { kind: "rubber", table: stored.table };
+}
+
 export class Table extends DurableObject<Env> {
   #cached: Stored | null = null;
 
@@ -101,20 +170,25 @@ export class Table extends DurableObject<Env> {
     if (this.#cached !== null) {
       return this.#cached;
     }
-    const stored = await this.ctx.storage.get<Stored>("table");
-    this.#cached = stored ?? {
-      code: "",
-      dealAchievementsApplied: false,
-      ready: [false, false],
-      recorded: false,
-      seats: [null, null],
-      table: null,
-    };
+    const stored = await this.ctx.storage.get<StoredOnDisk>("table");
+    this.#cached =
+      stored === undefined
+        ? {
+            code: "",
+            dealAchievementsApplied: false,
+            ready: [false, false],
+            recorded: false,
+            seats: [null, null],
+            match: null,
+          }
+        : { ...stored, match: matchFrom(stored) };
     return this.#cached;
   }
 
   async #save(stored: Stored): Promise<void> {
     this.#cached = stored;
+    // Written under the same key and without the legacy `table`, so the old shape
+    // disappears the first time anything happens at this table.
     // Persisted so an in-flight rubber survives a deploy or an eviction, which
     // matters when a rubber runs the better part of an hour (§3.3).
     await this.ctx.storage.put("table", stored);
@@ -241,7 +315,14 @@ export class Table extends DurableObject<Env> {
       // A session that no longer verifies leaves the seat's attribution alone
       // rather than erasing it: the account was proved when the seat was taken.
       accountId: account?.id ?? previous?.accountId ?? null,
+      // Absent from a client too old to ask for a session, which is what a rubber
+      // preference reads as anyway — the length is only consulted when both seats
+      // asked for duplicate.
+      deals: message.sessionDeals ?? 0,
       format: message.format,
+      // A client too old to have an opinion reads as the default, which is what it
+      // would have been playing.
+      order: message.sessionOrder ?? "halves",
       // The last fallback is unreachable: a seat is either being resumed, and
       // has a name already, or has just passed `refuse`, which requires one.
       nickname: account?.name ?? previous?.nickname ?? "",
@@ -249,18 +330,12 @@ export class Table extends DurableObject<Env> {
     };
     ws.serializeAttachment({ seat, token } satisfies Attachment);
 
-    // Both seats filled and nothing dealt yet: start the match. The seed is
-    // generated here and never leaves — it reconstructs the whole stock order.
-    const table =
-      stored.table ?? (seats[0] !== null && seats[1] !== null
-        ? startTable({
-            format: formatFor(seats[0].format, seats[1].format),
-            seed: dealSeed(),
-            starter: 0,
-          })
-        : null);
+    // Both seats filled and nothing dealt yet: start the match. Every seed is
+    // generated here and never leaves — one reconstructs a whole deal's stock order,
+    // and for a session that is true of boards nobody has played yet.
+    const match = stored.match ?? startingMatch(seats);
 
-    await this.#save({ ...stored, seats, table });
+    await this.#save({ ...stored, match, seats });
     await this.ctx.storage.deleteAlarm();
     await this.#broadcast();
   }
@@ -268,16 +343,16 @@ export class Table extends DurableObject<Env> {
   async #act(ws: WebSocket, message: Extract<ClientMessage, { type: "action" }>): Promise<void> {
     const stored = await this.#load();
     const seat = this.#seatOf(ws);
-    if (seat === null || stored.table === null) {
+    if (seat === null || stored.match === null) {
       this.#send(ws, { type: "error", message: "Not seated at a started table" });
       return;
     }
 
     // The engine refuses anything illegal, including acting out of turn. The
     // client's own copy of the rules is a convenience; this is the authority.
-    let next: TableState;
+    let next: MatchState;
     try {
-      next = applyTableAction(stored.table, seat, message.action);
+      next = actOn(stored.match, seat, message.action);
     } catch (error) {
       this.#send(ws, { type: "error", message: (error as Error).message });
       return;
@@ -291,8 +366,8 @@ export class Table extends DurableObject<Env> {
     // one, every deal, with the client shown nothing at all because the state
     // it is waiting for is never saved and never broadcast. Same rule as
     // `#recordIfWon`, which has said so all along; this is the other half of it.
-    const summary = summarize(next);
-    const recorded = await this.#recordIfWon(stored, summary);
+    const summary = summarizeMatch(next);
+    const recorded = await this.#recordIfDecided(stored, summary);
     let applied = true;
     try {
       await this.#applyAchievements(stored, next, summary);
@@ -305,9 +380,9 @@ export class Table extends DurableObject<Env> {
       // Only a run that actually got through counts as done, so a resent
       // action retries rather than silently skipping — the flag is there to
       // stop double-counting, not to record an attempt.
-      dealAchievementsApplied: next.deal.phase === "complete" && applied,
+      dealAchievementsApplied: dealOf(next).phase === "complete" && applied,
+      match: next,
       recorded,
-      table: next,
     });
     await this.#broadcast();
   }
@@ -320,25 +395,27 @@ export class Table extends DurableObject<Env> {
    * action the engine had already accepted — losing the game to save the record
    * of it.
    */
-  async #recordIfWon(stored: Stored, summary: TableSummary): Promise<boolean> {
+  async #recordIfDecided(stored: Stored, summary: MatchSummary): Promise<boolean> {
     const [first, second] = stored.seats;
     if (stored.recorded || first === null || second === null) {
       return stored.recorded;
     }
 
-    const { history, rubber } = summary;
-    if (!rubber.complete || rubber.winner === null) {
+    if (!summary.complete) {
       return false;
     }
 
-    const points = totalScore(rubber);
+    // A drawn match is recorded too, which duplicate makes ordinary: a board is flat
+    // whenever both of its runs come to the same score, so a short session is level a
+    // fair fraction of the time. `DRAWN` is what says so — see `results.ts`.
+    const points = summary.points;
     try {
       await recordRubber(
         this.env,
         {
           code: stored.code,
-          deals: history.length,
-          format: rubber.format,
+          deals: summary.dealsPlayed,
+          format: summary.format,
           seats: [
             {
               accountId: first.accountId,
@@ -353,7 +430,7 @@ export class Table extends DurableObject<Env> {
               token: second.token,
             },
           ],
-          winner: rubber.winner,
+          winner: summary.winner ?? DRAWN,
         },
         Date.now(),
       );
@@ -372,22 +449,35 @@ export class Table extends DurableObject<Env> {
    * were somehow delivered twice — see `dealAchievementsApplied` and, for the
    * rubber branch, the same `recorded` flag `#recordIfWon` already keeps.
    */
-  async #applyAchievements(stored: Stored, next: TableState, summary: TableSummary): Promise<void> {
+  async #applyAchievements(stored: Stored, next: MatchState, summary: MatchSummary): Promise<void> {
     const [first, second] = stored.seats;
     if (first === null || second === null) {
       return;
     }
     const seats: readonly [SeatRecord, SeatRecord] = [first, second];
 
-    if (next.deal.phase === "complete" && !stored.dealAchievementsApplied) {
-      const facts = dealFacts(next.deal, summary.score, summary.vulnerable);
+    if (dealOf(next).phase === "complete" && !stored.dealAchievementsApplied) {
+      const facts = dealFacts(dealOf(next), summary.score, summary.vulnerable);
       await this.#pushAchievements(seats, (player) =>
         applyDealAchievements(this.env, seats[player].accountId, facts, player, Date.now()),
       );
     }
 
-    if (!stored.recorded && summary.rubber.complete && summary.rubber.winner !== null) {
-      const facts = rubberFacts(summary);
+    // Rubber achievements are about a rubber. Taking the rubber cannot be earned in
+    // a session and must not fire in one, which is why this is gated on the
+    // standing's *shape* rather than on the match merely finishing.
+    if (
+      !stored.recorded &&
+      summary.complete &&
+      summary.winner !== null &&
+      summary.standing.kind === "rubber"
+    ) {
+      const facts = rubberFacts({
+        history: summary.standing.history,
+        rubber: summary.standing.rubber,
+        score: summary.score,
+        vulnerable: summary.vulnerable,
+      });
       await this.#pushAchievements(seats, (player) =>
         applyRubberAchievements(this.env, seats[player].accountId, facts, player, Date.now()),
       );
@@ -422,10 +512,10 @@ export class Table extends DurableObject<Env> {
   async #nextDeal(ws: WebSocket): Promise<void> {
     const stored = await this.#load();
     const seat = this.#seatOf(ws);
-    if (seat === null || stored.table === null) {
+    if (seat === null || stored.match === null) {
       return;
     }
-    if (stored.table.deal.phase !== "complete") {
+    if (dealOf(stored.match).phase !== "complete") {
       this.#send(ws, { type: "error", message: "The deal is not finished" });
       return;
     }
@@ -447,10 +537,10 @@ export class Table extends DurableObject<Env> {
       // last one's flag said.
       dealAchievementsApplied: false,
       ready: [false, false],
-      // `nextDeal` starts a fresh rubber when the last one was won, so whatever
-      // was recorded belongs to a rubber that is now over.
+      // `nextIn` starts a fresh match when the last one was decided, so whatever was
+      // recorded belongs to a match that is now over.
+      match: nextIn(stored.match, dealSeed()),
       recorded: false,
-      table: nextDeal(stored.table, dealSeed()),
     });
     await this.#broadcast();
   }
@@ -558,7 +648,11 @@ export class Table extends DurableObject<Env> {
       this.#send(ws, {
         type: "state",
         seat,
-        snapshot: stored.table === null ? null : snapshotFor(stored.table, seat),
+        // Wrapped as the rubber it is. A Durable Object plays rubbers: the wire
+        // carries `RubberFormat` on purpose, so it is never handed a duplicate
+        // session — see `tableFormat()` in the client. This is what it holds, not a
+        // placeholder for something else.
+        snapshot: stored.match === null ? null : snapshotFor(stored.match, seat),
         table,
       });
     }

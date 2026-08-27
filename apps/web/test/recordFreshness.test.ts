@@ -95,6 +95,7 @@ test("the record is read at once, without waiting for the report", async () => {
   reportRobotRubber({
     botVersion: 3,
     difficulty: "championship",
+    drawn: false,
     deals: 8,
     format: "rubber",
     points: 1200,
@@ -115,6 +116,7 @@ test("and read again once the report has landed, so it is not left stale", async
   reportRobotRubber({
     botVersion: 3,
     difficulty: "championship",
+    drawn: false,
     deals: 8,
     format: "rubber",
     points: 1200,

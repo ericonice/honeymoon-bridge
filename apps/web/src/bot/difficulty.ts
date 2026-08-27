@@ -57,6 +57,13 @@ export interface DifficultyLevel {
    * the pool to be *exactly* the twenty-six cards they were offered, which
    * requires remembering all thirteen. Anything less falls back to weighting by
    * rank, so this is not a dial with a smooth response.
+   *
+   * **It also governs a second, larger cliff that has nothing to do with discards.**
+   * Anything under thirteen forgets every *board* it has played, so a rung below the
+   * top meets a duplicate replay fresh — worth +157 ± 52 points a session, and all or
+   * nothing on purpose (`forgetful.ts` says why). One number carries both because
+   * they are the same claim about the same opponent: it remembers what it has seen,
+   * or it does not.
    */
   readonly recall: number;
   /** Hands it guesses at before each card. Zero means no solver at all. */

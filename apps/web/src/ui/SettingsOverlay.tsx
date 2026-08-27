@@ -1,4 +1,4 @@
-import type { MatchFormat, Unlock } from "@hb/engine";
+import type { Unlock } from "@hb/engine";
 import { useEffect, useState } from "react";
 import {
   DIFFICULTIES,
@@ -55,7 +55,6 @@ export interface SettingsOverlayProps {
   readonly cardColor: CardColor;
   readonly devTools: boolean;
   /** Takes effect on the next match; changing it cannot alter one under way. */
-  readonly format: MatchFormat;
   /** The house variant, likewise only from the next match onwards. */
   /**
    * Whether to offer the settings that are still being decided.
@@ -90,7 +89,6 @@ export interface SettingsOverlayProps {
   readonly theme: Theme;
   onClose(): void;
   onDevToolsChange(enabled: boolean): void;
-  onFormatChange(format: MatchFormat): void;
   onPeekingChange(enabled: boolean): void;
   onDisguiseChange(enabled: boolean): void;
   onShowHelp(): void;
@@ -279,7 +277,6 @@ export function SettingsOverlay({
   density,
   devTools,
   disguise,
-  format,
   onBoldnessChange,
   onDifficultyChange,
   onOpponentChange,
@@ -288,7 +285,6 @@ export function SettingsOverlay({
   onDevToolsChange,
   onDensityChange,
   onDisguiseChange,
-  onFormatChange,
   onPaceChange,
   onPeekingChange,
   onShowHelp,
@@ -328,22 +324,11 @@ export function SettingsOverlay({
           </span>
         </button>
 
-        {/* The one setting somebody might come here to change before sitting
-            down to play, so it's first. Named as a choice between the two
-            words a player actually needs, rather than a toggle whose "off"
-            position had to be inferred from what "on" said it wasn't. */}
-        <div className="w-full max-w-sm">
-          <Choice
-            label="Match length"
-            description="Rubber runs to the best of three games and carries vulnerability once a game is won. A single game ends the moment either side reaches 100 points below the line, worth 300, and nobody is ever vulnerable. At a table with somebody else, one game wins if either of you wants it."
-            value={format}
-            onChange={onFormatChange}
-            options={[
-              { label: "Rubber", value: "rubber" },
-              { label: "Single game", value: "game" },
-            ]}
-          />
-        </div>
+        {/* What is being played is chosen on Home now, above the buttons that
+            start a match — it changes session to session, unlike everything left
+            here, and it had to grow a third option that nobody would have found
+            behind a gear. Moved rather than copied: a preference in two places is
+            one that can disagree with itself. */}
 
         {/* How hard the computer plays, and the one control that replaced four.
             Strength, boldness, the disguise and the opponent picker all changed

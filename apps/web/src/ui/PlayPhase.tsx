@@ -28,6 +28,8 @@ export interface PlayPhaseProps {
    * which is exactly when `revealedHands` is null too.
    */
   readonly dealScore: DealScore | null;
+  /** What a duplicate deal paid beyond its tricks. Zero in a rubber. */
+  readonly dealBonus: number;
   /**
    * Where the card most recently played by this seat left from, captured by
    * whoever handled the tap — the hand has already lost the DOM node for it
@@ -315,6 +317,7 @@ function claimStatus(view: PlayerView): string | null {
 }
 
 export function PlayPhase({
+  dealBonus,
   dealScore,
   handOriginRef,
   lastTrick,
@@ -628,6 +631,7 @@ export function PlayPhase({
         ) : (
           <>
             <DealResultHeadline
+              bonus={dealBonus}
               opponentName={opponentName}
               score={dealScore}
               view={view}

@@ -40,7 +40,7 @@ export function RobotGame({
   const [rung] = useState(() => difficulty());
   const opponent = useBotAnchor(version, rung);
   const session = useLocalSession({ peek: peeking });
-  const noun = matchNoun(session.rubber.format);
+  const noun = matchNoun(session.format);
 
   return (
     <GameBoard

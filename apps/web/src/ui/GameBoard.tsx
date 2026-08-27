@@ -113,7 +113,7 @@ function CurrentPhase({
   /** See `GameBoardProps`. */
   readonly walkthrough: boolean;
 }): React.JSX.Element {
-  const { history, lastDraw, lastTrick, nextDeal, rubber, score, view, vulnerable } = session;
+  const { lastDraw, lastTrick, matchComplete, nextDeal, score, standing, view, vulnerable } = session;
 
   switch (phase) {
     case "draw": {
@@ -149,6 +149,7 @@ function CurrentPhase({
     case "play": {
       return (
         <PlayPhase
+          dealBonus={session.dealBonus}
           dealScore={score}
           handOriginRef={handOriginRef}
           lastTrick={lastTrick}
@@ -156,7 +157,7 @@ function CurrentPhase({
           // prop's own doc comment for why that one stays its own screen
           // rather than folding into this same tap.
           onContinue={
-            rubber.complete
+            matchComplete
               ? null
               : () => {
                   session.dismissTrick();
@@ -179,12 +180,12 @@ function CurrentPhase({
     default: {
       return (
         <DealComplete
-          history={history}
+          dealBonus={session.dealBonus}
           opponentName={session.opponentName}
           opponentRating={ratings.opponent}
           opponentWaitingToContinue={session.opponentWaitingToContinue}
-          rubber={rubber}
           score={score}
+          standing={standing}
           view={view}
           vulnerable={vulnerable}
           waitingToContinue={session.waitingToContinue}
@@ -491,7 +492,7 @@ export function GameBoard({
   useGameSounds({
     enabled: sound,
     session,
-    showingFinalScore: phase === "complete" && session.rubber.complete,
+    showingFinalScore: phase === "complete" && session.matchComplete,
   });
   // Captured the instant a card is tapped, before `session.act` removes it
   // from the hand — `PlayPhase` reads this once to aim that card's flight,
@@ -513,7 +514,7 @@ export function GameBoard({
   // Once the match is won there is nothing left to lose by going, so the exit
   // stops asking. Mid-rubber it always asks, including between deals — a
   // part-score and two games' history are exactly what walking out throws away.
-  const settled = session.rubber.complete;
+  const settled = session.matchComplete;
 
   return (
     <>
@@ -539,11 +540,11 @@ export function GameBoard({
 
       <ContractBar
         density={density}
-        handsPlayed={session.history.length}
+        handsPlayed={session.dealsPlayed}
         opponentName={session.opponentName}
         phase={phase}
         ratings={ratings}
-        rubber={session.rubber}
+        standing={session.standing}
         view={view}
         // The complete screen already shows the scorepad in full, so a
         // button that opens the same thing again is not a real option there.
@@ -670,9 +671,8 @@ export function GameBoard({
 
       {showingScore ? (
         <ScoreOverlay
-          history={session.history}
           opponentName={session.opponentName}
-          rubber={session.rubber}
+          standing={session.standing}
           view={view}
           vulnerable={session.vulnerable}
           onClose={() => {

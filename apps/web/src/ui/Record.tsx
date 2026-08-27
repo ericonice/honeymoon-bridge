@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
+import type { MatchFormat } from "@hb/engine";
 import { matchNoun } from "../game/labels.js";
 import type { MatchRecord, OpponentRecord, Records } from "../game/records.js";
 import { resetRecord, useRecentMatches, useRecords } from "../game/records.js";
@@ -244,8 +245,12 @@ function OpponentLine({
           <span className="shrink-0 text-[0.6rem] text-white/35">{format}</span>
         )}
       </span>
+      {/* The third figure only when there is one. Every rubber row would otherwise
+          carry a "–0" for something that cannot happen to it, and this row is
+          scanned rather than read. */}
       <span className="text-right font-mono text-xs tabular-nums">
         {record.won}–{record.lost}
+        {record.drawn > 0 ? `–${record.drawn}` : ""}
       </span>
       <span className="text-right font-mono text-xs tabular-nums text-white/70">
         {record.deals.toLocaleString()}
@@ -300,7 +305,10 @@ function OpponentPanel({
   readonly record: OpponentRecord;
 }): React.JSX.Element {
   const margin = record.pointsFor - record.pointsAgainst;
-  const played = record.won + record.lost;
+  // Every match, drawn ones included — this is what the panel compares its
+  // truncated match list against to say how much it is not showing, so leaving
+  // draws out would understate the history by exactly the sessions that ended level.
+  const played = record.won + record.lost + record.drawn;
   const rate = (value: number, per: number): string => (per === 0 ? "—" : signed(value / per, 1));
   const older = played - record.matches.length;
 
@@ -319,6 +327,8 @@ function OpponentPanel({
         </Fact>
         <Fact label="Matches">
           {played} <Dim>played</Dim> {record.won}–{record.lost}
+          {record.drawn > 0 ? `–${record.drawn}` : ""}
+          {record.drawn > 0 ? <Dim>won–lost–drawn</Dim> : null}
         </Fact>
         <Fact label="Hands">
           {record.deals.toLocaleString()}{" "}
@@ -392,15 +402,37 @@ function Dim({ children }: { readonly children: React.ReactNode }): React.JSX.El
 }
 
 interface OpponentGroup {
-  readonly game: OpponentRecord | null;
   readonly isRobot: boolean;
   readonly key: string;
   readonly name: string;
-  readonly rubber: OpponentRecord | null;
+  /**
+   * One record per format played against this opponent, in a fixed reading order.
+   *
+   * A list rather than a slot per format, which is what this was. Two named slots
+   * meant a third format was **silently dropped** rather than failing — duplicate
+   * records arrived and simply did not appear — and a list is also the honest shape
+   * for "whichever formats have been played against them".
+   */
+  readonly records: readonly OpponentRecord[];
 }
 
-function lastPlayedOf(group: Pick<OpponentGroup, "game" | "rubber">): number {
-  return Math.max(group.game?.lastPlayed ?? 0, group.rubber?.lastPlayed ?? 0);
+/**
+ * The order formats are listed in, which is the order they were added to the
+ * game rather than anything about them. Stated because a `Map`'s insertion order
+ * would otherwise make the list depend on which format happened to be played
+ * first.
+ */
+const FORMAT_ORDER: readonly MatchFormat[] = ["rubber", "game", "duplicate"];
+
+/** Plural, for a row that is naming which kind of match these are. */
+const FORMAT_PLURAL: Record<MatchFormat, string> = {
+  duplicate: "duplicate sessions",
+  game: "single games",
+  rubber: "rubbers",
+};
+
+function lastPlayedOf(group: Pick<OpponentGroup, "records">): number {
+  return Math.max(0, ...group.records.map((record) => record.lastPlayed));
 }
 
 /**
@@ -421,18 +453,11 @@ function groupByOpponent(records: Records): readonly OpponentGroup[] {
   const groups = new Map<string, Omit<OpponentGroup, "key">>();
 
   const fold = (record: OpponentRecord, isRobot: boolean): void => {
-    const existing = groups.get(record.opponentKey) ?? {
-      game: null,
-      isRobot,
-      name: record.name,
-      rubber: null,
-    };
-    groups.set(record.opponentKey, {
-      game: record.format === "game" ? record : existing.game,
-      isRobot,
-      name: record.name,
-      rubber: record.format === "rubber" ? record : existing.rubber,
-    });
+    const existing = groups.get(record.opponentKey);
+    const records = [...(existing?.records ?? []), record].sort(
+      (one, two) => FORMAT_ORDER.indexOf(one.format) - FORMAT_ORDER.indexOf(two.format),
+    );
+    groups.set(record.opponentKey, { isRobot, name: record.name, records });
   };
 
   for (const record of records.opponents) {
@@ -478,33 +503,30 @@ function OpponentSection({
   /** `key|format` of the row whose panel is showing, or null. */
   readonly openRow: string | null;
 }): React.JSX.Element {
-  // Only worth naming when there are two of them to tell apart.
-  const both = group.game !== null && group.rubber !== null;
-
-  const row = (record: OpponentRecord, format: string | null): React.JSX.Element => {
-    const id = `${group.key}|${record.format}`;
-    const open = openRow === id;
-    return (
-      <>
-        <OpponentLine
-          format={format}
-          name={group.name}
-          open={open}
-          record={record}
-          robot={group.isRobot}
-          onToggle={() => {
-            onToggle(id);
-          }}
-        />
-        {open ? <OpponentPanel myRating={myRating} record={record} /> : null}
-      </>
-    );
-  };
+  // Only worth naming when there is more than one to tell apart.
+  const named = group.records.length > 1;
 
   return (
     <>
-      {group.rubber === null ? null : row(group.rubber, both ? "rubbers" : null)}
-      {group.game === null ? null : row(group.game, both ? "single games" : null)}
+      {group.records.map((record) => {
+        const id = `${group.key}|${record.format}`;
+        const open = openRow === id;
+        return (
+          <Fragment key={id}>
+            <OpponentLine
+              format={named ? (FORMAT_PLURAL[record.format] ?? record.format) : null}
+              name={group.name}
+              open={open}
+              record={record}
+              robot={group.isRobot}
+              onToggle={() => {
+                onToggle(id);
+              }}
+            />
+            {open ? <OpponentPanel myRating={myRating} record={record} /> : null}
+          </Fragment>
+        );
+      })}
     </>
   );
 }

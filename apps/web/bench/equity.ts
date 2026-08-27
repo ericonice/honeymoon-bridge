@@ -10,7 +10,7 @@ import {
   totalScore,
   vulnerability,
 } from "@hb/engine";
-import type { Card, MatchFormat, Pair, PlayerId, RubberState, TableState } from "@hb/engine";
+import type { Card, Pair, PlayerId, RubberFormat, RubberState, TableState } from "@hb/engine";
 import { readFileSync } from "node:fs";
 import { DEFAULT_GAME_EQUITY } from "../src/bot/bidValue.js";
 import { createHeuristicBot } from "../src/bot/heuristicBot.js";
@@ -105,7 +105,7 @@ function sampleFrom(rubber: RubberState, seat: PlayerId, won: number, person = 0
  * handed — so it is the standing a decision was actually taken from, and the only
  * one an equity table can honestly be indexed by.
  */
-function playRubber(bots: Pair<Bot>, seed: number, format: MatchFormat): readonly Sample[] {
+function playRubber(bots: Pair<Bot>, seed: number, format: RubberFormat): readonly Sample[] {
   const rng = createRng(seed);
   let table: TableState = startTable({ format, seed, starter: 0 });
   const standings: RubberState[] = [];
@@ -588,7 +588,7 @@ const samples = Number(process.argv[3] ?? 0) || 0;
  */
 const objective = process.argv.includes("objective=equity") ? "equity" : "points";
 /** `format=game` fits the short match, which is a different game and needs its own numbers. */
-const format: MatchFormat = process.argv.includes("format=game") ? "game" : "rubber";
+const format: RubberFormat = process.argv.includes("format=game") ? "game" : "rubber";
 const tuning = { objective } as const;
 const cardPlay = (seed: number): Bot =>
   samples > 0

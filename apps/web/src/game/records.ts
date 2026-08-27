@@ -26,6 +26,8 @@ export interface OpponentMatch {
   readonly finishedAt: number;
   readonly pointsAgainst: number;
   readonly pointsFor: number;
+  /** Neither won nor lost. `won` false with this false is a loss. */
+  readonly drawn: boolean;
   readonly won: boolean;
 }
 
@@ -39,6 +41,8 @@ export interface RatingPoint {
 /** A record against one opponent. The computer's looks exactly like a person's. */
 export interface OpponentRecord {
   readonly deals: number;
+  /** Matches that ended level. In practice duplicate's alone — see the server's `DRAWN`. */
+  readonly drawn: number;
   readonly format: MatchFormat;
   readonly lastPlayed: number;
   readonly lost: number;
@@ -118,6 +122,8 @@ export interface MatchRecord {
   readonly opponentName: string;
   readonly pointsAgainst: number;
   readonly pointsFor: number;
+  /** Neither won nor lost. `won` false with this false is a loss. */
+  readonly drawn: boolean;
   readonly won: boolean;
 }
 
@@ -131,6 +137,8 @@ export interface RobotRubber {
    * gentlest setting and beating it on its hardest are not one achievement.
    */
   readonly difficulty: Difficulty;
+  /** Level, which duplicate makes an ordinary outcome rather than a curiosity. */
+  readonly drawn: boolean;
   readonly format: MatchFormat;
   readonly points: number;
   readonly pointsAgainst: number;
@@ -138,7 +146,7 @@ export interface RobotRubber {
 }
 
 /**
- * Tells the server about a rubber won or lost against the computer.
+ * Tells the server about a match won, lost or drawn against the computer.
  *
  * The device token goes along whether or not anybody is signed in, so a rubber
  * played before signing up is attached to the account later — that is what
@@ -168,9 +176,14 @@ export function reportRobotRubber(rubber: RobotRubber): void {
       nickname: nickname() === "" ? "Player" : nickname(),
       points: rubber.points,
       pointsAgainst: rubber.pointsAgainst,
+      // Additive, because every build the service worker still has in circulation
+      // sends `won` alone. A server too old to read it records a draw as a loss,
+      // which is wrong — and less wrong than the alternative of not sending the
+      // match at all.
+      drawn: rubber.drawn,
       won: rubber.won,
     }),
-    kind: rubber.won ? "Rubber won" : "Rubber lost",
+    kind: rubber.drawn ? "Match drawn" : rubber.won ? "Rubber won" : "Rubber lost",
     url: robotResultUrl(),
     // The device token identifies it without one, which is what lets a rubber
     // played before signing up still be claimed later.

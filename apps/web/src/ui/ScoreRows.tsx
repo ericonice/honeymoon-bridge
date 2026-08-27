@@ -1,4 +1,4 @@
-import { opponentOf, overtrickPoints, undertrickPoints } from "@hb/engine";
+import { GAME_THRESHOLD, opponentOf, overtrickPoints, undertrickPoints } from "@hb/engine";
 import type { Contract, DealScore, Pair, PlayerId, PlayerView, ScoreDetail } from "@hb/engine";
 import { ContractText } from "./CardText.js";
 
@@ -46,6 +46,12 @@ export function Columns({ opponentName }: { readonly opponentName: string }): Re
 }
 
 export interface DealResultHeadlineProps {
+  /**
+   * What a duplicate deal paid beyond its trick score — a game or a part-score,
+   * settled on the spot. Zero in a rubber, where a game is banked into the rubber
+   * rather than paid, so the breakdown has nothing extra to show.
+   */
+  readonly bonus?: number;
   readonly opponentName: string;
   readonly score: DealScore;
   readonly view: PlayerView;
@@ -53,6 +59,24 @@ export interface DealResultHeadlineProps {
 }
 
 /** "made", "made +2" or "set by 2" — the contract's own result, read the way a player says it aloud rather than the way it is entered on a scorepad. */
+/**
+ * How a deal came out, in three words at most.
+ *
+ * Shared by both scorepads, which is the whole reason it is here: a session's pad
+ * and a rubber's pad describe the same event and would otherwise say it in two
+ * slightly different vocabularies, which reads as two kinds of thing happening.
+ */
+export function dealResultText(score: DealScore | null): string {
+  if (score === null) {
+    return "passed out";
+  }
+  const { detail } = score;
+  if (!detail.made) {
+    return `down ${detail.undertricks}`;
+  }
+  return detail.overtricks > 0 ? `made +${detail.overtricks}` : "made";
+}
+
 function resultPhrase(detail: ScoreDetail): string {
   if (!detail.made) {
     return `set by ${detail.undertricks}`;
@@ -86,7 +110,12 @@ interface ScoreItem {
  * both are already exported for exactly this, and every other number here
  * (`slamBonus`, `insult`, `honors`) already lives on `detail` untouched.
  */
-function scoreItems(score: DealScore, contract: Contract, vulnerable: Pair<boolean>): ScoreItem[] {
+function scoreItems(
+  score: DealScore,
+  contract: Contract,
+  vulnerable: Pair<boolean>,
+  bonus: number,
+): ScoreItem[] {
   const { detail } = score;
   const { declarer, doubling, strain } = contract;
   const defender = opponentOf(declarer);
@@ -120,6 +149,17 @@ function scoreItems(score: DealScore, contract: Contract, vulnerable: Pair<boole
   if (detail.honors[0] > 0 || detail.honors[1] > 0) {
     items.push({ key: "honors", label: "Honors", values: detail.honors });
   }
+  // Duplicate only, and it has to be here rather than left off: a session pays for
+  // a game or a part-score on the spot, so a breakdown without it does not add up
+  // to the figure the scorepad shows for the same deal. In a rubber it is zero,
+  // because what a game is worth is banked into the rubber instead.
+  if (bonus > 0) {
+    items.push({
+      key: "bonus",
+      label: detail.contractTricks >= GAME_THRESHOLD ? "Game" : "Part-score",
+      values: creditTo(declarer, bonus),
+    });
+  }
 
   return items;
 }
@@ -141,6 +181,7 @@ function scoreItems(score: DealScore, contract: Contract, vulnerable: Pair<boole
  * reveal to have shown it already, so that one screen still needs it.
  */
 export function DealResultHeadline({
+  bonus = 0,
   opponentName,
   score,
   view,
@@ -166,7 +207,7 @@ export function DealResultHeadline({
       ) : null}
       <div className="mx-auto mt-2 w-full max-w-xs text-sm">
         <Columns opponentName={opponentName} />
-        {scoreItems(score, contract, vulnerable).map((item) => (
+        {scoreItems(score, contract, vulnerable, bonus).map((item) => (
           <Row key={item.key} label={item.label} values={item.values} view={view} />
         ))}
       </div>

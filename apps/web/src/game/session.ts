@@ -3,9 +3,9 @@ import type {
   CompletedTrick,
   DealAction,
   DealScore,
+  MatchFormat,
   Pair,
   PlayerView,
-  RubberState,
   Unlock,
 } from "@hb/engine";
 
@@ -13,6 +13,7 @@ import type {
 // so they belong with the rules rather than with the screens that show them —
 // the server has to produce exactly these shapes too.
 export type { DealRecord, DrawReveal, DrawSpend } from "@hb/engine";
+import type { DealRecord, DrawReveal, DrawSpend, MatchStanding } from "@hb/engine";
 
 /**
  * Everything the game screens need, and the only thing they are given.
@@ -26,14 +27,11 @@ export type { DealRecord, DrawReveal, DrawSpend } from "@hb/engine";
  * strip the three methods and what remains is exactly the snapshot the server
  * sends, so there is one shape to test for leaks instead of a whole UI to audit.
  */
-import type { DealRecord, DrawReveal, DrawSpend } from "@hb/engine";
 
 export interface GameSession {
-  /**
-   * Every deal of the current rubber, oldest first, including the one just
-   * finished. Cleared when a new rubber starts.
-   */
-  readonly history: readonly DealRecord[];
+  /** Deals finished in this match, the one just completed included. */
+  readonly dealsPlayed: number;
+  readonly format: MatchFormat;
   /**
    * The card most recently added to your hand, while the draw is running.
    *
@@ -80,8 +78,24 @@ export interface GameSession {
    * waiting on you. Always false against the computer, which never asks.
    */
   readonly opponentWaitingToContinue: boolean;
-  /** The rubber including the deal just finished. */
-  readonly rubber: RubberState;
+  /**
+   * The standing, in whichever shape the format keeps it.
+   *
+   * A tagged union rather than a rubber with duplicate bolted on, because the two
+   * are different machines: a rubber accumulates toward games and a session is a
+   * list of boards each settled where it was played. Every question that is the
+   * same in both formats — is it over, how many deals, who is vulnerable — is a
+   * field of its own above, so this is read only by the two displays that
+   * genuinely differ.
+   */
+  readonly standing: MatchStanding;
+  /** True once the match is decided, whatever deciding it means in this format. */
+  readonly matchComplete: boolean;
+  /**
+   * The bonus the finished deal earned beyond its trick score, in a format that
+   * pays one per deal. Always zero in a rubber, where a game is banked instead.
+   */
+  readonly dealBonus: number;
   /** Present once the deal is complete and was not passed out. */
   readonly score: DealScore | null;
   /**
@@ -115,7 +129,7 @@ export interface GameSession {
    * keep waiting.
    */
   readonly waitingToContinue: boolean;
-  /** Deals again, starting a fresh rubber if the last one has been won. */
+  /** Deals again — a fresh rubber if the last was won, or the next board of a session. */
   nextDeal(): void;
   /**
    * Plays whatever phase is in progress out at once. Null when it is not on

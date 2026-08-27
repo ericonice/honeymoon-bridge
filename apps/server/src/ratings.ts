@@ -356,9 +356,25 @@ export interface Ratings {
  * reason `recordsFor` aggregates in TypeScript instead of SQL.
  */
 export async function ratingsFor(env: Env): Promise<Ratings> {
+  // Duplicate sessions are recorded and are deliberately left out of the walk.
+  //
+  // Not because they could not be rated — the computer plays them, so there is
+  // something to anchor to — but because the anchor cannot come from a bench. A
+  // bench plays bot against bot, where *neither* side has cross-deal memory, and
+  // a person does; so a bench measurement of the bot's duplicate strength
+  // describes a game nobody is playing, and it is wrong in the direction nobody
+  // notices, over-crediting the player. The bench can give the spread between
+  // releases and rungs, since both sides there are equally memoryless; the single
+  // invented number waits for played sessions.
+  //
+  // Rating a session against the *rubber* anchor in the meantime would be worse
+  // than not rating it, for the reason this whole file exists: a figure that looks
+  // authoritative and is not is the error that never gets corrected. Duplicate
+  // matches still appear on the record screen, where `recordsFor` already keeps
+  // one record per format.
   const rows = await env.DB.prepare(
     `SELECT account0, account1, bot_version, difficulty, token0, token1, winner
-     FROM results ORDER BY finished_at`,
+     FROM results WHERE format != 'duplicate' ORDER BY finished_at`,
   ).all<RatingRow>();
 
   const rating = new Map<string, number>();

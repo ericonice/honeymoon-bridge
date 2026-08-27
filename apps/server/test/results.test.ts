@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { assignOpponentKeys } from "../src/results.js";
+import { assignOpponentKeys, DRAWN, outcomeOf } from "../src/results.js";
 import type { Tallied } from "../src/results.js";
 
 function entry(account: string | null, token: string, format: "game" | "rubber" = "rubber"): Tallied {
   return {
     account,
     deals: 13,
+    drawn: 0,
     format,
     lastPlayed: 1_700_000_000_000,
     lost: 0,
@@ -55,5 +56,33 @@ describe("assignOpponentKeys", () => {
       expect(key).not.toBe("account-1");
       expect(key).not.toContain("token-a");
     }
+  });
+});
+
+/**
+ * Three outcomes, which is what this got wrong.
+ *
+ * `winner === seat` reads a draw as a loss for **both** players — not a rounding
+ * error but the wrong answer twice over. Duplicate is what brought it up: a board
+ * is flat whenever both of its runs come to the same score, so a short session is
+ * level a fair fraction of the time, and before this a drawn match was not recorded
+ * at all. A rubber can tie on exactly equal totals too.
+ */
+describe("how a stored row came out", () => {
+  it("names a win and a loss from each seat", () => {
+    expect(outcomeOf(0, 0)).toBe("won");
+    expect(outcomeOf(0, 1)).toBe("lost");
+    expect(outcomeOf(1, 1)).toBe("won");
+    expect(outcomeOf(1, 0)).toBe("lost");
+  });
+
+  it("names a draw a draw from both seats, rather than a loss for each", () => {
+    expect(outcomeOf(DRAWN, 0)).toBe("drawn");
+    expect(outcomeOf(DRAWN, 1)).toBe("drawn");
+  });
+
+  /** Negative so it can never be mistaken for a seat, which is 0 or 1. */
+  it("keeps the sentinel out of the range a seat can take", () => {
+    expect(DRAWN).toBeLessThan(0);
   });
 });

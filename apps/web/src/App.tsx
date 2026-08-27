@@ -14,6 +14,8 @@ import {
   pace,
   peeking as storedPeeking,
   preferredFormat,
+  sessionDeals,
+  sessionOrder,
   setBoldness,
   setDifficulty,
   setPreferredRelease,
@@ -22,6 +24,8 @@ import {
   setPace,
   setPeeking as storePeeking,
   setPreferredFormat,
+  setSessionDeals,
+  setSessionOrder,
   setSoundEnabled,
   setTapToSelectEnabled,
   setTrickCountEnabled,
@@ -112,6 +116,13 @@ export function App(): React.JSX.Element {
   // A preference for the *next* match. A game in progress reads its format from
   // its own state, so changing this cannot alter one already under way.
   const [format, setFormat] = useState(preferredFormat);
+  // How long a duplicate session runs. A preference for the *next* match for the
+  // same reason the format is: a session carries its own board list, so changing
+  // this cannot alter one already under way.
+  const [deals, setDeals] = useState(sessionDeals);
+  // How a session orders its deals, on the same terms as the length: a preference for
+  // the next match, since a session carries its own schedule.
+  const [order, setOrder] = useState(sessionOrder);
   const [disguise, setDisguise] = useState(disguiseEnabled);
   // Testing settings, kept in state only so the rows re-render when tapped; the
   // stored value is what anything actually reads.
@@ -246,6 +257,21 @@ export function App(): React.JSX.Element {
           <Home
             account={account.account}
             checkingAccount={account.checking}
+            format={format}
+            onFormatChange={(next) => {
+              setPreferredFormat(next);
+              setFormat(next);
+            }}
+            sessionDeals={deals}
+            onSessionDealsChange={(next) => {
+              setSessionDeals(next);
+              setDeals(next);
+            }}
+            sessionOrder={order}
+            onSessionOrderChange={(next) => {
+              setSessionOrder(next);
+              setOrder(next);
+            }}
             onFindOpponent={() => {
               setScreen({ kind: "searching" });
             }}
@@ -397,7 +423,6 @@ export function App(): React.JSX.Element {
             difficulty={hardness}
             cardColor={cardColor}
             devTools={devTools}
-            format={format}
             pace={speed}
             playtester={account.playtester}
             peeking={peeking}
@@ -414,10 +439,6 @@ export function App(): React.JSX.Element {
             onDevToolsChange={(enabled) => {
               writeDevTools(enabled);
               setDevTools(enabled);
-            }}
-            onFormatChange={(next) => {
-              setPreferredFormat(next);
-              setFormat(next);
             }}
             onPeekingChange={(enabled) => {
               storePeeking(enabled);

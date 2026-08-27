@@ -1,4 +1,11 @@
-import type { DealAction, MatchFormat, Pair, PlayerId, Unlock } from "@hb/engine";
+import type {
+  DealAction,
+  DuplicateSchedule,
+  MatchFormat,
+  Pair,
+  PlayerId,
+  Unlock,
+} from "@hb/engine";
 import type { SessionSnapshot } from "./snapshot.js";
 
 /** How a seat is identified across a dropped socket. */
@@ -67,6 +74,21 @@ export type ClientMessage =
        * a match already under way.
        */
       readonly format: MatchFormat;
+      /**
+       * How long a duplicate session this player wants, in deals.
+       *
+       * Only consulted when *both* seats asked for duplicate — see `formatFor`. Absent
+       * from a client too old to ask for one, which reads as no preference rather than
+       * as a length of zero.
+       */
+      readonly sessionDeals?: number;
+      /**
+       * How this player wants a session's deals ordered.
+       *
+       * Consulted only when both seats asked for duplicate *and* asked for the same
+       * order — see `formatFor`. Absent from a client too old to have an opinion.
+       */
+      readonly sessionOrder?: DuplicateSchedule;
       readonly session: string | null;
       readonly token: string;
     }
