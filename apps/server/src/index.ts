@@ -4,6 +4,7 @@ import {
   accountFor,
   isPlaytester,
   accountFromRequest,
+  deleteAccount,
   normalizeCode,
   normalizeDestination,
   normalizeEmail,
@@ -956,6 +957,18 @@ export default {
       const body = (await request.json().catch(() => ({}))) as { achievements?: unknown };
       const achievements = body.achievements === true;
       return json(request, { forgotten: await resetRecord(env, accountId, { achievements }) });
+    }
+
+    // Deleting the account itself (Guideline 5.1.1(v)), rather than just its
+    // record — see `deleteAccount` for why detaching, not deleting, is what
+    // keeps everyone else's history and rating chain intact.
+    if (url.pathname === "/api/account/delete" && request.method === "POST") {
+      const accountId = await accountFromRequest(request, env, Date.now());
+      if (accountId === null) {
+        return json(request, { error: "Not signed in" }, 401);
+      }
+      await deleteAccount(env, accountId);
+      return json(request, { deleted: true });
     }
 
     // A rubber against the computer, reported by the browser that played it.

@@ -212,3 +212,22 @@ export async function handLogsFor(env: Env, limit: number): Promise<readonly Han
     tricksDeclarer: row.tricks_declarer,
   }));
 }
+
+/**
+ * Strips an account's identity out of the deals it logged, on account
+ * deletion. The deals themselves stay — `bench/hands.ts` reads this corpus by
+ * bot version, unscoped, and it is the only record of how the bot actually
+ * performs against a person — but nothing personal should survive the scrub.
+ *
+ * Must run before the caller deletes `account_tokens`: that is the join which
+ * finds a device this account claimed but never signed a hand log under
+ * directly, and it is gone the moment that table's rows are.
+ */
+export async function scrubHandLogs(env: Env, accountId: string): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE hand_logs SET account_id = NULL, device_token = ?2
+     WHERE account_id = ?1 OR device_token IN (SELECT token FROM account_tokens WHERE account_id = ?1)`,
+  )
+    .bind(accountId, `forgotten:${crypto.randomUUID()}`)
+    .run();
+}

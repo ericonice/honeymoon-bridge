@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { setAccountName } from "../game/account.js";
 import { nickname, setNickname } from "../game/identity.js";
+import { deleteAccount } from "../game/records.js";
 
 export interface AccountScreenProps {
   readonly email: string;
   /** Null before a name has ever been chosen, which is what makes this a prompt. */
   readonly existing: string | null;
   onBack(): void;
+  /** The account is gone server-side; the caller still owns signing out locally. */
+  onDeleted(): void;
   onSaved(): void;
   onSignOut(): void;
 }
@@ -27,12 +30,32 @@ export function AccountScreen({
   email,
   existing,
   onBack,
+  onDeleted,
   onSaved,
   onSignOut,
 }: AccountScreenProps): React.JSX.Element {
   const [name, setName] = useState(() => existing ?? nickname());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const confirmDelete = async (): Promise<void> => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      if (await deleteAccount()) {
+        onDeleted();
+      } else {
+        setDeleteError("Could not reach the server. Try again in a moment.");
+        setDeleting(false);
+      }
+    } catch {
+      setDeleteError("Could not reach the server. Try again in a moment.");
+      setDeleting(false);
+    }
+  };
 
   const save = async (): Promise<void> => {
     setSaving(true);
@@ -98,6 +121,55 @@ export function AccountScreen({
           >
             Sign out
           </button>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-red-400/25 px-4 py-3">
+          {confirmingDelete ? (
+            <>
+              <span className="block text-sm font-medium text-red-200">
+                Delete your account for good?
+              </span>
+              <p className="mt-1 text-xs text-white/55">
+                Your matches stay on the people you played — only your own identity and name are
+                removed. This cannot be undone.
+              </p>
+              <div className="mt-3 flex gap-3">
+                <button
+                  type="button"
+                  className="flex-1 rounded-lg border border-white/25 px-3 py-2 text-sm text-white disabled:opacity-35"
+                  disabled={deleting}
+                  onClick={() => {
+                    setConfirmingDelete(false);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 rounded-lg bg-red-500/90 px-3 py-2 text-sm font-semibold text-white disabled:opacity-35"
+                  disabled={deleting}
+                  onClick={() => {
+                    void confirmDelete();
+                  }}
+                >
+                  {deleting ? "Deleting…" : "Delete account"}
+                </button>
+              </div>
+              {deleteError === null ? null : (
+                <p className="mt-2 text-sm text-amber-200">{deleteError}</p>
+              )}
+            </>
+          ) : (
+            <button
+              type="button"
+              className="text-sm text-red-300/80 underline underline-offset-4"
+              onClick={() => {
+                setConfirmingDelete(true);
+              }}
+            >
+              Delete account
+            </button>
+          )}
         </div>
       </div>
 

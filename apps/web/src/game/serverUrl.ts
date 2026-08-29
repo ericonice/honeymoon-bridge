@@ -49,6 +49,10 @@ export function resetRecordUrl(): string {
   return `${ORIGIN}/api/results/reset`;
 }
 
+export function deleteAccountUrl(): string {
+  return `${ORIGIN}/api/account/delete`;
+}
+
 export function robotResultUrl(): string {
   return `${ORIGIN}/api/results/robot`;
 }

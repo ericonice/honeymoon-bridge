@@ -7,6 +7,7 @@ import { enqueue, flush, outboxState } from "./outbox.js";
 import { readStored, writeStored } from "./storage.js";
 import {
   botsUrl,
+  deleteAccountUrl,
   everyMatchUrl,
   recentMatchesUrl,
   recordsUrl,
@@ -227,6 +228,25 @@ export async function resetRecord({
   }
   const body = (await response.json()) as { forgotten: number };
   return body.forgotten;
+}
+
+/**
+ * Deletes the account itself, not merely its record — see `deleteAccount` on
+ * the server for what that means and why it is safe for everyone else's
+ * history. Returns whether it succeeded; the caller still owns clearing the
+ * session and the device token locally, since a deleted account cannot be
+ * asked to do that for itself.
+ */
+export async function deleteAccount(): Promise<boolean> {
+  const session = storedSession();
+  if (session === null) {
+    return false;
+  }
+  const response = await fetch(deleteAccountUrl(), {
+    headers: { Authorization: `Bearer ${session}` },
+    method: "POST",
+  });
+  return response.ok;
 }
 
 /** A server too old to rate anybody still has a usable record. */

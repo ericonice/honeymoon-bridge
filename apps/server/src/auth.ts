@@ -1,5 +1,7 @@
 import { isInviteCode, signInCode } from "./codes.js";
 import type { Env } from "./env.js";
+import { scrubHandLogs } from "./handLogs.js";
+import { resetRecord } from "./results.js";
 
 /** How long a sign-in link stays usable. Long enough to switch to an inbox, no longer. */
 const LINK_TTL_MS = 10 * 60 * 1000;
@@ -346,6 +348,55 @@ export async function accountFor(env: Env, accountId: string): Promise<Account |
 
 export async function setAccountName(env: Env, accountId: string, name: string): Promise<void> {
   await env.DB.prepare("UPDATE accounts SET name = ? WHERE id = ?").bind(name, accountId).run();
+}
+
+/**
+ * Deletes an account, required for any app that creates them (App Store
+ * Guideline 5.1.1(v)). Deletion cannot mean `DELETE FROM results` — a match is
+ * one row carrying both seats, so it is a fact the other player has a claim
+ * on too, and `ratingsFor` is a sequential Elo fold over every match ever
+ * recorded, so removing rows would rewrite the trajectory of everyone who
+ * ever faced this account. `resetRecord` already solved that by detaching
+ * rather than deleting; this extends it rather than inventing a second
+ * policy.
+ *
+ * The ordering is load-bearing and must not be reordered:
+ *
+ * 1. Detach and clear records, and the achievements with them — a deletion
+ *    always takes that branch, where an ordinary record reset makes it
+ *    optional. This is what clears `achievement_counters` and
+ *    `achievement_unlocks`; nothing below repeats it.
+ * 2. Scrub `hand_logs` of this account's identity, which still needs
+ *    `account_tokens` intact to find every device this account ever claimed.
+ * 3. Only now delete this account's own remaining rows — `account_tokens`
+ *    first (the join step 2 depended on), then `accounts` itself — written
+ *    explicitly rather than trusted to `ON DELETE CASCADE`: some of these
+ *    tables declare it and some do not, and no `PRAGMA foreign_keys` is set
+ *    anywhere in this project, so cascading here would be an assumption about
+ *    D1's defaults rather than something this code states.
+ * 4. Purge `magic_links` for the address, keyed by email rather than account
+ *    id since it holds no account reference at all.
+ *
+ * One deliberate thing left untouched: the opponent's `nickname{seat}` on any
+ * detached match. It is a display name the person chose, already seen by
+ * whoever sat across from them — replacing it with "a deleted account"
+ * degrades somebody else's history for no privacy gain, on the same
+ * precedent `resetRecord` already set.
+ */
+export async function deleteAccount(env: Env, accountId: string): Promise<void> {
+  const account = await accountFor(env, accountId);
+
+  await resetRecord(env, accountId, { achievements: true });
+  await scrubHandLogs(env, accountId);
+
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM account_tokens WHERE account_id = ?").bind(accountId),
+    env.DB.prepare("DELETE FROM accounts WHERE id = ?").bind(accountId),
+  ]);
+
+  if (account !== null) {
+    await env.DB.prepare("DELETE FROM magic_links WHERE email = ?").bind(account.email).run();
+  }
 }
 
 /** The account a request's `Authorization` header proves it belongs to, or null. */

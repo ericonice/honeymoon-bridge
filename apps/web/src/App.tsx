@@ -212,6 +212,7 @@ export function App(): React.JSX.Element {
           email={account.account.email}
           existing={null}
           onBack={goHome}
+          onDeleted={account.signOut}
           onSaved={account.refresh}
           onSignOut={account.signOut}
         />
@@ -230,6 +231,10 @@ export function App(): React.JSX.Element {
             email={account.account.email}
             existing={account.account.name}
             onBack={goHome}
+            onDeleted={() => {
+              account.signOut();
+              goHome();
+            }}
             onSaved={() => {
               account.refresh();
               goHome();
