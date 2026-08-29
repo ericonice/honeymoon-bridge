@@ -1928,8 +1928,38 @@ decisions and four aces is something a player did.
 **`game/match.ts` is the abstraction both formats satisfy**, as a tagged union with free functions
 rather than a common base — there is no common base. `MatchSummary` is shaped so almost nothing needs
 a branch at the call site; only three displays read the union. `SessionPad` is one row a **board**, not
-one a deal, since half a board is a score with nothing to compare it to, and **open boards are not
-listed at all** because a first run's score alone invites being read as a result.
+one a deal, since half a board is a score with nothing to compare it to.
+
+**The session pad is a column per side of the stock, and it took the two-game pad's shape to get
+there.** It grouped a board's two runs as stacked lines under a board header: everything needed for the
+comparison was on screen and the comparison was still *vertical*, which is the arrangement
+`Scorepad`'s paired version had already argued its way out of. A column each, a row a board, and each
+cell carries the contract, who declared, the result in bridge's notation and your net — so the board's
+worth is two adjacent figures added up rather than a third number claiming it.
+
+**The columns are which side of the stock you held, not the order the runs were played**, which is the
+one place this deliberately does *not* copy the mirror pad's chronological halves. The reason was
+already written in the component: "replay" names when a deal happened, and that is the single thing
+about a pair of runs that does not matter — the same stock offered the other way round is what
+differs. It also costs nothing per row, since which side you held is fixed for a whole column, so no
+cell needs a marker and nobody has to learn a key.
+
+**And it is what makes the two feet worth having.** Duplication hands each player both sides of every
+board, so *what I made holding the first draw* against *what I made holding the second* is a comparison
+with the luck already cancelled out — the direct analogue of a mirror's two half-totals, and a figure
+that sat inside the old pad's numbers without ever being added up.
+
+Two things went. The per-board margin, because side by side the sum is a glance and the width buys more
+elsewhere. And **"still to come round"**, because an empty cell beside a played one says it without
+words — which is the meaning a blank already carries on both pads. That also finally disposes of an
+older rule this file used to state, that **open boards are not listed at all** in case a lone first-run
+score read as a result: listing them withheld the thing a player most wants after finishing a deal, and
+the empty cell is the honest version of the same caution.
+
+**Its fixtures are scored through the engine's own `scoreDeal` rather than hand-built**, which is what
+makes the result marks testable at all — and it immediately caught one claiming 3♥ made while its own
+`tricksWon` said down six. A hand-built score is a second opinion about scoring, and this pad now
+prints one in every cell.
 
 **What is being played moved from Settings to Home, and the test is not when a setting is read.** All
 of them are read once, when a match starts — the useful question is **how often the answer changes**.
