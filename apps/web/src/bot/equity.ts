@@ -1,5 +1,5 @@
 import { totalScore } from "@hb/engine";
-import type { PlayerId, RubberState } from "@hb/engine";
+import type { PairStanding, PlayerId, RubberState } from "@hb/engine";
 
 /**
  * The chance of taking the match from a standing.
@@ -27,6 +27,25 @@ interface Coefficients {
   readonly part: number;
 }
 
+/** The second half also prices how much of the aggregate was carried into it. */
+interface SecondHalf extends Coefficients {
+  /**
+   * What a carried 100 is worth *beyond* the same 100 counted in `margin`, in
+   * log-odds. Negative, because a carried point is worth less than one banked here.
+   *
+   * The aggregate is the feature, so the pair reads as `margin × aggregate + carried
+   * × carriedPart` — which makes a fresh point worth `margin` and a carried one worth
+   * `margin + carried`. Fitted at −0.09 against a margin of +0.21, so about 57%.
+   */
+  readonly carried: number;
+}
+
+/** A two-game match, whose verdict is the pair's aggregate rather than either half's. */
+interface MirrorCells {
+  readonly first: Coefficients;
+  readonly second: SecondHalf;
+}
+
 export interface EquityTable {
   /**
    * A one-game match, which has exactly one standing to be in.
@@ -41,6 +60,17 @@ export interface EquityTable {
   /** Log-odds of holding one game to none. Negated for being the side that is behind. */
   readonly gameLead: number;
   readonly level: Coefficients;
+  /**
+   * A pair of games on one set of boards.
+   *
+   * Split by which half rather than by anything about the score, because the two are
+   * different situations: the first has a whole second game of variance still to come
+   * and the second is playing against a number it already knows. That shows up hardest
+   * in the part-score, worth **nothing measurable in the first half and +0.46 in the
+   * second** — a single cell, which is what a mirror used to be priced from, cannot say
+   * that and was saying +0.95 in both.
+   */
+  readonly mirror: MirrorCells;
   readonly oneEach: Coefficients;
   readonly oneUp: Coefficients;
 }
@@ -101,6 +131,27 @@ export const EQUITY: EquityTable = {
   game: { margin: 0.1738, part: 0.9548 },
   gameLead: 0.6104,
   level: { margin: 0.1328, part: -0.2204 },
+  // 400 two-game matches, 5,978 deal-start standings, four samples a card —
+  // `bench/equity.ts 400 4 format=mirror`. Both intercepts fitted at +0.00 ± 0.04,
+  // which is the antisymmetry check passing rather than a number being used.
+  //
+  // **Fitted from the points bidder, and refitting from the bidder it became was tried
+  // and is worse.** The refit moves a long way — both margins double and the
+  // second-half part-score flips from +0.46 to −0.32, error bars nowhere near
+  // overlapping — and installing it scores 50.6% ± 2.3 against the same reference this
+  // table scores 60.2% ± 2.3 against. So it stays, and the honest description of it is
+  // the one the rubber table already carries: an opponent model of the points bidder.
+  //
+  // The mechanism is a selection effect turned into a policy. Under this bidder a seat
+  // merely holding a part-score in the second half is one that *settled* when it should
+  // have stretched, so the refit reads "part-scores lose" as causal and produces a
+  // bidder that avoids them — down two or more in 6% of its deals against this table's
+  // 10%, timid rather than better, and −314 points a match. Level pairs also fall from
+  // 17% of matches to 5%, so the two fits are not describing the same population at all.
+  mirror: {
+    first: { margin: 0.1409, part: -0.0561 },
+    second: { carried: -0.0904, margin: 0.2113, part: 0.4649 },
+  },
   oneEach: { margin: 0.1359, part: 0.6945 },
   oneUp: { margin: 0.1124, part: 0.5461 },
 };
@@ -130,11 +181,16 @@ export function pointsAsEquity(
   rubber: RubberState,
   seat: PlayerId,
   points: number,
+  /** Present when the currency is a mirror's own, which is a different scale again. */
+  pair?: PairStanding,
   table: EquityTable = EQUITY,
 ): number {
   const aboveLine: [number, number] = [rubber.aboveLine[0], rubber.aboveLine[1]];
   aboveLine[seat] = aboveLine[seat]! + points;
-  return equityOf({ ...rubber, aboveLine }, seat, table) - equityOf(rubber, seat, table);
+  const after = { ...rubber, aboveLine };
+  return pair === undefined
+    ? equityOf(after, seat, table) - equityOf(rubber, seat, table)
+    : mirrorEquityOf(after, pair, seat, table) - mirrorEquityOf(rubber, pair, seat, table);
 }
 
 /**
@@ -147,6 +203,56 @@ export function pointsAsEquity(
  * to rely on — a table that only nearly had that property would let a call look
  * good to both seats at once.
  */
+/**
+ * This seat's chance of taking a two-game match from here.
+ *
+ * Antisymmetric on the same terms as `equityOf`: every feature is a difference taken
+ * this seat's way and no state carries an intercept, so the two seats' chances sum to
+ * one exactly. A bidder comparing two futures relies on that.
+ *
+ * **The first half completing is not the match completing, and that is the one branch
+ * a rubber has no equivalent of.** `equityOf` answers 1 or 0 the moment its rubber is
+ * complete, because there the rubber *is* the match. Here a finished first half simply
+ * becomes the standing the second half opens at — everything it banked turns into
+ * carry, the part-score is spent, and the situation is the start of half two. Reading
+ * it as a decided match is what would have the bidder treat winning the first game as
+ * winning the pair, which is the whole error this cell exists to correct.
+ */
+export function mirrorEquityOf(
+  rubber: RubberState,
+  pair: PairStanding,
+  seat: PlayerId,
+  table: EquityTable = EQUITY,
+): number {
+  const them: PlayerId = seat === 0 ? 1 : 0;
+  const total = totalScore(rubber);
+  const carried = (pair.carried[seat]! - pair.carried[them]!) / GAME_THRESHOLD;
+  const here = (total[seat]! - total[them]!) / GAME_THRESHOLD;
+  const aggregate = carried + here;
+
+  if (pair.half === 2 && rubber.complete) {
+    // The pair is over and the aggregate has answered it.
+    return aggregate === 0 ? 0.5 : aggregate > 0 ? 1 : 0;
+  }
+
+  const part = (rubber.partScore[seat]! - rubber.partScore[them]!) / GAME_THRESHOLD;
+
+  if (pair.half === 2) {
+    const cell = table.mirror.second;
+    return sigmoid(cell.part * part + cell.margin * aggregate + cell.carried * carried);
+  }
+
+  if (rubber.complete) {
+    // The first half is done: what it came to is the carry, and the next thing that
+    // happens is the second half opening at that number with a clean part-score.
+    const cell = table.mirror.second;
+    return sigmoid(cell.margin * aggregate + cell.carried * aggregate);
+  }
+
+  const cell = table.mirror.first;
+  return sigmoid(cell.part * part + cell.margin * aggregate);
+}
+
 export function equityOf(rubber: RubberState, seat: PlayerId, table: EquityTable = EQUITY): number {
   if (rubber.complete) {
     // The bonus is already on the pad and the question has been answered.

@@ -33,12 +33,44 @@ import type { DealAction, DealState, Pair, PlayerId } from "./types.js";
  */
 export interface Standing {
   /**
+   * What makes a two-game match a pair, for the one format that is one.
+   *
+   * Absent for every other format, where the rubber beside it is the whole of the
+   * situation. A mirror is settled on the two halves' **aggregate**, so a bidder
+   * handed only `rubber` is looking at a game whose outcome decides nothing on its
+   * own — which is exactly what it was doing, pricing a part-score at what a
+   * part-score is worth when winning the game wins the match.
+   *
+   * It sits here rather than inside `RubberState` because a half's rubber is a real
+   * single game and means precisely what it means anywhere else; what is different
+   * is the sitting around it, which is what this interface is for. Same reasoning
+   * that puts `vulnerable` here rather than deriving it at the call site.
+   */
+  readonly pair?: PairStanding;
+  /**
    * The rubber as it stood when this deal *began*, which is what the deal is bid
    * and scored against — see `rubberBefore` in `table.ts`.
    */
   readonly rubber: RubberState;
   /** Vulnerability for this deal, which follows from the rubber before it. */
   readonly vulnerable: Pair<boolean>;
+}
+
+/** Where a two-game match stands, beyond the half being played. */
+export interface PairStanding {
+  /**
+   * What the first half came to, per seat, bonus included. `[0, 0]` during the first
+   * half, where there is nothing behind this one.
+   *
+   * Kept separately from the half's own score rather than added into it, because the
+   * two are **not worth the same**: measured over 400 matches, a carried point moves
+   * the chance of taking the pair by about 57% of what a point banked in the half
+   * being played moves it. The boards come back, so a large first-half margin partly
+   * says the cards were good and the other seat is about to hold them.
+   */
+  readonly carried: Pair<number>;
+  /** Which half is being played. The two are different situations, not different scores. */
+  readonly half: 1 | 2;
 }
 
 /**
@@ -458,6 +490,8 @@ function summarizeMirror(match: MirrorMatch, summary: TableSummary): MatchSummar
       rubber: summary.rubber,
     },
     botStanding: {
+      // The one thing about a mirror a bidder cannot see from the half in front of it.
+      pair: { carried: earlier, half },
       rubber: match.table.rubberBefore,
       vulnerable: vulnerability(match.table.rubberBefore),
     },

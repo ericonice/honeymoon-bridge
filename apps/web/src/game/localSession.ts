@@ -4,7 +4,6 @@ import {
   canReturn,
   createRng,
   dealFacts,
-  currentDeal,
   dealOf,
   drawRevealFor,
   nextIn,
@@ -20,9 +19,9 @@ import {
 import type { Card, DealAction, DealState, MatchState, Pair, PlayerId } from "@hb/engine";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_GAME_EQUITY } from "../bot/bidValue.js";
-import { DISGUISE_CREDIT_ON } from "../bot/heuristicBot.js";
 import { levelFor } from "../bot/difficulty.js";
 import { botForLevel } from "../bot/build.js";
+import type { BoardOutcome } from "../bot/boardRecall.js";
 import { useAchievementTracker } from "./achievements.js";
 import { botActionFor } from "./botTurn.js";
 import { reportHandLog } from "./handLog.js";
@@ -37,28 +36,11 @@ import {
   sessionDeals,
   sessionOrder,
 } from "./identity.js";
+import { botTuningFor } from "./botTuning.js";
 import { reportRobotRubber } from "./records.js";
 import type { GameSession } from "./session.js";
+import { boardKeyOf } from "./boardKey.js";
 import { drawPauseBefore, paced, setPacing } from "./timing.js";
-
-/**
- * What identifies the board on the table, for the computer's memory of it.
- *
- * The deal's own seed, in both formats, because that is what a board *is* — and
- * because keying on it gives the one behaviour wanted for free: a board's second
- * run carries the same seed as its first, so `boardOffers` keeps the record of the
- * first run and the replay does not overwrite it with a record of the half already
- * spent.
- *
- * Null before anything has been dealt, which cannot happen, and is handled rather
- * than asserted because the alternative is a crash on the first draw turn.
- */
-function boardKeyOf(match: MatchState): number | null {
-  if (match.kind === "duplicate") {
-    return match.session.boards[currentDeal(match.session).board]?.seed ?? null;
-  }
-  return match.table.dealt[match.table.dealt.length - 1]?.seed ?? null;
-}
 
 /**
  * How long a solve must have taken before the computer says it is thinking.
@@ -193,23 +175,27 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
   // record two different opponents if somebody changed it mid-rubber.
   const rung = useMemo(() => difficulty(), []);
   const level = useMemo(() => levelFor(rung), [rung]);
+  // Read once and shared with `startMatch` below rather than read twice, because
+  // the bidder and the match have to be answering about the same format — which is
+  // the whole reason `objectiveFor` is a function.
+  const format = useMemo(() => preferredFormat(), []);
   const bot = useMemo(
     () =>
       botForLevel({
         level,
         rng: createRng(randomSeed()),
-        // The release, then the rung, then the player's own dials. What the
-        // opponent *is*, then how hard it is asked to play, then the leftovers
-        // from before difficulty existed — `strength` is gone, since the rung
-        // owns the sample count now.
-        tuning: {
-          ...release.tuning,
-          ...level.tuning,
-          disguiseCredit: disguiseEnabled() ? DISGUISE_CREDIT_ON : 0,
+        // The release, then the rung, then the player's own dials, then the
+        // format — see `botTuningFor`, which is where that precedence is stated
+        // and tested rather than spelled out at its one call site.
+        tuning: botTuningFor({
+          disguise: disguiseEnabled(),
+          format,
           gameEquity: equityFor(boldness()),
-        },
+          level,
+          release,
+        }),
       }),
-    [level, release],
+    [format, level, release],
   );
   /**
    * The seed the deal on the table was dealt from, kept for the hand log.
@@ -234,8 +220,11 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
    * `inPlay` is the deal being played *now*, held aside and committed only when it
    * finishes. Without that the bot would be handed a partial record of the board in
    * front of it and try to identify itself by it.
+   *
+   * Keyed by `boardKeyOf`, which is one rule for all three formats a board comes
+   * round in rather than a board index in one and nothing in the others.
    */
-  const boardOffers = useRef(new Map<number, readonly Pair<Card>[]>());
+  const boardOffers = useRef(new Map<number, { pairs: readonly Pair<Card>[]; result: BoardOutcome }>());
   const inPlay = useRef<{ board: number; pairs: Pair<Card>[] } | null>(null);
 
   // Read once, when the match starts. Changing the setting mid-match would move
@@ -251,7 +240,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
       // a field yet, so what matters is only that a session's boards are
       // recorded, and `dealSeed` is what records them.
       firstBoard: randomSeed() % 1_000_000,
-      format: preferredFormat(),
+      format,
       // Only a mirror reads it; every other format's length is its format.
       halfFormat: mirrorHalfFormat(),
       seed: dealSeed.current,
@@ -269,7 +258,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
 
   const deal = dealOf(match);
   const summary = summarizeMatch(match);
-  const board = match.kind === "duplicate" ? currentDeal(match.session).board : null;
+  const board = boardKeyOf(match);
   const waitingOnBot = deal.toAct === OPPONENT && deal.phase !== "complete";
 
   // Set the instant a trick resolves, however either seat gets there, and
@@ -378,7 +367,11 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
       }
 
       const action = botActionFor({
-        boards: [...boardOffers.current].map(([one, offers]) => ({ board: one, offers })),
+        boards: [...boardOffers.current].map(([one, noted]) => ({
+          board: one,
+          offers: noted.pairs,
+          result: noted.result,
+        })),
         bot,
         seat: OPPONENT,
         standing: summary.botStanding,
@@ -474,7 +467,17 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     // again, so overwriting would replace a useful record with a spent one.
     const noted = inPlay.current;
     if (noted !== null && noted.pairs.length === 13 && !boardOffers.current.has(noted.board)) {
-      boardOffers.current.set(noted.board, noted.pairs);
+      boardOffers.current.set(noted.board, {
+        pairs: noted.pairs,
+        // What the board came to, in the computer's own frame — see `BoardOutcome`.
+        // Recorded beside the pairs rather than derived later, because by the time the
+        // board comes round this deal is long gone.
+        result: {
+          contract: deal.contract,
+          declared: deal.contract?.declarer === OPPONENT,
+          tricksWon: [deal.tricksWon[OPPONENT], deal.tricksWon[HUMAN]],
+        },
+      });
     }
     inPlay.current = null;
 

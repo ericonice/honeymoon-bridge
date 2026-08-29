@@ -38,8 +38,12 @@ export function RobotGame({
   // under, even if somebody changes the setting while the rubber is running.
   const [version] = useState(() => preferredRelease().version);
   const [rung] = useState(() => difficulty());
-  const opponent = useBotAnchor(version, rung);
   const session = useLocalSession({ peek: peeking });
+  // Asked with the format as well, because a two-game match is worth more to beat: the
+  // computer meets the second half's boards remembering them and a person does not.
+  // Taken off the session rather than read from the setting a second time — the session
+  // pinned it when the match started, and two reads is how they come to disagree.
+  const opponent = useBotAnchor(version, rung, session.format);
   const noun = matchNoun(session.format);
 
   return (

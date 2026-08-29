@@ -444,8 +444,22 @@ export function PlayPhase({
     setSweeping(false);
     setSwept(false);
 
-    if (mountedAt.current === null) {
-      mountedAt.current = playedCount;
+    const mounting = mountedAt.current === null;
+    mountedAt.current = playedCount;
+    // **A card can be waiting on the table before this screen has ever been drawn.**
+    // The closed auction is held until it is dismissed rather than for a set time, and
+    // the seat on lead is under no obligation to wait for the other one to finish
+    // reading it — so over a network their opening lead lands while this seat is still
+    // looking at the contract. Against the computer it cannot happen, because the bot
+    // is held until the same tap.
+    //
+    // Mounting with an empty trick is the ordinary case and has nothing to fly. Mounting
+    // with a card already there is that lead, and it flies in exactly as it would have
+    // if this screen had been up when it arrived — which is a small lie about *when* and
+    // a true statement about what happened. The alternative is what shipped: a card
+    // simply present at the moment the contract scrolls away, with no sense that the
+    // other player did anything.
+    if (mounting && view.currentTrick.length === 0) {
       return;
     }
 

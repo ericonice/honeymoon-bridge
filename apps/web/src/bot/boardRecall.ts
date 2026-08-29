@@ -1,5 +1,5 @@
 import { buildDeck, cardId } from "@hb/engine";
-import type { Card, Pair, PlayerView } from "@hb/engine";
+import type { Card, Contract, Pair, PlayerView } from "@hb/engine";
 
 /**
  * What this seat saw of one board it has already played.
@@ -15,11 +15,45 @@ import type { Card, Pair, PlayerView } from "@hb/engine";
  * `DealState` — that shape is what `viewFor` projects from, and a seed or a pairing
  * inside it is a leak waiting for somebody to forget to strip it.
  */
+/**
+ * What a board came to the first time it was played, in the frame of the seat that
+ * remembers it.
+ *
+ * **Which is not the frame it will be used in, and that is the whole subtlety.** A
+ * replay hands each seat the other stream, so the cards this seat is about to hold
+ * are the ones the *opponent* held last time. What transfers is therefore crossed:
+ * what they did last time is evidence about this hand, and what this seat did is
+ * evidence about theirs.
+ */
+export interface BoardOutcome {
+  /** Null when the board was passed out and nothing was played. */
+  readonly contract: Contract | null;
+  /** Whether the seat that remembers this board was the declarer of it. */
+  readonly declared: boolean;
+  /** Tricks taken on that first run: the rememberer's, then the other seat's. */
+  readonly tricksWon: Pair<number>;
+}
+
 export interface BoardOffers {
-  /** Which board of the session, by its index. */
+  /**
+   * Which board this is, as whatever the host uses to tell them apart — the deal's
+   * seed, which is what a board *is*. Opaque here: nothing in this module compares
+   * it, since identifying the board from the cards is the whole job. It exists so
+   * the host can keep one record per board and not overwrite a first run with a
+   * replay of it.
+   */
   readonly board: number;
   /** The pairs this seat faced, oldest turn first. */
   readonly offers: readonly Pair<Card>[];
+  /**
+   * What the board came to, if this seat is allowed to remember that too.
+   *
+   * Optional because it is a second thing to forget: a rung that hands over the pairs
+   * can withhold the result, and a client too old to record it simply has none. Absent
+   * means the bidder falls back to counting the hand in front of it, which is what it
+   * did before any of this existed.
+   */
+  readonly result?: BoardOutcome;
 }
 
 /**
@@ -81,11 +115,13 @@ function offeredCards(entry: BoardOffers): Card[] {
  * board it is on is one it has not played. **Ambiguity reads as not knowing**, rather
  * than as a guess between two boards: a wrong pairing would make every sampled hand
  * confidently impossible, which is worse than sampling without one.
+ *
+ * `boardFacing` is the same identification returning the whole remembered board, since
+ * the pairs are not the only thing worth remembering about one — see `BoardOutcome`.
+ * `offersFacingOpponent` stays because the sampler wants exactly the pairs and nothing
+ * else, and because it is what the property test is written against.
  */
-export function offersFacingOpponent(
-  memory: BoardMemory,
-  seen: readonly Card[],
-): readonly Pair<Card>[] | null {
+export function boardFacing(memory: BoardMemory, seen: readonly Card[]): BoardOffers | null {
   if (memory.length === 0 || seen.length === 0) {
     return null;
   }
@@ -99,7 +135,14 @@ export function offersFacingOpponent(
     return seen.every((card) => theirs.has(cardId(card)));
   });
 
-  return candidates.length === 1 ? candidates[0]!.offers : null;
+  return candidates.length === 1 ? candidates[0]! : null;
+}
+
+export function offersFacingOpponent(
+  memory: BoardMemory,
+  seen: readonly Card[],
+): readonly Pair<Card>[] | null {
+  return boardFacing(memory, seen)?.offers ?? null;
 }
 
 /**

@@ -611,6 +611,51 @@ serves a reducer in the tab and a Durable Object on Cloudflare. Invite links, a 
 (one Durable Object holding no state; the socket *is* the place in the queue), the "waiting for X"
 countdown, and reconnection on backoff, on `online`, and on the tab becoming visible.
 
+**The trick hold had no effect at a table, and the reason is worth generalising: a beat enforced by
+holding the opponent cannot survive the opponent moving to another device.** Against the computer,
+`localSession` sets `trickAwaitingDismissal` the instant a trick resolves and the bot's scheduling
+effect refuses to run while it is set — so nothing can land on a trick nobody has seen. `networkSession`
+hardcoded that flag false and `dismissTrick` to a no-op, arguing that holding this side of a resolved
+trick "would be a screen with no effect on the game underneath it". True of the *other* seat's move,
+and beside the point: what it also stopped doing was pacing this screen. Reported as their card
+landing and the next trick starting with no delay, which is exactly what it was — `tableTrick` prefers
+`view.currentTrick` the moment it is non-empty, so the resolved trick was not rushed but **replaced,
+with no sweep and no sight of who took it.**
+
+**The fix has to be on the receiver, because a card that has arrived cannot be unseen.** Gating the
+sender was the other candidate and does not work: a player who taps straight through their own hold
+still sends straight away. So `useTrickGate` sits *above* `GameSession` and decides which snapshot a
+session is built from at all — a play that would open a new trick over a resolved one waits, and
+everything else (a card that *completes* a trick, a deal ending, a reconnect, a null snapshot before
+both seats are filled) lands at once.
+
+**It costs nothing when the other player is not rushing, which is the whole design.** The hold runs
+until `dismiss`, which `PlayPhase` calls when its own sweep finishes and a tap calls early — so it is
+measured from when the trick landed *here*, not from when the next card arrived. An opponent who lets
+their own hold run has already spent it and nothing waits. Only a lead that beats this screen's
+choreography waits, and only for the remainder. `trickStageTime` is a *failsafe* ceiling rather than
+the mechanism: a held snapshot must never be strandable, and if `PlayPhase` has gone before its sweep
+fires there is nothing left to call `dismiss` and the game would simply stop.
+
+**This seat's own card is never held**, which is a rule rather than an optimisation — it flies from
+the hand that was just tapped, and a tap that does nothing for two seconds reads as a dead screen.
+
+Two things worth knowing. `test/support/board.ts` deliberately does **not** wire the gate in, and its
+doc comment now says so: the gate is above `GameSession`, and pulling it in would make every "the
+opponent never waits" walk in `networkPlay.test.ts` wait for something those tests are not about.
+`test/trickGate.test.ts` covers it instead, fed real `snapshotFor` output from a driven `TableState`
+rather than constructed objects — a hand-built snapshot would agree with the predicate by construction
+and say nothing about whether the predicate describes anything the server sends. Checked by reverting:
+three of its six fail with the hold removed, and it counts what it held so a walk that never triggered
+the case fails rather than passes. And `receive` is asserted **stable across renders**, because
+`useNetworkSession` lists it among the connect effect's dependencies and an identity that changed per
+render would tear the socket down and rebuild it on every incoming message.
+
+**One neighbour of this is still open**: the opponent's *opening lead* of a deal can arrive while
+`useShownPhase` is still holding the closed auction, so their card is already on the table when you
+tap through rather than flying in. Same class, different held screen — the gate cannot see the shown
+phase, which lives inside `GameBoard`.
+
 **Done, and it reversed a rule.** Playing a person requires an account (§3.7). The gate is on
 *sitting down*, not on staying seated: a reconnect whose device token matches a seat resumes it
 whatever the session says, so a rotated secret or a deploy cannot take a rubber off somebody
@@ -1603,6 +1648,273 @@ played by one bidder and recorded as another for want of exactly that. One claim
 duplicate objective ignores the **rubber standing**, not vulnerability, which a board prescribes
 rather than earns.
 
+**And for as long as that function existed, nothing in the app called it.** `localSession` built the
+bot's tuning from the release and the rung and stopped, so the format never reached the bidder: a
+duplicate session was played by whatever pricing the release happened to carry — under v3, the change
+in its chance of taking a rubber that was freshly minted, never advanced and could not be won.
+`duplicateFrom`, the pricing written for the format, is reached by `bench/hands.ts` and by
+`test/duplicateObjective.test.ts` and **was never reached by the game**.
+
+The shape is the same as the mirror memory bug found the same afternoon, and the lesson is sharper
+than either: **a function whose whole purpose is to stop two callers disagreeing is worth nothing
+until both of them call it**, and a test that asks the function its own question cannot tell you
+whether anybody asks. `duplicateObjective.test.ts` asserted `objectiveFor("duplicate", "equity") ===
+"duplicate"` and passed throughout.
+
+`game/botTuning.ts` is the merge, extracted from the hook for the reason `boardKeyOf` was: **a
+precedence inlined at its one call site cannot be tested.** It states the order — release, then rung,
+then the player's dials, then the format — and `test/botTuning.test.ts` pins each step, including that
+the two releases really do price a rubber differently, without which the "left to the release" case
+would hold against a merge that ignored the release entirely.
+
+**And it was not a theoretical mispricing — v3 in a session was playing worse than v2 would have.**
+Both objectives measured over 240 sessions each against the same reference, the bidder pricing in
+rubber points, at four samples a card with `nodouble`:
+
+| challenger, in duplicate | sessions won | margin per session |
+| --- | --- | --- |
+| equity — what was shipping | **38.5% ± 3.1** | **−364 ± 78** |
+| duplicate — what ships now | **56.9% ± 3.2** | **+152 ± 58** |
+
+About **+127 rating points**, though that composes two runs against a common yardstick rather than
+measuring the pair head to head, which the bench cannot currently do; the composed error is ±97 and the
+conclusion is five standard errors clear either way.
+
+**The mechanism is worth keeping, because it says which formats are at risk of the same thing.**
+`botStanding` for a session is a *fresh rubber, every deal, forever*, so the equity objective was
+returning `equityOf(afterThisDeal) − equityOf(untouched)`. The table's `part` and `gameLead` terms
+exist to price progress toward a game — and a session has no game to progress toward, since every deal
+is settled where it is played. So it valued below-the-line progress at a large premium over
+above-the-line points, in a format where a hundred either side of the line is worth exactly a hundred,
+and discounted hardest the penalties, honors and overtricks that are most of what a board turns on.
+
+The points objective is nearly right for the same reason and not quite: it gets the differential right
+and then adds `positionalValue`, a credit for games and part-scores a session will never bank. That
+last step is what the +152 buys.
+
+**The same question asked of a mirror is a clean null, and that is what rules out the cheap fix.** A
+mirror was the obvious next suspect — its verdict is the pair's aggregate *points*, while each half
+carries `RubberState.format === "game"`, so `equityOf` prices it out of the cell fitted on "winning a
+game **is** winning the match", which in a pair is false. Measured the same way, 480 matches at four
+samples: **239 to 241, 49.8% ± 2.3, one tenth of a standard error from even**, margin −59 ± 44. The
+two pricings are indistinguishable.
+
+The reason, in hindsight: winning a mirror half pays `GAME_BONUS` **into the aggregate**, so
+"maximise the chance of winning this half" and "maximise points" are nearly the same instruction. The
+equity table is aimed at the wrong target and mostly hits the right one anyway.
+
+**So switching mirror to the points objective is worth nothing, and that is the useful finding** — it
+was the cheap half of the design and it is now measured rather than assumed. A mirror bidder that is
+actually better has to be the expensive version: an objective that knows the **margin carried out of
+the first half**, which is the one fact that makes the pair a pair and the one thing `Standing` cannot
+currently say. Nothing short of that is worth building.
+
+One number from that run is worth watching rather than acting on: the equity bidder went **down two or
+more in 21% of its own deals, costing 499 a match** — high against the 13% this file records for the
+re-fitted v3, though at four samples a card rather than eight. The plausible story is the same
+mispricing seen from the other side: a table that thinks winning the game ends the match will stretch
+for a game that ends nothing. It is a hypothesis, and this file has a standing rule about how those go
+wrong.
+
+**`bench/equity.ts format=mirror` fits the pair, and it says the mispricing is real and is entirely in
+the part-score.** 400 matches, 5,978 deal-start standings, four samples a card, split by which half is
+being played, with the margin recorded as the **running aggregate** — carried plus what this half has
+banked — because the aggregate is what settles a mirror:
+
+| | even score | per part-score | per 100 points |
+| --- | --- | --- | --- |
+| first half | +0.00 ± 0.04 | **−0.06 ± 0.09** | +0.14 ± 0.02 |
+| second half | +0.00 ± 0.04 | **+0.46 ± 0.09** | +0.21 ± 0.02 |
+| shipped `game` cell, used for both | — | **+0.95** | +0.17 |
+
+**The margin term is about right and the part-score term is wrong by the width of the table.** In the
+first half the two definitions coincide, so that row is a like-for-like comparison: the bidder is
+being told a part-score is worth +0.95 where it is worth nothing measurable. That is a bidder chasing
+progress toward a game bonus that a whole second half is about to swamp, which is a mechanism for the
+21% of deals it goes down two in rather than a coincidence beside it.
+
+**And it says a part-score is worth nothing in the first half and +0.46 in the second**, which one cell
+structurally cannot say — the same shape of failure as pricing "a game" with one constant across
+transitions worth 0.170 and 0.500.
+
+**The prediction was written down before the run and it held.** A point carried out of the first half
+is worth **−0.09 ± 0.02** against one banked in the half being played — four and a half standard errors
+— so a carried point is worth **0.12 per 100 against a fresh point's 0.21, about 57%**. The mechanism
+is the format's own: the boards come back, so a big first-half margin partly says the cards were good
+and the other seat is about to hold them. Duplication showing up as a discount on your own lead is
+this format working, and a single aggregate feature would have priced it away.
+
+Three caveats, all of them the ones this file already knows to state. It is fitted from the **points**
+bidder, so it is an opponent model of that bidder exactly as the rubber table is. Calibration is
+monotone but compressed in the middle bands (predicted 0.20–0.35 won 0.389, 0.65–0.80 won 0.611), and
+in-sample. And it is four samples a card, where the rubber table had to be re-fitted once already for
+being fitted under card play that failed contracts too often.
+
+**A level pair is 17% of matches, which is why they are labelled 0.5 rather than dropped.** `playRubber`
+discards a rubber nobody won because that essentially cannot happen; here it happens constantly, and
+throwing away 17% of matches selected for being close would have biased the fit toward the standings
+that ran away.
+
+**Installing it needs `Standing` to carry two numbers, not one** — which half, and how much of the
+aggregate was carried — which is `Standing.pair`, an optional `PairStanding` beside the rubber rather
+than a field inside it: a half's rubber is a real single game and means what it means anywhere else,
+and what differs is the sitting around it, which is what `Standing` is for.
+
+**Installed, and it is worth ten points of win rate.** Measured against the same points-bidder
+reference the equity objective was measured against, so the two are directly comparable:
+
+| challenger, in a mirror | matches won | down 2+ in its own contract |
+| --- | --- | --- |
+| equity — what was shipping | 49.8% ± 2.3 | 21% of deals, costing 499 a match |
+| mirror — what ships now | **60.2% ± 2.3**, 4.5σ | **10% of deals, costing 224** |
+
+**The census is the part worth keeping, because it confirms the mechanism rather than the number.**
+The overreach halved, which is exactly what the fit predicted would happen: a bidder told a part-score
+is worth +0.95 when it is worth nothing stretches for a game that ends nothing. The points margin goes
+the other way at −191, which is not a regression but the thing this file predicted in advance for the
+rubber equity objective — a bidder maximising the chance of taking the match will trade points for
+wins, and `bench/rubber.ts` leads on matches won for that reason.
+
+**`mirrorEquityOf` has one branch a rubber has no equivalent of.** `equityOf` answers 1 or 0 the moment
+its rubber is complete, because there the rubber *is* the match. A finished first half is not a result:
+everything it banked becomes carry, the part-score is spent, and the state is the second half opening
+at that number. Reading it the other way is the error the cell exists to correct, so it has its own
+test.
+
+**The bot takes account of what happened the first time now, and that is where a board's memory
+actually pays.** `BoardOffers` carries a `BoardOutcome` beside the pairs — the contract, the tricks and
+whether this seat declared — and `chooseCall` blends it into the estimate at `LAST_TIME_WEIGHT`.
+
+**The evidence is crossed, which is the whole of the design.** A replay hands each seat the other
+stream, so the cards this seat now holds are the ones the opponent held last time: what *they* did is
+evidence about this hand, and what this seat did is evidence about theirs. Of the four combinations
+only two transfer, and both restrictions are objections this file already records elsewhere. **The
+strain must match**, because trick counts are not additive across strains. And **the same stock must be
+declaring**, because double-dummy tricks depend on who leads, so the same material declaring from the
+other side is a different position whose split nothing knows. The other two are dropped rather than
+rotated.
+
+It is blended rather than believed because **the replay does not deal the same thirteen cards**: the
+same twenty-six are offered and this seat makes its own keep-or-reject decisions, so it holds a
+different hand built from the same material — and "made four" is what that play produced rather than
+what the cards were worth.
+
+**Worth 57.3% ± 2.4 over 480 matches, 3.1 standard errors, +132 ± 63 points a match.** One bidder
+against an exact copy of itself with the board memory as the only difference. The margin is *positive*
+here where the mirror objective's was negative, and that difference is in kind rather than in degree: an
+objective change trades points for wins by design, where better information about the same question
+should win on both. It does.
+
+**Which relocates what a board's memory is for.** The pairs alone measured **+17 ± 34 rating points,
+52.5% ± 4.9 — a null** — and that was the number that let a mirror be rated at the rubber anchor. Adding
+what happened takes the same lever to 3.1 standard errors. The intuition it confirms is the human one:
+somebody replaying a board is not mainly re-deriving the opponent's holding from thirteen remembered
+pairs, they are remembering that the contract was 2♥ and it made four.
+
+**The decomposition was run, and it reverses that reading.** `memory=pairs` hands over the thirteen
+pairs and withholds what the board came to — possible only because `BoardOffers.result` is optional,
+which was built so a rung could withhold it. Both arms against a bot with no memory at all, 240 matches
+each, at the fitted weight:
+
+| | matches won | margin | down 2+ |
+| --- | --- | --- | --- |
+| pairs **and** result | 58.2% ± 2.3, 3.5σ | +139 | 10%, 271 |
+| **pairs only** | **56.7% ± 2.3, 2.9σ** | +113 | 11%, 327 |
+
+**The pairs carry nearly all of it, which is the opposite of what was predicted here** — the prediction
+was that the pairs would land near even and the result would carry it.
+
+**So the old pairs-only null was wrong, and it was load-bearing.** 52.5% ± 4.9 is what rated a mirror at
+the plain rubber anchor, on the argument that if perfect board recall is worth nothing then the gap
+between perfect and human recall is worth at most that. At 56.7% and 2.9 standard errors that argument
+does not hold and **the mirror anchor is owed a second look**. The likely cause of the old figure is
+that it was taken under a different bidder at eight samples — a null measured on a bot nobody plays,
+which is the same shape as the duplicate rating anchor's own objection.
+
+**And the run cannot answer the question it was built for, which is the instrument lesson.** The two
+arms differ by 1.5 points with ±2.3 each — about half a standard error, indistinguishable from zero. It
+does not say the result is worth 1.5 points; it says **this design cannot tell**. Comparing two strong
+configurations against a weak common reference is far less sensitive than playing them against each
+other: both are already winning handily and the gap compresses. In log-odds the two arms differ by 0.06
+where the head-to-head sweep measured 0.24, a factor of four that compression does not explain.
+
+**The sweep was the sensitive instrument all along** — 0.6 against a bot holding the result and
+ignoring it, 56.0% ± 2.6, everything else identical. That is what the `vs=`-shaped flags exist for, and
+reaching the same quantity by subtracting two win rates against a third opponent was the wrong route.
+One secondary signal agrees with the sweep rather than the subtraction: without the result the bidder
+goes down two or more in 11% of deals costing 327, against 10% and 271 with it.
+
+**`LAST_TIME_WEIGHT` is fitted at 0.6, and the guess it replaces was too low.** Measuring the memory on
+against off says whether the evidence is worth anything; it cannot say what it is worth. So the weight
+became a `BotTuning` field — the shape `theirBidOnOwnWeight` already has, for the reason it has it —
+and `bench/rubber.ts lastweight=W:0` plays the same bidder against itself at two trusts, both sides
+carrying the memory so only the trust differs:
+
+| weight | matches won | margin | down 2+ |
+| --- | --- | --- | --- |
+| 0.20 | 51.3% ± 2.6 | +68 | 10%, 273 |
+| 0.35 — the guess | 54.2% ± 2.6 | +92 | 9%, 257 |
+| **0.60** | **56.0% ± 2.6** | +67 | 10%, 265 |
+| 1.00 | 56.3% ± 2.6 | +38 | 11%, 312 |
+
+**0.20 is a null, and it is a threshold rather than a small effect.** The blend moves the estimate by
+about a third of a trick there, which almost never crosses the line between bidding three and bidding
+four — the evidence is present and inert. Half a trick starts flipping decisions.
+
+**The win rate then flattens and the points do not**, which is what picks 0.6 out of the plateau. 0.60
+and 1.00 are indistinguishable on matches won and are the only two arms clearing two standard errors;
+but past 0.35 the margin falls steadily and at 1.00 the bidder goes down two or more in 11% of its own
+deals against 9%. Believing last time outright buys no extra wins and pays for them.
+
+**That the curve does not fall at 1.00 is the surprise, and worth stating.** Ignoring the hand
+count entirely and taking last time's trick total as the estimate wins as often as blending does — so
+on the deals where it applies, what the stock produced before is about as good a predictor as counting
+the cards in front of you. It just costs more to use that way.
+
+No adjacent pair is separated by more than noise; the evidence is the monotone shape across four
+points, which is the standard the difficulty ladder was spaced on when its own arms were 1.0 and 1.2
+standard errors.
+
+Recognition ran at **34% of deals**, against the 43% recorded for the pairs-only run; matches are
+shorter here (8.3 deals against 9.1), so more of the second half is played on boards past the first
+half's length and therefore never seen before.
+
+**The circularity check was run rather than promised, and the refit loses.** `equity.ts` states the
+discipline in its own comment — fit, swap it in, refit, report whether the coefficients moved — and this
+table was fitted from the *points* bidder then installed in a bidder whose overreach immediately halved.
+Refitting from its own play:
+
+| | fitted from the points bidder | refit from the mirror bidder |
+| --- | --- | --- |
+| first half, per 100 | +0.14 ± 0.02 | +0.28 ± 0.03 |
+| second half, per part-score | **+0.46 ± 0.09** | **−0.32 ± 0.11** |
+| second half, per 100 | +0.21 ± 0.02 | +0.34 ± 0.02 |
+| a carried 100 | −0.09 ± 0.02 | −0.19 ± 0.02 |
+| **installed, against the same reference** | **60.2% ± 2.3** | **50.6% ± 2.3** |
+
+**Ten points of win rate, which is the rubber table's story repeated almost exactly** (78.9% to 66.6%
+there). The shipped numbers stay and the honest description of them is the one `equity.ts` already
+carries for the rubber: an opponent model of the points bidder.
+
+**The mechanism is a selection effect promoted to a policy, and it is worth recognising again.** Under
+this bidder, a seat merely holding a part-score in the second half is one that **settled** when it
+should have stretched — so the refit reads "part-scores lose" as causal and produces a bidder that
+avoids them. It is timid rather than better: down two or more in 6% of its deals against 10%, and −314
+points a match. Level pairs also fall from 17% of matches to 5%, so the two fits are not describing the
+same population at all, which is enough on its own to raise every margin coefficient.
+
+**Two smaller things pointed the same way before the run did.** The refit's *in-sample* calibration is
+worse — its 0.20–0.35 band won 0.426 against the original's 0.389 — which is over-confidence against the
+very data it was fitted on. And `test/mirrorEquity.test.ts` failed on exactly one assertion when the
+refit was swapped in, the one saying a part-score is worth something in the second half, while all five
+structural assertions held. A test that notices a table changing its mind about a finding, and not
+about arithmetic, is the right shape.
+
+**And `creditIn` had to learn the new currency.** The disguise credit is a fitted constant in points and
+was converted only for `"equity"`; a mirror objective is a probability on the same scale, so 200 added
+raw would have been a landslide rather than a nudge. It converts through the mirror table, since what
+200 points is worth depends on where the pair stands.
+
 **Scoring is points, and `impsFor` is written and unused.** IMPs was the first proposal, on the
 grounds that a concave scale stops one doubled disaster deciding a session. What weakened it is that
 duplication has *already* cancelled the deal, so a duplicate margin is far better behaved than a
@@ -1700,10 +2012,32 @@ difference between its two runs, so playing the replay better is exactly what th
 measures — where a mirror's halves are games won at a hundred below the line, and thirty points played
 better usually changes nobody's race. That is a hypothesis; the measurement is the finding.
 
-Teaching the bench the format needed one thing worth naming: the board key is `localSession`'s own
-expression, copied rather than re-derived. A mirror replays through the *table* rather than through a
-`DuplicateSession`, so a bench keying memory off the session alone would have measured a capability the
-app ships in two formats in only one of them — and would not have said so.
+Teaching the bench the format needed one thing worth naming: the board key is the app's own
+expression. A mirror replays through the *table* rather than through a `DuplicateSession`, so a bench
+keying memory off the session alone would have measured a capability the app ships in two formats in
+only one of them — and would not have said so.
+
+**It was a copy, with a comment saying the two had to agree, and they did not.** The bench kept its
+own `boardKeyOf`; `localSession` had one too, written for both formats, documented as such — and
+never called. What the app actually used was `match.kind === "duplicate" ? currentDeal(...).board :
+null`, so in a **mirror and in a return match the bot was handed an empty memory on every deal**,
+while every number the bench has ever printed about mirror memory came from a bot that had it. The
++17 ± 34 null that justified rating a mirror at the rubber anchor was measured on an opponent nobody
+was playing.
+
+`game/boardKey.ts` is now one function that the app, the bench and `test/boardKey.test.ts` all import.
+**A comment asserting that two copies agree is not a mechanism**, and this file has recorded the same
+shape twice before — the ratings test walking the app's own `DIFFICULTIES` list against the server's
+offsets exists because those two live in different workspaces and nothing else makes them meet.
+
+The test pins the property the memory rests on — a board's second run keys the same as its first —
+**per format rather than once**, because the three places a board comes round reach it by three
+different routes: a session's schedule, a mirror's second half, and a rubber replayed by hand. Only
+the first was ever wired up. Two of its four assertions passed against the bug on the first draft,
+because two runs of nulls compare equal; they check for null before comparing now. `playSameBoards`'s
+own doc comment had been describing the return match's memory as the thing that makes it interesting
+for the computer, which was simply untrue for as long as it stood. The census says it is true now: 43%
+of deals recognised in a mirror, which is every replayed deal.
 
 **A match played back on an earlier one's boards is still out, and the client had been drawing a
 rating line for one.** `repeated` excludes it server-side and always has; `DealComplete` suppressed the

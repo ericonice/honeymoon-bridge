@@ -198,3 +198,19 @@ export const TRICK_TIMING = {
   /** The sweep toward whoever won it, once dismissed. */
   sweep: 400,
 };
+
+/**
+ * How long a resolved trick occupies the table, from the card that completed it
+ * arriving to the sweep finishing.
+ *
+ * The three legs `PlayPhase` actually spends on one: the completing card's own
+ * flight, the hold that lets it be read, and the sweep toward whoever won it.
+ * It lives here with them rather than beside the caller for the reason the rest
+ * of this module gives — they are one budget, and a clock derived from them
+ * somewhere else would go out of step the moment any of the three moved.
+ *
+ * Read fresh, since `pacing` can change between one trick and the next.
+ */
+export function trickStageTime(): number {
+  return paced(TRICK_TIMING.play + TRICK_TIMING.hold + TRICK_TIMING.sweep);
+}

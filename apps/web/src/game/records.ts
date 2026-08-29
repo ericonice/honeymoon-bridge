@@ -73,6 +73,8 @@ export interface OpponentRecord {
 export interface Records {
   /** See `BotAnchors`. Absent from a server too old to send it. */
   readonly anchors?: BotAnchors;
+  /** See `BotAnchors`. Absent from a server too old to send it, which reads as a rubber. */
+  readonly mirrorAnchors?: BotAnchors;
   readonly opponents: readonly OpponentRecord[];
   /**
    * The asker's own rating.
@@ -279,6 +281,12 @@ export interface KnownRatings {
   readonly bot: number | null;
   readonly mine: number | null;
   /**
+   * The anchors for a two-game match, empty until a server new enough to send them
+   * has been heard from. Falls back to `anchors`, which understates a mirror rather
+   * than inventing anything — see `botAnchor`.
+   */
+  readonly mirrorAnchors: BotAnchors;
+  /**
    * What the next result will move this player by, as the server last said.
    *
    * Null from a server too old to send it, which has to mean "cannot say" rather
@@ -290,7 +298,7 @@ export interface KnownRatings {
 }
 
 export function knownRatings(): KnownRatings {
-  const empty: KnownRatings = { anchors: {}, bot: null, mine: null, step: null };
+  const empty: KnownRatings = { anchors: {}, bot: null, mine: null, mirrorAnchors: {}, step: null };
   const raw = readStored(RATING_KEY);
   if (raw === null) {
     return empty;
@@ -301,6 +309,7 @@ export function knownRatings(): KnownRatings {
       anchors: parsed.anchors ?? {},
       bot: parsed.bot ?? null,
       mine: parsed.mine ?? null,
+      mirrorAnchors: parsed.mirrorAnchors ?? {},
       step: parsed.step ?? null,
     };
   } catch {
@@ -317,9 +326,19 @@ export function knownRatings(): KnownRatings {
  * and the ladder is provisional, so a stale local copy would be wrong in exactly
  * the way that matters. A screen with no number to show should say nothing.
  */
-export function botAnchor(version: number, difficulty: Difficulty): number | null {
-  const { anchors, bot } = knownRatings();
-  return anchors[String(version)]?.[difficulty] ?? bot;
+export function botAnchor(
+  version: number,
+  difficulty: Difficulty,
+  format: MatchFormat | null = null,
+): number | null {
+  const known = knownRatings();
+  // Looked up rather than adjusted. The client never adds the mirror term itself: the
+  // rule is "worth this much at the rungs that carry a board into the replay", and a
+  // client that knew that would be a second copy of it — which is the drift this whole
+  // table exists to prevent. A server too old to send the second table falls through to
+  // the first and is understated rather than wrong in a way nobody could see.
+  const table = format === "mirror" ? (known.mirrorAnchors ?? known.anchors) : known.anchors;
+  return table[String(version)]?.[difficulty] ?? known.bot;
 }
 
 /**
@@ -342,8 +361,12 @@ export function botAnchor(version: number, difficulty: Difficulty): number | nul
  * rating is the figure somebody quotes at the dinner table, so a plausible wrong
  * one is worse than a blank: nobody checks a number that looks right.
  */
-export function useBotAnchor(version: number, difficulty: Difficulty): number | null {
-  const [anchor, setAnchor] = useState(() => botAnchor(version, difficulty));
+export function useBotAnchor(
+  version: number,
+  difficulty: Difficulty,
+  format: MatchFormat | null = null,
+): number | null {
+  const [anchor, setAnchor] = useState(() => botAnchor(version, difficulty, format));
 
   useEffect(() => {
     if (anchor !== null) {
@@ -351,13 +374,20 @@ export function useBotAnchor(version: number, difficulty: Difficulty): number | 
     }
     let live = true;
     void fetch(botsUrl())
-      .then(async (response) => (response.ok ? ((await response.json()) as { anchors?: BotAnchors }) : null))
+      .then(async (response) =>
+        response.ok
+          ? ((await response.json()) as {
+              anchors?: BotAnchors;
+              mirrorAnchors?: BotAnchors;
+            })
+          : null,
+      )
       .then((body) => {
         if (!live || body?.anchors === undefined) {
           return;
         }
-        rememberAnchors(body.anchors);
-        setAnchor(botAnchor(version, difficulty));
+        rememberAnchors(body.anchors, body.mirrorAnchors);
+        setAnchor(botAnchor(version, difficulty, format));
       })
       .catch(() => {
         // No network, or no server. The blank is the honest answer.
@@ -365,17 +395,23 @@ export function useBotAnchor(version: number, difficulty: Difficulty): number | 
     return () => {
       live = false;
     };
-  }, [anchor, difficulty, version]);
+  }, [anchor, difficulty, format, version]);
 
   return anchor;
 }
 
 /** Stores anchors without disturbing the two ratings cached alongside them. */
-export function rememberAnchors(anchors: BotAnchors): void {
+export function rememberAnchors(anchors: BotAnchors, mirrorAnchors: BotAnchors = {}): void {
   const known = knownRatings();
   writeStored(
     RATING_KEY,
-    JSON.stringify({ anchors, bot: known.bot, mine: known.mine, step: known.step }),
+    JSON.stringify({
+      anchors,
+      bot: known.bot,
+      mine: known.mine,
+      mirrorAnchors,
+      step: known.step,
+    }),
   );
 }
 

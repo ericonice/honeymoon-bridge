@@ -12,7 +12,7 @@ import { ORDER_LABEL, SESSION_ORDERS, preferredRelease } from "../game/identity.
 import { botAnchor } from "../game/records.js";
 import type { CardColor } from "../game/cardColor.js";
 import type { Boldness, Density, Pace } from "../game/identity.js";
-import { flush, outboxState } from "../game/outbox.js";
+import { clearStuck, flush, outboxState } from "../game/outbox.js";
 import type { Theme } from "../game/theme.js";
 import { playAchievement } from "../game/soundEffects.js";
 import { AchievementToast } from "./AchievementToast.js";
@@ -244,17 +244,44 @@ function Unsent(): React.JSX.Element | null {
           <li className="text-xs text-white/35">and {pending.length - 5} more</li>
         ) : null}
       </ul>
-      <button
-        type="button"
-        className="mt-2 rounded-lg border border-white/20 px-3 py-1 text-xs text-white/80"
-        onClick={() => {
-          void flush().then(() => {
-            setState(outboxState());
-          });
-        }}
-      >
-        Try again now
-      </button>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="rounded-lg border border-white/20 px-3 py-1 text-xs text-white/80"
+          onClick={() => {
+            void flush().then(() => {
+              setState(outboxState());
+            });
+          }}
+        >
+          Try again now
+        </button>
+        {/* Only when something is actually stuck, and it is the way out of a dead end
+            rather than a tidy-up. `drain` skips a report the server has refused or that
+            has run out of attempts, so "Try again now" cannot move one — without this
+            the footer says "1 result not sent yet" for the life of the browser and
+            nothing can ever clear it.
+
+            Down here rather than behind the playtester flag, for the same reason the
+            block around it is: the person who needs it is whoever lost the game, not
+            somebody who volunteered for unfinished behaviour. `clearStuck` used to
+            claim it was reachable from the testing panel and was reachable from
+            nowhere at all. */}
+        {state.stuck.length > 0 ? (
+          <button
+            type="button"
+            className="rounded-lg border border-white/10 px-3 py-1 text-xs text-white/50"
+            onClick={() => {
+              clearStuck();
+              setState(outboxState());
+            }}
+          >
+            {state.stuck.length === 1
+              ? "Discard the one that cannot be sent"
+              : `Discard the ${state.stuck.length} that cannot be sent`}
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

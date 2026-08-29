@@ -1,5 +1,5 @@
 import { describe, expect, it, test } from "vitest";
-import { DIFFICULTIES } from "../../web/src/bot/difficulty.js";
+import { DIFFICULTIES, levelFor } from "../../web/src/bot/difficulty.js";
 import type { Env } from "../src/env.js";
 import {
   botAnchors,
@@ -326,5 +326,98 @@ describe("what the computer is worth on each rung", () => {
         expect(anchors[version]![rung]).toBe(botRating(Number(version), rung));
       }
     }
+  });
+});
+
+describe("what a board's memory is worth in a two-game match", () => {
+  /**
+   * The computer meets the second half's boards having already played them, and a
+   * person does not — measured at 56.7% ± 2.3 for the pairs alone, which is the half a
+   * person cannot reproduce. It was zero until that was re-measured, on an older figure
+   * that turned out to be a null taken against a bidder nobody plays.
+   */
+  it("rates a mirror above a rubber at the rung that remembers", () => {
+    expect(botRating(3, "championship", "mirror")).toBeGreaterThan(
+      botRating(3, "championship", "rubber"),
+    );
+  });
+
+  /**
+   * **The structural half, and the reason this is not simply a constant.** `forgetful.ts`
+   * hands over no boards at all below the top rung, so a club or kitchen computer meets a
+   * replayed board knowing nothing about it and has nothing to be credited for. The two
+   * facts live in different workspaces, so this is the only thing that makes them meet —
+   * the same reason the offsets themselves are walked against `DIFFICULTIES` above.
+   */
+  it("credits exactly the rungs the app gives a board's pairs to", () => {
+    let remembered = 0;
+    for (const rung of DIFFICULTIES) {
+      const remembers = levelFor(rung).recall >= 13;
+      const gap = botRating(3, rung, "mirror") - botRating(3, rung, "rubber");
+      expect(gap, `${rung} remembers=${remembers}`).toBe(remembers ? gap : 0);
+      if (remembers) {
+        remembered += 1;
+        expect(gap).toBeGreaterThan(0);
+      }
+    }
+    expect(remembered, "no rung has perfect recall, so this asserted nothing").toBe(1);
+  });
+
+  /** Before the setting existed the bot had perfect recall, so those games get it too. */
+  it("credits a match from before the difficulty setting existed", () => {
+    expect(botRating(3, null, "mirror")).toBeGreaterThan(botRating(3, null, "rubber"));
+    expect(botRating(3, null, "mirror")).toBe(botRating(3, "championship", "mirror"));
+  });
+
+  it("leaves every other format alone", () => {
+    for (const format of ["rubber", "game", null]) {
+      for (const rung of DIFFICULTIES) {
+        expect(botRating(3, rung, format)).toBe(botRating(3, rung));
+      }
+    }
+  });
+});
+
+describe("the anchors a client is handed", () => {
+  /**
+   * The gap this closes: the walk rated a mirror above a rubber while the table sent to
+   * the client had no format in it at all, so the number beside the computer's seat
+   * understated the one its own rating was computed from. `Records` says those must be
+   * **one number from one place**, and for a while they were two.
+   */
+  it("sends a mirror table that agrees with the walk", () => {
+    const mirror = botAnchors("mirror");
+    for (const [version, rungs] of Object.entries(mirror)) {
+      for (const [rung, rating] of Object.entries(rungs)) {
+        expect(rating).toBe(botRating(Number(version), rung, "mirror"));
+      }
+    }
+  });
+
+  /** And the default table is still the rubber one, unchanged for every other format. */
+  it("leaves the default table as it was", () => {
+    const plain = botAnchors();
+    for (const [version, rungs] of Object.entries(plain)) {
+      for (const [rung, rating] of Object.entries(rungs)) {
+        expect(rating).toBe(botRating(Number(version), rung));
+      }
+    }
+  });
+
+  /**
+   * Anti-vacuity: the two tables have to actually differ somewhere, or both tests above
+   * would pass against a `botAnchors` that ignored its argument — which is exactly the
+   * bug being fixed, one layer down.
+   */
+  it("the two tables differ, at the rung that remembers", () => {
+    const plain = botAnchors();
+    const mirror = botAnchors("mirror");
+    const differing = Object.keys(plain).flatMap((version) =>
+      Object.keys(plain[version]!).filter(
+        (rung) => plain[version]![rung] !== mirror[version]![rung],
+      ),
+    );
+    expect(differing.length).toBeGreaterThan(0);
+    expect(new Set(differing)).toEqual(new Set(["championship"]));
   });
 });

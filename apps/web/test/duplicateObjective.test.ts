@@ -122,7 +122,12 @@ describe("which objective a format is played for", () => {
     expect(objectiveFor("duplicate", "points")).toBe("duplicate");
   });
 
-  it("leaves every rubber format to the release", () => {
+  it("overrides it for a two-game match as well", () => {
+    expect(objectiveFor("mirror", "equity")).toBe("mirror");
+    expect(objectiveFor("mirror", "points")).toBe("mirror");
+  });
+
+  it("leaves the formats that really are one rubber to the release", () => {
     expect(objectiveFor("rubber", "equity")).toBe("equity");
     expect(objectiveFor("game", "equity")).toBe("equity");
     expect(objectiveFor("rubber", "points")).toBe("points");

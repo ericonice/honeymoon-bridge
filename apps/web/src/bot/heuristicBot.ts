@@ -3,7 +3,8 @@ import type { Bid, Call, Card, Contract, DrawTake, PlayerId, PlayerView, Rng, St
 import { DEFAULT_GAME_EQUITY, expectedValue } from "./bidValue.js";
 import type { Objective } from "./bidValue.js";
 import { pointsAsEquity } from "./equity.js";
-import { offeredSoFar, offersFacingOpponent } from "./boardRecall.js";
+import { boardFacing, offeredSoFar, offersFacingOpponent } from "./boardRecall.js";
+import type { BoardOutcome } from "./boardRecall.js";
 import { mirrorOdds, searchTricks, spreadOdds } from "./searchTricks.js";
 import type { TrickSpread } from "./searchTricks.js";
 import { chooseCard } from "./cardPlay.js";
@@ -168,6 +169,14 @@ export const DISGUISE_CREDIT_ON = 200;
 export interface BotTuning {
   /** What naming a suit that isn't necessarily this hand's best one is worth. Zero is off. */
   readonly disguiseCredit?: number;
+  /**
+   * How far to trust what a board came to the first time — see `LAST_TIME_WEIGHT`.
+   *
+   * A field so `bench/rubber.ts` can play the same bidder against itself at two
+   * weights, which is the only way to fit it: measuring the memory on against off says
+   * whether the evidence is worth anything, not what it is worth.
+   */
+  readonly lastTimeWeight?: number;
   /** What a game in hand is worth, in points. Only read by the points objective. */
   readonly gameEquity?: number;
   /**
@@ -239,10 +248,12 @@ function disguiseValue(view: PlayerView, level: number, strain: Strain, credit: 
  * something the flat version could not: the credit is worth less at a standing
  * where points matter less, which is correct and was never expressible before.
  *
- * Only the equity objective needs converting. Duplicate prices calls in points
- * like the original objective did, so 200 means there what it has always meant —
- * which is why the condition names equity rather than listing the others, and why
- * a fourth objective priced in points would need no change here.
+ * The objectives priced as a **probability** need converting; the ones priced in
+ * points do not. Duplicate prices calls in points like the original objective did, so
+ * 200 means there what it has always meant. Mirror does not — it is a chance of taking
+ * the pair, on the same scale as equity — so it converts too, and through its own
+ * table, since what 200 points is worth depends on where the pair stands. Getting this
+ * wrong is not subtle: 200 added to a probability is a landslide.
  *
  * Exported only so `test/equity.test.ts` can check it directly. Driving the whole
  * bidder instead was tried and the test was vacuous: `honestlyWeak` means the
@@ -256,10 +267,10 @@ export function creditIn(
   me: PlayerId,
   credit: number,
 ): number {
-  if (credit === 0 || objective !== "equity") {
+  if (credit === 0 || (objective !== "equity" && objective !== "mirror")) {
     return credit;
   }
-  return pointsAsEquity(standing.rubber, me, credit);
+  return pointsAsEquity(standing.rubber, me, credit, objective === "mirror" ? standing.pair : undefined);
 }
 
 /**
@@ -374,8 +385,53 @@ function impliedByTheirBid(view: PlayerView, strain: Strain): number | null {
  * The level they chose says how many they believe they hold. Both are evidence,
  * and the weighting between them was measured rather than assumed.
  */
+/**
+ * What a board's first run says about the tricks in this contract, or null.
+ *
+ * **The evidence is crossed, and only half of it transfers.** A replay hands each seat
+ * the other stream, so the cards this seat now holds are the ones the opponent held
+ * last time — what *they* did is evidence about this hand, and what this seat did is
+ * evidence about theirs.
+ *
+ * Two conditions, and both are the same objection `estimateFor` already records about
+ * the searched estimate. **The strain has to match**, because trick counts are not
+ * additive across strains — a hand pair can be eleven in hearts and ten in clubs — so
+ * carrying a count from one strain to another is guesswork rather than arithmetic. And
+ * **the same stream has to be declaring**, because double-dummy tricks depend on who
+ * leads: the stock that declared last time declaring again is the same position, and
+ * the other way round is a different one whose split nothing here knows.
+ *
+ * So of the four combinations only two say anything, and they are exactly the two
+ * branches of the estimate below.
+ *
+ * Exported for `test/lastTime.test.ts`, on the same terms `creditIn` is: the four
+ * combinations are the rule, and driving a whole bidder to observe two of them flip a
+ * bid would be testing the noise around them.
+ *
+ * What it is *not* is a guarantee, and the reason is worth keeping: the replay offers
+ * the same twenty-six cards but this seat makes its own keep-or-reject decisions, so
+ * it ends up with a different hand built from the same material. "This stock took ten
+ * tricks in hearts" is evidence about what is available, not about what is held —
+ * which is why it is blended at a weight rather than believed.
+ */
+export function impliedByLastTime(contract: Contract, context: LastTimeContext): number | null {
+  const { played, view } = context;
+  if (played?.contract == null || played.contract.strain !== contract.strain) {
+    return null;
+  }
+  const mine = contract.declarer === view.me;
+  // This seat declaring now is the same position as the opponent declaring then, since
+  // this seat holds what they held. The mismatched pairs are dropped rather than
+  // rotated.
+  if (mine === played.declared) {
+    return null;
+  }
+  return mine ? played.tricksWon[1] : played.tricksWon[0];
+}
+
 function estimateFor(contract: Contract, context: CallContext): number {
   const { theirBidOnOwnWeight, view } = context;
+  const lastTime = impliedByLastTime(contract, context);
   const searched = context.spreads?.get(contract.strain);
   if (contract.declarer === view.me) {
     /**
@@ -394,10 +450,13 @@ function estimateFor(contract: Contract, context: CallContext): number {
      * +467 and is the largest single thing the bidder knows. A better estimate of
      * one term is not a reason to discard another.
      */
-    const own =
+    const counted =
       searched !== undefined && searched.samples >= MIN_SEARCH_SAMPLES
         ? searched.mean
         : ownEstimate(view, contract.strain);
+    // Folded in before their bid rather than after, so it corrects what this hand
+    // thinks it is worth and their claim is then weighed against the corrected number.
+    const own = blendLastTime(counted, lastTime, context.lastTimeWeight);
     const implied = impliedByTheirBid(view, contract.strain);
     return implied === null
       ? own
@@ -410,9 +469,17 @@ function estimateFor(contract: Contract, context: CallContext): number {
   // than swapped: taking the bid alone is what made defending look hopeless and
   // pushed both bots to the seven level, so their claim is treated as evidence
   // and not as fact.
-  const fromMyHand = TRICKS - defendingTricks(view.hand, contract.strain);
+  const fromMyHand = blendLastTime(
+    TRICKS - defendingTricks(view.hand, contract.strain),
+    lastTime,
+    context.lastTimeWeight,
+  );
   const fromTheirBid = contract.level + BOOK;
   return (1 - THEIR_BID_WEIGHT) * fromMyHand + THEIR_BID_WEIGHT * fromTheirBid;
+}
+
+function blendLastTime(counted: number, lastTime: number | null, weight: number): number {
+  return lastTime === null ? counted : (1 - weight) * counted + weight * lastTime;
 }
 
 /**
@@ -425,6 +492,46 @@ function estimateFor(contract: Contract, context: CallContext): number {
  * this hand were declaring it, which is the exact confusion `estimateFor` was
  * written to end.
  */
+/**
+ * How far to trust what a board came to the first time it was played.
+ *
+ * The same shape as `THEIR_BID_ON_OWN_WEIGHT`, and for the same reason: a second piece
+ * of evidence about a number this hand can only estimate, blended rather than swapped
+ * in. It applies only where a count actually transfers — see `impliedByLastTime` — so
+ * on most deals it never fires at all.
+ *
+ * **Fitted, and the guess it replaces was too low.** 200 matches an arm, each weight
+ * against the same bidder at zero, both sides carrying the memory so only the trust
+ * differs — `bench/rubber.ts lastweight=W:0 format=mirror objective=mirror memory=both`:
+ *
+ * | weight | matches won | margin | down 2+ |
+ * | --- | --- | --- | --- |
+ * | 0.20 | 51.3% ± 2.6 | +68 | 10%, 273 |
+ * | 0.35 | 54.2% ± 2.6 | +92 | 9%, 257 |
+ * | 0.60 | **56.0% ± 2.6** | +67 | 10%, 265 |
+ * | 1.00 | 56.3% ± 2.6 | +38 | 11%, 312 |
+ *
+ * **0.20 is a null and the reason is a threshold rather than a small effect.** A third
+ * of a trick almost never crosses the line between bidding three and bidding four, so
+ * the evidence is present and inert; half a trick starts flipping decisions.
+ *
+ * **The win rate then flattens and the points do not.** 0.60 and 1.00 are
+ * indistinguishable on matches won and only those two clear two standard errors — but
+ * past 0.35 the margin falls steadily and at 1.00 the bidder goes down two or more in
+ * 11% of its deals against 9%. Believing last time outright buys no extra wins and
+ * pays for them, which is what the argument below predicted and the reason the top of
+ * the plateau is taken rather than its end.
+ *
+ * Why it should not be 1.00 at all: the replay offers the same twenty-six cards but
+ * this seat makes its own keep-or-reject decisions, so it holds a *different hand built
+ * from the same material*, and the tricks taken last time are what that play produced
+ * rather than what the cards were worth.
+ *
+ * No adjacent pair here is separated by more than noise; the evidence is the monotone
+ * shape across four points, which is the standard the difficulty ladder was spaced on.
+ */
+export const LAST_TIME_WEIGHT = 0.6;
+
 /**
  * How many sampled hands a searched distribution needs before it is worth more
  * than the fitted one.
@@ -495,8 +602,20 @@ interface Candidate {
  * which is how the estimate came to be computed two different ways in two of
  * them — a fifth was the point at which that stopped being tolerable.
  */
-interface CallContext {
+/** Just enough of a call for `impliedByLastTime`, which is all its test needs to build. */
+export interface LastTimeContext {
+  /**
+   * What this board came to the first time, when this is a board coming round again
+   * and the seat can tell which one it is. Null the rest of the time, which is every
+   * deal of a rubber and the first run of every board.
+   */
+  readonly played: BoardOutcome | null;
+  readonly view: PlayerView;
+}
+
+interface CallContext extends LastTimeContext {
   readonly disguiseCredit: number;
+  readonly lastTimeWeight: number;
   readonly gameEquity: number;
   readonly objective: Objective;
   readonly searchMode: "mean" | "odds";
@@ -504,7 +623,6 @@ interface CallContext {
   readonly spreads: ReadonlyMap<Strain, TrickSpread> | null;
   readonly standing: Standing;
   readonly theirBidOnOwnWeight: number;
-  readonly view: PlayerView;
 }
 
 /**
@@ -673,6 +791,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
   const fallback = createRandomBot(rng);
   const disguiseCredit = tuning.disguiseCredit ?? DISGUISE_CREDIT;
   const gameEquity = tuning.gameEquity ?? DEFAULT_GAME_EQUITY;
+  const lastTimeWeight = tuning.lastTimeWeight ?? LAST_TIME_WEIGHT;
   const objective = tuning.objective ?? "points";
   const searchBudgetMs = tuning.searchBudgetMs ?? 0;
   const searchSamples = tuning.searchSamples ?? 0;
@@ -694,6 +813,10 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
       // strain rather than a contract, and every candidate in that strain reads
       // the same distribution. Strains nobody could legally bid are left out,
       // which is most of the saving on a crowded auction.
+      // Identified once for the whole call rather than per candidate: which board this
+      // is does not change between two contracts, and the match walks every remembered
+      // board against every card this seat has been offered.
+      const board = boardFacing(boards, offeredSoFar(view, remembered));
       const spreads =
         searchBudgetMs > 0 && searchSamples > 0
           ? searchTricks({
@@ -702,14 +825,16 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
               remembered,
               rng,
               strains: strainsWorthPricing(view),
-              theirOffers: offersFacingOpponent(boards, offeredSoFar(view, remembered)),
+              theirOffers: board?.offers ?? null,
               view,
             }).spreads
           : null;
       return bestCall({
         disguiseCredit,
         gameEquity,
+        lastTimeWeight,
         objective,
+        played: board?.result ?? null,
         searchMode,
         spreads,
         standing,

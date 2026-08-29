@@ -257,7 +257,18 @@ export function outboxState(): OutboxState {
   };
 }
 
-/** Throws away what is stuck. Only reachable from the testing panel. */
+/**
+ * Throws away the reports that can never be sent, keeping the ones still trying.
+ *
+ * `drain` skips anything the server has refused or that has run out of attempts, so a
+ * stuck report is stuck for good — and the footer in Settings goes on saying a result
+ * was never filed, with a "Try again now" beside it that cannot move it. This is the
+ * way out of that, and it is offered in the same ungated block rather than in the
+ * testing panel: whoever needs it is whoever lost the game.
+ *
+ * Nothing recoverable is lost. A refused report is one the server read and rejected,
+ * which it will reject identically forever.
+ */
 export function clearStuck(): void {
   const { waiting } = outboxState();
   write(waiting);

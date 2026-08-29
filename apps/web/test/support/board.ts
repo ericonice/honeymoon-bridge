@@ -10,12 +10,19 @@ import type { GameSession } from "../../src/game/session.js";
 /**
  * The board driven the way a networked seat drives it.
  *
- * `GameSession` is the whole of what `GameBoard` is given, so a session built
- * the way `networkSession.ts` builds one — nothing pacing the other seat on
- * this seat's behalf, a `dismissTrick` that does nothing — over a `TableState`
- * the test advances itself is the real thing rather than a stand-in. The seat
- * opposite is the test, which is what lets it move without waiting: over a
- * network it is under no obligation to.
+ * `GameSession` is the whole of what `GameBoard` is given, so a session over a
+ * `TableState` the test advances itself is the real thing rather than a stand-in.
+ * The seat opposite is the test, which is what lets it move without waiting: over
+ * a network it is under no obligation to.
+ *
+ * **What it deliberately leaves out is `useTrickGate`, and a pass here is
+ * therefore not a statement about pacing.** That gate sits *above* `GameSession`
+ * — it decides which snapshot a session is built from at all — so wiring it in
+ * here would test something these files are not about, and would make every
+ * "the opponent never waits" walk below wait. `dismissTrick` does nothing and
+ * `trickAwaitingDismissal` is false, which is the unpaced worst case and exactly
+ * the right thing for a test asking whether a card is reachable. The gate has
+ * `test/trickGate.test.ts` of its own.
  */
 export interface Board {
   /** Applies an action as either seat, as the Durable Object would. */
@@ -115,6 +122,7 @@ function Harness({
     clearUnlocks: () => {
       setUnlocked([]);
     },
+    // See this file's own doc comment: unpaced on purpose, not by omission.
     dismissTrick: () => {},
     justTaken: snapshot.justTaken,
     justUnlocked: unlocked,

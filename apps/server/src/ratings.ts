@@ -202,8 +202,16 @@ const UNVERSIONED_BOT_RATING = 1000;
  * stored. A re-spaced ladder comes out right on the next read for everybody at
  * once, where a stored column would need a migration and a backfill.
  */
+/**
+ * The rung `BOT_RATINGS` is anchored on, and the only one that remembers a board.
+ *
+ * Named rather than spelled twice: it is the zero of the table above *and* the
+ * condition on `MIRROR_RECALL_OFFSET`, and those two have to stay the same rung.
+ */
+const TOP_RUNG = "championship";
+
 const DIFFICULTY_OFFSETS: Record<string, number> = {
-  championship: 0,
+  [TOP_RUNG]: 0,
   club: -200,
   kitchen: -350,
 };
@@ -234,13 +242,60 @@ function unknownRungOffset(): number {
  * sample count in every one of those games, because there was no way to ask it
  * for anything less.
  */
-export function botRating(version: number | null, difficulty: string | null = null): number {
+export function botRating(
+  version: number | null,
+  difficulty: string | null = null,
+  format: string | null = null,
+): number {
   const base =
     version === null ? UNVERSIONED_BOT_RATING : (BOT_RATINGS[version] ?? UNVERSIONED_BOT_RATING);
   if (difficulty === null) {
-    return base;
+    // Before the setting existed, so the top rung — and the top rung is the only one
+    // that carries a board into its replay, which is why the mirror offset applies.
+    return base + mirrorRecallOffset(null, format);
   }
-  return base + (DIFFICULTY_OFFSETS[difficulty] ?? unknownRungOffset());
+  return (
+    base + (DIFFICULTY_OFFSETS[difficulty] ?? unknownRungOffset()) + mirrorRecallOffset(difficulty, format)
+  );
+}
+
+/**
+ * What the computer's perfect memory of a board is worth in a two-game match.
+ *
+ * **This started as zero on a measurement that turned out to be wrong.** A mirror was
+ * rated at the plain rubber anchor because carrying a board's pairs into its replay
+ * measured at 52.5% ± 4.9 — half a standard error, a null — and if perfect recall is
+ * worth nothing then the gap between perfect and human recall is worth at most that.
+ * Re-measured under the bidder that actually ships, it is **56.7% ± 2.3, 2.9 standard
+ * errors, +47 rating points**. The old figure was taken against a different bidder at a
+ * different sample count: a null measured on a bot nobody plays.
+ *
+ * **The pairs are the right number rather than the whole memory, and that is the one
+ * judgement here.** Full board memory — the pairs *and* what the board came to — is
+ * worth +57. But an offset is meant to price the advantage the computer holds over *a
+ * person*, and a person replaying a board remembers the contract and the result
+ * perfectly well. What they cannot do is recall thirteen exact offered pairs, which is
+ * the half the bench says carries almost all of it.
+ *
+ * Rounded **down** from 47, because raising an anchor is the direction that inflates:
+ * a higher opponent rating pays more for beating it. The file's standing preference is
+ * to under-credit rather than over-credit, and the residual — a person's imperfect
+ * recall of the pairs — can only make the true offset smaller.
+ *
+ * **Top rung only, and that is structural rather than cautious.** `forgetful.ts` hands
+ * over no boards at all below Championship, so a club or kitchen computer meets a
+ * replayed board knowing nothing about it and has no advantage to price.
+ */
+const MIRROR_RECALL_OFFSET = 40;
+
+function mirrorRecallOffset(difficulty: string | null, format: string | null): number {
+  if (format !== "mirror") {
+    return 0;
+  }
+  // Null difficulty predates the setting and is rated at the top rung throughout this
+  // file, for the same reason: those games were played with perfect recall because
+  // there was no way to ask for less.
+  return difficulty === null || difficulty === TOP_RUNG ? MIRROR_RECALL_OFFSET : 0;
 }
 
 /**
@@ -251,13 +306,20 @@ export function botRating(version: number | null, difficulty: string | null = nu
  * enough to send whole — a release times a rung is a dozen numbers — and sending
  * it whole means a client can show the anchor for a release it is not currently
  * playing, which the opponent picker needs.
+ *
+ * **A format is a whole second table rather than a term the client adds**, because the
+ * moment the client adds anything it is keeping its own copy of the rule — and the rule
+ * here is not "mirror is worth 40", it is "mirror is worth 40 at the rungs that carry a
+ * board into the replay". Sending the answers keeps that sentence in one place. A
+ * second table is another dozen numbers, which is nothing, and a client too old to ask
+ * for one falls back to the default table and is understated rather than broken.
  */
-export function botAnchors(): Record<string, Record<string, number>> {
+export function botAnchors(format: string | null = null): Record<string, Record<string, number>> {
   const anchors: Record<string, Record<string, number>> = {};
   for (const version of Object.keys(BOT_RATINGS)) {
     const rungs: Record<string, number> = {};
     for (const rung of Object.keys(DIFFICULTY_OFFSETS)) {
-      rungs[rung] = botRating(Number(version), rung);
+      rungs[rung] = botRating(Number(version), rung, format);
     }
     anchors[version] = rungs;
   }
@@ -304,6 +366,8 @@ interface RatingRow {
   readonly account1: string | null;
   readonly bot_version: number | null;
   readonly difficulty: string | null;
+  /** Read for one reason: a mirror's top rung meets a replayed board remembering it. */
+  readonly format: string | null;
   readonly token0: string;
   readonly token1: string;
   readonly winner: number;
@@ -373,20 +437,19 @@ export async function ratingsFor(env: Env): Promise<Ratings> {
   // perfect recall where a person's is good but not exact, and the size of that gap
   // was a number nobody had.
   //
-  // It is worth nothing. `bench/rubber.ts 120 8 format=mirror control nodouble memory`
-  // plays one bidder against an exact copy of itself with a board's pairs carried into
-  // the replay as the only difference: **52.5% ± 4.9, half a standard error from even,
-  // +1 point a match — +17 ± 34 rating points**, which is inside the rounding on the
-  // difficulty offsets below. The capability was firing, so this is a null and not a
-  // dead control: the challenger knew which board it was on in 43% of deals, which is
-  // every replayed one.
+  // It measured as worth nothing, and that measurement was wrong. `bench/rubber.ts 120
+  // 8 format=mirror control nodouble memory` gave **52.5% ± 4.9, half a standard error
+  // from even**, so the format was rated at the plain rubber anchor: if perfect recall
+  // is worth nothing then the gap between perfect and human recall is worth at most
+  // that. Re-run under the bidder that ships, the same lever is **56.7% ± 2.3, 2.9
+  // standard errors**. The old figure was a null measured on a bot nobody plays — a
+  // different bidder at a different sample count — which is the same objection this
+  // comment makes about duplicate two paragraphs up, turned on itself.
   //
-  // So no offset, and nothing invented — the format is rated at the same anchor as a
-  // rubber. Note what the null also settles: the objection was that the *bot* has
-  // perfect recall and a person does not, and if perfect recall is worth nothing then
-  // the gap between perfect and imperfect recall is worth at most that.
+  // So a mirror is rated at the rubber anchor *plus* `MIRROR_RECALL_OFFSET`, at the one
+  // rung that carries a board into its replay.
   //
-  // Why it is worth +157 a session in duplicate and nothing here is not established.
+  // Why it is worth +157 a session in duplicate and less here is still not established.
   // The plausible mechanism is that duplicate scores a board on the difference between
   // its two runs, so playing the replay better is exactly what the unit of scoring
   // measures, where a mirror's halves are games won at a hundred below the line — and
@@ -399,7 +462,7 @@ export async function ratingsFor(env: Env): Promise<Ratings> {
   // matches still appear on the record screen, where `recordsFor` already keeps
   // one record per format.
   const rows = await env.DB.prepare(
-    `SELECT account0, account1, bot_version, difficulty, token0, token1, winner
+    `SELECT account0, account1, bot_version, difficulty, format, token0, token1, winner
      FROM results
       WHERE format != 'duplicate' AND coalesce(repeated, 0) = 0
       ORDER BY finished_at`,
@@ -419,7 +482,7 @@ export async function ratingsFor(env: Env): Promise<Ratings> {
     // written back. That is what stops the pool from being a closed loop.
     const of = (seat: (typeof seats)[number]): number =>
       seat.token === ROBOT_TOKEN
-        ? botRating(row.bot_version, row.difficulty)
+        ? botRating(row.bot_version, row.difficulty, row.format)
         : (rating.get(identityOf(seat.account, seat.token)) ?? START_RATING);
 
     const before = [of(seats[0]), of(seats[1])] as const;

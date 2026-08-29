@@ -1,6 +1,6 @@
 import { applyDealScore, duplicateFrom, opponentOf, scoreDeal, totalScore } from "@hb/engine";
 import type { Card, Contract, MatchFormat, Pair, PlayerId, RubberState } from "@hb/engine";
-import { equityOf } from "./equity.js";
+import { equityOf, mirrorEquityOf } from "./equity.js";
 import type { Standing } from "./types.js";
 
 /**
@@ -125,12 +125,15 @@ const DOUBLED_FROM_DOWN = 2;
  * from another — see `creditIn` in `heuristicBot.ts`, which is the one place a
  * constant has to be expressed in more than one.
  *
- * **`"duplicate"` is not a release's choice but the format's**, which is what
- * makes it different in kind from the other two: a session has no standing to be
- * a game up in, so the equity table has nothing to look up and the positional
- * credit has nothing to price. `objectiveFor` is where the two sources meet.
+ * **`"duplicate"` and `"mirror"` are not a release's choice but the format's**, which
+ * is what makes them different in kind from the other two. A session has no standing
+ * to be a game up in, so the equity table has nothing to look up and the positional
+ * credit has nothing to price. A mirror has a standing and it is the wrong one: each
+ * half is a single game, so a release pricing it would ask what winning *this game* is
+ * worth, when winning it decides nothing on its own. `objectiveFor` is where the two
+ * sources meet.
  */
-export type Objective = "duplicate" | "equity" | "points";
+export type Objective = "duplicate" | "equity" | "mirror" | "points";
 
 /**
  * What a call has to be priced in, from what is being played and what the
@@ -144,13 +147,18 @@ export type Objective = "duplicate" | "equity" | "points";
  * came to be played by one bidder and recorded as another.
  */
 export function objectiveFor(format: MatchFormat, release: Objective): Objective {
-  // A two-game match keeps the release's own pricing, unlike a session. Each half is
-  // a real single game with a line, a part-score and a race to a hundred, so the
-  // standing means exactly what it means in a rubber and the equity table has
-  // something to look up. What is different about the format — that the verdict is
-  // the pair's total — is a fact about the *match*, and a bidder priced on the deal
-  // in front of it has no way to act on that anyway.
-  return format === "duplicate" ? "duplicate" : release;
+  // A mirror used to keep the release's own pricing, on the argument that each half is
+  // a real single game and the verdict being the pair's total is a fact about the
+  // *match* that a bidder priced on the deal in front of it could not act on anyway.
+  // The second clause was the wrong half of that: the carried margin is knowable, it
+  // just had nowhere to travel, and `Standing.pair` is now where it travels. The
+  // first clause was right and is the reason this is not simply the equity objective —
+  // measured, the single-game cell prices a mirror part-score at +0.95 where it is
+  // worth **nothing** in the first half and +0.46 in the second.
+  if (format === "duplicate") {
+    return "duplicate";
+  }
+  return format === "mirror" ? "mirror" : release;
 }
 
 export interface BidValueOptions {
@@ -225,6 +233,13 @@ function differentialAfter(options: BidValueOptions, tricks: number): number {
 
   if (options.objective === "equity") {
     return equityOf(rubber, me) - equityOf(standing.rubber, me);
+  }
+
+  if (options.objective === "mirror") {
+    // A mirror always supplies one; falling back to a fresh pair rather than throwing
+    // keeps a bidder handed the wrong standing merely wrong instead of broken.
+    const pair = standing.pair ?? { carried: [0, 0] as Pair<number>, half: 1 as const };
+    return mirrorEquityOf(rubber, pair, me) - mirrorEquityOf(standing.rubber, pair, me);
   }
 
   const after = totalScore(rubber);

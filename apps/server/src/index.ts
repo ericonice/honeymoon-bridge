@@ -900,7 +900,7 @@ export default {
     // rating walk actually used are one number. This ladder will be retuned, and
     // three copies of an anchor is three things to forget.
     if (url.pathname === "/api/bots" && request.method === "GET") {
-      return json(request, { anchors: botAnchors() });
+      return json(request, { anchors: botAnchors(), mirrorAnchors: botAnchors("mirror") });
     }
 
     // Your record against everyone you have finished a rubber against. Behind a

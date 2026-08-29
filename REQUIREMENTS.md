@@ -429,6 +429,16 @@ for everybody was tried and reverted.
   trick the instant the second card lands and hands the lead to the winner, so without this the
   trick you just lost would be replaced by the next card before you had read it. The direction of
   the sweep is what says who took it.
+
+  **At a table this is the watching seat's own business, and for a while it was nobody's.** Against
+  the computer the rule is kept by holding the *opponent* — the bot is not allowed to lead until the
+  trick has been seen. The other player is on another device and cannot be held that way: their own
+  screen is showing them the same trick, but their hand is not locked while it does, so a tap
+  through their hold sends a lead that arrives here on top of a trick still being read. It was
+  reported exactly as the rule describes — their card lands and the next trick starts with no beat
+  between. So the card waits on *this* screen instead, and only for as long as this screen still
+  owes the trick: an opponent who lets their own hold run has already spent it, and nothing waits at
+  all.
 - **The thirteenth trick gets the same ending as the other twelve.** The deal is complete the
   instant the last card lands, so the scorepad used to arrive on top of a trick that had not been
   collected yet — and the trick that decides whether a contract was made is the one most worth

@@ -10,7 +10,16 @@ import {
   totalScore,
   vulnerability,
 } from "@hb/engine";
-import type { Card, Pair, PlayerId, RubberFormat, RubberState, TableState } from "@hb/engine";
+import { actOn, dealOf, halfOf, nextIn, startMatch, summarizeMatch } from "@hb/engine";
+import type {
+  Card,
+  MatchState,
+  Pair,
+  PlayerId,
+  RubberFormat,
+  RubberState,
+  TableState,
+} from "@hb/engine";
 import { readFileSync } from "node:fs";
 import { DEFAULT_GAME_EQUITY } from "../src/bot/bidValue.js";
 import { createHeuristicBot } from "../src/bot/heuristicBot.js";
@@ -75,13 +84,30 @@ const GAME_THRESHOLD = 100;
  * here, and the states below are grouped so it can be read straight off.
  */
 interface Sample {
-  /** This seat's games, then theirs — the state the fit is split by. */
-  readonly games: Pair<number>;
+  /**
+   * Whatever this format splits its fit by, as a pair so it can be compared.
+   *
+   * A rubber splits by games won — this seat's, then theirs. A mirror splits by
+   * which half is being played, since the halves are different situations rather
+   * than different scores: the first has a whole second game of variance still to
+   * come and the second is playing against a number it already knows.
+   */
+  readonly cell: Pair<number>;
   /** Total points, this seat's way, in hundreds. Part-score points are inside it. */
   readonly margin: number;
   /** Progress toward the game in play, this seat's way, as a fraction of a game. */
   readonly part: number;
-  /** +1 for the person's seat, -1 for the computer's, 0 when both seats are one bot. */
+  /**
+   * The optional fourth feature, whatever this run is asking about.
+   *
+   * A hand-log fit puts the *strength* term here — +1 for the person's seat, -1 for
+   * the computer's — because between two unequal players most of the result is who is
+   * playing rather than where the score is. A mirror puts the **carried margin**
+   * here, alongside `margin` holding the aggregate: the pair then reads as
+   * `a·aggregate + b·carried`, so `b` is exactly how much *less* a carried point is
+   * worth than one banked in the half being played, and zero means they are
+   * interchangeable. Zero when the run is not asking anything.
+   */
   readonly person: number;
   readonly won: number;
 }
@@ -90,7 +116,7 @@ function sampleFrom(rubber: RubberState, seat: PlayerId, won: number, person = 0
   const them: PlayerId = seat === 0 ? 1 : 0;
   const total = totalScore(rubber);
   return {
-    games: [rubber.gamesWon[seat]!, rubber.gamesWon[them]!],
+    cell: [rubber.gamesWon[seat]!, rubber.gamesWon[them]!],
     margin: (total[seat]! - total[them]!) / GAME_THRESHOLD,
     part: (rubber.partScore[seat]! - rubber.partScore[them]!) / GAME_THRESHOLD,
     person,
@@ -140,6 +166,86 @@ function playRubber(bots: Pair<Bot>, seed: number, format: RubberFormat): readon
   }
 
   // A rubber nobody won says nothing about winning one.
+  return [];
+}
+
+/**
+ * One two-game match, keeping every standing it passed through.
+ *
+ * Three things make this a different measurement from `playRubber` rather than a
+ * parameterisation of it.
+ *
+ * **The margin recorded is the running aggregate**, not this half's own score. What
+ * settles a mirror is the pair's total, so the number a bidder should be moving is
+ * the one that includes what the first half banked — and in the second half that is
+ * the whole of the situation, since the target is already known.
+ *
+ * **A level pair is a real outcome and is recorded as one.** `playRubber` throws
+ * away a rubber nobody won, which is fair there because it essentially cannot
+ * happen. Here it happens readily — the same boards from both sides come out equal
+ * far more often than a rubber ties — so a draw is labelled 0.5 rather than dropped,
+ * which the fit takes without complaint and which dropping would have biased.
+ *
+ * **The prediction worth writing down before reading the fit**: a point carried out
+ * of the first half should be worth *less* than a point banked in the second, because
+ * the boards come back. A big first-half margin is partly a statement that the cards
+ * were good, and in the second half the other seat holds them. That is the whole
+ * mechanic of the format, and if the fit does not show it then either the mechanic or
+ * this bench is not doing what it claims.
+ */
+function playMirror(bots: Pair<Bot>, seed: number, halfFormat: RubberFormat): readonly Sample[] {
+  const rng = createRng(seed);
+  let match: MatchState = startMatch({
+    firstBoard: 0,
+    format: "mirror",
+    halfFormat,
+    seed,
+    starter: 0,
+  });
+  const seen: { cell: Pair<number>; margin: number; part: number; person: number }[] = [];
+
+  for (let deals = 0; deals < MAX_DEALS * 2; deals++) {
+    const before = summarizeMatch(match);
+    const half = match.kind === "mirror" ? halfOf(match) : 1;
+    const rubber = before.botStanding.rubber;
+    // The aggregate as it stood when this deal began, which is what the deal is
+    // being bid against even though nothing currently tells the bidder so.
+    for (const seat of [0, 1] as const) {
+      const them = seat === 0 ? 1 : 0;
+      const carriedPoints = match.kind === "mirror" ? (match.table.previousPoints ?? [0, 0]) : [0, 0];
+      seen.push({
+        cell: [half, 0],
+        // The aggregate, and how much of it was carried — see `Sample.person` for
+        // what the pair of them is asking.
+        margin: (before.points[seat]! - before.points[them]!) / GAME_THRESHOLD,
+        part: (rubber.partScore[seat]! - rubber.partScore[them]!) / GAME_THRESHOLD,
+        person: (carriedPoints[seat]! - carriedPoints[them]!) / GAME_THRESHOLD,
+      });
+    }
+
+    while (dealOf(match).phase !== "complete") {
+      const seat = dealOf(match).toAct;
+      match = actOn(
+        match,
+        seat,
+        botActionFor({ bot: bots[seat], seat, standing: before.botStanding, state: dealOf(match) }),
+      );
+    }
+
+    const after = summarizeMatch(match);
+    if (after.complete) {
+      const won: Pair<number> =
+        after.points[0] === after.points[1]
+          ? [0.5, 0.5]
+          : after.points[0]! > after.points[1]!
+            ? [1, 0]
+            : [0, 1];
+      return seen.map((one, index) => ({ ...one, won: won[index % 2]! }));
+    }
+    match = nextIn(match, Math.floor(rng.next() * 0xffffffff));
+  }
+
+  // A pair nobody finished says nothing about finishing one.
   return [];
 }
 
@@ -322,7 +428,13 @@ function solve(matrix: number[][], rhs: number[]): number[] {
  * learning rate for somebody to get wrong later. The ridge on the diagonal is
  * there for a state whose rows are nearly separable, not for regularisation.
  */
-function fit(samples: readonly Sample[], withStrength = false): Fit {
+function fit(samples: readonly Sample[], wantsFourth = false): Fit {
+  // A fourth feature that never varies is not a feature — it is a column of zeroes,
+  // and fitting it returns whatever the ridge on the diagonal happens to give, with
+  // an error bar in the thousands. A mirror's first half is exactly that case: there
+  // is nothing carried into it. So the run asks for the term and the data decides
+  // whether it exists.
+  const withStrength = wantsFourth && samples.some((one) => one.person !== 0);
   const features = (one: Sample): number[] =>
     withStrength ? [1, one.part, one.margin, one.person] : [1, one.part, one.margin];
   const size = withStrength ? 4 : 3;
@@ -373,11 +485,11 @@ function fit(samples: readonly Sample[], withStrength = false): Fit {
 }
 
 /** The games states, named the way somebody at the table would name them. */
-const STATES: readonly { games: Pair<number>; label: string }[] = [
-  { games: [0, 0], label: "no games yet" },
-  { games: [1, 0], label: "a game up" },
-  { games: [0, 1], label: "a game down" },
-  { games: [1, 1], label: "one game each" },
+const STATES: readonly { cell: Pair<number>; label: string }[] = [
+  { cell: [0, 0], label: "no games yet" },
+  { cell: [1, 0], label: "a game up" },
+  { cell: [0, 1], label: "a game down" },
+  { cell: [1, 1], label: "one game each" },
 ];
 
 /**
@@ -389,12 +501,29 @@ const STATES: readonly { games: Pair<number>; label: string }[] = [
  * numbers to it would have been inventing them rather than approximating them: it
  * is not a shorter rubber, it is a game whose bonus is paid on the spot.
  */
-const GAME_STATES: readonly { games: Pair<number>; label: string }[] = [
-  { games: [0, 0], label: "nothing to nothing" },
+const GAME_STATES: readonly { cell: Pair<number>; label: string }[] = [
+  { cell: [0, 0], label: "nothing to nothing" },
 ];
 
-function inState(samples: readonly Sample[], games: Pair<number>): Sample[] {
-  return samples.filter((one) => one.games[0] === games[0] && one.games[1] === games[1]);
+/**
+ * A two-game match, split by which half is being played.
+ *
+ * The verdict is the pair's aggregate points, so `margin` here is the **running
+ * aggregate** rather than this half's own score — what the first half banked plus
+ * what this one has banked so far. That is the whole reason a mirror needs its own
+ * table: a bidder in the second half is not playing for this game, it is playing to
+ * finish the pair in front, and the number it has to beat is already decided.
+ *
+ * The two halves are not mirror images of each other the way a rubber's game-up and
+ * game-down cells are, so nothing here is forced by symmetry and both are real fits.
+ */
+const MIRROR_STATES: readonly { cell: Pair<number>; label: string }[] = [
+  { cell: [1, 0], label: "first half" },
+  { cell: [2, 0], label: "second half" },
+];
+
+function inState(samples: readonly Sample[], cell: Pair<number>): Sample[] {
+  return samples.filter((one) => one.cell[0] === cell[0] && one.cell[1] === cell[1]);
 }
 
 function signed(value: number, digits = 2): string {
@@ -429,6 +558,23 @@ function equityAt(one: Fit, part: number, margin: number): number {
   return sigmoid(one.base + one.part * part + one.margin * margin);
 }
 
+
+/**
+ * What the fourth coefficient means, which depends on what the run put there.
+ *
+ * A mirror puts the carried margin beside the aggregate, so a negative number says a
+ * carried point is worth less than one banked in the half being played — which is
+ * what the format's own mechanic predicts, since the boards come back and a big
+ * first-half margin partly says the cards were good. A hand-log fit puts the strength
+ * term there instead.
+ */
+function fourthLabel(one: Fit): string {
+  const value = `${signed(one.strength!)} ± ${one.strengthError!.toFixed(2)}`;
+  return fitting === "mirror"
+    ? `a carried 100 is worth ${value} against one banked here, in log-odds`
+    : `the person is ${value} stronger, in log-odds`;
+}
+
 function report(samples: readonly Sample[], withStrength = false, states = STATES): void {
   console.log(`${samples.length} deal-start standings from finished rubbers, both seats' view of each`);
   console.log();
@@ -437,7 +583,7 @@ function report(samples: readonly Sample[], withStrength = false, states = STATE
 
   const fits = new Map<string, Fit>();
   for (const state of states) {
-    const rows = inState(samples, state.games);
+    const rows = inState(samples, state.cell);
     if (rows.length < 50) {
       console.log(`  ${state.label.padEnd(19)}${String(rows.length).padStart(5)}    too few to fit`);
       continue;
@@ -452,7 +598,7 @@ function report(samples: readonly Sample[], withStrength = false, states = STATE
     );
     if (one.strength !== null && one.strengthError !== null) {
       console.log(
-        `  ${"".padEnd(19)}      the person is ${signed(one.strength)} ± ${one.strengthError.toFixed(2)} stronger, in log-odds`,
+        `  ${"".padEnd(19)}      ${fourthLabel(one)}`,
       );
     }
   }
@@ -559,7 +705,7 @@ function report(samples: readonly Sample[], withStrength = false, states = STATE
     const lo = bands[band]!;
     const hi = bands[band + 1]!;
     const inBand = samples.filter((one) => {
-      const state = fits.get(states.find((s) => s.games[0] === one.games[0] && s.games[1] === one.games[1])?.label ?? "");
+      const state = fits.get(states.find((s) => s.cell[0] === one.cell[0] && s.cell[1] === one.cell[1])?.label ?? "");
       if (state === undefined) {
         return false;
       }
@@ -585,18 +731,47 @@ const samples = Number(process.argv[3] ?? 0) || 0;
  * table has been handed to, and checking whether the coefficients moved, is the
  * only way to know the fit is a fixed point rather than a description of the
  * thing it replaced.
+ *
+ * `objective=mirror` is the same check for the pair, and it is owed rather than
+ * optional: `EQUITY.mirror` was fitted from matches the *points* bidder played and
+ * then installed in a bidder whose behaviour visibly changed — its overreach halved.
+ * Precedent says this matters. Refitting the rubber table from its own bidder moved
+ * `gameLead` 0.71 to 0.20 and cost the bidder twelve points of win rate.
  */
-const objective = process.argv.includes("objective=equity") ? "equity" : "points";
-/** `format=game` fits the short match, which is a different game and needs its own numbers. */
-const format: RubberFormat = process.argv.includes("format=game") ? "game" : "rubber";
+const objective = process.argv.includes("objective=equity")
+  ? "equity"
+  : process.argv.includes("objective=mirror")
+    ? "mirror"
+    : "points";
+/**
+ * `format=game` fits the short match, which is a different game and needs its own
+ * numbers; `format=mirror` fits the pair, which is a different game again.
+ *
+ * A mirror also takes a half length, and it is a rubber format in its own right — so
+ * the two are kept apart: `fitting` is what is being fitted, `halfFormat` is how long
+ * each half of a pair runs, and only a mirror reads the second.
+ */
+const fitting = process.argv.includes("format=mirror")
+  ? "mirror"
+  : process.argv.includes("format=game")
+    ? "game"
+    : "rubber";
+const format: RubberFormat = fitting === "game" ? "game" : "rubber";
+const halfFormat: RubberFormat = process.argv.includes("half=rubber") ? "rubber" : "game";
 const tuning = { objective } as const;
 const cardPlay = (seed: number): Bot =>
   samples > 0
     ? createSamplingBot(createRng(seed), samples, tuning)
     : createHeuristicBot(createRng(seed), tuning);
 
+const unit =
+  fitting === "mirror"
+    ? `two-game matches, ${halfFormat === "game" ? "a game" : "a rubber"} a half`
+    : fitting === "game"
+      ? "single games"
+      : "rubbers";
 console.log(
-  `Fitting from ${rubbers} ${format === "game" ? "single games" : "rubbers"}, ${objective} bidder, ` +
+  `Fitting from ${rubbers} ${unit}, ${objective} bidder, ` +
     `${samples > 0 ? `${samples} samples a card` : "heuristic card play"}`,
 );
 const handsArg = process.argv.find((arg) => arg.startsWith("hands="));
@@ -610,16 +785,39 @@ if (handsArg !== undefined) {
 
 const collected: Sample[] = [];
 let finished = 0;
+let drawn = 0;
 for (let index = 0; index < rubbers; index++) {
-  const rows = playRubber([cardPlay(index * 2 + 1), cardPlay(index * 2 + 2)], index + 1, format);
+  const bots: Pair<Bot> = [cardPlay(index * 2 + 1), cardPlay(index * 2 + 2)];
+  const rows =
+    fitting === "mirror"
+      ? playMirror(bots, index + 1, halfFormat)
+      : playRubber(bots, index + 1, format);
   if (rows.length > 0) {
     finished += 1;
+    if (rows[0]!.won === 0.5) {
+      drawn += 1;
+    }
     collected.push(...rows);
   }
   if ((index + 1) % 250 === 0) {
-    console.log(`  ${index + 1} rubbers, ${collected.length} standings`);
+    console.log(`  ${index + 1} matches, ${collected.length} standings`);
   }
 }
 console.log(`${finished}/${rubbers} matches finished inside ${MAX_DEALS} deals`);
+if (fitting === "mirror") {
+  // **The census that says whether there is anything here to fit.** Two identical
+  // players on mirrored boards draw every time by construction — the replay is the
+  // first run with the seats relabelled — so a run of all draws is a control run
+  // and its coefficients are zero because nothing happened, not because a standing
+  // is worth nothing.
+  console.log(`  ${drawn} of them level, which is ${((drawn / finished) * 100).toFixed(0)}%`);
+}
 console.log();
-report(collected, false, format === "game" ? GAME_STATES : STATES);
+// A mirror asks for the fourth feature, which for it is the carried margin — the one
+// question a single aggregate term cannot answer. See `Sample.person`.
+report(
+  collected,
+  fitting === "mirror",
+  fitting === "mirror" ? MIRROR_STATES : fitting === "game" ? GAME_STATES : STATES,
+);
+

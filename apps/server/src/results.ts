@@ -319,6 +319,15 @@ export interface Records {
    * read as "no anchors to show" rather than as an error.
    */
   readonly anchors: Record<string, Record<string, number>>;
+  /**
+   * The same table for a two-game match, where the computer meets the second half's
+   * boards remembering them and a person does not.
+   *
+   * A second table rather than a term the client adds, because the rule is not "mirror
+   * is worth forty" but "worth forty at the rungs that carry a board into the replay" —
+   * and a client applying that is a second copy of it. See `MIRROR_RECALL_OFFSET`.
+   */
+  readonly mirrorAnchors: Record<string, Record<string, number>>;
   readonly opponents: OpponentRecord[];
   /** The asker's own rating, the matches it rests on, and how it got there. */
   readonly rating: {
@@ -484,6 +493,7 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
 
   return {
     anchors: botAnchors(),
+    mirrorAnchors: botAnchors("mirror"),
     opponents: await withNames(
       env,
       all.filter((entry) => entry.token !== ROBOT_TOKEN),

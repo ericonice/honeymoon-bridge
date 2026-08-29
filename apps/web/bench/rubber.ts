@@ -20,7 +20,6 @@ import type {
   DealAction,
   DealState,
   MatchFormat,
-  MatchState,
   Pair,
   PlayerId,
   PlayerView,
@@ -41,8 +40,10 @@ import { createSamplingBot } from "../src/bot/samplingBot.js";
 import { solve } from "../src/bot/solver.js";
 import type { BoardMemory, Bot } from "../src/bot/types.js";
 import { offeredSoFar, offersFacingOpponent } from "../src/bot/boardRecall.js";
+import type { BoardOutcome } from "../src/bot/boardRecall.js";
+import { boardKeyOf } from "../src/game/boardKey.js";
 import { botActionFor } from "../src/game/botTurn.js";
-import { actOn, currentDeal, dealOf, nextIn, startMatch, summarizeMatch } from "@hb/engine";
+import { actOn, dealOf, nextIn, startMatch, summarizeMatch } from "@hb/engine";
 import { createProgress } from "./progress.js";
 
 /**
@@ -205,6 +206,8 @@ interface MatchOptions {
    * instrument failure this whole directory exists to avoid.
    */
   readonly boardMemory: Pair<boolean>;
+  /** False for `memory=pairs`: the pairs are handed over and the outcome is not. */
+  readonly boardResults: boolean;
   /** The seat whose disasters are counted. */
   readonly challenger: PlayerId;
   readonly format: MatchFormat;
@@ -223,16 +226,31 @@ interface MatchOptions {
  * so. A bench with its own copy of the match machine can measure a format the app
  * plays differently, and would not say so either.
  */
-function playMatch({ boardMemory, bots, challenger, format, oracleSeat, seed }: MatchOptions): Outcome {
+function playMatch({
+  boardMemory,
+  boardResults,
+  bots,
+  challenger,
+  format,
+  oracleSeat,
+  seed,
+}: MatchOptions): Outcome {
   // Recorded exactly as `localSession` records it: read off `pending` and the top of
   // the stock before the turn spends them, held aside for the deal in progress, and
   // committed when it finishes. A bench that recorded it some other way would be
   // measuring a capability the app does not ship.
-  const recalled: Pair<Map<number, readonly Pair<Card>[]>> = [new Map(), new Map()];
+  const recalled: Pair<Map<number, { pairs: readonly Pair<Card>[]; result: BoardOutcome }>> = [
+    new Map(),
+    new Map(),
+  ];
   const noting: Pair<{ board: number; pairs: Pair<Card>[] } | null> = [null, null];
   const memoryOf = (seat: PlayerId): BoardMemory =>
     boardMemory[seat]
-      ? [...recalled[seat]].map(([board, offers]) => ({ board, offers }))
+      ? [...recalled[seat]].map(([board, noted]) =>
+          boardResults
+            ? { board, offers: noted.pairs, result: noted.result }
+            : { board, offers: noted.pairs },
+        )
       : [];
   const rng = createRng(seed);
   // Board numbers spaced well apart, so no two seeds share a board and a session
@@ -294,10 +312,18 @@ function playMatch({ boardMemory, bots, challenger, format, oracleSeat, seed }: 
     deals += 1;
     // Only the first run of a board is kept: by the time the second is over the board
     // is spent, so overwriting would replace a useful record with a useless one.
+    const finished = dealOf(match);
     for (const seat of [0, 1] as const) {
       const noted = noting[seat];
       if (noted !== null && noted.pairs.length === 13 && !recalled[seat].has(noted.board)) {
-        recalled[seat].set(noted.board, noted.pairs);
+        recalled[seat].set(noted.board, {
+          pairs: noted.pairs,
+          result: {
+            contract: finished.contract,
+            declared: finished.contract?.declarer === seat,
+            tricksWon: [finished.tricksWon[seat]!, finished.tricksWon[seat === 0 ? 1 : 0]!],
+          },
+        });
       }
       noting[seat] = null;
     }
@@ -328,25 +354,6 @@ function playMatch({ boardMemory, bots, challenger, format, oracleSeat, seed }: 
     wreckPoints,
     wrecks,
   };
-}
-
-/**
- * Which board this deal is, as its seed — **the app's own answer, copied rather than
- * re-derived**.
- *
- * A mirror replays its boards through the table rather than through a session, so a
- * bench keying memory off `DuplicateSession` alone would have measured a capability the
- * app ships in two formats in only one of them. `localSession.boardKeyOf` is this same
- * expression, and the two have to agree or the bench is measuring a different bot.
- *
- * A plain rubber deals every seed once, so nothing is ever recognised and this costs
- * only a lookup — which is exactly what happens in the app.
- */
-function boardKeyOf(match: MatchState): number | null {
-  if (match.kind === "duplicate") {
-    return match.session.boards[currentDeal(match.session).board]?.seed ?? null;
-  }
-  return match.table.dealt[match.table.dealt.length - 1]?.seed ?? null;
 }
 
 /** A contract this seat declared and went down two or more in, and what it paid above the line. */
@@ -478,7 +485,7 @@ interface RunOptions {
    * Duplicate only. A rubber never replays a stock, so there is nothing to recognise
    * and the flag would silently do nothing.
    */
-  readonly memory: "both" | "challenger" | "none";
+  readonly memory: "both" | "challenger" | "none" | "pairs";
   /**
    * Two releases to play against each other, challenger first.
    *
@@ -516,7 +523,23 @@ interface RunOptions {
 
 /** Whether a seat carries what it was offered from a board into that board's replay. */
 function remembers(seat: PlayerId, challengerSeat: PlayerId, memory: RunOptions["memory"]): boolean {
-  return memory === "both" || (memory === "challenger" && seat === challengerSeat);
+  return (
+    memory === "both" ||
+    ((memory === "challenger" || memory === "pairs") && seat === challengerSeat)
+  );
+}
+
+/**
+ * Whether a seat that remembers a board also remembers what it came to.
+ *
+ * `memory=pairs` is the arm that separates the two halves of a board's memory: the
+ * thirteen pairs, which feed the sampler, and the result, which corrects the trick
+ * estimate. Measured together they are one lever worth 57%, and nothing said which
+ * half was carrying it — the pairs were once measured as a null and the result has
+ * only ever been measured on top of them.
+ */
+function remembersResult(memory: RunOptions["memory"]): boolean {
+  return memory !== "pairs";
 }
 
 function run({
@@ -596,6 +619,12 @@ function run({
         if (releases !== null) {
           return cardPlay(rng, releases[challenger ? 0 : 1].tuning);
         }
+        if (lastWeights !== null) {
+          // The same bidder at two trusts in what a board came to last time. Both
+          // sides keep the objective and the memory; only the weight differs, which
+          // is what makes this a fit rather than a yes-or-no.
+          return cardPlay(rng, { objective, lastTimeWeight: lastWeights[challenger ? 0 : 1] });
+        }
         if (control) {
           return cardPlay(rng, { objective });
         }
@@ -621,6 +650,7 @@ function run({
           remembers(0, challengerSeat, memory),
           remembers(1, challengerSeat, memory),
         ],
+        boardResults: remembersResult(memory),
         bots,
         challenger: challengerSeat,
         format,
@@ -669,14 +699,20 @@ function run({
         ? `v${releases[0].version} ${releases[0].name} against v${releases[1].version} ${releases[1].name}${play}`
             : versusWeight !== null
             ? `the same bidder against itself trusting their bid at ${versusWeight}${play}`
+            : lastWeights !== null
+              ? `the same bidder trusting a board's first run at ${lastWeights[0]} against ${lastWeights[1]}${play}`
             : objective === "equity"
               ? `the equity objective against the same bidder pricing in points${play}`
+              : objective === "mirror"
+                ? `the mirror objective against the same bidder pricing in points${play}`
               : `points bidder against the old "can I make it" bidder${play}`,
   );
   console.log(`  challenger prices a game at ${gameEquity}`);
   if (memory !== "none") {
     console.log(
-      memory === "both"
+      memory === "pairs"
+        ? "  the challenger carries a board's pairs into its replay but not what it came to"
+        : memory === "both"
         ? "  both seats carry a board's pairs into its replay"
         : "  the challenger carries a board's pairs into its replay; the reference does not",
     );
@@ -827,18 +863,40 @@ const format: MatchFormat = process.argv.includes("format=duplicate")
   : process.argv.includes("format=mirror")
     ? "mirror"
     : "rubber";
+/**
+ * `lastweight=A:B` plays the same bidder against itself trusting a board's first run at
+ * two different weights — challenger first.
+ *
+ * The shape `vs=` already has, and for the same reason: measuring the memory on against
+ * off says whether the evidence is worth anything, where fitting the weight needs two
+ * bidders that both have it. Wants `memory=both`, or neither side has a first run to
+ * trust and this is two identical bots.
+ */
+const lastWeightArg = process.argv.find((arg) => arg.startsWith("lastweight="));
+const lastWeights: Pair<number> | null =
+  lastWeightArg === undefined
+    ? null
+    : (lastWeightArg
+        .slice("lastweight=".length)
+        .split(":")
+        .map(Number) as [number, number]);
+
 const objective: Objective = process.argv.includes("objective=points")
   ? "points"
   : process.argv.includes("objective=equity")
     ? "equity"
-    : format === "duplicate"
-      ? "duplicate"
-      : "points";
+    : process.argv.includes("objective=mirror")
+      ? "mirror"
+      : format === "duplicate"
+        ? "duplicate"
+        : "points";
 
 run({
   control: process.argv.includes("control"),
   format,
-  memory: process.argv.includes("memory=both")
+  memory: process.argv.includes("memory=pairs")
+    ? "pairs"
+    : process.argv.includes("memory=both")
     ? "both"
     : process.argv.includes("memory")
       ? "challenger"

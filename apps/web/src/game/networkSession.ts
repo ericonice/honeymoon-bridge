@@ -12,6 +12,7 @@ import {
 } from "./identity.js";
 import type { GameSession } from "./session.js";
 import { tableSocketUrl } from "./serverUrl.js";
+import { useTrickGate } from "./trickGate.js";
 
 /** How often to prove the socket is still there. Well inside any idle timeout. */
 const HEARTBEAT_MS = 25_000;
@@ -35,14 +36,30 @@ export interface NetworkGame {
   leave(): void;
 }
 
-function sessionFrom(
-  snapshot: SessionSnapshot,
-  table: TableInfo,
-  seat: PlayerId,
-  send: (message: ClientMessage) => void,
-  justUnlocked: readonly Unlock[],
-  clearUnlocks: () => void,
-): GameSession {
+interface SessionParts {
+  /** Cleared by the board once the toast for them has been dismissed. */
+  clearUnlocks: () => void;
+  /** See `TrickGate.dismiss`. */
+  dismissTrick: () => void;
+  readonly justUnlocked: readonly Unlock[];
+  readonly seat: PlayerId;
+  send: (message: ClientMessage) => void;
+  readonly snapshot: SessionSnapshot;
+  readonly table: TableInfo;
+  /** See `TrickGate.awaitingDismissal`. */
+  readonly trickAwaitingDismissal: boolean;
+}
+
+function sessionFrom({
+  clearUnlocks,
+  dismissTrick,
+  justUnlocked,
+  seat,
+  send,
+  snapshot,
+  table,
+  trickAwaitingDismissal,
+}: SessionParts): GameSession {
   const them = table.seats[opponentOf(seat)];
 
   return {
@@ -50,10 +67,11 @@ function sessionFrom(
       send({ type: "action", action });
     },
     clearUnlocks,
-    // Nothing here paces the other seat's move on this seat's behalf — see
-    // `GameSession.trickAwaitingDismissal` — so holding this side of a resolved
-    // trick would be a screen with no effect on the game underneath it.
-    dismissTrick: () => {},
+    // Real here, unlike the version this replaced, which did nothing on the
+    // grounds that holding this side of a resolved trick has no effect on the
+    // game underneath it. True of the *other* seat's move, and beside the point:
+    // what it gates is which snapshot this screen is shown. See `useTrickGate`.
+    dismissTrick,
     justTaken: snapshot.justTaken,
     justUnlocked,
     lastDraw: snapshot.lastDraw,
@@ -87,7 +105,7 @@ function sessionFrom(
     playSameBoards: null,
     repeated: false,
     skipPhase: null,
-    trickAwaitingDismissal: false,
+    trickAwaitingDismissal,
     view: snapshot.view,
     vulnerable: snapshot.vulnerable,
     waitingOnOpponent: snapshot.view.toAct !== snapshot.view.me,
@@ -111,7 +129,9 @@ function sessionFrom(
  */
 export function useNetworkSession(code: string): NetworkGame {
   const [connection, setConnection] = useState<Connection>("connecting");
-  const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
+  // Not plain state: a card that opens a new trick waits for the trick it is
+  // leading past to have been seen here. See `useTrickGate`.
+  const { awaitingDismissal, dismiss, receive, snapshot } = useTrickGate();
   const [table, setTable] = useState<TableInfo | null>(null);
   const [seat, setSeat] = useState<PlayerId | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -185,8 +205,11 @@ export function useNetworkSession(code: string): NetworkGame {
         }
         setError(null);
         setSeat(message.seat);
-        setSnapshot(message.snapshot);
+        // The table is never held back with the snapshot: it carries who is
+        // sitting there and who has asked to move on, and news of somebody
+        // leaving should not wait on a trick being read.
         setTable(message.table);
+        receive(message.snapshot);
       });
 
       ws.addEventListener("close", () => {
@@ -231,7 +254,7 @@ export function useNetworkSession(code: string): NetworkGame {
       socket.current?.close();
       socket.current = null;
     };
-  }, [code, send]);
+  }, [code, receive, send]);
 
   const dropSocket = useCallback(() => {
     // Closed as though the network did it, so the retry path runs for real.
@@ -263,7 +286,16 @@ export function useNetworkSession(code: string): NetworkGame {
     session:
       snapshot === null || table === null || seat === null
         ? null
-        : sessionFrom(snapshot, table, seat, send, justUnlocked, clearUnlocks),
+        : sessionFrom({
+            clearUnlocks,
+            dismissTrick: dismiss,
+            justUnlocked,
+            seat,
+            send,
+            snapshot,
+            table,
+            trickAwaitingDismissal: awaitingDismissal,
+          }),
     table,
   };
 }
