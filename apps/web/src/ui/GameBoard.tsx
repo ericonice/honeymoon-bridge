@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { drawPlayout } from "../game/timing.js";
 import type { Density } from "../game/identity.js";
 import type { GameSession } from "../game/session.js";
-import { useGameSounds } from "../game/useGameSounds.js";
+import { useGameFeedback } from "../game/useGameFeedback.js";
 import { AchievementToast } from "./AchievementToast.js";
 import { AuctionPhase } from "./AuctionPhase.js";
 import { BiddingOverlay } from "./BiddingOverlay.js";
@@ -507,7 +507,7 @@ export function GameBoard({
   // The *shown* phase, not the engine's: `DealComplete` is what carries the
   // "You win the rubber" headline, and it is not on screen until the hold over
   // the last trick releases. See `GameSounds.showingFinalScore`.
-  useGameSounds({
+  useGameFeedback({
     enabled: sound,
     session,
     showingFinalScore: phase === "complete" && session.matchComplete,

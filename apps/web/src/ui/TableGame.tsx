@@ -1,3 +1,5 @@
+import { Capacitor } from "@capacitor/core";
+import { Share } from "@capacitor/share";
 import { opponentOf } from "@hb/engine";
 import { useEffect, useState } from "react";
 import { matchNoun } from "../game/labels.js";
@@ -75,12 +77,19 @@ function Waiting({
           type="button"
           className="rounded-xl bg-white px-4 py-4 text-base font-semibold text-stone-900"
           onClick={() => {
+            if (Capacitor.isNativePlatform()) {
+              // Rejects when the person just dismisses the sheet without
+              // picking anything — not a failure worth surfacing, so there is
+              // nothing to catch it into.
+              void Share.share({ url: link }).catch(() => {});
+              return;
+            }
             void navigator.clipboard.writeText(link).then(() => {
               setCopied(true);
             });
           }}
         >
-          {copied ? "Link copied" : "Copy invite link"}
+          {Capacitor.isNativePlatform() ? "Share invite link" : copied ? "Link copied" : "Copy invite link"}
         </button>
       </div>
 

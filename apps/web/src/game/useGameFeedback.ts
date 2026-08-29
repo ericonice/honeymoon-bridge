@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { hapticDealWon, hapticGameWon, hapticMatchWon } from "./haptics.js";
 import { declaringIn, outlookFor } from "./outlook.js";
 import type { GameSession } from "./session.js";
 import {
@@ -11,9 +12,28 @@ import {
 } from "./soundEffects.js";
 
 /**
- * Sound effects for the events a deal produces, wired once here so the game
- * against the computer and a table over the network get the same cues —
- * `GameBoard` is the one component both sessions render through.
+ * Sound and haptic feedback for the events a deal produces, wired once here so
+ * the game against the computer and a table over the network get the same
+ * cues — `GameBoard` is the one component both sessions render through.
+ *
+ * Haptics are a three-tier, positive-only ladder — winning a deal, winning a
+ * game inside a rubber, winning the match itself — each felt more strongly
+ * than the last (`haptics.ts`). Positive-only on purpose: the sound marks
+ * either outcome, since a loss is news too, but the ladder is meant to be felt
+ * as encouragement climbing toward the match rather than as a running
+ * commentary on every result either way. A tap on every card play or every
+ * draw turn was tried and cut before this shape was settled on — each of
+ * those is either an action this seat's own finger already felt land, or an
+ * opponent's move the screen already shows, so it read as noise rather than
+ * as one of these three milestones.
+ *
+ * The haptics share these effects rather than getting a hook of their own, on
+ * purpose: a second hook re-deriving the same rising edges is two accounts of
+ * the same event with no way to keep them agreeing — exactly the shape of bug
+ * this file's own history (the fog horn, the unlock chime) keeps recording.
+ * They fire unconditionally rather than gated on `enabled`: they are inert
+ * off-device already (see `haptics.ts`), and there is no existing "vibration"
+ * setting for them to respect the way sound has one to mute.
  *
  * Every ref below is kept current regardless of `enabled`, so a match played
  * with sound off and then turned on mid-way does not fire a catch-up burst for
@@ -38,9 +58,27 @@ export interface GameSounds {
   readonly showingFinalScore: boolean;
 }
 
-export function useGameSounds({ enabled, session, showingFinalScore }: GameSounds): void {
-  const { justUnlocked, lastDraw, matchComplete, score, view } = session;
+export function useGameFeedback({ enabled, session, showingFinalScore }: GameSounds): void {
+  const { justUnlocked, lastDraw, matchComplete, score, standing, view, winner } = session;
   const auction = view.auction;
+
+  // Only a rubber standing (or a mirror's own half, which is a rubber
+  // standing too) has games at all — duplicate has no such concept, so this
+  // stays zero for it and the effect below never fires. This seat's own count
+  // specifically, not both sides' total, since the tap marks *this seat*
+  // winning a game rather than either side reaching one.
+  const myGames = standing.kind === "rubber" ? standing.rubber.gamesWon[view.me] : 0;
+  const gamesSeen = useRef(myGames);
+  useEffect(() => {
+    // This seat's own games won only ever climbs within one continuous
+    // rubber, so a count lower than what was last seen cannot be a game just
+    // won — it can only mean a new rubber started, or a mirror moved into its
+    // second half, neither of which is itself a game won.
+    if (myGames > gamesSeen.current && !matchComplete) {
+      hapticGameWon();
+    }
+    gamesSeen.current = myGames;
+  }, [myGames, matchComplete]);
 
   const drawTurn = useRef(lastDraw?.turn ?? null);
   useEffect(() => {
@@ -114,6 +152,12 @@ export function useGameSounds({ enabled, session, showingFinalScore }: GameSound
     if (enabled) {
       playDealOutcome(decided);
     }
+    // The sound announces either outcome, since a set contract is news too —
+    // the haptic ladder is positive-only, so a loss stays silent here the same
+    // way it does at the game and match tiers above and below this one.
+    if (decided) {
+      hapticDealWon();
+    }
   }, [decided, enabled, view.phase]);
 
   // A title unlocked, keyed on the toast having something to show rather than on
@@ -155,5 +199,11 @@ export function useGameSounds({ enabled, session, showingFinalScore }: GameSound
     if (enabled) {
       playRubberWon();
     }
-  }, [enabled, matchComplete, showingFinalScore]);
+    // The horn sounds either way, since losing a match is still news worth a
+    // sound — the haptic stays positive-only, the same as the tiers below it,
+    // and a drawn match (`winner === null`) is not a win either.
+    if (winner === view.me) {
+      hapticMatchWon();
+    }
+  }, [enabled, matchComplete, showingFinalScore, winner, view.me]);
 }
