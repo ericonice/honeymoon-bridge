@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { useCallback, useEffect, useState } from "react";
 import type { Destination } from "./destination.js";
 import { destinationToWire } from "./destination.js";
@@ -52,9 +53,15 @@ export type LinkRequestOutcome =
  * exactly as it was — with the link spent, since one works only once. Telling
  * the server means it can send the code alone and not offer something that
  * cannot work.
+ *
+ * The Capacitor shell is the same case again in a different disguise: a
+ * `WKWebView` loaded from `capacitor://localhost` reports `display-mode` as
+ * `browser` and has no `navigator.standalone` at all, so without this branch the
+ * native app would be mailed a link it is structurally unable to open.
  */
 export function standalone(): boolean {
   return (
+    Capacitor.isNativePlatform() ||
     window.matchMedia("(display-mode: standalone)").matches ||
     // iOS predates the standard media query and still reports it here.
     ("standalone" in window.navigator && window.navigator.standalone === true)

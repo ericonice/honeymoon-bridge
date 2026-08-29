@@ -3310,3 +3310,27 @@ Two `WebSocket`s, `/api/auth/dev` for a session apiece, `/api/auth/name` (a seat
 one), `POST /api/tables` for a code, then `legalActionsForView` off each seat's own snapshot to pick
 the next action. Worth writing again whenever a networked report needs the server ruled in or out:
 it plays a full 26-turn draw, an auction and 13 tricks in about a second.
+
+### Considering an iOS app
+
+A working plan exists for wrapping the PWA in Capacitor rather than rewriting the client in Swift.
+The case for staying in a webview rested on one claim taken from memory rather than measured: that
+`WKWebView` gets JavaScriptCore's JIT because it runs in a separate entitled process, while a bare
+`JSContext` inside an ordinary Swift host is interpreter-only. That mattered because the solver is
+the workload the bot's whole strength sits on, at 25–60 solves a card.
+
+**Measured directly on this Mac, with nothing but `swiftc` — no Xcode.app required.** Two throwaway
+harnesses ran the identical bundled `solver.ts` against five real deals (drawn out through the actual
+heuristic bot, full thirteen cards each, nothing played — the documented worst case) on a bare
+`JSContext` and on a headless `WKWebView`, both timed with `Date.now()` inside the JS so the clock and
+the warm-up are identical on both sides. Bare `JSContext` averaged **28.4ms a solve**; `WKWebView`
+averaged **3.5ms** — an **eightfold** difference, consistent across three runs each and across every
+hand shape tried (the slowest deal was 62ms bare against 7.5ms in the webview; the fastest was 11ms
+against 1.2ms).
+
+**The claim holds, and it strengthens the recommendation rather than merely confirming a detail.**
+Moving the engine out of a webview and into a bare Swift host would cost roughly 8× on the one thing
+this project's strength is built on, before even counting the cost of losing every bench in `bench/`.
+Porting the solver *alone* to Swift — the escape hatch the plan leaves open if compute ever becomes
+binding — would have to claw back that eightfold loss before it broke even, which is a steeper bar
+than the plan assumed when it proposed that as a cheap fallback.

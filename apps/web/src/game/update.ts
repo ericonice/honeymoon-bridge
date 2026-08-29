@@ -11,6 +11,8 @@
  * front of the app decides to do.
  */
 
+import { Capacitor } from "@capacitor/core";
+
 const SCRIPT_URL = "/sw.js";
 
 /**
@@ -45,6 +47,13 @@ function reloadWhenUpdated(): void {
  */
 export function registerServiceWorker(): void {
   if (!("serviceWorker" in navigator)) {
+    return;
+  }
+  // Inside the Capacitor shell the bundle is baked into the binary rather than
+  // fetched from a CDN, so there is no cache-pinning problem for this module to
+  // solve — registering here would be inert at best. Updates on iOS come from
+  // TestFlight/App Store releases, not from a service worker.
+  if (Capacitor.isNativePlatform()) {
     return;
   }
 

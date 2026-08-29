@@ -51,6 +51,11 @@ const ALLOWED_EXACT = [
   "https://honeymoon-bridge.pages.dev",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  // The Capacitor iOS shell: a WKWebView loading the bundle from disk sends this
+  // as its Origin, not the site's real origin, since nothing was fetched over
+  // HTTP to get there. Every authenticated request is preflighted, so without
+  // this every one of them fails closed with no error visible on the client.
+  "capacitor://localhost",
 ];
 
 function corsHeaders(request: Request): Record<string, string> {
