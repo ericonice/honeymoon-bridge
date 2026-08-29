@@ -19,7 +19,7 @@ import type {
   TableState,
   Unlock,
 } from "@hb/engine";
-import { snapshotFor } from "@hb/protocol";
+import { PROTOCOL_VERSION, snapshotFor } from "@hb/protocol";
 import type { ClientMessage, Seating, ServerMessage, TableInfo } from "@hb/protocol";
 import { applyDealAchievements, applyRubberAchievements } from "./achievements.js";
 import { accountFor, verifySession } from "./auth.js";
@@ -297,6 +297,19 @@ export class Table extends DurableObject<Env> {
   }
 
   async #join(ws: WebSocket, message: Extract<ClientMessage, { type: "join" }>): Promise<void> {
+    // Accepts this version and the one before it — a client older than that
+    // predates changes this table may already be relying on. A client too old
+    // to send `protocol` at all reads as older than any real version, however
+    // low `PROTOCOL_VERSION` starts — -1 rather than 0, since 0 would collide
+    // with "the version before 1" the very first time this ships and let
+    // exactly the client this exists to catch straight through.
+    const protocol = typeof message.protocol === "number" ? message.protocol : -1;
+    if (protocol < PROTOCOL_VERSION - 1) {
+      this.#send(ws, { type: "outdated" });
+      ws.close(1008, "Outdated client");
+      return;
+    }
+
     const { token } = message;
     const stored = await this.#load();
     const seats: [SeatRecord | null, SeatRecord | null] = [stored.seats[0], stored.seats[1]];

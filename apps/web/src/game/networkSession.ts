@@ -1,5 +1,6 @@
 import { opponentOf } from "@hb/engine";
 import type { DealAction, PlayerId, Unlock } from "@hb/engine";
+import { PROTOCOL_VERSION } from "@hb/protocol";
 import type { ClientMessage, ServerMessage, SessionSnapshot, TableInfo } from "@hb/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { storedSession } from "./account.js";
@@ -26,6 +27,12 @@ export interface NetworkGame {
   readonly connection: Connection;
   /** The last thing the server refused or complained about. */
   readonly error: string | null;
+  /**
+   * This build is too old for the server to trust — see `PROTOCOL_VERSION`.
+   * Distinct from `error`: nothing this player does closes the gap, so the
+   * screen it drives says "update the app" rather than the ordinary refusal.
+   */
+  readonly outdated: boolean;
   /** Null until both seats are filled and the first deal is dealt. */
   readonly session: GameSession | null;
   readonly seat: PlayerId | null;
@@ -135,6 +142,9 @@ export function useNetworkSession(code: string): NetworkGame {
   const [table, setTable] = useState<TableInfo | null>(null);
   const [seat, setSeat] = useState<PlayerId | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set once and never cleared: an outdated build does not become current by
+  // reconnecting, so unlike `error` there is nothing here for a retry to fix.
+  const [outdated, setOutdated] = useState(false);
   // Already decided by the server — see `Table#applyAchievements` — so this
   // only ever accumulates and clears what arrives, unlike the robot game's
   // own local evaluation.
@@ -144,6 +154,10 @@ export function useNetworkSession(code: string): NetworkGame {
   const attempt = useRef(0);
   const retry = useRef<number | null>(null);
   const closed = useRef(false);
+  // Mirrors `outdated` state for the close handler below, which closes over
+  // `connect` at effect-setup time and would otherwise see whatever `outdated`
+  // was on that first render rather than its current value.
+  const outdatedRef = useRef(false);
 
   const send = useCallback((message: ClientMessage) => {
     if (socket.current?.readyState === WebSocket.OPEN) {
@@ -174,6 +188,7 @@ export function useNetworkSession(code: string): NetworkGame {
         ws.send(
           JSON.stringify({
             type: "join",
+            protocol: PROTOCOL_VERSION,
             format: preferredFormat(),
             // Only consulted when the other seat asked for duplicate too — see
             // `formatFor`. Sent unconditionally because it is a preference rather
@@ -195,6 +210,11 @@ export function useNetworkSession(code: string): NetworkGame {
 
       ws.addEventListener("message", (event: MessageEvent<string>) => {
         const message = JSON.parse(event.data) as ServerMessage;
+        if (message.type === "outdated") {
+          outdatedRef.current = true;
+          setOutdated(true);
+          return;
+        }
         if (message.type === "error") {
           setError(message.message);
           return;
@@ -214,7 +234,7 @@ export function useNetworkSession(code: string): NetworkGame {
 
       ws.addEventListener("close", () => {
         setConnection("closed");
-        if (closed.current) {
+        if (closed.current || outdatedRef.current) {
           return;
         }
         const wait = RETRY_MS[Math.min(attempt.current, RETRY_MS.length - 1)]!;
@@ -282,6 +302,7 @@ export function useNetworkSession(code: string): NetworkGame {
     dropSocket,
     leave,
     error,
+    outdated,
     seat,
     session:
       snapshot === null || table === null || seat === null

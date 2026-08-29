@@ -220,6 +220,19 @@ export function TableGame({
     onLeave();
   };
 
+  // Distinct from the ordinary error screen below: nothing this player does
+  // closes the gap, so there is nothing here to retry — only somewhere to go
+  // back to.
+  if (game.outdated) {
+    return (
+      <Message
+        title="Update the app"
+        detail="This version is too old to play a networked table. Get the latest update and try again."
+        onLeave={quit}
+      />
+    );
+  }
+
   if (game.error !== null && game.session === null) {
     return <Message title={game.error} detail="" onLeave={quit} />;
   }

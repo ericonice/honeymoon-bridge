@@ -9,6 +9,23 @@ import type {
 } from "@hb/engine";
 import type { SessionSnapshot } from "./snapshot.js";
 
+/**
+ * What this build of the wire protocol expects. Both ends deployed in one
+ * command for as long as the server and the browser were the only two hosts —
+ * a stale client was a service-worker problem fixed by shipping. An app binary
+ * changes that: a TestFlight tester who has not updated is a client whose
+ * deploy nobody controls, and the failure without this was silent
+ * misbehaviour rather than an error (see `CLAUDE.md`, the Pages/Worker
+ * mismatch that cost an afternoon).
+ *
+ * The server accepts this version and the one before it — see `#join` — so
+ * bumping it is only ever required when a change to `ClientMessage` or
+ * `ServerMessage` would otherwise be misread by the other end, the same
+ * discipline `halfFormat` and its siblings already follow by staying optional
+ * with a default instead.
+ */
+export const PROTOCOL_VERSION = 1;
+
 /** How a seat is identified across a dropped socket. */
 export interface Seating {
   readonly connected: boolean;
@@ -65,6 +82,16 @@ export type ClientMessage =
    */
   | {
       readonly type: "join";
+      /**
+       * What this client's build of the wire protocol is — see
+       * `PROTOCOL_VERSION`. Required rather than optional like the preference
+       * fields below: a client old enough to have no opinion on `halfFormat`
+       * is a client this can still talk to, but a client old enough to
+       * predate this field entirely is exactly the one an `outdated` refusal
+       * exists for, and a missing value has to read as the oldest version
+       * there is rather than as silently compatible.
+       */
+      readonly protocol: number;
       /**
        * How long this player would like the sitting to be.
        *
@@ -143,4 +170,12 @@ export type ServerMessage =
    * hand that earned it (Two-Suiter, most obviously), so it is exactly as
    * private as the hand itself and must never reach the other seat.
    */
-  | { readonly type: "achievements"; readonly unlocked: readonly Unlock[] };
+  | { readonly type: "achievements"; readonly unlocked: readonly Unlock[] }
+  /**
+   * This client's `protocol` is too old for the server to trust. Distinct
+   * from `error`, which is a refusal the player can act on (a full table, a
+   * wrong code) — nothing this player does closes the gap here, so the
+   * client renders a plain "update the app" screen rather than the ordinary
+   * error message.
+   */
+  | { readonly type: "outdated" };
