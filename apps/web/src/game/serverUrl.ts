@@ -82,9 +82,27 @@ export function queueSocketUrl(): string {
   return `${ORIGIN.replace(/^http/, "ws")}/api/queue/ws`;
 }
 
+/**
+ * Where the web app itself lives, for a link meant to be opened on any
+ * device — never `window.location.origin`, which inside the Capacitor shell
+ * is `capacitor://localhost` and would build a link nobody else's phone can
+ * open. Falls back to `window.location.origin` for local dev and the browser
+ * build, where the two already agree.
+ *
+ * A function rather than a module-level constant: the fallback touches
+ * `window`, and evaluating that at import time breaks any test that imports
+ * this module outside a browser-like environment, whether or not it ever
+ * calls `inviteLink`.
+ */
+function appOrigin(): string {
+  return import.meta.env.VITE_APP_ORIGIN !== undefined && import.meta.env.VITE_APP_ORIGIN !== ""
+    ? import.meta.env.VITE_APP_ORIGIN
+    : window.location.origin;
+}
+
 /** The link to send someone, which is this app with the code in the hash. */
 export function inviteLink(code: string): string {
-  return `${window.location.origin}${window.location.pathname}#/table/${code}`;
+  return `${appOrigin()}/#/table/${code}`;
 }
 
 /** The code in the current URL, if this page was opened from an invite. */
