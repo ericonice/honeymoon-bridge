@@ -4,6 +4,7 @@ import {
   dealFacts,
   dealOf,
   nextIn,
+  restoreTable,
   rubberFacts,
   startMatch,
   summarizeMatch,
@@ -156,11 +157,24 @@ function startingMatch(seats: readonly [SeatRecord | null, SeatRecord | null]): 
   });
 }
 
+/**
+ * The stored match, with anything it predates filled in.
+ *
+ * Two shapes have to survive here, and the second one bit. A sitting from before
+ * `MatchState` existed is a bare `TableState` under `table`. A sitting from before the
+ * return match is a `MatchState` whose rubber has no `dealt` or `replay` — and
+ * `nextDeal` indexes `replay` by `dealt.length`, so without this every action of a
+ * rubber already under way at a table throws.
+ */
 function matchFrom(stored: StoredOnDisk): MatchState | null {
-  if (stored.match !== undefined) {
-    return stored.match;
+  const match = stored.match;
+  if (match !== undefined) {
+    if (match === null || match.kind !== "rubber") {
+      return match ?? null;
+    }
+    return { kind: "rubber", table: restoreTable(match.table) };
   }
-  return stored.table == null ? null : { kind: "rubber", table: stored.table };
+  return stored.table == null ? null : { kind: "rubber", table: restoreTable(stored.table) };
 }
 
 export class Table extends DurableObject<Env> {

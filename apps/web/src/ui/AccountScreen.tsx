@@ -101,9 +101,7 @@ export function AccountScreen({
         </div>
       </div>
 
-      <button
-        type="button"
-        className="text-sm text-white/50 underline underline-offset-4"
+      <button type="button" className="w-full rounded-xl border border-white/25 px-4 py-3.5 text-base text-white"
         onClick={onBack}
       >
         Back

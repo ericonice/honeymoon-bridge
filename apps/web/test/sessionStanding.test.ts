@@ -142,7 +142,7 @@ describe("the fixed score during a session", () => {
   });
 
   it("leaves a rubber's two columns alone", () => {
-    show({ kind: "rubber", history: [], rubber: newRubber("rubber") });
+    show({ kind: "rubber", history: [], previous: [], previousPoints: null, rubber: newRubber("rubber") });
 
     expect(screen.getByText("Computer")).toBeTruthy();
     expect(text()).toContain("Part score");

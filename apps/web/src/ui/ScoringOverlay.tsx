@@ -336,7 +336,7 @@ export function ScoringOverlay({ onClose }: { onClose(): void }): React.JSX.Elem
       <div className="safe-bottom px-5 pb-5">
         <button
           type="button"
-          className="w-full rounded-xl border border-white/25 px-4 py-3 text-base text-white"
+          className="w-full rounded-xl border border-white/25 px-4 py-3.5 text-base text-white"
           onClick={onClose}
         >
           Back

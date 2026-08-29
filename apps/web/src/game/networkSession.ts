@@ -71,6 +71,11 @@ function sessionFrom(
     format: snapshot.format,
     score: snapshot.score,
     // Not on offer: the server decides what a seat may do and would refuse it.
+    // Not offered at a table yet, on the terms duplicate shipped under: the
+    // mechanic needs nothing from one device, but agreeing to it is a second
+    // negotiation and it lands against the computer first.
+    playSameBoards: null,
+    repeated: false,
     skipPhase: null,
     trickAwaitingDismissal: false,
     view: snapshot.view,

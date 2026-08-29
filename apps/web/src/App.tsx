@@ -267,11 +267,6 @@ export function App(): React.JSX.Element {
               setSessionDeals(next);
               setDeals(next);
             }}
-            sessionOrder={order}
-            onSessionOrderChange={(next) => {
-              setSessionOrder(next);
-              setOrder(next);
-            }}
             onFindOpponent={() => {
               setScreen({ kind: "searching" });
             }}
@@ -404,7 +399,12 @@ export function App(): React.JSX.Element {
           Capped at a phone's width and centered: every screen here is laid out
           for a hand holding a phone, and stretching that across a desktop
           monitor makes rows of buttons absurdly wide rather than usefully
-          bigger. On a phone the cap never binds. */}
+          bigger. On a phone the cap never binds.
+
+          On a window bigger than a phone the *height* is capped too and this
+          becomes a card on a ground — see `.viewport-height`'s media query. The
+          width cap alone left a 28rem column stretched to the whole window,
+          which is a strip rather than a phone. */}
       <div
         className="table-surface viewport-height relative mx-auto flex w-full max-w-md flex-col overflow-hidden text-white"
         style={{
@@ -418,6 +418,11 @@ export function App(): React.JSX.Element {
 
         {showingSettings ? (
           <SettingsOverlay
+            sessionOrder={order}
+            onSessionOrderChange={(next) => {
+              setSessionOrder(next);
+              setOrder(next);
+            }}
             boldness={bold}
             opponent={opponent}
             difficulty={hardness}

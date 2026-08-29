@@ -52,7 +52,13 @@ export function ScoreOverlay({
       {standing.kind === "duplicate" ? (
         <SessionPad summary={standing.summary} view={view} />
       ) : (
-        <Scorepad history={standing.history} opponentName={opponentName} rubber={standing.rubber} view={view} />
+        <Scorepad
+        history={standing.history}
+        opponentName={opponentName}
+        previous={standing.previous}
+        rubber={standing.rubber}
+        view={view}
+      />
       )}
       <p className="pt-3 text-xs text-white/50">{vulnerabilityLine(view, vulnerable, opponentName)}</p>
     </Overlay>

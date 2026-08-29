@@ -95,6 +95,8 @@ interface RobotRubber {
   readonly difficulty: string | null;
   readonly points: number;
   readonly pointsAgainst: number;
+  /** Played on the boards of the match before it, from the other side. */
+  readonly repeated: boolean;
   /**
    * When the rubber ended on the client, or null from a build that does not say.
    * Trusted only within `REPORT_WINDOW` of now — see `playedAt`.
@@ -190,6 +192,9 @@ function robotRubberFrom(body: unknown): RobotRubber | null {
     // circulation sends `won` alone and never a draw. Absent means somebody won,
     // which is what a client that could not draw was reporting.
     drawn: value.drawn === true,
+    // Same terms as `drawn`: additive and absent-means-no, because a client old
+    // enough not to send it could not play a return match in the first place.
+    repeated: value.repeated === true,
     won: value.won,
   };
 }
@@ -992,6 +997,9 @@ export default {
           // prevent. Duplicate made it common rather than theoretical: a board is
           // flat whenever both of its runs score the same, so a short session is
           // level a fair fraction of the time.
+          // Recorded, and kept out of the rating walk rather than refused: a match
+          // somebody played is worth writing down whether or not it can be rated.
+          repeated: rubber.repeated,
           winner: rubber.drawn ? DRAWN : rubber.won ? 0 : 1,
         },
         playedAt(rubber.finishedAt, Date.now()),

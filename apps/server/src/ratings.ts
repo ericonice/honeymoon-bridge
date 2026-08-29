@@ -374,7 +374,9 @@ export async function ratingsFor(env: Env): Promise<Ratings> {
   // one record per format.
   const rows = await env.DB.prepare(
     `SELECT account0, account1, bot_version, difficulty, token0, token1, winner
-     FROM results WHERE format != 'duplicate' ORDER BY finished_at`,
+     FROM results
+      WHERE format != 'duplicate' AND coalesce(repeated, 0) = 0
+      ORDER BY finished_at`,
   ).all<RatingRow>();
 
   const rating = new Map<string, number>();

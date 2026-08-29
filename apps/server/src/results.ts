@@ -72,6 +72,14 @@ export interface FinishedRubber {
   /** Which difficulty rung a robot rubber was played at. Null against a person. */
   readonly difficulty?: string | null;
   readonly format: MatchFormat;
+  /**
+   * Played on an earlier match's boards, from the other side.
+   *
+   * Optional, because every build the service worker keeps in circulation reports
+   * without it — and absent reads as "not repeated", which is what those builds
+   * could only ever have played.
+   */
+  readonly repeated?: boolean;
   readonly seats: readonly [FinishedSeat, FinishedSeat];
   /** The seat that won, or `DRAWN`. */
   readonly winner: PlayerId | typeof DRAWN;
@@ -88,10 +96,10 @@ export async function recordRubber(env: Env, rubber: FinishedRubber, now: number
   const [first, second] = rubber.seats;
   await env.DB.prepare(
     `INSERT INTO results
-       (id, finished_at, table_code, winner, deals, format, bot_version, difficulty,
+       (id, finished_at, table_code, winner, deals, format, bot_version, difficulty, repeated,
         account0, token0, nickname0, points0,
         account1, token1, nickname1, points1)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       crypto.randomUUID(),
@@ -102,6 +110,9 @@ export async function recordRubber(env: Env, rubber: FinishedRubber, now: number
       rubber.format,
       rubber.botVersion ?? null,
       rubber.difficulty ?? null,
+      // Stored as 0 rather than left null when the client did say, so the column
+      // distinguishes "said no" from "never asked" even though both read the same.
+      rubber.repeated === true ? 1 : 0,
       first.accountId,
       first.token,
       first.nickname,

@@ -1,4 +1,4 @@
-import type { Unlock } from "@hb/engine";
+import type { DuplicateSchedule, Unlock } from "@hb/engine";
 import { useEffect, useState } from "react";
 import {
   DIFFICULTIES,
@@ -8,7 +8,7 @@ import {
 import type { Difficulty } from "../bot/difficulty.js";
 import { BOT_RELEASES, LATEST_RELEASE } from "../bot/release.js";
 import { runBidTiming } from "../game/bidCost.js";
-import { preferredRelease } from "../game/identity.js";
+import { ORDER_LABEL, SESSION_ORDERS, preferredRelease } from "../game/identity.js";
 import { botAnchor } from "../game/records.js";
 import type { CardColor } from "../game/cardColor.js";
 import type { Boldness, Density, Pace } from "../game/identity.js";
@@ -70,6 +70,8 @@ export interface SettingsOverlayProps {
   readonly disguise: boolean;
   readonly boldness: Boldness;
   readonly difficulty: Difficulty;
+  /** How a duplicate session orders its deals. */
+  readonly sessionOrder: DuplicateSchedule;
   readonly opponent: number;
   readonly density: Density;
   readonly pace: Pace;
@@ -79,6 +81,7 @@ export interface SettingsOverlayProps {
   readonly trickCount: boolean;
   onBoldnessChange(next: Boldness): void;
   onDifficultyChange(next: Difficulty): void;
+  onSessionOrderChange(next: DuplicateSchedule): void;
   onOpponentChange(next: number): void;
   onCardColorChange(next: CardColor): void;
   onDensityChange(next: Density): void;
@@ -279,6 +282,7 @@ export function SettingsOverlay({
   disguise,
   onBoldnessChange,
   onDifficultyChange,
+  onSessionOrderChange,
   onOpponentChange,
   onCardColorChange,
   onClose,
@@ -295,6 +299,7 @@ export function SettingsOverlay({
   pace,
   peeking,
   playtester,
+  sessionOrder,
   sound,
   tapToSelect,
   trickCount,
@@ -344,6 +349,26 @@ export function SettingsOverlay({
               label: DIFFICULTY_LABEL[one],
               value: one,
             }))}
+          />
+        </div>
+
+        {/* **Here rather than on Home, on Home's own test.** What is being played
+            moved to Home because the format changes session to session; the order does
+            not — it is how you like duplicate played, chosen once and left, the same
+            shape as the pace. It was on Home only because the format is, which is a
+            reason about where its neighbour lives rather than about how often the
+            answer changes. It also cost a row of three buttons on the one screen that
+            must not scroll, in service of one format in three.
+
+            Shown to everybody rather than only while duplicate is chosen: a row that
+            comes and goes is one nobody can find when they want it. */}
+        <div className="w-full max-w-sm">
+          <Choice
+            label="Order of a duplicate session"
+            description="Back to back plays a board's two halves one after the other, so the comparison is immediate and you remember everything. Halves plays every board once and then brings them round again in a random order, which is what a duplicate evening is. Shuffled mixes the lot."
+            value={sessionOrder}
+            onChange={onSessionOrderChange}
+            options={SESSION_ORDERS.map((one) => ({ label: ORDER_LABEL[one], value: one }))}
           />
         </div>
 
@@ -635,10 +660,10 @@ export function SettingsOverlay({
       <div className="px-5 pb-5">
         <button
           type="button"
-          className="w-full rounded-xl bg-white px-4 py-3.5 text-base font-semibold text-stone-900"
+          className="w-full rounded-xl border border-white/25 px-4 py-3.5 text-base text-white"
           onClick={onClose}
         >
-          Close
+          Back
         </button>
       </div>
 

@@ -6,6 +6,7 @@ import type { BotRelease } from "../bot/release.js";
 import { readStored, writeStored } from "./storage.js";
 
 const FORMAT_KEY = "hb.format";
+const RUBBER_GAMES_KEY = "hb.rubberGames";
 const SESSION_DEALS_KEY = "hb.sessionDeals";
 const SESSION_ORDER_KEY = "hb.sessionOrder";
 const OPPONENT_KEY = "hb.opponent";
@@ -78,6 +79,33 @@ export function preferredFormat(): MatchFormat {
 
 export function setPreferredFormat(format: MatchFormat): void {
   writeStored(FORMAT_KEY, format);
+  // A rubber's length is remembered separately, so choosing Duplicate and coming back
+  // does not silently promote a single game to a full rubber — see `rubberGames`.
+  if (format === "game" || format === "rubber") {
+    writeStored(RUBBER_GAMES_KEY, format === "game" ? "1" : "2");
+  }
+}
+
+/**
+ * How long a rubber was last set to run: one game or two.
+ *
+ * **A second key, and the reason is a real bug rather than tidiness.** The format
+ * itself is stored and perfectly sticky — but it can only hold *one* of `"game"`,
+ * `"rubber"` and `"duplicate"`, so choosing Duplicate overwrites which of the two
+ * rubber lengths was wanted. Coming back to Rubber then had nothing to go on and
+ * defaulted to two, quietly turning somebody's single game into a full rubber.
+ *
+ * It is deliberately **not** a second answer to "what am I playing" — the format key
+ * stays authoritative for that, and this is only read when the Rubber cell is picked,
+ * to decide which rubber it means. That is what keeps the two from disagreeing.
+ */
+export function rubberGames(): 1 | 2 {
+  return readStored(RUBBER_GAMES_KEY) === "1" ? 1 : 2;
+}
+
+/** The rubber format that length means, which is the only thing the row stores. */
+export function rubberFormatFor(games: 1 | 2): MatchFormat {
+  return games === 1 ? "game" : "rubber";
 }
 
 /**
@@ -144,6 +172,13 @@ export function setSessionDeals(deals: number): void {
  * every board once, then they come round again.
  */
 export const SESSION_ORDERS: readonly DuplicateSchedule[] = ["adjacent", "halves", "random"];
+
+/** What each order is called wherever one is offered. */
+export const ORDER_LABEL: Record<DuplicateSchedule, string> = {
+  adjacent: "Back to back",
+  halves: "Halves",
+  random: "Shuffled",
+};
 
 export function sessionOrder(): DuplicateSchedule {
   const stored = readStored(SESSION_ORDER_KEY);

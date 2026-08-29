@@ -1,0 +1,13 @@
+-- A match played on an earlier match's boards, from the other side.
+--
+-- Kept out of the rating walk for the reason a duplicate session is: the computer's
+-- recall of a board it has played is perfect and a person's is not, so rating a match
+-- on repeated boards over-credits whichever side remembers better, and that is never
+-- the person.
+--
+-- Nullable, and **null means "not repeated" rather than "unknown"** — every row
+-- written before this column existed was an ordinary match, because there was no way
+-- to play any other kind. Same reading as `bot_version`'s null, and safe in the same
+-- direction: the conservative answer is the one that keeps a match in the walk only
+-- when nothing suggests it should be out.
+ALTER TABLE results ADD COLUMN repeated INTEGER;

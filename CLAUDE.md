@@ -543,6 +543,26 @@ The whole app is capped at a phone's width and centered, since every screen is l
 holding a phone — on a desktop monitor a full-bleed layout makes rows of buttons absurdly wide
 rather than usefully bigger.
 
+**The width cap alone was half the answer, and the other half is the height.** Capped horizontally
+and not vertically, the app on a desktop is a 28rem column stretched to the whole window: a strip
+rather than a phone, with `justify-between` spreading one screen's content over three times the room
+it was designed for. So above 480px wide *and* 720px tall the frame caps its height too and becomes a
+card on a ground — rounded, a hairline to read as a device edge, a shadow to lift it off the
+`--color-table-dark` that `body` already paints. No new colour: the ground is the app's own token and
+switches with the theme.
+
+**Gated on height as well as width**, so a landscape phone or a short window stays full-bleed rather
+than becoming a letterbox, and the 900px cap is generous enough never to bind on a real phone in
+portrait — the tallest are 932 CSS pixels, and a gap above the board on an actual phone would be this
+bug in reverse.
+
+Two things that made it more than a one-liner. `html` has no height, so `body` and `#root`'s
+`height: 100%` resolve against an auto containing block and collapse to their content — which never
+mattered while the frame set its own `100dvh`, but centering needs something to centre *in*, and a
+container as tall as the card centres nothing. And `min(100dvh - 4rem, 900px)` is invalid without
+`dvh` support, where the whole declaration drops and lands back on the full-height rule — the very
+strip this exists to stop — so it carries the static fallback the class next to it already documents.
+
 **Done, and the part that got real attention.** The draw screen, specified in `REQUIREMENTS.md`
 §1.3 and animated with Framer Motion. Each turn plays out as two cards leaving the stock, one
 landing in a hand and one in the discard. This is not decoration: the destinations *are* the
@@ -1408,6 +1428,52 @@ board by. Asked at the first call instead it is **50% of deals: every replay, ev
 taken at the wrong moment is the same instrument failure this file keeps recording, moved into the
 read-out.
 
+**A rubber already stored at a table broke on the deploy that added this, and the repair is on
+read.** `TableState` gained four fields, and a Durable Object holds a table across deploys — so a
+sitting already under way came back without them, and `nextDeal` indexes `replay` by `dealt.length`,
+which throws on `undefined`. Every action of that rubber failed. `restoreTable` fills them in where
+the object hands the state back, the same way `matchFrom` already wrapped a bare `TableState` and
+`withImpliedTiers` repairs a stored achievement: the old shape stays in storage and the answer comes
+out right anyway. `dealt` comes back **empty**, which is the honest answer — nothing recorded what
+those deals were dealt from and nothing can now — so `canReturn` also requires a non-empty `dealt`,
+and such a rubber simply never offers to be played back. The test deletes the fields rather than
+constructing a complete table, because a test that built one would have passed against the bug.
+
+**The general shape, and it is the second time: adding a field to something a Durable Object persists
+is a migration whether or not anybody writes one.** The engine's types describe what a *new* table
+has; storage holds what an old one had.
+
+**A return match ends by showing what the pair came to.** Its own final score answers half a question
+— the boards have been played twice and the interesting number is how the halves add up — so the
+finishing screen carries `First match` and `Both together` beside `Final score`. Read **unreversed**,
+unlike every other figure this feature draws: per deal the unit is the cards, so a seat is compared
+against whoever held them, but across a whole match each player has had both sides of every board, so
+the totals compare the players.
+
+`previousPoints` is carried as a **total** rather than re-derived from the scorepad that travels with
+it, and the test says why: a rubber's totals are not the sum of its deals, since `matchBonusFor` pays
+500 or 700 for winning it and that lands on the rubber rather than on any deal in it. Summing the pad
+would be short by the bonus, and short in a way nobody would notice.
+
+**The replay's scorepad is rows-are-holdings, columns-are-players, and the version before it shipped
+a lie.** The first attempt kept one row a deal and *reversed* the earlier run's figures under the
+"You" heading, so the comparison lined up — and it also reversed the word "you", which names a person
+rather than a position, so the line said you declared a contract your opponent had declared. Reported
+as "hard to tell which hand I played".
+
+Per deal it cannot be fixed with a better label: a replay swaps the seats, so the two figures worth
+comparing are always diagonally opposite. **The handle that resolves it is the draw position** —
+flipping the starter swaps which *player* draws first, but the first drawer still gets the same cards,
+so "the first drawer's holding" is one thing with a stable identity across both runs. So a board is
+two rows, one per holding, each showing what *each* player made with it: you in one run, them in the
+other. Every cell is a player's own score, nothing is reversed, and the comparison reads down a
+column. `DealRecord` gains `starter` to make it possible, which is safe to project where the seed
+beside it is not — both players watch the draw.
+
+The cost is the chronology: pairs rather than the order played. Taken only here, because on a replay
+the order is not news and the comparison is. Both auctions survive on their own labelled lines, since
+a run supplies one cell of each row and so belongs to a diagonal rather than to either.
+
 **Perfect recall only, so it lives on the top rung and nowhere else.** `forgetful.ts` hands over no
 boards at all — all or nothing, because thirteen exact pairs from a deal played some time ago is a
 strictly harder feat than the thirteen cards this seat just threw, and `sampleFromOffers` needs a
@@ -1470,6 +1536,69 @@ two places can disagree with itself. `test/homeFormat.test.ts` holds it there, b
 `settingsRows.test.ts` structurally cannot — its list is of rows everyone must be able to *reach*, and
 a format row in either place satisfies it.
 
+**A rubber can be played back on its own boards, and that is a third thing rather than a
+setting.** `returnMatch` in the engine replays the deals of the match just finished, each with the
+right to draw first handed to the other player, so you are offered the cards your opponent was
+offered. Duplicate's mechanic without duplicate's scoring, offered as **Same boards back** beside
+"New rubber" on the match-end screen and nowhere else.
+
+**It got there by rejecting four layouts, and the diagnosis is worth more than any of them.** The
+question started as "should the row be scoring by deals rather than three named formats", and every
+arrangement of that reads as a form, because splitting the axes turns three things with names into a
+pair of coordinates. **The row was being asked to name what you are about to play and to configure
+it, and those stopped being the same act the moment the axes came apart.** A return match sidesteps
+it: Home does not change at all, and the choice is made at the one moment somebody actually wants
+it, which is when they have just played the boards.
+
+**Both objections to rubber-on-duplicate-hands were wrong, and in the same way.** The argument was
+that vulnerability has to be prescribed for boards to cancel, and that a rubber's variable length
+would leave a board played once. Both are properties of duplicate *scoring*: under rubber scoring a
+board is not a scoring unit, so nothing has to cancel and nothing is orphaned. What is genuinely
+given up is **cancellation**, which is not the reason meeting a board again is worth doing.
+
+**Each starter is recorded and flipped individually, and deriving it would have been a real bug.**
+The tempting version keeps only the seeds and starts the return match with the other player, since
+`nextDeal` alternates from there. But it does not alternate unconditionally -- a deal passed out is
+redealt by the *same* player -- so the two alternations diverge the first time either rubber passes
+one out, and every board after that faces the wrong side. `DealtBoard` costs a number a deal.
+
+**`TableState.dealt` is not on `DealRecord`, and that is the whole reason it is its own field.** The
+records cross the wire inside `MatchStanding`, and a seed reconstructs an entire stock order.
+`TableState` is never projected.
+
+**Running out is a main path, measured at 43% of pairs.** The return match ends when somebody wins
+it, which need not be inside the number of deals the first took, so past the recorded boards it
+deals fresh. Even so **82% of a return rubber is on the same boards** (75% at one game), which is
+what says the feature works at either length. Both figures are from 400 matches a side.
+
+**The comparison is in the scorepad, and it is read with the seats swapped.** A faint line under each
+deal shows what those cards made the first time, taken from the earlier record with the pair
+*reversed*, because the return match hands each seat the stream the other faced -- so the figure
+belonging under "You" is what the opponent scored on that board before. Reading it unreversed puts a
+player beside themselves holding different cards, which compares nothing. Said once at the top of the
+pad rather than per row, because a reader who has not been told will read the faint figures as their
+own score and conclude the exact opposite of the truth.
+
+**It is a comparison and not a margin**, deliberately. The two runs happened at different standings,
+so subtracting them would claim a precision this format does not have. Duplicate is where a board has
+a number.
+
+**Duplicate's best test does not transfer, and the replacement is mechanical.** There, two identical
+players score a dead heat on every board -- the property that caught vulnerability being assigned to
+a seat rather than a position. Here they will not, by design. So `returnMatch.test.ts` pins the
+mechanism instead: same seeds, in order, each starter flipped, checked by reverting the flip and
+watching two tests fail. Its driver opens the cheapest contract, after two dead ends that would each
+have passed vacuously -- taking the first legal action passes every deal out, and taking the last
+climbs to seven no-trump, whose penalties score above the line so no game is ever won and the rubber
+never completes.
+
+**A match on repeated boards stays out of the rating walk**, on the deals argument rather than the
+scoring one: the computer's recall of a board it has played is perfect and a person's is not.
+`0011_result_repeated.sql` adds a nullable column where **null means "not repeated" rather than
+"unknown"**, since every row written before it could only have been an ordinary match. All three
+branches -- 0, 1 and null -- were checked against real local D1 rather than read, because the ratings
+test stubs the database and so never sees the `WHERE` clause at all.
+
 **Duplicate results are recorded and deliberately excluded from the rating walk.** Not because they
 could not be rated — the computer plays them — but because **the anchor cannot come from a bench**. A
 bench plays bot against bot, where *neither* side has cross-deal memory, and a person does; so a bench
@@ -1508,6 +1637,15 @@ found a second in `summarizeDuplicate`, which folded the deal on the table in wh
 right everywhere except at the end, where the last deal is committed and then *left* on the table. A
 rubber has no equivalent state, because dealing always hands it a fresh deal. The invariant is exact —
 `results[i]` describes `schedule[i]`, so "already committed" is `results.length > at`.
+
+**A surface that fills the screen says "Back"; a panel floating over what you were doing gets a
+cross.** The question is not where you came from, which varies -- Help opens from Home, from Settings
+and from the middle of an auction -- but whether the thing you were doing is still on screen behind
+it. If it is, you are dismissing something; if it is not, you are going back. By that rule Help and
+Settings were the only two wrong: both are `absolute inset-0` over an opaque ground, so they are
+screens wearing the word "overlay" in their filenames, and they said "Close" while the record, the
+achievements, the account page and the scoring page all said "Back" from the identical position. The
+rule is written on `Overlay` itself, which is the component the other half of it belongs to.
 
 **`REQUIREMENTS.md` §1.8 is the rules and §3.6a is where the choice lives**, so the format is
 documented where every other rule is rather than only in a working note. The help screen has a
@@ -1603,7 +1741,46 @@ players** — asserted, because that is the property the format exists for.
 
 Agreeing it at a table takes both seats, on the same reasoning duplicate itself does: there is no
 "shorter wins" between two different games, and an order nobody asked for is one handed over unasked.
-A disagreement falls back to halves.
+A disagreement falls back to halves, which is also the default.
+
+**The row lives in Settings, not on Home, and it moved there on Home's own test.** What is being
+played is on Home because the format changes session to session; the order does not -- it is how you
+like duplicate played, set once and left, the same shape as the pace. It was on Home only because the
+*format* is, which is a reason about where its neighbour lives rather than about how often the answer
+changes. It also cost a fixed line on the one screen that must not scroll, in service of one format in
+three. Shown to everybody rather than only while duplicate is chosen: a row that comes and goes is one
+nobody can find when they want it, and `test/settingsRows.test.ts` holds it on the list of rows
+everyone must be able to reach.
+
+**Home fits without scrolling now, and the three ways to reach a person are one row.** "Find an
+opponent", "Start a table" and "Join a table" were three full-width buttons with a line of description
+each -- about 240px, on the screen with the least to spare. They are a row of three cells now, each
+two lines (Find / whoever is free, Invite / send a link, Join / with a code), with the "needs an
+account" line said once underneath instead of three times. The primary button stays full width,
+because it needs nothing and is what most taps are. Two lines per cell rather than one: a bare "Find"
+does not say what it finds, and a shared caption reading "whoever is looking, send a link, enter a
+code" makes the reader match three phrases to three buttons by position, which is a puzzle rather than
+a label. `overflow-y-auto` stays as a safety net -- clipped is worse than scrolled -- but nothing is
+meant to reach it.
+
+**The row is two cells now, because "One game" was never a third format.** It is a rubber that stops
+at the first game, which is exactly what `RubberFormat`'s two values already say — so sitting it
+beside Duplicate made the row mix categories: two of three cells were the same game at different
+lengths and the third was a different game. The row holds the two games that genuinely differ, and how
+long a rubber runs moved to the line underneath, where duplicate's length already lived. Both formats
+state their length in the same words now, which is the argument for a two-stop stepper over a toggle.
+
+**Nothing stored changed, and that was the constraint.** `preferredFormat` still keeps `"game"` or
+`"rubber"`, `matchNoun` still says which, and a single game is still recorded and rated as one. It
+matters because `ratings.ts` pools the formats and a match recorded under a new name would quietly
+leave the pool — so this is a truer description of two existing values rather than a re-modelling of
+them. No new stored setting either: the cell and the stepper are both derived from the one format
+value, so there is no second source to disagree with it.
+
+**And the format row now says what it is choosing.** Three words sat at the top of the screen with a
+line under them explaining whichever was selected, so somebody meeting it could read "Best of three
+games" and still not know that was one of three answers to a question nobody had asked. A
+"What you're playing" label above the row is the question.
 
 `scheduleKindOf` reads the order back off a session's own schedule rather than storing it twice, so a
 new session inherits how the last one was played with nothing to disagree with itself about.

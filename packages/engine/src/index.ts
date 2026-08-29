@@ -5,6 +5,7 @@ export * from "./deal.js";
 export * from "./duplicate.js";
 export * from "./match.js";
 export * from "./rng.js";
+export * from "./returnMatch.js";
 export * from "./rubber.js";
 export * from "./scoring.js";
 export * from "./table.js";

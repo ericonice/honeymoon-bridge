@@ -1,6 +1,7 @@
 import {
   actOn,
   boardsForDeals,
+  canReturn,
   createRng,
   dealFacts,
   currentDeal,
@@ -9,6 +10,7 @@ import {
   nextIn,
   ownDrawPairFor,
   randomSeed,
+  returnMatch,
   rubberFacts,
   sortHand,
   startMatch,
@@ -37,6 +39,25 @@ import {
 import { reportRobotRubber } from "./records.js";
 import type { GameSession } from "./session.js";
 import { drawPauseBefore, paced, setPacing } from "./timing.js";
+
+/**
+ * What identifies the board on the table, for the computer's memory of it.
+ *
+ * The deal's own seed, in both formats, because that is what a board *is* — and
+ * because keying on it gives the one behaviour wanted for free: a board's second
+ * run carries the same seed as its first, so `boardOffers` keeps the record of the
+ * first run and the replay does not overwrite it with a record of the half already
+ * spent.
+ *
+ * Null before anything has been dealt, which cannot happen, and is handled rather
+ * than asserted because the alternative is a crash on the first draw turn.
+ */
+function boardKeyOf(match: MatchState): number | null {
+  if (match.kind === "duplicate") {
+    return match.session.boards[currentDeal(match.session).board]?.seed ?? null;
+  }
+  return match.table.dealt[match.table.dealt.length - 1]?.seed ?? null;
+}
 
 export const HUMAN: PlayerId = 0;
 export const OPPONENT: PlayerId = 1;
@@ -339,6 +360,18 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     setMatch(next);
   }, [bot, match]);
 
+  /**
+   * The same boards back, with the right to draw first swapped.
+   *
+   * Deliberately does *not* clear `boardOffers`, which is the one thing that makes a
+   * return match interesting for the computer: on its hardest setting it meets every
+   * board having already been offered the other half of it. `advance` clears, because
+   * a fresh rubber shares nothing with the one before it.
+   */
+  const playSameBoards = useCallback(() => {
+    setMatch(returnMatch(match));
+  }, [match]);
+
   const advance = useCallback(() => {
     // A finished session is followed by a fresh set of boards, so what the computer
     // remembers of the old ones goes. Not housekeeping: a person does not carry a
@@ -445,6 +478,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
       format: summary.format,
       points: summary.points[HUMAN],
       pointsAgainst: summary.points[OPPONENT],
+      repeated: summary.repeated,
       drawn: summary.winner === null,
       won: summary.winner === HUMAN,
     });
@@ -485,6 +519,8 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     lastDraw: drawRevealFor(deal, HUMAN),
     lastTrick: deal.completedTricks[deal.completedTricks.length - 1] ?? null,
     nextDeal: advance,
+    playSameBoards: canReturn(match) ? playSameBoards : null,
+    repeated: summary.repeated,
     opponentHand: peek ? sortHand(deal.hands[OPPONENT]) : null,
     opponentLastDraw:
       peek && deal.phase === "draw" ? ownDrawPairFor(deal, OPPONENT) : null,

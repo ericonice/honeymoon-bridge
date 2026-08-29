@@ -318,7 +318,7 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
       </div>
 
       <div className="flex flex-col gap-2 px-5 pb-5">
-        {/* Above Close, because it is the thing somebody who came here confused
+        {/* Above the way out, because it is the thing somebody who came here confused
             actually wants: the draw explained on the board rather than on this page.
             Offered whether or not it has been seen — a walkthrough you can lose by
             tapping through it too fast is worse than none, and the person most likely
@@ -343,10 +343,10 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
 
         <button
           type="button"
-          className="w-full rounded-xl bg-white px-4 py-3.5 text-base font-semibold text-stone-900"
+          className="w-full rounded-xl border border-white/25 px-4 py-3.5 text-base text-white"
           onClick={onClose}
         >
-          Close
+          Back
         </button>
       </div>
     </div>

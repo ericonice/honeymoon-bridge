@@ -144,6 +144,68 @@ body {
   }
 }
 
+/* Wider and taller than a phone: the frame stops being the window and becomes a
+   phone-shaped card sitting on a ground.
+
+   On a phone the frame *is* the window — full height, edge to edge, insets for the
+   notch — and that is the case everything here is laid out for. On a desktop the
+   width cap already binds at 28rem, so without this the app is that column stretched
+   to the whole window height: a strip rather than a phone, with `justify-between`
+   spreading a screen's worth of content over three times the room it was designed
+   for. Capping the height is what makes the proportions a phone's again.
+
+   **Gated on height as well as width**, so a landscape phone or a short window stays
+   full-bleed rather than becoming a letterbox with nowhere to put anything. And the
+   cap is generous enough never to bind on a real phone in portrait — the tallest are
+   932 CSS pixels — because a gap above and below the board on an actual phone would
+   be the bug this is fixing, in reverse.
+
+   The ground is `--color-table-dark`, which `body` already paints and which switches
+   with the theme, so this borrows the app's own vocabulary rather than introducing a
+   colour that would need its own light and dark answers. */
+@media (min-width: 480px) and (min-height: 720px) {
+  /* `html` has no height, so `body`/`#root`'s `height: 100%` resolves against an auto
+     containing block and collapses to their content. That never mattered while the
+     frame set its own `100dvh` — but centering needs something to centre *in*, and a
+     container as tall as the card centres nothing: the card would sit at the top with
+     the dead space all below it. So the height is stated here, with the same static
+     fallback `.viewport-height` uses and for the same reason. */
+  #root {
+    align-items: center;
+    display: flex;
+    height: 100vh;
+    justify-content: center;
+  }
+
+  @supports (height: 100dvh) {
+    #root {
+      height: 100dvh;
+    }
+  }
+
+  .viewport-height {
+    /* A hairline to read as the edge of a device, over a shadow to lift it off the
+       ground. Radius clips the overlays too, since they are `absolute inset-0`
+       inside this element. */
+    border-radius: 1.75rem;
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.08),
+      0 1.5rem 3rem -1rem rgb(0 0 0 / 0.55);
+    /* Static first, for the reason stated above the class itself: a browser without
+       `dvh` drops the whole declaration rather than approximating it, and here that
+       would drop it back to the full-height rule above — the very strip this exists to
+       stop. `dvh` matters less on a desktop, where no address bar collapses, but
+       getting the fallback wrong is how this file learned to write one. */
+    height: min(100vh - 4rem, 900px);
+  }
+
+  @supports (height: 100dvh) {
+    .viewport-height {
+      height: min(100dvh - 4rem, 900px);
+    }
+  }
+}
+
 /* Same reason as `.table-surface`: the pattern has to switch off with the
    theme, and a colour token cannot carry a background image. */
 .card-back {

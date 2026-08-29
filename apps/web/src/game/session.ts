@@ -132,6 +132,26 @@ export interface GameSession {
   /** Deals again — a fresh rubber if the last was won, or the next board of a session. */
   nextDeal(): void;
   /**
+   * Plays the finished match's boards back, with the right to draw first swapped.
+   *
+   * Null when there is nothing to return — a match still in progress, a session,
+   * which already plays every board twice, or a return match, since a third run of
+   * the same cards is not a game. Null rather than a no-op so the screen has one
+   * thing to test rather than a boolean beside a method that might do nothing.
+   *
+   * Null over a network for now as well. Nothing about the mechanic needs one
+   * device; it is the same argument duplicate shipped under — a format lands
+   * against the computer first, where there is nobody to agree with.
+   */
+  readonly playSameBoards: (() => void) | null;
+  /**
+   * This match is being played on an earlier match's boards.
+   *
+   * Read where a result is recorded rather than where it is drawn: a match on
+   * repeated boards stays out of the rating walk, for the reason a session does.
+   */
+  readonly repeated: boolean;
+  /**
    * Plays whatever phase is in progress out at once. Null when it is not on
    * offer — which is always, over a network, where the server decides what a
    * seat may do and would simply refuse it.

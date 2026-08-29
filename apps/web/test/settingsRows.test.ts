@@ -25,6 +25,8 @@ function settings(playtester: boolean): SettingsOverlayProps {
     devTools: false,
     disguise: true,
     difficulty: "championship",
+  sessionOrder: "halves",
+  onSessionOrderChange: () => {},
     opponent: 3,
     onBoldnessChange: noop,
     onCardColorChange: noop,
@@ -73,6 +75,10 @@ const ORDINARY = [
   // needs. Which *release* they play is a measurement tool and lives behind the
   // flag — it stopped being the difficulty lever the moment there was one.
   "How hard it plays",
+  // Moved here from Home, and on this list rather than left off it for the reason
+  // the trick count is: it is a matter of taste about a format somebody may not be
+  // playing this minute, and a preference nobody can find is not a preference.
+  "Order of a duplicate session",
 ];
 
 test("every ordinary preference is reachable without the playtester flag", () => {

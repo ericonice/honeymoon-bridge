@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { DuplicateSchedule, MatchFormat } from "@hb/engine";
+import type { MatchFormat } from "@hb/engine";
 import type { Account } from "../game/account.js";
 import { storedSession } from "../game/account.js";
 import {
@@ -8,6 +8,8 @@ import {
   SESSION_DEALS_STEP,
   SESSION_ORDERS,
   cleanSessionDeals,
+  rubberFormatFor,
+  rubberGames,
 } from "../game/identity.js";
 import { createTableUrl } from "../game/serverUrl.js";
 import { AchievementIcon, HelpIcon, RecordIcon, SettingsIcon } from "./icons.js";
@@ -21,9 +23,6 @@ export interface HomeProps {
   /** How long a duplicate session runs, in deals. Only shown while one is chosen. */
   readonly sessionDeals: number;
   onSessionDealsChange(deals: number): void;
-  /** How a duplicate session orders its deals. Only shown while one is chosen. */
-  readonly sessionOrder: DuplicateSchedule;
-  onSessionOrderChange(order: DuplicateSchedule): void;
   onFindOpponent(): void;
   onJoinTable(code: string): void;
   onPlayComputer(): void;
@@ -91,6 +90,24 @@ function Secondary({
  * controls for one preference is a preference that can disagree with itself —
  * set duplicate on one, tap the other, get a rubber.
  */
+/**
+ * Which game, in two cells rather than three.
+ *
+ * **"One game" was never a third format — it is a rubber that stops at the first
+ * game**, which is exactly what `RubberFormat`'s two values already say. Sitting it
+ * beside Duplicate as a peer made the row mix categories: two of the three cells were
+ * the same game at different lengths and the third was a different game. So the row
+ * holds the two games that genuinely differ, and how long a rubber runs moves to the
+ * line underneath, where duplicate's length already lives.
+ *
+ * Nothing about what is *stored* changes. `preferredFormat` still keeps `"game"` or
+ * `"rubber"`, `matchNoun` still says which, and a single game is still recorded and
+ * rated as one — this is a truer description of the same two values, not a
+ * re-modelling of them. That matters because `ratings.ts` pools the formats and a
+ * match recorded under a new name would quietly leave the pool.
+ */
+const CELLS = ["rubber", "duplicate"] as const;
+
 function Format({
   format,
   onChange,
@@ -98,88 +115,43 @@ function Format({
   readonly format: MatchFormat;
   onChange(format: MatchFormat): void;
 }): React.JSX.Element {
-  const labels: Record<MatchFormat, string> = {
-    duplicate: "Duplicate",
-    game: "One game",
-    rubber: "Rubber",
-  };
-  const options = FORMAT_ORDER.map((value) => ({ label: labels[value], value }));
+  const labels = { duplicate: "Duplicate", rubber: "Rubber" } as const;
+  // A single game is the rubber cell at a length of one, so both live under it.
+  const chosen = format === "duplicate" ? "duplicate" : "rubber";
 
   return (
     <div className="flex gap-1 rounded-xl bg-white/5 p-1">
-      {options.map((option) => (
+      {CELLS.map((cell) => (
         <button
-          key={option.value}
+          key={cell}
           type="button"
-          aria-pressed={format === option.value}
-          className={`flex-1 rounded-lg px-2 py-2 text-xs font-medium ${
-            format === option.value ? "bg-white/15 text-white" : "text-white/55"
+          aria-pressed={chosen === cell}
+          className={`flex-1 rounded-lg px-2 py-2 text-sm font-medium ${
+            chosen === cell ? "bg-white/15 text-white" : "text-white/55"
           }`}
           onClick={() => {
-            onChange(option.value);
+            // Coming back to Rubber restores the length last chosen for it, rather
+            // than defaulting to two — which is what a trip through Duplicate used to
+            // do, silently promoting a single game to a full rubber.
+            onChange(cell === "duplicate" ? "duplicate" : rubberFormatFor(rubberGames()));
           }}
         >
-          {option.label}
+          {labels[cell]}
         </button>
       ))}
     </div>
   );
 }
 
-/** "1 board" rather than "1 boards", which the shortest session would otherwise read as. */
 /**
- * How the session orders its deals, on the second of the two lines under the format
- * row.
+ * How long a format-dependent line may be before it needs a third line.
  *
- * **Two lines, always, whichever format is chosen**, and the second is empty for the
- * two rubber formats. That is not waste: it is what keeps the block a fixed height so
- * nothing below it can move — a fault this control has already had twice — and the
- * space it leaves is the separation between choosing what to play and the buttons
- * that act on the choice, which the group wanted anyway.
- *
- * The three orders are different *games* rather than three arrangements of one. Back
- * to back makes the comparison immediate and the strategy about beating a line you
- * have just seen; halves is what a duplicate evening actually is, everybody playing
- * every board once before they come round again; shuffled makes recognising the board
- * part of it. Which is better is not something a bench has an opinion about, so it is
- * a setting rather than a decision.
+ * The narrowest phone gives this text about 42 characters a line, so two lines is
+ * roughly 84. Anything under that wraps to at most two wherever it is read, which is
+ * what the pinned heights are sized for. Asserted in `homeFormat.test.ts` rather than
+ * trusted: these strings are edited far more often than the heights are.
  */
-function OrderRow({
-  format,
-  onChange,
-  order,
-}: {
-  readonly format: MatchFormat;
-  onChange(order: DuplicateSchedule): void;
-  readonly order: DuplicateSchedule;
-}): React.JSX.Element {
-  if (format !== "duplicate") {
-    return <div className={NOTE_HEIGHT} aria-hidden="true" />;
-  }
-
-  return (
-    <div className={`${NOTE_HEIGHT} gap-2 px-1 text-xs text-white/45`}>
-      <span className="whitespace-nowrap">Order</span>
-      <div className="flex flex-1 gap-1">
-        {SESSION_ORDERS.map((one) => (
-          <button
-            key={one}
-            type="button"
-            aria-pressed={order === one}
-            className={`flex-1 truncate rounded-md py-0.5 text-xs font-medium ${
-              order === one ? "bg-white/15 text-white" : "text-white/45"
-            }`}
-            onClick={() => {
-              onChange(one);
-            }}
-          >
-            {ORDER_LABEL[one]}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+export const DESCRIPTION_LIMIT = 84;
 
 /** "1 board" rather than "1 boards", which the shortest session would otherwise read as. */
 function boardWord(boards: number): string {
@@ -194,23 +166,8 @@ function boardWord(boards: number): string {
  * block and moved the primary button, which is the exact fault the line was added
  * to fix. Its height is pinned in CSS as well, so no future edit can reintroduce it.
  */
-/** The order the row draws them, which is also what `leanFor` reads. */
-const FORMAT_ORDER: readonly MatchFormat[] = ["game", "rubber", "duplicate"];
-
-const FORMAT_NOTE: Record<"game" | "rubber", string> = {
-  game: "First to 100 below the line",
-  rubber: "Best of three games",
-};
-
 /** The line's height, pinned so nothing below it can ever move. */
 const NOTE_HEIGHT = "flex h-6 items-center";
-
-/** What each order is called on the row, and what it means underneath. */
-const ORDER_LABEL: Record<DuplicateSchedule, string> = {
-  adjacent: "Back to back",
-  halves: "Halves",
-  random: "Shuffled",
-};
 
 /**
  * Which way the line under the row leans, so it reads as being *about* the option
@@ -255,16 +212,45 @@ function FormatNote({
   deals,
   format,
   onDealsChange,
+  onFormatChange,
 }: {
   readonly deals: number;
   readonly format: MatchFormat;
   onDealsChange(deals: number): void;
+  onFormatChange(format: MatchFormat): void;
 }): React.JSX.Element {
-  const lean = leanFor(FORMAT_ORDER.indexOf(format), FORMAT_ORDER.length);
+  const lean = leanFor(format === "duplicate" ? 1 : 0, CELLS.length);
 
   if (format !== "duplicate") {
+    // **A stepper with two stops, for the same reason duplicate has one.** Two arrows
+    // to move between exactly two values is more machinery than a toggle needs — and
+    // one vocabulary for "how long is this" beats two, on a line whose whole job is
+    // that question. The two formats state their length the same way now.
+    const games = format === "game" ? 1 : 2;
     return (
-      <p className={`${NOTE_HEIGHT} ${lean} px-1 text-xs text-white/45`}>{FORMAT_NOTE[format]}</p>
+      <div className={`${NOTE_HEIGHT} ${lean} gap-1 px-1 text-xs text-white/45`}>
+        <span>First to</span>
+        <Step
+          label="One game only"
+          disabled={games === 1}
+          onClick={() => {
+            onFormatChange("game");
+          }}
+        >
+          &lsaquo;
+        </Step>
+        <output className="w-4 text-center font-semibold tabular-nums text-white/90">{games}</output>
+        <Step
+          label="Best of three"
+          disabled={games === 2}
+          onClick={() => {
+            onFormatChange("rubber");
+          }}
+        >
+          &rsaquo;
+        </Step>
+        <span>{games === 1 ? "game" : "games"}</span>
+      </div>
     );
   }
 
@@ -381,6 +367,45 @@ function Identity({
   );
 }
 
+/**
+ * One of the three ways to reach a person, as a cell rather than a row.
+ *
+ * **Three full-width buttons with a line of description each cost 240px, and the
+ * screen did not have it.** They were stacked because they are three different
+ * things; they are a row now because they are three different things *of the same
+ * kind* — every one of them ends with somebody else at the table, and every one
+ * needs an account. The primary button stays full width, because it is the one
+ * that needs nothing and is what most taps are.
+ *
+ * Two lines rather than one. A bare "Find" does not say what it finds, and a shared
+ * caption underneath reading "whoever is looking · send a link · enter a code" makes
+ * the reader match three phrases to three buttons by position — which is a puzzle,
+ * not a label.
+ */
+function TableAction({
+  disabled,
+  label,
+  onClick,
+  sub,
+}: {
+  readonly disabled?: boolean;
+  readonly label: string;
+  readonly sub: string;
+  onClick(): void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="min-w-0 flex-1 rounded-xl border border-white/25 px-2 py-2.5 text-center disabled:opacity-35"
+      disabled={disabled === true}
+      onClick={onClick}
+    >
+      <span className="block truncate text-sm font-semibold">{label}</span>
+      <span className="mt-0.5 block truncate text-[11px] leading-tight text-white/55">{sub}</span>
+    </button>
+  );
+}
+
 function Choice({
   description,
   disabled,
@@ -407,8 +432,19 @@ function Choice({
       onClick={onClick}
     >
       <span className="block text-lg font-semibold">{label}</span>
+      {/* **Two lines' worth, whether it uses them or not.** This description changes
+          with the format and the two are different lengths, so on a wide enough phone
+          one wrapped to two lines and the other did not — which moved everything below
+          the moment you tapped between Rubber and Duplicate. The same fault the note
+          line above has been pinned against twice, in a place nobody thought to look,
+          because the thing that moves is not the thing that changed.
+
+          `min-h-8` is two lines of `text-xs`; `DESCRIPTION_LIMIT` is what stops either
+          string ever needing a third. */}
       <span
-        className={`mt-0.5 block text-xs ${primary === true ? "text-stone-600" : "text-white/55"}`}
+        className={`mt-0.5 block min-h-8 text-xs ${
+          primary === true ? "text-stone-600" : "text-white/55"
+        }`}
       >
         {description}
       </span>
@@ -432,9 +468,7 @@ export function Home({
   onFormatChange,
   onJoinTable,
   onSessionDealsChange,
-  onSessionOrderChange,
   sessionDeals,
-  sessionOrder,
   onPlayComputer,
   onShowAccount,
   onShowAchievements,
@@ -478,8 +512,12 @@ export function Home({
     }
   };
 
+  // **`overflow-y-auto` is a safety net, not the plan.** This screen is meant to fit
+  // without scrolling and the spacing is chosen for that — but a phone smaller than
+  // any I can test on, or a text size somebody has turned up, would otherwise clip the
+  // footer with no way to reach it. Clipped is worse than scrolled.
   return (
-    <div className="flex flex-1 flex-col justify-between overflow-y-auto px-6 pt-8 pb-4">
+    <div className="flex flex-1 flex-col justify-between overflow-y-auto px-6 pt-6 pb-3">
       <div>
         <h1 className="text-3xl font-semibold">Honeymoon Bridge</h1>
         <p className="mt-1 text-sm text-white/55">Contract bridge for two.</p>
@@ -489,7 +527,7 @@ export function Home({
           the thing standing between somebody and half of what the screen
           below offers. Its own margin instead of the choices' shared `gap-3`
           keeps it from reading as one more item in that list. */}
-      <div className="mt-6">
+      <div className="mt-5">
         <Identity
           account={account}
           checking={checkingAccount}
@@ -498,15 +536,27 @@ export function Home({
         />
       </div>
 
-      <div className="flex flex-col gap-3 py-6">
+      <div className="flex flex-col gap-3 py-5">
         {/* The row and its one line of explanation are one control, so they sit close
             to each other — and well clear of the buttons below, which act on the
             choice rather than being part of making it. Without that gap the note read
             as a caption on the primary button. */}
         <div className="mb-2 flex flex-col gap-1.5">
+          {/* **The row said nothing about what it was choosing.** Three words sat at
+              the top of the screen and the line underneath explained the one that was
+              selected, so somebody who had never seen it could read "Best of three
+              games" and still not know that was one of three answers to a question
+              nobody had asked. The label is the question. */}
+          <p className="px-1 text-xs tracking-wide text-white/45 uppercase">
+            What you&rsquo;re playing
+          </p>
           <Format format={format} onChange={onFormatChange} />
-          <FormatNote deals={sessionDeals} format={format} onDealsChange={onSessionDealsChange} />
-          <OrderRow format={format} order={sessionOrder} onChange={onSessionOrderChange} />
+          <FormatNote
+            deals={sessionDeals}
+            format={format}
+            onDealsChange={onSessionDealsChange}
+            onFormatChange={onFormatChange}
+          />
         </div>
 
         <Choice
@@ -520,34 +570,39 @@ export function Home({
           onClick={onPlayComputer}
         />
 
-        {/* No longer shut for duplicate: a table can run a session now. It still
-            takes *both* seats to have asked for one — a session is a different game
-            rather than a longer or shorter one, so being put into it unasked is a
-            worse mistake than getting the rubber you know. See `formatFor` on the
-            server, which is where that rule lives. */}
-        <Choice
-          label="Find an opponent"
-          description={
-            format === "duplicate"
-              ? "Get put together with whoever else is looking. A session needs you both to want one."
-              : "Get put together with whoever else is looking for a game."
-          }
-          onClick={onFindOpponent}
-        />
+        {/* None of the three is shut for duplicate: a table can run a session now. It
+            still takes *both* seats to have asked for one — a session is a different
+            game rather than a longer or shorter one, so being put into it unasked is a
+            worse mistake than getting the rubber you know. `formatFor` on the server
+            is where that rule lives, and the line under the row is where it is said,
+            once, rather than three times. */}
+        <div className="flex gap-2">
+          <TableAction label="Find" sub="whoever is free" onClick={onFindOpponent} />
+          <TableAction
+            disabled={busy}
+            label="Invite"
+            sub="send a link"
+            onClick={() => {
+              void startTable();
+            }}
+          />
+          <TableAction
+            label="Join"
+            sub="with a code"
+            onClick={() => {
+              setJoining(true);
+            }}
+          />
+        </div>
 
-        <Choice
-          label="Start a table"
-          description={
-            format === "duplicate"
-              ? "Send one person the link. A session needs you both to want one."
-              : "Create a table and send one particular person the link."
-          }
-          disabled={busy}
-          onClick={() => {
-            void startTable();
-          }}
-        />
+        <p className="min-h-8 text-xs text-white/45">
+          {format === "duplicate"
+            ? "Playing a person needs an account — and a session needs you both to want one."
+            : "Playing a person needs an account. The computer needs nothing."}
+        </p>
 
+        {/* Opens under the row rather than replacing a button, which is what it did
+            when there was a full-width button to replace. */}
         {joining ? (
           <div className="flex gap-2">
             <input
@@ -571,15 +626,7 @@ export function Home({
               Join
             </button>
           </div>
-        ) : (
-          <Choice
-            label="Join a table"
-            description="Enter a code, or just open the link you were sent."
-            onClick={() => {
-              setJoining(true);
-            }}
-          />
-        )}
+        ) : null}
 
         {error === null ? null : <p className="text-sm text-amber-200">{error}</p>}
       </div>

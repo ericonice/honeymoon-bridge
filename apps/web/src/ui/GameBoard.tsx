@@ -191,6 +191,7 @@ function CurrentPhase({
           waitingToContinue={session.waitingToContinue}
           onDone={onDone}
           onNextDeal={nextDeal}
+          onPlaySameBoards={session.playSameBoards}
         />
       );
     }

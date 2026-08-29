@@ -3,8 +3,9 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import type { MatchFormat } from "@hb/engine";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Home } from "../src/ui/Home.js";
+import { DESCRIPTION_LIMIT, Home } from "../src/ui/Home.js";
 import type { HomeProps } from "../src/ui/Home.js";
+import { MAX_SESSION_DEALS, setPreferredFormat } from "../src/game/identity.js";
 
 afterEach(() => {
   cleanup();
@@ -16,7 +17,6 @@ function show(
   format: MatchFormat,
   onFormatChange: HomeProps["onFormatChange"] = noop,
   onSessionDealsChange: HomeProps["onSessionDealsChange"] = noop,
-  onSessionOrderChange: HomeProps["onSessionOrderChange"] = noop,
 ): void {
   render(
     createElement(Home, {
@@ -32,11 +32,9 @@ function show(
       onShowHelp: noop,
       onShowRecord: noop,
       onSessionDealsChange,
-      onSessionOrderChange,
       onShowSettings: noop,
       onSignIn: noop,
       sessionDeals: 10,
-      sessionOrder: "halves",
     }),
   );
 }
@@ -58,12 +56,26 @@ function action(label: string): HTMLButtonElement {
  * merely unlikely to be tapped.
  */
 describe("choosing what to play, on Home", () => {
-  it("offers all three formats", () => {
+  /**
+   * **Two cells, not three.** "One game" was never a third format — it is a rubber
+   * that stops at the first game, which is exactly what `RubberFormat`'s two values
+   * say. Sitting it beside Duplicate made the row mix categories, and how long a
+   * rubber runs belongs on the line underneath where duplicate's length already is.
+   */
+  it("offers the two games that genuinely differ", () => {
     show("rubber");
 
-    expect(action("One game")).toBeTruthy();
     expect(action("Rubber")).toBeTruthy();
     expect(action("Duplicate")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "One game" })).toBeNull();
+  });
+
+  /** A single game is the rubber cell at a length of one, and the cell says so. */
+  it("marks the rubber cell for a single game too", () => {
+    show("game");
+
+    expect(action("Rubber").getAttribute("aria-pressed")).toBe("true");
+    expect(action("Duplicate").getAttribute("aria-pressed")).toBe("false");
   });
 
   it("marks the chosen one, so the row says what it is going to do", () => {
@@ -90,8 +102,9 @@ describe("choosing what to play, on Home", () => {
     show("rubber");
 
     expect(action("Play the computer").disabled).toBe(false);
-    expect(action("Find an opponent").disabled).toBe(false);
-    expect(action("Start a table").disabled).toBe(false);
+    for (const way of ["Find", "Invite", "Join"]) {
+      expect(screen.getByRole("button", { name: new RegExp(way) })).toBeTruthy();
+    }
   });
 
   /**
@@ -106,9 +119,13 @@ describe("choosing what to play, on Home", () => {
     show("duplicate");
 
     expect(action("Play the computer").disabled).toBe(false);
-    expect(action("Find an opponent").disabled).toBe(false);
-    expect(action("Start a table").disabled).toBe(false);
-    expect(screen.getAllByText(/needs you both to want one/).length).toBe(2);
+    for (const way of ["Find", "Invite", "Join"]) {
+      expect(screen.getByRole("button", { name: new RegExp(way) })).toBeTruthy();
+    }
+    // Said once under the row now rather than three times, once per button. Three
+    // full-width buttons with a line of description each cost 240px on the one screen
+    // that must not scroll.
+    expect(screen.getAllByText(/needs you both to want one/).length).toBe(1);
   });
 
   it("says what a session actually is, since nobody has met one before", () => {
@@ -139,15 +156,37 @@ describe("choosing what to play, on Home", () => {
 describe("how long a session runs", () => {
   it("is one line whatever is chosen, so nothing below it moves", () => {
     show("rubber");
-    expect(screen.getByText("Best of three games")).toBeTruthy();
+    expect(screen.getByText("First to")).toBeTruthy();
+    expect(screen.getByText("games")).toBeTruthy();
 
     cleanup();
     show("game");
-    expect(screen.getByText("First to 100 below the line")).toBeTruthy();
+    expect(screen.getByText("game")).toBeTruthy();
 
     cleanup();
     show("duplicate");
     expect(screen.getByText("A session of")).toBeTruthy();
+  });
+
+  /**
+   * The rubber's length is a stepper now, so both formats say how long they are in
+   * the same words. Its two stops are the two `RubberFormat` values, and it reports
+   * them as exactly those — a single game must still be stored and rated as `"game"`,
+   * since `ratings.ts` pools the formats and a match under a new name leaves the pool.
+   */
+  it("steps a rubber between one game and two, reporting the stored format", () => {
+    const changed = vi.fn();
+    show("rubber", changed);
+
+    screen.getByRole("button", { name: "One game only" }).click();
+    expect(changed).toHaveBeenCalledWith("game");
+
+    cleanup();
+    changed.mockClear();
+    show("game", changed);
+
+    screen.getByRole("button", { name: "Best of three" }).click();
+    expect(changed).toHaveBeenCalledWith("rubber");
   });
 
   /** Short enough not to wrap, which is the whole reason the height holds. */
@@ -162,22 +201,12 @@ describe("how long a session runs", () => {
     const line = (text: string): HTMLElement =>
       screen.getByText(text, { exact: false }).closest("p, div") as HTMLElement;
 
-    show("game");
-    expect(line("First to 100").className).toContain("text-left");
-
-    cleanup();
     show("rubber");
-    expect(line("Best of three").className).toContain("text-center");
+    expect(line("First to").className).toContain("text-left");
 
     cleanup();
     show("duplicate");
     expect(line("A session of").className).toContain("text-right");
-  });
-
-  it("keeps every version of that line short", () => {
-    for (const note of ["Best of three games", "First to 100 below the line"]) {
-      expect(note.length).toBeLessThan(32);
-    }
   });
 
   it("steps by two, since an odd count would leave a board played once", () => {
@@ -235,7 +264,6 @@ function render0(format: MatchFormat, deals: number): void {
       onJoinTable: noop,
       onPlayComputer: noop,
       onSessionDealsChange: noop,
-      onSessionOrderChange: noop,
       onShowAccount: noop,
       onShowAchievements: noop,
       onShowHelp: noop,
@@ -243,52 +271,115 @@ function render0(format: MatchFormat, deals: number): void {
       onShowSettings: noop,
       onSignIn: noop,
       sessionDeals: deals,
-      sessionOrder: "halves",
     }),
   );
 }
 
 /**
- * How a session orders its deals: back to back, halves, or shuffled.
+ * The block above the buttons is the same height whatever is chosen.
  *
- * A setting rather than a decision because the three are different *games* rather
- * than three arrangements of one — back to back makes the comparison immediate,
- * shuffled makes recognising the board part of it — and which is better is not
- * something a bench has an opinion about.
+ * Which is what stops the primary button moving out from under the thumb reaching for
+ * it — a fault this control has had twice, once by a row appearing and once by a note
+ * long enough to wrap. Counted rather than measured: one fixed-height line, present in
+ * every format.
  *
- * The row lives on a **second fixed line** under the format row, empty for the two
- * rubber formats. The emptiness is the point: it keeps the block one height, which is
- * the fault this control has already had twice, and the space it leaves is the
- * separation between choosing what to play and the buttons that act on the choice.
+ * The order of a session used to be a second fixed line here and is a Settings row
+ * now, on Home's own test — the format changes session to session and the order does
+ * not. `test/settingsRows.test.ts` is what holds it there.
  */
-describe("how a session orders its deals", () => {
-  it("offers the three orders, and only for a session", () => {
-    show("rubber");
-    expect(screen.queryByText("Order")).toBeNull();
+/**
+ * **Nothing below the format row may move when the format changes**, and the row is
+ * not the only thing that can move it.
+ *
+ * Reported after the row itself had been pinned twice: tapping between Rubber and
+ * Duplicate still jumped. The culprit was two *descriptions* further down — the
+ * primary button's and the line under the table row — which differ by format and were
+ * different enough in length to wrap to a different number of lines on a wide enough
+ * phone. The lesson is the one this control keeps teaching from a new direction: the
+ * thing that moves is not the thing that changed.
+ *
+ * Both are pinned to two lines. These assert the strings can never need a third,
+ * since they are edited far more often than the heights are, and jsdom does no layout
+ * so a rendered height cannot be measured here.
+ */
+describe("nothing below the row moves when the format changes", () => {
+  const texts = (): string[] =>
+    [...document.querySelectorAll("p, span")]
+      .map((one) => one.textContent ?? "")
+      .filter((one) => one.startsWith("On this device") || one.startsWith("Playing a person"));
 
-    cleanup();
-    show("duplicate");
-    expect(screen.getByText("Order")).toBeTruthy();
-    for (const label of ["Back to back", "Halves", "Shuffled"]) {
-      expect(screen.getByRole("button", { name: label })).toBeTruthy();
+  it("keeps every format-dependent line inside two lines", () => {
+    for (const format of ["rubber", "game", "duplicate"] as const) {
+      cleanup();
+      show(format);
+      const found = texts();
+      expect(found.length).toBeGreaterThan(0);
+      for (const line of found) {
+        expect(line.length).toBeLessThanOrEqual(DESCRIPTION_LIMIT);
+      }
     }
   });
 
-  it("marks the chosen order and reports a change", () => {
-    const changed = vi.fn();
-    show("duplicate", noop, noop, changed);
+  /** At the longest session, which is where the description is longest. */
+  it("stays inside them at the longest session", () => {
+    render0("duplicate", MAX_SESSION_DEALS);
 
-    expect(screen.getByRole("button", { name: "Halves" }).getAttribute("aria-pressed")).toBe("true");
-    screen.getByRole("button", { name: "Back to back" }).click();
-    expect(changed).toHaveBeenCalledWith("adjacent");
+    for (const line of texts()) {
+      expect(line.length).toBeLessThanOrEqual(DESCRIPTION_LIMIT);
+    }
   });
 
-  /**
-   * The block is the same height whatever is chosen, which is what stops the primary
-   * button moving. Counted rather than measured: two lines of fixed height plus the
-   * row, present in every format.
-   */
-  it("keeps the block one height across all three formats", () => {
+  it("pins both to the same height whatever is chosen", () => {
+    show("rubber");
+    const pinned = document.querySelectorAll(".min-h-8").length;
+    expect(pinned).toBeGreaterThan(0);
+
+    cleanup();
+    show("duplicate");
+    expect(document.querySelectorAll(".min-h-8").length).toBe(pinned);
+  });
+});
+
+/**
+ * **A trip through Duplicate used to promote a single game to a full rubber.** The
+ * format is stored and perfectly sticky, but it holds only one of three values — so
+ * choosing Duplicate overwrites *which* rubber was wanted, and coming back had nothing
+ * to go on and defaulted to two. Reported as the length not being sticky, and it was
+ * not the storage that failed but what the storage could express.
+ */
+describe("how long a rubber runs, remembered", () => {
+  it("comes back to the length last chosen, not to a full rubber", () => {
+    const changed = vi.fn();
+
+    show("rubber", changed);
+    screen.getByRole("button", { name: "One game only" }).click();
+    expect(changed).toHaveBeenCalledWith("game");
+    setPreferredFormat("game");
+
+    // Off to Duplicate, which is the only thing the format key can now say.
+    setPreferredFormat("duplicate");
+    cleanup();
+    changed.mockClear();
+
+    show("duplicate", changed);
+    action("Rubber").click();
+    expect(changed).toHaveBeenCalledWith("game");
+  });
+
+  it("comes back to a full rubber when that is what was left", () => {
+    setPreferredFormat("rubber");
+    setPreferredFormat("duplicate");
+    const changed = vi.fn();
+
+    show("duplicate", changed);
+    action("Rubber").click();
+
+    expect(changed).toHaveBeenCalledWith("rubber");
+  });
+});
+
+describe("the block above the buttons", () => {
+  it("keeps one height across all three formats", () => {
     const lines = (): number => document.querySelectorAll(".h-6").length;
 
     show("game");
@@ -301,5 +392,11 @@ describe("how a session orders its deals", () => {
 
     show("duplicate");
     expect(lines()).toBe(forGame);
+  });
+
+  it("says what the row is choosing", () => {
+    show("rubber");
+
+    expect(screen.getByText(/What you.re playing/)).toBeTruthy();
   });
 });

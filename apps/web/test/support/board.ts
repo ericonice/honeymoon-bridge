@@ -142,6 +142,8 @@ function Harness({
     view: snapshot.view,
     vulnerable: snapshot.vulnerable,
     waitingOnOpponent: snapshot.view.toAct !== snapshot.view.me,
+    playSameBoards: null,
+    repeated: false,
     waitingToContinue: false,
   };
 

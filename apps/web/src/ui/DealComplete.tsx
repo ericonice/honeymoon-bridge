@@ -32,12 +32,27 @@ export interface DealCompleteProps {
    */
   readonly onDone: (() => void) | null;
   onNextDeal(): void;
+  /**
+   * Plays the finished match's boards back, from the other side. Null when there
+   * is nothing to return.
+   *
+   * Offered beside "New rubber" rather than instead of it, because it is a second
+   * way to carry on rather than a different kind of ending — and quieter than it,
+   * because most of the time another rubber is what somebody wants.
+   */
+  readonly onPlaySameBoards: (() => void) | null;
+}
+
+/** The pair's aggregate, which is the number a return match exists to produce. */
+function bothTogether(first: Pair<number>, second: Pair<number>): Pair<number> {
+  return [first[0] + second[0], first[1] + second[1]];
 }
 
 export function DealComplete({
   dealBonus,
   onDone,
   onNextDeal,
+  onPlaySameBoards,
   opponentName,
   opponentRating,
   opponentWaitingToContinue,
@@ -54,7 +69,13 @@ export function DealComplete({
     standing.kind === "duplicate" ? (
       <SessionPad summary={standing.summary} view={view} />
     ) : (
-      <Scorepad history={standing.history} opponentName={opponentName} rubber={standing.rubber} view={view} />
+      <Scorepad
+        history={standing.history}
+        opponentName={opponentName}
+        previous={standing.previous}
+        rubber={standing.rubber}
+        view={view}
+      />
     );
   const complete =
     standing.kind === "duplicate" ? standing.summary.complete : standing.rubber.complete;
@@ -62,16 +83,51 @@ export function DealComplete({
     standing.kind === "duplicate" ? "duplicate" : standing.rubber.format,
   );
 
+  // Side by side once there are two ways to carry on, because they are two ways to
+  // carry on rather than a choice and an afterthought — stacked, the second read as a
+  // second-class version of the first. "Done for now" stays apart below: it is the one
+  // that ends the sitting rather than continuing it.
+  const carryOn = onPlaySameBoards !== null && !waitingToContinue;
+
   const button = (
     <div className="flex w-full max-w-sm flex-col items-center gap-3">
-      <button
-        type="button"
-        className="w-full rounded-xl bg-white px-4 py-4 text-lg font-semibold text-stone-900 disabled:bg-white/10 disabled:text-white/60"
-        disabled={waitingToContinue}
-        onClick={onNextDeal}
-      >
-        {waitingToContinue ? `Waiting for ${opponentName}…` : complete ? `New ${noun}` : "Next deal"}
-      </button>
+      <div className="flex w-full gap-2">
+        <button
+          type="button"
+          className={`min-w-0 flex-1 rounded-xl bg-white px-3 text-stone-900 disabled:bg-white/10 disabled:text-white/60 ${
+            carryOn ? "py-3 text-left" : "px-4 py-4 text-lg font-semibold"
+          }`}
+          disabled={waitingToContinue}
+          onClick={onNextDeal}
+        >
+          {carryOn ? (
+            <>
+              <span className="block truncate text-base font-semibold">New {noun}</span>
+              <span className="mt-0.5 block truncate text-xs text-stone-600">fresh deals</span>
+            </>
+          ) : waitingToContinue ? (
+            `Waiting for ${opponentName}…`
+          ) : complete ? (
+            `New ${noun}`
+          ) : (
+            "Next deal"
+          )}
+        </button>
+
+        {/* The same cards back, with the draw swapped. Only after a rubber dealt
+            fresh: a session already plays every board twice, and returning a return
+            match is a third run of the same cards. */}
+        {carryOn ? (
+          <button
+            type="button"
+            className="min-w-0 flex-1 rounded-xl border border-white/25 px-3 py-3 text-left"
+            onClick={onPlaySameBoards ?? undefined}
+          >
+            <span className="block truncate text-base font-semibold">Same boards</span>
+            <span className="mt-0.5 block truncate text-xs text-white/55">from the other side</span>
+          </button>
+        ) : null}
+      </div>
 
       {/* The other half of "Waiting for X…". Moving on takes both, and without
           this a finished deal looks the same whether or not somebody is sitting
@@ -79,6 +135,15 @@ export function DealComplete({
       {opponentWaitingToContinue ? (
         <p className="text-xs text-white/50">
           {complete ? `${opponentName} wants another ${noun}` : `${opponentName} is ready`}
+        </p>
+      ) : null}
+
+      {/* Said under the pair rather than inside the button that does it, which had no
+          room for a sentence once the two sat side by side. */}
+      {carryOn ? (
+        <p className="text-xs text-white/50">
+          The same deals again, with the draw swapped — you get the cards {opponentName} was
+          offered.
         </p>
       ) : null}
 
@@ -148,6 +213,31 @@ export function DealComplete({
             <Row label="Above the line" values={standing.rubber.aboveLine} view={view} />
             <Row divider label="Below the line" values={standing.rubber.belowLineTotal} view={view} />
             <Row emphasis label="Final score" values={totalScore(standing.rubber)} view={view} />
+            {/* **What the pair came to, on the screen that ends the second half of
+                it.** A return match's own final score answers half a question: these
+                boards have been played twice and the interesting number is how the two
+                halves add up. Only here — the running pad compares deal by deal, where
+                the unit is the cards; this compares the players, which is fair across a
+                whole match precisely because each has now had both sides of every
+                board.
+
+                Read unreversed, unlike every other figure this feature draws. */}
+            {standing.previousPoints === null ? null : (
+              <>
+                <Row
+                  label="First match"
+                  values={standing.previousPoints}
+                  view={view}
+                />
+                <Row
+                  divider
+                  emphasis
+                  label="Both together"
+                  values={bothTogether(standing.previousPoints, totalScore(standing.rubber))}
+                  view={view}
+                />
+              </>
+            )}
           </div>
         )}
 

@@ -14,6 +14,7 @@ import type {
 import { newRubber, totalScore, vulnerability } from "./rubber.js";
 import type { RubberFormat, RubberState } from "./rubber.js";
 import type { DealScore } from "./scoring.js";
+import { mirrorOf } from "./returnMatch.js";
 import { applyTableAction, nextDeal, startTable, summarize } from "./table.js";
 import type { DealRecord, TableState } from "./table.js";
 import type { DealAction, DealState, Pair, PlayerId } from "./types.js";
@@ -55,7 +56,13 @@ export interface Standing {
  */
 export type MatchState =
   | { readonly kind: "duplicate"; readonly session: DuplicateState }
-  | { readonly kind: "rubber"; readonly table: TableState };
+  | RubberMatch;
+
+/** Named so `canReturn` can narrow to it, which a plain boolean cannot do. */
+export interface RubberMatch {
+  readonly kind: "rubber";
+  readonly table: TableState;
+}
 
 /** The standing, in whichever shape it is being kept. What the score strip and the pad read. */
 export type MatchStanding =
@@ -63,6 +70,16 @@ export type MatchStanding =
   | {
       readonly history: readonly DealRecord[];
       readonly kind: "rubber";
+      /**
+       * What the same boards came to in the match this one is replaying, oldest
+       * first. Empty unless this is a return match.
+       *
+       * Carries scores and nothing else — no seed, which is what a board is dealt
+       * from and the one thing that must never reach a client.
+       */
+      readonly previous: readonly DealRecord[];
+      /** What the match being replayed came to, per seat. Null unless this is one. */
+      readonly previousPoints: Pair<number> | null;
       readonly rubber: RubberState;
     };
 
@@ -87,6 +104,17 @@ export interface MatchSummary {
   readonly format: MatchFormat;
   /** Each side's match total, in whatever the format settles in. */
   readonly points: Pair<number>;
+  /**
+   * This match is being played on the boards of an earlier one, from the other side.
+   *
+   * Two things read it. The deal-complete screen, which must not offer a return
+   * match on a return match — a third run of the same cards is not a game. And the
+   * recorded result, which has to stay out of the rating walk for the reason
+   * duplicate does: the computer's recall of a board it has played is perfect and a
+   * person's is not, so a rated match on repeated boards over-credits whichever side
+   * remembers better, and that is never the person.
+   */
+  readonly repeated: boolean;
   /** The current deal's score, once it is complete and was not passed out. */
   readonly score: DealScore | null;
   readonly standing: MatchStanding;
@@ -136,6 +164,63 @@ export function startMatch(options: StartMatchOptions): MatchState {
     };
   }
   return { kind: "rubber", table: startTable({ format, seed, starter }) };
+}
+
+/**
+ * Whether the match just finished can be played back on the same boards.
+ *
+ * A rubber that has been won and was dealt fresh. Not a session — duplicate
+ * already plays every board twice, so there is nothing left to return — and not a
+ * return match, which would be a third run of the same cards.
+ */
+export function canReturn(match: MatchState): match is RubberMatch {
+  return (
+    match.kind === "rubber" &&
+    // **Every deal of this rubber must be one we recorded a board for**, not merely
+    // one of them. A rubber already under way when the boards started being kept comes
+    // back from storage with none (see `restoreTable`) and then records boards for
+    // whatever it plays next — so it ends with fewer boards than deals, and pairing
+    // `previous[i]` against `history[i]` on the replay would line every deal up
+    // against the wrong one. Counting is what makes that unreachable rather than
+    // subtly wrong, and it subsumes the empty case.
+    match.table.dealt.length === summarize(match.table).history.length &&
+    match.table.replay.length === 0 &&
+    summarize(match.table).rubber.complete
+  );
+}
+
+/**
+ * The same boards again, with the right to draw first handed to the other player.
+ *
+ * So you are offered the cards your opponent was offered and they get yours, which
+ * is duplicate's mechanic reached without duplicate's scoring: the deals are shared
+ * and the rubber is an ordinary rubber. What that gives up is *cancellation* — under
+ * earned vulnerability the two runs of a board happen at different standings, so
+ * their difference is not purely what the two players did. That is a property of
+ * duplicate scoring rather than of repeated deals, and it is not the reason meeting
+ * a board again is worth doing.
+ *
+ * Returns the match unchanged when there is nothing to return, so a caller that has
+ * not checked `canReturn` cannot accidentally start a third run.
+ */
+export function returnMatch(match: MatchState): MatchState {
+  if (!canReturn(match)) {
+    return match;
+  }
+  const replay = mirrorOf(match.table.dealt);
+  return {
+    kind: "rubber",
+    table: startTable({
+      format: match.table.rubberBefore.format,
+      previous: summarize(match.table).history,
+      previousPoints: totalScore(summarize(match.table).rubber),
+      replay,
+      // Both are supplied by the replay's first board and are here only to satisfy
+      // the ordinary path; `startTable` prefers the replay when it has one.
+      seed: replay[0]!.seed,
+      starter: replay[0]!.starter,
+    }),
+  };
 }
 
 export function dealOf(match: MatchState): DealState {
@@ -197,6 +282,7 @@ export function summarizeMatch(match: MatchState): MatchSummary {
       format: "duplicate",
       points: summary.margin,
       score: summary.score?.deal ?? null,
+      repeated: false,
       standing: { kind: "duplicate", summary },
       botStanding: { rubber: newRubber("rubber"), vulnerable: summary.vulnerable },
       vulnerable: summary.vulnerable,
@@ -211,8 +297,15 @@ export function summarizeMatch(match: MatchState): MatchSummary {
     dealsPlayed: summary.history.length,
     format: summary.rubber.format,
     points: totalScore(summary.rubber),
+    repeated: match.table.replay.length > 0,
     score: summary.score,
-    standing: { history: summary.history, kind: "rubber", rubber: summary.rubber },
+    standing: {
+      history: summary.history,
+      kind: "rubber",
+      previous: match.table.previous,
+      previousPoints: match.table.previousPoints,
+      rubber: summary.rubber,
+    },
     // The rubber the deal was *bid* at, not the rubber including it — see
     // `rubberBefore`. Pricing a call against a standing that already contains the
     // deal being priced would be reading the answer off the back of the book.

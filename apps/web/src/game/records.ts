@@ -142,6 +142,12 @@ export interface RobotRubber {
   readonly format: MatchFormat;
   readonly points: number;
   readonly pointsAgainst: number;
+  /**
+   * Played on the boards of the match before it. Keeps the result out of the
+   * rating walk, for the reason a session is kept out: the computer's recall of a
+   * board it has already played is perfect and a person's is not.
+   */
+  readonly repeated: boolean;
   readonly won: boolean;
 }
 
@@ -176,6 +182,7 @@ export function reportRobotRubber(rubber: RobotRubber): void {
       nickname: nickname() === "" ? "Player" : nickname(),
       points: rubber.points,
       pointsAgainst: rubber.pointsAgainst,
+      repeated: rubber.repeated,
       // Additive, because every build the service worker still has in circulation
       // sends `won` alone. A server too old to read it records a draw as a loss,
       // which is wrong — and less wrong than the alternative of not sending the

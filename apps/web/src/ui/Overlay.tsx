@@ -5,6 +5,21 @@ export interface OverlayProps {
 }
 
 /**
+ * What a surface calls its way out, which was two words for one thing.
+ *
+ * **A surface that fills the screen says "Back". A panel floating over what you were
+ * doing gets a ✕.** Nothing else: the question is not where you came from, which
+ * varies — Help opens from Home, from Settings and from the middle of an auction —
+ * but whether the thing you were doing is still on screen behind it. If it is, you
+ * are dismissing something; if it is not, you are going back.
+ *
+ * By that rule Help and Settings were the only two wrong. Both are `absolute inset-0`
+ * over an opaque ground, so they are screens wearing the word "overlay" in their
+ * filenames, and they said "Close" while the record, the achievements, the account
+ * page and the scoring page all said "Back" from the identical position.
+ */
+
+/**
  * A panel over the table rather than in place of it.
  *
  * `ClaimConfirm` and `LeaveConfirm` are asking for a decision and take the

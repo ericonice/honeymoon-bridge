@@ -307,6 +307,7 @@ describe("rubber facts", () => {
   const record = (wonGameBy: PlayerId | null): DealRecord => ({
     contract: null,
     score: null,
+    starter: 0,
     tricksWon: [0, 0],
     wonGameBy,
   });
