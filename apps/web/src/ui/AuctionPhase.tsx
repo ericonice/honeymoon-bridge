@@ -9,6 +9,15 @@ const LEVELS: readonly Level[] = [1, 2, 3, 4, 5, 6, 7];
 
 export interface AuctionPhaseProps {
   readonly opponentName: string;
+  /**
+   * Both sides' ratings, either null until something has said.
+   *
+   * Beside the seat labels, which is where a rating belongs: it is a fact about a
+   * player, and a label is the one thing on the board that is one. See `SeatLabel`.
+   */
+  readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
+  /** The computer is working out its move right now — see `GameSession.thinking`. */
+  readonly thinking: boolean;
   readonly view: PlayerView;
   readonly vulnerable: Pair<boolean>;
   onCall(call: Call): void;
@@ -149,6 +158,8 @@ export function AuctionPhase({
   onCall,
   onStartPlay,
   opponentName,
+  ratings,
+  thinking,
   view,
   vulnerable,
 }: AuctionPhaseProps): React.JSX.Element {
@@ -187,8 +198,14 @@ export function AuctionPhase({
       {/* The auction has no cards on the table for a label to sit beside, so
           the two seats go above the record of what each of them has said. */}
       <div className="flex items-center justify-between px-4 pt-2">
-        <SeatLabel active={!myTurn} name={opponentName} vulnerable={vulnerable[view.opponent]} />
-        <SeatLabel active={myTurn} name="You" vulnerable={vulnerable[view.me]} />
+        <SeatLabel
+          active={!myTurn}
+          name={opponentName}
+          rating={ratings.opponent}
+          thinking={thinking}
+          vulnerable={vulnerable[view.opponent]}
+        />
+        <SeatLabel active={myTurn} name="You" rating={ratings.mine} vulnerable={vulnerable[view.me]} />
       </div>
 
       <History opponentName={opponentName} view={view} />

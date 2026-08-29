@@ -7,6 +7,7 @@ import { readStored, writeStored } from "./storage.js";
 
 const FORMAT_KEY = "hb.format";
 const RUBBER_GAMES_KEY = "hb.rubberGames";
+const MIRROR_GAMES_KEY = "hb.mirrorGames";
 const SESSION_DEALS_KEY = "hb.sessionDeals";
 const SESSION_ORDER_KEY = "hb.sessionOrder";
 const OPPONENT_KEY = "hb.opponent";
@@ -71,7 +72,13 @@ export function resetPlayerToken(): void {
  */
 export function preferredFormat(): MatchFormat {
   const stored = readStored(FORMAT_KEY);
-  if (stored === "game" || stored === "duplicate") {
+  // **Widen this whenever `MatchFormat` widens.** It is a validating reader, so a
+  // format it has not been told about is silently read back as a rubber — which is
+  // exactly what happened when Mirror shipped: choosing it stored `"mirror"`, this
+  // returned `"rubber"`, and the match played was a rubber that would not end at a
+  // hundred below the line because a rubber takes two games. The row said Mirror and
+  // the game was not one.
+  if (stored === "game" || stored === "duplicate" || stored === "mirror") {
     return stored;
   }
   return "rubber";
@@ -106,6 +113,31 @@ export function rubberGames(): 1 | 2 {
 /** The rubber format that length means, which is the only thing the row stores. */
 export function rubberFormatFor(games: 1 | 2): MatchFormat {
   return games === 1 ? "game" : "rubber";
+}
+
+/**
+ * How long each half of a mirror runs: one game, or a rubber.
+ *
+ * **Its own value rather than sharing the rubber's**, because they are answers to two
+ * different questions. A rubber's length is how long you want a rubber; a mirror's is
+ * how long you want each side of a comparison to be, and somebody may well want a full
+ * rubber of one and a single game of the other. Sharing would make changing either
+ * silently change the other, which is the fault `preferredFormat` already had.
+ *
+ * Defaults to one game, which is what the format is for: the pair is then about six
+ * deals and duplicating them cancels most of the shuffle.
+ */
+export function mirrorGames(): 1 | 2 {
+  return readStored(MIRROR_GAMES_KEY) === "2" ? 2 : 1;
+}
+
+export function setMirrorGames(games: 1 | 2): void {
+  writeStored(MIRROR_GAMES_KEY, String(games));
+}
+
+/** What each half of a mirror is, in the narrow vocabulary the rubber machinery keeps. */
+export function mirrorHalfFormat(): "game" | "rubber" {
+  return mirrorGames() === 1 ? "game" : "rubber";
 }
 
 /**

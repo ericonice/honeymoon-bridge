@@ -15,6 +15,7 @@ import type {
   MatchState,
   MatchSummary,
   PlayerId,
+  RubberFormat,
   TableState,
   Unlock,
 } from "@hb/engine";
@@ -53,6 +54,8 @@ interface SeatRecord {
   readonly format: MatchFormat;
   /** How long a session they asked for, in deals. Only consulted for duplicate. */
   readonly deals: number;
+  /** What each half of a two-game match runs to. Only consulted when both asked. */
+  readonly halfFormat: RubberFormat;
   /** How they want a session ordered. Only consulted when both asked for the same. */
   readonly order: DuplicateSchedule;
   readonly nickname: string;
@@ -152,6 +155,7 @@ function startingMatch(seats: readonly [SeatRecord | null, SeatRecord | null]): 
       : {}),
     firstBoard: dealSeed(),
     format: agreed.format,
+    halfFormat: agreed.halfFormat,
     seed: dealSeed(),
     starter: 0,
   });
@@ -334,6 +338,9 @@ export class Table extends DurableObject<Env> {
       // asked for duplicate.
       deals: message.sessionDeals ?? 0,
       format: message.format,
+      // A client too old to ask reads as the default, which is what the format is
+      // for — a pair of single games, about six deals.
+      halfFormat: message.halfFormat ?? "game",
       // A client too old to have an opinion reads as the default, which is what it
       // would have been playing.
       order: message.sessionOrder ?? "halves",

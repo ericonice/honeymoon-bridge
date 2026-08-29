@@ -121,6 +121,8 @@ function CurrentPhase({
         <DrawPhase
           lastDraw={lastDraw}
           opponentName={session.opponentName}
+          ratings={ratings}
+          thinking={session.thinking}
           peekLastDraw={peeking ? session.opponentLastDraw : null}
           peekPending={peeking ? session.opponentPending : null}
           showingTheirCards={peeking && session.opponentHand !== null}
@@ -137,6 +139,8 @@ function CurrentPhase({
       return (
         <AuctionPhase
           opponentName={session.opponentName}
+          ratings={ratings}
+          thinking={session.thinking}
           view={view}
           vulnerable={vulnerable}
           onCall={(call: Call) => {
@@ -150,14 +154,22 @@ function CurrentPhase({
       return (
         <PlayPhase
           dealBonus={session.dealBonus}
+          ratings={ratings}
+          thinking={session.thinking}
           dealScore={score}
           handOriginRef={handOriginRef}
           lastTrick={lastTrick}
           // Null exactly when this deal also finished the rubber — see the
           // prop's own doc comment for why that one stays its own screen
           // rather than folding into this same tap.
+          //
+          // **And when it finished the first game of a two-game match**, which is the
+          // same kind of moment: something ended that the next tap would otherwise
+          // walk straight past. Without this the half-time screen was unreachable —
+          // the reveal handed you into the second game with nothing having said the
+          // first was over.
           onContinue={
-            matchComplete
+            matchComplete || session.halfComplete
               ? null
               : () => {
                   session.dismissTrick();
@@ -181,9 +193,14 @@ function CurrentPhase({
       return (
         <DealComplete
           dealBonus={session.dealBonus}
+          format={session.format}
+          halfComplete={session.halfComplete}
+          matchWinner={session.winner}
+          matchComplete={session.matchComplete}
           opponentName={session.opponentName}
           opponentRating={ratings.opponent}
           opponentWaitingToContinue={session.opponentWaitingToContinue}
+          repeated={session.repeated}
           score={score}
           standing={standing}
           view={view}
@@ -541,10 +558,10 @@ export function GameBoard({
 
       <ContractBar
         density={density}
+        format={session.format}
         handsPlayed={session.dealsPlayed}
         opponentName={session.opponentName}
         phase={phase}
-        ratings={ratings}
         standing={session.standing}
         view={view}
         // The complete screen already shows the scorepad in full, so a
@@ -672,6 +689,7 @@ export function GameBoard({
 
       {showingScore ? (
         <ScoreOverlay
+          format={session.format}
           opponentName={session.opponentName}
           standing={session.standing}
           view={view}

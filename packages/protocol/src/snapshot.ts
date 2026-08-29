@@ -50,6 +50,24 @@ export interface SessionSnapshot {
   /** The resolved trick still lying on the table. Both cards were played face up. */
   readonly lastTrick: CompletedTrick | null;
   readonly matchComplete: boolean;
+  /**
+   * The first game of a two-game match is over and the match is not.
+   *
+   * On the wire rather than derived per host, because two hosts deriving it would be
+   * two chances to get it wrong — and it is what tells the hands reveal to stop
+   * offering a tap straight into the next deal. A boolean about the match, revealing
+   * nothing about anybody's cards.
+   */
+  readonly halfComplete: boolean;
+  /**
+   * Who won the *match*, once it is over. Null while it runs, and null for a draw.
+   *
+   * On the wire rather than derived from the standing, because for a two-game match
+   * the standing is the second game's and its winner is that game's — which is not the
+   * result. That mistake shipped: a player with the higher total was told the computer
+   * had won, because the computer won the second game.
+   */
+  readonly winner: PlayerId | null;
   readonly score: DealScore | null;
   /**
    * The standing, in whichever shape the format keeps it.
@@ -81,6 +99,8 @@ export function snapshotFor(match: MatchState, seat: PlayerId): SessionSnapshot 
     justTaken: deal.phase === "draw" ? (hand[hand.length - 1] ?? null) : null,
     lastDraw: drawRevealFor(deal, seat),
     lastTrick: deal.completedTricks[deal.completedTricks.length - 1] ?? null,
+    halfComplete: summary.halfComplete,
+    winner: summary.winner,
     matchComplete: summary.complete,
     score: summary.score,
     // Deliberately not `summary.botStanding`, which is the bidder's shape and holds

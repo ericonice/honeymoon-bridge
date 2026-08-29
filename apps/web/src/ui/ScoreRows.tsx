@@ -77,6 +77,31 @@ export function dealResultText(score: DealScore | null): string {
   return detail.overtricks > 0 ? `made +${detail.overtricks}` : "made";
 }
 
+/**
+ * How the contract went, in bridge's own notation rather than in prose.
+ *
+ * `dealResultText` says the same thing in words and is what a surface with room
+ * uses. This is for the two-column scorepad, where a cell is about half a phone
+ * wide and already holds a contract, a declarer and a signed total — "made +2"
+ * does not fit and `+2` does.
+ *
+ * **A contract made exactly is `=` rather than nothing**, which is the lesson that
+ * pad has already learnt once from the other side: a blank cell has to mean there
+ * is no deal there. A mark that disappears when the news is "made it" would leave
+ * the reader deciding which kind of nothing they are looking at.
+ */
+export function resultMark(score: DealScore | null): string | null {
+  if (score === null) {
+    return null;
+  }
+  const { detail } = score;
+  if (!detail.made) {
+    // U+2212, matching the signed totals it sits beside rather than a hyphen.
+    return `−${detail.undertricks}`;
+  }
+  return detail.overtricks > 0 ? `+${detail.overtricks}` : "=";
+}
+
 function resultPhrase(detail: ScoreDetail): string {
   if (!detail.made) {
     return `set by ${detail.undertricks}`;

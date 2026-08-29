@@ -3,7 +3,13 @@ import type { DealAction, PlayerId, Unlock } from "@hb/engine";
 import type { ClientMessage, ServerMessage, SessionSnapshot, TableInfo } from "@hb/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { storedSession } from "./account.js";
-import { playerToken, preferredFormat, sessionDeals, sessionOrder } from "./identity.js";
+import {
+  mirrorHalfFormat,
+  playerToken,
+  preferredFormat,
+  sessionDeals,
+  sessionOrder,
+} from "./identity.js";
 import type { GameSession } from "./session.js";
 import { tableSocketUrl } from "./serverUrl.js";
 
@@ -74,6 +80,10 @@ function sessionFrom(
     // Not offered at a table yet, on the terms duplicate shipped under: the
     // mechanic needs nothing from one device, but agreeing to it is a second
     // negotiation and it lands against the computer first.
+    halfComplete: snapshot.halfComplete,
+    // Their thinking happens on their device; this one is never blocked by it.
+    thinking: false,
+    winner: snapshot.winner,
     playSameBoards: null,
     repeated: false,
     skipPhase: null,
@@ -153,6 +163,10 @@ export function useNetworkSession(code: string): NetworkGame {
             // reason duplicate itself takes both: an order nobody asked for is a
             // different game handed over unasked.
             sessionOrder: sessionOrder(),
+            // Consulted only when both seats asked for a mirror, and then the shorter
+            // wins — the half length is a matter of how long, where the format itself
+            // is a matter of which game.
+            halfFormat: mirrorHalfFormat(),
             session: storedSession(),
             token: playerToken(),
           } satisfies ClientMessage),

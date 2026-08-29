@@ -55,7 +55,16 @@ function Section({
   );
 }
 
-const SECTION_TITLES = ["draw", "auction", "play", "scoring", "duplicate", "app", "known"] as const;
+const SECTION_TITLES = [
+  "draw",
+  "auction",
+  "play",
+  "scoring",
+  "mirror",
+  "duplicate",
+  "app",
+  "known",
+] as const;
 type SectionKey = (typeof SECTION_TITLES)[number];
 
 /**
@@ -94,6 +103,7 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
     auction: false,
     draw: false,
     duplicate: false,
+    mirror: false,
     known: false,
     play: false,
     scoring: false,
@@ -229,6 +239,43 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
               Trick values, games, penalties, and what they imply when you are bidding.
             </span>
           </button>
+        </Section>
+
+        {/* Same argument as Duplicate's below: a format that changes what a deal is
+            *for* is not a rule under Scoring, and somebody who only plays rubbers can
+            skip the whole heading. */}
+        <Section title="Mirror" open={open.mirror} onToggle={() => toggle("mirror")}>
+          <Rule title="A game, then the same deals back">
+            You play a game. Then the very same deals are dealt again, with the draw the
+            other way round — so the cards you were offered the first time are the ones
+            your opponent is offered the second, and the ones they had come to you.
+          </Rule>
+          <Rule title="Each half is a game, or a rubber">
+            The home screen sets it. One game a half is what the format is for: the pair
+            comes to about six deals, and playing the same cards from both sides cancels
+            most of the luck. A rubber a half is the long version of the same idea.
+          </Rule>
+          <Rule title="The two halves added together decide it">
+            Winning the first settles nothing. What counts is the total of both, which is
+            the point: you and your opponent have each had a turn with the same cards, so
+            most of the luck of the shuffle cancels and what is left is what the two of
+            you did with them.
+          </Rule>
+          <Rule title="Ordinary scoring inside each half">
+            A line, a part-score carried, honors, first to a hundred — everything works the
+            way it does in a rubber. Only the verdict is different.
+          </Rule>
+          <Rule title="The second half can outlast the first">
+            It runs until somebody wins it, which need not be inside the number of deals
+            the first took. When the repeated deals run out it simply carries on with
+            fresh ones, so a little of the second half is not mirrored. Most of it is.
+          </Rule>
+          <Rule title="You will remember the deals, and so will the computer">
+            That is part of it. Every deal is played to all thirteen tricks, so both hands
+            are known by the end and you meet them again a few minutes later. The computer
+            remembers them exactly. It turns out to be worth almost nothing here, so these
+            matches count toward your rating like any other.
+          </Rule>
         </Section>
 
         {/* Its own section rather than a rule under Scoring. Duplicate changes what a

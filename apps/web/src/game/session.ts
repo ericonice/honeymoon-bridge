@@ -13,7 +13,7 @@ import type {
 // so they belong with the rules rather than with the screens that show them —
 // the server has to produce exactly these shapes too.
 export type { DealRecord, DrawReveal, DrawSpend } from "@hb/engine";
-import type { DealRecord, DrawReveal, DrawSpend, MatchStanding } from "@hb/engine";
+import type { DealRecord, DrawReveal, DrawSpend, MatchStanding, PlayerId } from "@hb/engine";
 
 /**
  * Everything the game screens need, and the only thing they are given.
@@ -91,6 +91,36 @@ export interface GameSession {
   readonly standing: MatchStanding;
   /** True once the match is decided, whatever deciding it means in this format. */
   readonly matchComplete: boolean;
+  /**
+   * The first game of a two-game match is over and the match is not. False everywhere
+   * else.
+   *
+   * Read by the hands reveal, which must stop offering a tap straight into the next
+   * deal, and by `DealComplete`, which shows the half-time screen instead. Both from
+   * this one value: computed separately they drift, and the failure is a screen nobody
+   * can reach.
+   */
+  readonly halfComplete: boolean;
+  /**
+   * The opponent is working out its move right now.
+   *
+   * Distinct from "it is their turn", which already has an indicator and which covers
+   * the deliberate pause before they move as well as the thinking. This is only the
+   * stretch where the app is unresponsive — the solver runs on the main thread — and
+   * that is the part a player needs told, because it is the part that looks broken.
+   *
+   * Always false over a network, where the other seat's thinking is somebody else's
+   * device and this one stays responsive throughout.
+   */
+  readonly thinking: boolean;
+  /**
+   * Who won the match, once it is over. Null while it runs, and null for a draw.
+   *
+   * **Never derive this from the standing.** For a two-game match the standing is the
+   * *current game's*, so its winner is whoever won that game — which is not the result,
+   * and saying so to somebody who won on the total is how this was reported.
+   */
+  readonly winner: PlayerId | null;
   /**
    * The bonus the finished deal earned beyond its trick score, in a format that
    * pays one per deal. Always zero in a rubber, where a game is banked instead.

@@ -32,6 +32,7 @@ import {
   preferredRelease,
   disguiseEnabled,
   pace,
+  mirrorHalfFormat,
   preferredFormat,
   sessionDeals,
   sessionOrder,
@@ -58,6 +59,16 @@ function boardKeyOf(match: MatchState): number | null {
   }
   return match.table.dealt[match.table.dealt.length - 1]?.seed ?? null;
 }
+
+/**
+ * How long a solve must have taken before the computer says it is thinking.
+ *
+ * Short enough that a real wait is explained, long enough that ordinary play never
+ * flickers a word nobody has time to read. A second is where a pause stops reading as
+ * pacing and starts reading as a stall — below it the deliberate delay before the
+ * computer moves is doing the same job already.
+ */
+const SLOW_ENOUGH_TO_SAY = 1000;
 
 export const HUMAN: PlayerId = 0;
 export const OPPONENT: PlayerId = 1;
@@ -241,6 +252,8 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
       // recorded, and `dealSeed` is what records them.
       firstBoard: randomSeed() % 1_000_000,
       format: preferredFormat(),
+      // Only a mirror reads it; every other format's length is its format.
+      halfFormat: mirrorHalfFormat(),
       seed: dealSeed.current,
       // Randomized rather than always the human: every deal after this one
       // already alternates who starts — see `nextDeal` — so this is the only
@@ -265,6 +278,37 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
   // rather than reacting to any change in it, since a new deal's count resets
   // to zero too, and that is not a trick anyone needs to be shown.
   const [awaitingDismissal, setAwaitingDismissal] = useState(false);
+  /**
+   * The computer is working out its move right now, as opposed to merely being on turn.
+   *
+   * Distinct from "it is their turn", which is already drawn and which covers the
+   * deliberate pause before they move as well as the thinking itself. This is only the
+   * part where the app is unresponsive, which is the part a player needs explaining.
+   */
+  const [thinking, setThinking] = useState(false);
+  /**
+   * How long the computer's last solve took at each position, keyed by cards in hand.
+   *
+   * **The indicator has to be predicted, not observed, and this is why.** The solver
+   * runs synchronously on the main thread, so once it starts nothing can measure it
+   * and repaint: a timer set for a second cannot fire until the work it was timing has
+   * finished, by which point saying "thinking" would be a flash after the fact. The
+   * only way to have the word on screen *during* a long solve is to decide before
+   * starting that this one will be long.
+   *
+   * Cards in hand is the key because it is what the cost turns on — a solve with
+   * thirteen cards and nothing played is the dearest of the deal, and each trick makes
+   * the next one cheaper. Measured rather than modelled, so it is right on whatever
+   * device it is running on and at whatever sample count the rung asks for, instead of
+   * resting on a constant fitted to this laptop.
+   *
+   * The cost is that the *first* solve at a given size is never announced, however slow
+   * it turns out to be — including the opening lead of the first deal, which is the one
+   * that prompted this. From the second deal on it is right. Worth stating plainly
+   * rather than hiding: a worker is the fix that would make this reactive, and this is
+   * not that.
+   */
+  const solveTimes = useRef(new Map<number, number>());
   const previousTrickCount = useRef(deal.completedTricks.length);
   useEffect(() => {
     const previous = previousTrickCount.current;
@@ -304,6 +348,19 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     }
 
     const timer = setTimeout(() => {
+      // Announced only where the last solve of this size was slow enough to be worth
+      // explaining — see `solveTimes`. A fast move pays nothing for this: no flag, no
+      // yielded frame, no flicker of a word that would be gone before it was read.
+      const size = deal.hands[OPPONENT].length;
+      const slow = (solveTimes.current.get(size) ?? 0) >= SLOW_ENOUGH_TO_SAY;
+
+      // **Say it, then let the browser paint before blocking.** A flag set immediately
+      // before the solve never reaches the screen: the frame that would draw it is the
+      // frame the solve is blocking, so it would go up and come down without ever being
+      // painted. The yield costs about 16ms, invisible inside a pause already being
+      // waited out, and it is the difference between an indicator and a no-op.
+      const run = (): void => {
+        const began = performance.now();
       // The action is chosen out here rather than inside the updater: the bot's
       // generator is stateful, and React may call an updater more than once.
       // What this turn offered the computer, noted before the turn consumes it. Keyed
@@ -327,7 +384,17 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
         standing: summary.botStanding,
         state: deal,
       });
-      setMatch((current) => (current === match ? actOn(current, OPPONENT, action) : current));
+        solveTimes.current.set(size, performance.now() - began);
+        setThinking(false);
+        setMatch((current) => (current === match ? actOn(current, OPPONENT, action) : current));
+      };
+
+      if (slow) {
+        setThinking(true);
+        requestAnimationFrame(run);
+      } else {
+        run();
+      }
     }, pauseBefore(deal, peek));
 
     return () => {
@@ -518,7 +585,10 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     justUnlocked: achievements.justUnlocked,
     lastDraw: drawRevealFor(deal, HUMAN),
     lastTrick: deal.completedTricks[deal.completedTricks.length - 1] ?? null,
+    halfComplete: summary.halfComplete,
+    winner: summary.winner,
     nextDeal: advance,
+    thinking,
     playSameBoards: canReturn(match) ? playSameBoards : null,
     repeated: summary.repeated,
     opponentHand: peek ? sortHand(deal.hands[OPPONENT]) : null,

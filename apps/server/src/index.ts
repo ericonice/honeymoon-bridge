@@ -184,7 +184,9 @@ function robotRubberFrom(body: unknown): RobotRubber | null {
     // `ratings.ts` can come out right by itself once it learns what to do with
     // it, rather than flattening it to something it is not.
     format:
-      value.format === "game" || value.format === "duplicate" ? value.format : "rubber",
+      value.format === "game" || value.format === "duplicate" || value.format === "mirror"
+        ? value.format
+        : "rubber",
     nickname: nickname === "" ? "Player" : nickname,
     points,
     pointsAgainst,
@@ -647,7 +649,7 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
     // load-bearing rather than a label: `objectiveFor` reads it to decide what the
     // bidder was pricing in, and a session's call replayed as a rubber's is a
     // different decision with the same auction in front of it.
-    ...(value.format === "duplicate" || value.format === "game"
+    ...(value.format === "duplicate" || value.format === "game" || value.format === "mirror"
       ? { format: value.format }
       : {}),
     ...(rules === undefined ? {} : { rules }),

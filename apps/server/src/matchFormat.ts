@@ -1,11 +1,13 @@
 import { boardsForDeals } from "@hb/engine";
-import type { DuplicateSchedule, MatchFormat } from "@hb/engine";
+import type { DuplicateSchedule, MatchFormat, RubberFormat } from "@hb/engine";
 
 /** What one seat asked for when it sat down. */
 export interface Asked {
   /** How long a duplicate session, in deals. Ignored unless both asked for one. */
   readonly deals: number;
   readonly format: MatchFormat;
+  /** What each half of a two-game match runs to. Ignored unless both asked for one. */
+  readonly halfFormat: RubberFormat;
   /** How they want a session ordered. Ignored unless both asked for the same. */
   readonly order: DuplicateSchedule;
 }
@@ -15,58 +17,103 @@ export interface Agreed {
   /** Boards in a duplicate session. Zero for every other format. */
   readonly boards: number;
   readonly format: MatchFormat;
+  /** What each half runs to. Meaningless for any format that has no halves. */
+  readonly halfFormat: RubberFormat;
   /** How the session is ordered. Meaningless for any other format. */
   readonly order: DuplicateSchedule;
 }
 
+
 /**
- * What the sitting runs to, from what the two players each asked for.
+ * The order a disagreement resolves in: **mirror, then a rubber or a game, then
+ * duplicate.**
  *
- * **Duplicate needs both seats to have asked for it**, and every other
- * disagreement resolves to the shorter of what was asked. Those are two rules
- * rather than one because the two kinds of disagreement are not the same shape.
+ * A total ordering rather than a set of rules about which formats need both seats,
+ * which is what this used to be. That version made duplicate and mirror take both
+ * and fall back to a rubber — sound at an invite, where two people who know each
+ * other can simply agree, and useless in a queue, where it meant somebody asking
+ * for a session waited for a stranger who wanted the same thing or was quietly
+ * handed a rubber with nothing saying why. **A rule that leaves somebody waiting is
+ * worse here than one that hands them a neighbouring game**, so this one always
+ * produces an answer and nobody is unpaired for a preference.
  *
- * A rubber and a single game differ only in *length*, so there is a shorter one and
- * the shorter wins — deliberately not symmetric, since somebody who wanted one game
- * and is held in a rubber owes the better part of an hour they never agreed to,
- * while somebody who wanted a rubber and gets a game can simply play another. The
- * two mistakes are not the same size.
+ * Duplicate is last because it is the format furthest from the game everyone else
+ * came for: a board is a scoring unit, the deals repeat, and being dropped into one
+ * unasked is being dropped into a different evening. It therefore still takes both
+ * seats in practice, since nothing outranks a seat that did not ask for it.
  *
- * Duplicate is not shorter or longer, it is a **different game**: the deck repeats,
- * the score is one signed number a deal, and half the boards are ones you have seen
- * before. So "shorter wins" has nothing to say about it — and the same asymmetry
- * argument points the other way, because being put into a format you have never
- * played and did not ask for is a worse mistake than getting the rubber you know.
- * So it takes both.
+ * Mirror is first because it is the *least* imposing thing that is not a rubber —
+ * rubber scoring, a line, a part-score, a race to a hundred, over deals that come
+ * back once. Somebody who wanted a rubber and gets a mirror is playing the game they
+ * asked for, twice, on cards they have seen.
  *
- * A seat that asked for duplicate and did not get it falls back to a **rubber**,
- * which is the default and the game this was built to play. It does not get to
- * impose a single game on somebody who asked for a rubber, having asked for neither.
+ * The cost, stated because it is the one asymmetry the old rule existed to avoid:
+ * somebody who asked for a **single game** and meets a mirror gets roughly twice
+ * what they asked for. Two single-game halves is about eight deals, which is a
+ * rubber's own length, so the wrong end of this is one player in one pairing rather
+ * than a category of them.
+ */
+const PRECEDENCE: readonly MatchFormat[] = ["mirror", "rubber", "game", "duplicate"];
+
+/** A rubber and a single game are one format at two lengths, and resolve as one. */
+function isRubberish(format: MatchFormat): boolean {
+  return format === "game" || format === "rubber";
+}
+
+function ranks(format: MatchFormat): number {
+  const at = PRECEDENCE.indexOf(format);
+  // An unrecognised format from a newer client sorts last, which is the same
+  // conservatism the rating anchors take: never impose something nobody named.
+  return at === -1 ? PRECEDENCE.length : at;
+}
+
+/**
+ * What the table will actually play, from what the two players each asked for.
+ *
+ * **Two rules, and they answer different questions.** Which *game* comes from
+ * `PRECEDENCE` above, so a disagreement always resolves and nobody waits. How
+ * *long* is separate and always takes the **shorter** of what the two asked — the
+ * asymmetry this has kept from the start, since somebody held in a rubber they did
+ * not agree to owes the better part of an hour, where somebody who wanted a rubber
+ * and gets a game can simply play another. The two mistakes are not the same size.
+ *
+ * The length is read off both seats whichever format wins, because both send every
+ * preference they hold rather than only the one matching their chosen format. So a
+ * seat that asked for a rubber still has an opinion about how long a mirror's halves
+ * run, and it counts.
  *
  * Not in the engine: how long a match lasts is a rule and lives there, but
  * reconciling two people's preferences is about seating them, and the game against
  * the computer has only one preference to consult.
  */
 export function formatFor(first: Asked, second: Asked): Agreed {
-  if (first.format === "duplicate" && second.format === "duplicate") {
-    // The shorter session, for the reason a single game beats a rubber. Compared in
-    // deals because that is what the player chose; `boardsForDeals` is the one place
-    // the two units meet.
-    //
-    // The order takes agreement, on the same reasoning duplicate itself does: back to
-    // back and shuffled are different games rather than a longer and a shorter one, so
-    // there is no "shorter wins" to appeal to — and being handed one you did not ask
-    // for is the mistake worth avoiding. A disagreement falls back to `halves`, which
-    // is what a duplicate evening is and is the default nobody has to have asked for.
+  const format = ranks(first.format) <= ranks(second.format) ? first.format : second.format;
+  // Lowest game count wins, asked of both seats regardless of which format won.
+  const halfFormat: RubberFormat =
+    first.halfFormat === "game" || second.halfFormat === "game" ? "game" : "rubber";
+  const shorterRubber: MatchFormat =
+    first.format === "game" || second.format === "game" ? "game" : "rubber";
+
+  if (isRubberish(format)) {
+    return { boards: 0, format: shorterRubber, halfFormat, order: "halves" };
+  }
+
+  if (format === "duplicate") {
     return {
+      // Compared in deals because that is what the player chose; `boardsForDeals`
+      // is the one place the two units meet.
       boards: boardsForDeals(Math.min(first.deals, second.deals)),
       format: "duplicate",
+      halfFormat,
+      // The order takes agreement, which is the one place the old both-seats
+      // reasoning still holds: back to back, halves and shuffled are three
+      // different games rather than a longer and a shorter one, so there is no
+      // "shorter wins" to appeal to. A disagreement falls back to `halves`, which
+      // is what a duplicate evening is and is the default nobody has to have
+      // asked for.
       order: first.order === second.order ? first.order : "halves",
     };
   }
 
-  const asked = [first, second].map((seat) =>
-    seat.format === "duplicate" ? "rubber" : seat.format,
-  );
-  return { boards: 0, format: asked.includes("game") ? "game" : "rubber", order: "halves" };
+  return { boards: 0, format, halfFormat, order: "halves" };
 }

@@ -110,6 +110,36 @@ body {
   overflow: hidden;
 }
 
+/* The turn indicator's pulse.
+
+   **CSS rather than JavaScript, because of what it has to survive.** The computer
+   works out its move synchronously on the main thread — sixty sampled hands a card at
+   the top rung, and the opening lead is the dearest of them — so anything animated
+   from JavaScript stops dead for the whole of it. That is the one stretch the
+   indicator exists for, and a pulse that freezes precisely then reads as a hung app
+   rather than as a busy one. A compositor-driven animation on `opacity` keeps running
+   while the thread is blocked. */
+.think-pulse {
+  animation: think-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes think-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .think-pulse {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 /* The frame the whole app sits in. A class rather than a `bg-table` utility
    because the sheen has to switch off with the theme, and a colour token cannot
    carry a background image. */

@@ -144,6 +144,12 @@ export type Objective = "duplicate" | "equity" | "points";
  * came to be played by one bidder and recorded as another.
  */
 export function objectiveFor(format: MatchFormat, release: Objective): Objective {
+  // A two-game match keeps the release's own pricing, unlike a session. Each half is
+  // a real single game with a line, a part-score and a race to a hundred, so the
+  // standing means exactly what it means in a rubber and the equity table has
+  // something to look up. What is different about the format — that the verdict is
+  // the pair's total — is a fact about the *match*, and a bidder priced on the deal
+  // in front of it has no way to act on that anyway.
   return format === "duplicate" ? "duplicate" : release;
 }
 

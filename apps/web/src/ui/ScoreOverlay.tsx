@@ -1,9 +1,11 @@
-import type { MatchStanding, Pair, PlayerView } from "@hb/engine";
+import type { MatchFormat, MatchStanding, Pair, PlayerView } from "@hb/engine";
 import { Overlay } from "./Overlay.js";
 import { Scorepad } from "./Scorepad.js";
 import { SessionPad } from "./SessionPad.js";
 
 export interface ScoreOverlayProps {
+  /** What is being played, which the standing cannot say for a two-game match. */
+  readonly format: MatchFormat;
   readonly opponentName: string;
   readonly standing: MatchStanding;
   readonly view: PlayerView;
@@ -42,6 +44,7 @@ function vulnerabilityLine(view: PlayerView, vulnerable: Pair<boolean>, opponent
  */
 export function ScoreOverlay({
   onClose,
+  format,
   opponentName,
   standing,
   view,
@@ -53,9 +56,11 @@ export function ScoreOverlay({
         <SessionPad summary={standing.summary} view={view} />
       ) : (
         <Scorepad
+        format={format}
         history={standing.history}
         opponentName={opponentName}
         previous={standing.previous}
+        previousPoints={standing.previousPoints}
         rubber={standing.rubber}
         view={view}
       />

@@ -1,12 +1,20 @@
-import type { Pair, PlayerId, PlayerView, RubberState } from "@hb/engine";
+import { totalScore } from "@hb/engine";
+import type { MatchFormat, Pair, PlayerId, PlayerView, RubberState } from "@hb/engine";
 import { matchNoun } from "../game/labels.js";
 import type { DealRecord } from "../game/session.js";
 import { ContractText } from "./CardText.js";
-import { dealResultText } from "./ScoreRows.js";
+import { dealResultText, resultMark } from "./ScoreRows.js";
 
 export interface ScorepadProps {
+  /**
+   * What is being played. A two-game match shows both columns from the first deal,
+   * where a rubber's replay only has a second game once there is one.
+   */
+  readonly format: MatchFormat;
   readonly history: readonly DealRecord[];
   readonly opponentName: string;
+  /** What the earlier game came to, bonus included. Null unless there is one. */
+  readonly previousPoints: Pair<number> | null;
   /**
    * What the same boards came to in the match this one is replaying. Empty
    * unless this is a return match.
@@ -165,114 +173,320 @@ function GameLine({
  * removed once `ContractBar` started showing that same standing all the
  * time, which made repeating it here the same numbers said twice.
  */
+/** What a deal came to for this seat, as one signed figure. */
+function netTo(record: DealRecord, player: PlayerId): number {
+  const score = record.score;
+  if (score === null) {
+    return 0;
+  }
+  const mine = score.aboveLine[player] + score.belowLine[player];
+  const theirs = score.aboveLine[player === 0 ? 1 : 0] + score.belowLine[player === 0 ? 1 : 0];
+  return mine - theirs;
+}
+
 /**
- * A board's two runs, laid out so the comparison reads down a column.
+ * A signed figure with a real minus.
  *
- * **Rows are the players and columns are the two holdings**, which is the one
- * arrangement that is both truthful and aligned. Per *deal* it cannot be: a replay
- * swaps the seats, so the two figures worth comparing always end up diagonally
- * opposite, and the version that forced them into a column did it by reversing them
- * under a "You" heading — which reads as your own score and says the opposite of the
- * truth. That shipped, and it is what this replaces.
+ * **Zero is drawn as a zero, and it used to be drawn as a dash.** A dash says nothing
+ * happened, and a deal that nets nothing is not a deal where nothing happened — it is
+ * one where both sides scored the same. That is reachable in ordinary play and common
+ * here: five clubs made pays declarer 100 below the line, and a defender holding four
+ * club honours takes 100 above, so the deal nets zero with two hundred points on the
+ * table. Reported as a hand scoring "no change, which is not possible unless it was
+ * passed out" — and it was not passed out.
  *
- * The handle is the **draw position**. Flipping the starter swaps which player draws
- * first, but the first drawer still gets the same cards, so "the first drawer's
- * holding" is one thing with a stable identity across both runs — held by one player
- * the first time and the other the second. Every cell below is a player's own score
- * with their own cards; nothing is reversed anywhere. Reading down `first draw` says
- * what each of you made with that holding, which is the whole question a replay asks.
+ * A quarter of deals pay honours in this game, far more than in ordinary bridge,
+ * because each hand holds thirteen of only twenty-six dealt cards and the draw selects
+ * for high ones. So this is not a curiosity.
  *
- * The cost is the chronology: these are pairs rather than the order they were played.
- * Acceptable here and nowhere else — on a replay you played these boards a few minutes
- * ago, so the order is not news and the comparison is.
+ * A cell with no deal in it at all stays blank, which is the distinction the dash was
+ * wrongly carrying: nothing there, as against nothing in it.
  */
-function BoardPair({
-  index,
-  now,
-  opponentName,
-  then,
+function signed(value: number): string {
+  if (value === 0) {
+    return "0";
+  }
+  return value > 0 ? `+${value}` : `−${Math.abs(value)}`;
+}
+
+/**
+ * What honors paid on this deal, signed this seat's way, or null if none were.
+ *
+ * **The one component of a score that the row cannot already explain.** Overtricks, the
+ * doubling insult, a slam bonus — all of them follow from the contract, which is right
+ * there in the cell. Honors do not: they go to whoever *holds* them, declarer or
+ * defender, so a number can be surprising with nothing in the row to account for it.
+ * Five clubs made pays declarer 100 and a defender with four club honours takes 100,
+ * and the deal comes to nothing at all.
+ *
+ * Worth surfacing here rather than left to the deal-complete screen because they are
+ * common: a fifth to a quarter of deals pay them, since each hand holds thirteen of
+ * only twenty-six dealt cards and the draw selects for high ones. `bench/honors.ts`
+ * has the figures, and why they nonetheless decide almost nothing.
+ */
+function honorsOn(record: DealRecord | undefined, view: PlayerView): number | null {
+  const honors = record?.score?.detail.honors;
+  if (honors === undefined || (honors[0] === 0 && honors[1] === 0)) {
+    return null;
+  }
+  return honors[view.me] - honors[view.opponent];
+}
+
+/** One deal's line inside a game's column: what was bid, and what it came to. */
+function GameCell({
+  record,
   view,
 }: {
-  readonly index: number;
-  readonly now: DealRecord;
-  readonly opponentName: string;
-  readonly then: DealRecord;
+  readonly record: DealRecord | undefined;
   readonly view: PlayerView;
 }): React.JSX.Element {
-  // Which of the two runs this seat drew first on. Exactly one of them, since the
-  // replay hands the first draw to the other player.
-  const mineFirst = now.starter === view.me ? now : then;
-  const theirsFirst = now.starter === view.me ? then : now;
+  if (record === undefined) {
+    return <span className="min-w-0 flex-1" aria-hidden="true" />;
+  }
 
-  const points = (record: DealRecord, player: PlayerId): React.JSX.Element => (
-    <Points
-      above={record.score?.aboveLine[player] ?? 0}
-      below={record.score?.belowLine[player] ?? 0}
-    />
-  );
-
-  const said = (record: DealRecord): React.JSX.Element => (
-    <>
-      {record.contract === null ? (
-        <span className="text-white/45">passed out</span>
-      ) : (
-        <>
-          <ContractText contract={record.contract} on="dark" />
-          <span className="text-white/45">
-            {" "}
-            {record.contract.declarer === view.me ? "you" : "opp"} ·{" "}
-            {dealResultText(record.score)}
-          </span>
-        </>
-      )}
-    </>
-  );
-
-  const row = (label: string, mine: DealRecord, theirs: DealRecord): React.JSX.Element => (
-    <div className="flex items-baseline justify-between gap-2">
-      <span className="truncate pl-[1.375rem] text-white/45">{label}</span>
-      <span className="flex shrink-0 gap-2">
-        {points(mine, view.me)}
-        {points(theirs, view.opponent)}
+  const net = netTo(record, view.me);
+  return (
+    <span className="flex min-w-0 flex-1 items-baseline justify-between gap-1">
+      <span className="min-w-0 truncate">
+        {record.contract === null ? (
+          <span className="text-white/40">passed out</span>
+        ) : (
+          <>
+            <ContractText contract={record.contract} on="dark" />
+            <span className="text-white/40">
+              {" "}
+              {record.contract.declarer === view.me ? "you" : "opp"} {resultMark(record.score)}
+            </span>
+          </>
+        )}
       </span>
-    </div>
+      <span className={`shrink-0 tabular-nums ${net === 0 ? "text-white/30" : ""}`}>
+        {signed(net)}
+      </span>
+    </span>
   );
+}
 
-  const bid = (label: string, record: DealRecord): React.JSX.Element => (
-    <div className="flex min-w-0 items-baseline gap-1.5 text-xs text-white/40">
-      <span className="shrink-0 pl-[1.375rem]">{label}</span>
-      <span className="min-w-0 truncate">{said(record)}</span>
-    </div>
-  );
+/** A game's deals and what it finally came to, which are not the same sum. */
+interface GameColumn {
+  readonly deals: readonly DealRecord[];
+  /** Null for a game not started. Otherwise the real total, bonus included. */
+  readonly total: Pair<number> | null;
+}
+
+/**
+ * The two games side by side, a column each.
+ *
+ * **This replaced a per-board pairing that was correct and still hard to read.** That
+ * version put each *holding* on its own row so the like-for-like comparison sat in a
+ * column — honest, and it asked the reader to hold "which stream was this" in their
+ * head on every line. What a two-game match turns on is simpler: two games happened on
+ * one set of deals, and their totals add up to the result. So a column is a game, a row
+ * is a deal, and every figure is signed from this seat.
+ *
+ * **What it deliberately does not claim** is that a row is a like-for-like comparison.
+ * The seats swap, so on any board you held one stream in the first game and the other
+ * in the second — reading across says how that board went *for you* twice, not who did
+ * better with the same cards. The honest comparison is the pair of game totals.
+ *
+ * **Both columns from the start**, the second empty until it exists. A pad that grew a
+ * column halfway through would move everything under it and would also hide, during
+ * the first game, the fact that there is a second one coming.
+ */
+function TwoGames({
+  first,
+  opponentName,
+  second,
+  view,
+}: {
+  readonly first: GameColumn;
+  readonly opponentName: string;
+  readonly second: GameColumn;
+  readonly view: PlayerView;
+}): React.JSX.Element {
+  const rows = Math.max(first.deals.length, second.deals.length);
+
+  /**
+   * **A game's total is not the sum of its deals, and the pad said it was.**
+   *
+   * Winning a game pays `matchBonusFor`, and that lands on the rubber's own above-line
+   * rather than on any deal in it — so a column footed by adding up its rows was short
+   * by the bonus and disagreed with every other total on screen. Taken from the game's
+   * real total instead, with the bonus shown as what it is: whatever that total is
+   * beyond its deals. Derived rather than restated, so the row and the foot cannot
+   * drift apart, and so nothing here has to know what a game pays.
+   */
+  const dealt = (column: GameColumn): number =>
+    column.deals.reduce((sum, one) => sum + netTo(one, view.me), 0);
+  const settled = (column: GameColumn): number | null =>
+    column.total === null ? null : column.total[view.me] - column.total[view.opponent];
+  const bonus = (column: GameColumn): number => (settled(column) ?? 0) - dealt(column);
+
+  const foot = (column: GameColumn): string => {
+    const value = settled(column);
+    return value === null ? "" : signed(value);
+  };
+
+  const match = (settled(first) ?? 0) + (settled(second) ?? 0);
+
+  /**
+   * Whether this row is where a column's half was won.
+   *
+   * **The rule belongs under the deal that won the game, not at the foot of the pad.**
+   * At the foot it slid down with every deal played, so a line marking a moment that had
+   * already happened kept moving — which is the one thing a mark on a record must not
+   * do. A paper scorepad rules its line where the game ended and leaves it there.
+   *
+   * A column's half is won exactly when it has a bonus: the figure is the difference
+   * between the half's real total and its deals added up, and only `matchBonusFor` sits
+   * in that gap. While a half is still being played there is no bonus and no rule.
+   *
+   * The two columns are ruled independently, because the halves need not end on the same
+   * deal — one can take four and the other three.
+   */
+  const wonAt = (column: GameColumn, index: number): boolean =>
+    bonus(column) !== 0 && index === column.deals.length - 1;
 
   return (
-    <div className="border-t border-white/10 py-1.5 first:border-t-0">
-      <div className="flex items-baseline gap-1.5">
-        <span className="w-4 shrink-0 text-xs text-white/35 tabular-nums">{index}</span>
-        <span className="text-xs text-white/45">board {index}</span>
+    <div className="w-full max-w-sm text-sm">
+      {/* **One rule down the whole block rather than a border on every row.** The rows
+          have their own vertical rhythm — a header, the deals, the game rule, the foot —
+          and a per-row border breaks wherever two of them are spaced apart, which reads
+          as a dashed line rather than a division. Positioned against the same `flex-1`
+          split the rows use, so it sits exactly where the columns meet however wide the
+          pad is. */}
+      <div className="relative">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 w-px bg-white/10"
+          // The row is a 1rem index, a 0.5rem gap, then two equal columns with another
+          // 0.5rem gap between them — so the columns meet half a gap past the first
+          // one's right edge. Spelled out rather than eyeballed, because a rule that is
+          // nearly between two columns reads as belonging to one of them.
+          style={{ left: "calc(1.5rem + (100% - 2rem) / 2 + 0.25rem)" }}
+        />
+        <div className="flex items-baseline gap-2 pb-1 text-xs text-white/45">
+          <span className="w-4 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1">First half</span>
+          <span className="min-w-0 flex-1">Second half</span>
+        </div>
+
+      {rows === 0 ? (
+        <p className="py-2 text-white/40">No deals yet.</p>
+      ) : (
+        Array.from({ length: rows }, (_unused, index) => {
+          const paid: Pair<number | null> = [
+            honorsOn(first.deals[index], view),
+            honorsOn(second.deals[index], view),
+          ];
+
+          return (
+            <div key={index}>
+              <div className="flex items-baseline gap-2 py-0.5">
+                <span className="w-4 shrink-0 text-xs text-white/35 tabular-nums">
+                  {index + 1}
+                </span>
+                <GameCell record={first.deals[index]} view={view} />
+                <GameCell record={second.deals[index]} view={view} />
+              </div>
+              {/* Under the deal it belongs to, with the figure in the column that paid
+                  it, and only on the deals that did — about one in five. Named rather
+                  than marked: a dot or an "h" is cheaper in width and is a key the
+                  reader has to learn, which this project has argued itself out of more
+                  than once. The same word `DealComplete` and the single-column pad
+                  already use, so three surfaces agree. */}
+              {paid[0] === null && paid[1] === null ? null : (
+                <div className="flex items-baseline gap-2 pb-0.5 text-xs text-white/40">
+                  <span className="w-4 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 text-right tabular-nums">
+                    {paid[0] === null ? "" : `honors ${signed(paid[0])}`}
+                  </span>
+                  <span className="min-w-0 flex-1 text-right tabular-nums">
+                    {paid[1] === null ? "" : `honors ${signed(paid[1])}`}
+                  </span>
+                </div>
+              )}
+
+              {/* **Ruled under the deal that won the half, and nowhere else.** The same
+                  device the rubber scorepad uses to mark a game, and the bonus rides on
+                  the rule because that is what the rule is about: not another deal, but
+                  what finishing the half was worth. Each column is ruled on its own row,
+                  since the two halves need not end on the same deal. */}
+              {wonAt(first, index) || wonAt(second, index) ? (
+                <div className="flex items-center gap-2 pb-0.5 text-xs">
+                  <span className="w-4 shrink-0" aria-hidden="true" />
+                  {[first, second].map((column, side) => (
+                    <span key={side} className="flex min-w-0 flex-1 items-center gap-1.5">
+                      {wonAt(column, index) ? (
+                        <>
+                          <span className="h-px flex-1 bg-amber-300/40" />
+                          <span className="shrink-0 tabular-nums text-amber-200/70">
+                            game {signed(bonus(column))}
+                          </span>
+                        </>
+                      ) : null}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })
+      )}
+
+      {/* Right-aligned, like every figure above it. A foot that sits under a column of
+          right-aligned numbers and starts at the left is reading as a different kind of
+          thing than the numbers it totals. */}
+      <div className="flex items-baseline gap-2 border-t border-white/15 pt-1 font-semibold">
+        <span className="w-4 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1 text-right tabular-nums">{foot(first)}</span>
+        <span className="min-w-0 flex-1 text-right tabular-nums">{foot(second)}</span>
       </div>
-      {/* Each row is a *holding* and each cell the score of whoever held it — you in
-          one run, {opponentName} in the other — so reading down a column says what the
-          two of you made with the same cards. Nothing here is reversed. */}
-      {row("you drew first", mineFirst, theirsFirst)}
-      {row("they drew first", theirsFirst, mineFirst)}
-      {/* The auctions, under the figures rather than beside them: a run supplies one
-          cell of each row, so a contract belongs to a diagonal and cannot sit against
-          either. Labelled by who drew first, which is the same handle the rows use. */}
-      {bid("when you drew first", mineFirst)}
-      {bid("when they drew first", theirsFirst)}
+
+      </div>
+
+      {/* The verdict, spelled out rather than left to be added: it is the whole reason
+          the two columns are beside each other — and outside the rule above, because it
+          belongs to neither column. */}
+      <div className="mt-1 flex items-baseline justify-between border-t border-white/15 pt-1">
+        <span className="text-xs text-white/45">Both halves</span>
+        <span className="font-semibold tabular-nums">{signed(match)}</span>
+      </div>
+      <p className="pt-1 text-xs text-white/45">
+        Signed your way, against {opponentName}.
+      </p>
     </div>
   );
 }
 
 export function Scorepad({
+  format,
   history,
   opponentName,
   previous,
+  previousPoints,
   rubber,
   view,
 }: ScorepadProps): React.JSX.Element {
-  const returning = previous.length > 0;
+  // A two-game match is about the *pair* from its first deal, so both columns are there
+  // from the start with the second empty. A rubber's replay only becomes a pair once
+  // there is an earlier game to put in the left column.
+  if (format === "mirror" || previous.length > 0) {
+    // Which deals belong to which column flips at half time: during the first game the
+    // deals in hand *are* the first game, and only afterwards do they become the second.
+    const inSecond = previousPoints !== null;
+    return (
+      <TwoGames
+        first={{
+          deals: inSecond ? previous : history,
+          total: inSecond ? previousPoints : totalScore(rubber),
+        }}
+        opponentName={opponentName}
+        second={{ deals: inSecond ? history : [], total: inSecond ? totalScore(rubber) : null }}
+        view={view}
+      />
+    );
+  }
 
   return (
     <div className="w-full max-w-sm text-sm">
@@ -283,28 +497,9 @@ export function Scorepad({
           reversed against the columns above them — deliberately, since the seats
           swapped — and a reader who has not been told that will read them as their
           own score and conclude the wrong thing. */}
-      {returning ? (
-        <p className="pb-1 text-xs text-white/45">
-          The same boards, from the other side. Each row is one holding, so reading down
-          a column says what the two of you made with the same cards.
-        </p>
-      ) : null}
       <Columns opponentName={opponentName} />
 
-      {returning ? (
-        history.map((record, index) =>
-          previous[index] === undefined ? null : (
-            <BoardPair
-              key={index}
-              index={index + 1}
-              now={record}
-              opponentName={opponentName}
-              then={previous[index]!}
-              view={view}
-            />
-          ),
-        )
-      ) : history.length === 0 ? (
+      {history.length === 0 ? (
         <p className="py-2 text-white/40">No deals yet.</p>
       ) : (
         history.map((record, index) => (

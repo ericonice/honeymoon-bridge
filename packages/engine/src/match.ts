@@ -16,7 +16,7 @@ import type { RubberFormat, RubberState } from "./rubber.js";
 import type { DealScore } from "./scoring.js";
 import { mirrorOf } from "./returnMatch.js";
 import { applyTableAction, nextDeal, startTable, summarize } from "./table.js";
-import type { DealRecord, TableState } from "./table.js";
+import type { DealRecord, TableState, TableSummary } from "./table.js";
 import type { DealAction, DealState, Pair, PlayerId } from "./types.js";
 
 /**
@@ -56,12 +56,41 @@ export interface Standing {
  */
 export type MatchState =
   | { readonly kind: "duplicate"; readonly session: DuplicateState }
+  | MirrorMatch
   | RubberMatch;
 
 /** Named so `canReturn` can narrow to it, which a plain boolean cannot do. */
 export interface RubberMatch {
   readonly kind: "rubber";
   readonly table: TableState;
+}
+
+/**
+ * Two games on one set of boards, and the total wins.
+ *
+ * A game, then the same boards back with the draw swapped, and the verdict is the
+ * pair's total rather than either half's. A hybrid on purpose: rubber scoring, so a
+ * line and a part-score and a race to a hundred still mean something, over duplicated
+ * deals, so most of the luck of the shuffle cancels.
+ *
+ * **It holds a `TableState` like a rubber does, and each half's `RubberState.format`
+ * is `"game"`.** Each half really is a single game and is scored as exactly that, so
+ * `matchBonusFor` pays what a game pays and no rubber machinery has to learn a third
+ * answer. What makes the pair a pair lives here rather than in the rubber: which half
+ * this is, read off whether the table is replaying, and the aggregate that decides it.
+ *
+ * The first half is dealt fresh; the second is the first's boards mirrored, which is
+ * `returnMatch`'s mechanic with the choice taken out — here it is not offered, it is
+ * simply what happens next.
+ */
+export interface MirrorMatch {
+  readonly kind: "mirror";
+  readonly table: TableState;
+}
+
+/** Which half of a two-game match is being played: the fresh one or the replay. */
+export function halfOf(match: MirrorMatch): 1 | 2 {
+  return match.table.replay.length > 0 ? 2 : 1;
 }
 
 /** The standing, in whichever shape it is being kept. What the score strip and the pad read. */
@@ -99,6 +128,17 @@ export interface MatchSummary {
    */
   readonly bonus: number;
   readonly complete: boolean;
+  /**
+   * The half in progress is over but the match is not — a two-game match at half time,
+   * and false in every other format.
+   *
+   * **One expression rather than two**, because it decides two things in two files: the
+   * hands reveal must stop offering a tap straight into the next deal, and
+   * `DealComplete` must show the half-time screen instead. Computed separately they
+   * would drift, and the failure would be silent — a screen nobody can reach, which is
+   * exactly what shipped before this existed.
+   */
+  readonly halfComplete: boolean;
   /** Deals finished, the one just completed included. */
   readonly dealsPlayed: number;
   readonly format: MatchFormat;
@@ -141,6 +181,15 @@ export interface StartMatchOptions {
   readonly schedule?: DuplicateSchedule;
   /** Where a duplicate session's board numbers start. Ignored by a rubber. */
   readonly firstBoard: number;
+  /**
+   * What it takes to finish each half of a two-game match: one game, or a rubber.
+   *
+   * Defaults to a single game, which is what the format is for — the pair is then about
+   * six deals, and duplicating them cancels most of the shuffle. A rubber a side is the
+   * long version of the same idea. Ignored by every other format, where the length is
+   * the format.
+   */
+  readonly halfFormat?: RubberFormat;
   readonly format: MatchFormat;
   /** The rubber's first deal, or the session's schedule. Both are the caller's to own. */
   readonly seed: number;
@@ -148,7 +197,7 @@ export interface StartMatchOptions {
 }
 
 export function startMatch(options: StartMatchOptions): MatchState {
-  const { boards, firstBoard, format, schedule, seed, starter } = options;
+  const { boards, firstBoard, format, halfFormat, schedule, seed, starter } = options;
   if (format === "duplicate") {
     return {
       kind: "duplicate",
@@ -161,6 +210,14 @@ export function startMatch(options: StartMatchOptions): MatchState {
         scheduleSeed: seed,
         starter,
       }),
+    };
+  }
+  if (format === "mirror") {
+    // The half's own length lives on the rubber underneath, so it finishes and pays
+    // exactly as that kind of match does and no rubber machinery learns a third answer.
+    return {
+      kind: "mirror",
+      table: startTable({ format: halfFormat ?? "game", seed, starter }),
     };
   }
   return { kind: "rubber", table: startTable({ format, seed, starter }) };
@@ -207,20 +264,7 @@ export function returnMatch(match: MatchState): MatchState {
   if (!canReturn(match)) {
     return match;
   }
-  const replay = mirrorOf(match.table.dealt);
-  return {
-    kind: "rubber",
-    table: startTable({
-      format: match.table.rubberBefore.format,
-      previous: summarize(match.table).history,
-      previousPoints: totalScore(summarize(match.table).rubber),
-      replay,
-      // Both are supplied by the replay's first board and are here only to satisfy
-      // the ordinary path; `startTable` prefers the replay when it has one.
-      seed: replay[0]!.seed,
-      starter: replay[0]!.starter,
-    }),
-  };
+  return { kind: "rubber", table: mirroredTable(match.table) };
 }
 
 export function dealOf(match: MatchState): DealState {
@@ -231,7 +275,12 @@ export function actOn(match: MatchState, player: PlayerId, action: DealAction): 
   if (match.kind === "duplicate") {
     return { kind: "duplicate", session: applyDuplicateAction(match.session, player, action) };
   }
-  return { kind: "rubber", table: applyTableAction(match.table, player, action) };
+  const table = applyTableAction(match.table, player, action);
+  // **Spelt out rather than spread, because the compiler cannot catch this one.** A
+  // mirror and a rubber both carry a `table`, so returning a hard-coded
+  // `{ kind: "rubber" }` here type-checks perfectly and quietly turns a two-game match
+  // into an ordinary rubber on its first action.
+  return match.kind === "mirror" ? { kind: "mirror", table } : { kind: "rubber", table };
 }
 
 /**
@@ -269,7 +318,51 @@ export function nextIn(match: MatchState, seed: number): MatchState {
     }
     return { kind: "duplicate", session: nextDuplicateDeal(match.session) };
   }
+  if (match.kind === "mirror") {
+    return nextInMirror(match, seed);
+  }
   return { kind: "rubber", table: nextDeal(match.table, seed) };
+}
+
+/**
+ * The next deal of a two-game match, including the two boundaries that matter.
+ *
+ * Halfway, the second game is dealt from the first's boards mirrored — the same
+ * mechanic `returnMatch` offers a rubber, with the choice taken out, because here it
+ * is not an offer but simply what happens next. At the end, "again" means a fresh pair
+ * on fresh boards.
+ */
+function nextInMirror(match: MirrorMatch, seed: number): MatchState {
+  if (!summarize(match.table).rubber.complete) {
+    return { kind: "mirror", table: nextDeal(match.table, seed) };
+  }
+  if (halfOf(match) === 1) {
+    return { kind: "mirror", table: mirroredTable(match.table) };
+  }
+  return startMatch({
+    firstBoard: seed % 1_000_000,
+    format: "mirror",
+    // The next pair is the same kind of pair, for the reason a new rubber is the same
+    // kind of rubber: how long a sitting runs is chosen when players sit down.
+    halfFormat: match.table.rubberBefore.format,
+    seed,
+    // The seat that drew first on the last board of the pair draws second on the new
+    // pair's first, so the alternation carries across rather than restarting.
+    starter: opponentOf(match.table.deal.starter),
+  });
+}
+
+/** The same boards, mirrored, carrying what the half just finished came to. */
+function mirroredTable(table: TableState): TableState {
+  const done = summarize(table);
+  return startTable({
+    format: table.rubberBefore.format,
+    previous: done.history,
+    previousPoints: totalScore(done.rubber),
+    replay: mirrorOf(table.dealt),
+    seed: table.dealt[0]!.seed,
+    starter: table.dealt[0]!.starter,
+  });
 }
 
 export function summarizeMatch(match: MatchState): MatchSummary {
@@ -278,6 +371,7 @@ export function summarizeMatch(match: MatchState): MatchSummary {
     return {
       bonus: summary.score?.bonus ?? 0,
       complete: summary.complete,
+      halfComplete: false,
       dealsPlayed: summary.dealsPlayed,
       format: "duplicate",
       points: summary.margin,
@@ -291,9 +385,13 @@ export function summarizeMatch(match: MatchState): MatchSummary {
   }
 
   const summary = summarize(match.table);
+  if (match.kind === "mirror") {
+    return summarizeMirror(match, summary);
+  }
   return {
     bonus: 0,
     complete: summary.rubber.complete,
+    halfComplete: false,
     dealsPlayed: summary.history.length,
     format: summary.rubber.format,
     points: totalScore(summary.rubber),
@@ -315,6 +413,58 @@ export function summarizeMatch(match: MatchState): MatchSummary {
     },
     vulnerable: summary.vulnerable,
     winner: summary.rubber.winner,
+  };
+}
+
+/**
+ * A two-game match, whose verdict is the pair's total rather than either half's.
+ *
+ * **The halves are not each a result.** Winning the first game and losing the second
+ * decides nothing; what decides it is the sum, which is the whole reason the format
+ * exists — the same boards from both sides, so most of the shuffle cancels and what is
+ * left is what the two of you did with the cards.
+ *
+ * So `complete` waits for the second half, `points` is the aggregate, and `winner`
+ * reads the aggregate — including the draw, which is likelier here than in a rubber
+ * because two halves of the same boards can genuinely come out level.
+ *
+ * `standing` stays the ordinary rubber shape. Every screen that draws a rubber already
+ * knows how, and the half in progress *is* a rubber; the pair-ness is carried by the
+ * `previous`/`previousPoints` already on it, which is what the paired scorepad reads.
+ */
+function summarizeMirror(match: MirrorMatch, summary: TableSummary): MatchSummary {
+  const half = halfOf(match);
+  const earlier = match.table.previousPoints ?? [0, 0];
+  const here = totalScore(summary.rubber);
+  const points: Pair<number> = [earlier[0] + here[0], earlier[1] + here[1]];
+  const complete = half === 2 && summary.rubber.complete;
+
+  return {
+    bonus: 0,
+    complete,
+    // The first game is over and the match is not. The one moment this format has that
+    // no other does, and the reason it needs saying at all.
+    halfComplete: half === 1 && summary.rubber.complete,
+    dealsPlayed: summary.history.length,
+    format: "mirror",
+    points,
+    repeated: false,
+    score: summary.score,
+    standing: {
+      history: summary.history,
+      kind: "rubber",
+      previous: match.table.previous,
+      previousPoints: match.table.previousPoints,
+      rubber: summary.rubber,
+    },
+    botStanding: {
+      rubber: match.table.rubberBefore,
+      vulnerable: vulnerability(match.table.rubberBefore),
+    },
+    vulnerable: summary.vulnerable,
+    // Undecided until the pair is done, and level is a real answer when it is: two
+    // halves of one set of boards come out equal far more readily than a rubber does.
+    winner: !complete || points[0] === points[1] ? null : points[0] > points[1] ? 0 : 1,
   };
 }
 

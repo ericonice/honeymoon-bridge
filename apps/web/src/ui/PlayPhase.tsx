@@ -50,6 +50,15 @@ export interface PlayPhaseProps {
   readonly onContinue: (() => void) | null;
   readonly opponentName: string;
   /**
+   * Both sides' ratings, either null until something has said.
+   *
+   * Beside the seat labels, which is where a rating belongs: it is a fact about a
+   * player, and a label is the one thing on the board that is one. See `SeatLabel`.
+   */
+  readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
+  /** The computer is working out its move right now — see `GameSession.thinking`. */
+  readonly thinking: boolean;
+  /**
    * True once the other player has asked to move on and you have not —
    * the mirror of `waitingToContinue`, shown here for the same reason
    * `DealComplete` used to show it: without it, a hand you are still
@@ -325,6 +334,8 @@ export function PlayPhase({
   onDismissTrick,
   onHandsSettled,
   opponentName,
+  ratings,
+  thinking,
   opponentWaitingToContinue,
   release,
   revealedHands,
@@ -592,6 +603,8 @@ export function PlayPhase({
       <SeatLabel
         active={live && !yourTurn}
         name={opponentName}
+        rating={ratings.opponent}
+        thinking={thinking}
         vulnerable={vulnerable[view.opponent]}
       />
       {/* The trick slots are only worth looking at while there is something
@@ -663,7 +676,7 @@ export function PlayPhase({
           it has sat in the same footer all game, and by the time hands are
           revealed there is no active turn left for the dot to mean either. */}
       {swept && revealedHands !== null ? null : (
-        <SeatLabel active={yourTurn} name="You" vulnerable={vulnerable[view.me]} />
+        <SeatLabel active={yourTurn} name="You" rating={ratings.mine} vulnerable={vulnerable[view.me]} />
       )}
 
       {flights.map((flight) => (

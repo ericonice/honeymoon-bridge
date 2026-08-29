@@ -50,6 +50,7 @@ npm run bench:bidcost   --workspace @hb/web -- 25       # what bidding by search
 npm run bench:strain    --workspace @hb/web -- "S:AK4 H:AK4 D:A43 C:AK32"
 npm run bench:draw      --workspace @hb/web -- 300      # draw policies against each other
 npm run bench:equity    --workspace @hb/web -- 1500      # what a standing is worth, as a win chance
+npx vite-node bench/honors.ts -- 300 0                  # whether honors decide anything
 # What remembering a board is worth. Ten minutes; needs a sample count to do anything.
 npm run bench:rubber --workspace @hb/web -- 60 8 format=duplicate control nodouble memory
 
@@ -1455,8 +1456,99 @@ it, and the test says why: a rubber's totals are not the sum of its deals, since
 500 or 700 for winning it and that lands on the rubber rather than on any deal in it. Summing the pad
 would be short by the bonus, and short in a way nobody would notice.
 
-**The replay's scorepad is rows-are-holdings, columns-are-players, and the version before it shipped
-a lie.** The first attempt kept one row a deal and *reversed* the earlier run's figures under the
+**The scorepad shows the two games side by side, a column each — and that is the third shape it has
+taken.** First one row a deal with the earlier run's figures *reversed* under the "You" heading, which
+lined the comparison up by telling the reader they had declared a contract their opponent declared.
+Then rows-are-holdings, columns-are-players: correct, nothing reversed, the like-for-like sitting in a
+column — and still hard to read, because it asked the reader to hold "which stream was this" in their
+head on every line.
+
+What a two-game match actually turns on is simpler than either: two games happened on one set of
+deals, and their totals add up to the result. So a **column is a game**, a **row is a deal**, and every
+figure is signed this seat's way. Nothing is reversed and nothing needs a caption to be read
+correctly. Each column is footed with that game's own figure, because the pair of them is what decides
+the match.
+
+**What it deliberately does not claim is that a row is a like-for-like comparison**, and the caption
+says so. The seats swap, so on any board you held one stream in the first game and the other in the
+second: reading across says how that board went *for you* twice, not who did better with the same
+cards. That comparison is real but subtle, and two shapes of this pad were spent trying to put it on
+screen automatically. The honest place for it is the pair of game totals.
+
+**Honors are a fifth of the deals and almost none of the results, and that is measured rather than
+argued.** They looked like a candidate for removal: 100 or 150 against a part-score of 60 to 90, on a
+fifth to a quarter of deals, going to whoever *holds* them and so uncorrelated with anything the
+contract did. `bench/honors.ts` asks the only question that settles it — how often the winner changes
+if they are stripped out:
+
+| | deals paying honors | share of all points | **winner flips without them** |
+| --- | --- | --- | --- |
+| rubber (300) | 23% | 15% | **2%** |
+| single game (200) | 20% | 9% | **4%** |
+| mirror (200) | 21% | 14% | **1%** |
+
+**A quarter of rubbers have honors swinging 200 or more to one side, and it changes the result in
+two percent of them** — they land roughly evenly over a match, so a big swing usually goes to whoever
+was winning anyway. **Mirror is the least affected of the three**, which is duplication doing its job:
+the same deals are played from both sides, so the honors in them are largely met twice.
+
+So they stay. They are colour rather than a decider, and the reason to keep them was always good —
+in a game whose first half is 26 discard decisions, four of a suit's honors is something a player
+did rather than something they were dealt.
+
+**One caveat the number does not cover.** Play is held fixed and the deals re-scored, so this misses
+that honors depend on the *strain* — a bidder can chase them by naming a suit it holds four of, and
+`bidValue` prices them because `scoreDeal` includes them. Removing them would change what gets bid,
+which this cannot see. It is the right first question anyway: if holding everything else constant
+flips only one match in fifty, the bidding is not going to make honors decisive.
+
+**And the bench had to be told its two seats must differ.** The first run put the same bot on both
+and reported *zero decided mirrors in two hundred* — which reads as a broken measurement and is the
+format working perfectly: identical players on mirrored deals draw exactly, every time, so there is
+no winner to flip. Third time a control run has been mistaken for a measurement in this directory.
+
+**And the signed net told a fourth kind of lie, which honors make ordinary here.** A deal that nets
+zero was drawn as a dash, and a dash says nothing happened — but five clubs made pays declarer 100
+below the line while a defender holding four club honours takes 100 above, so the deal nets zero with
+two hundred points on the table. Reported as a hand scoring "no change, which is not possible unless
+it was passed out", and it was not passed out. Zero is drawn as a zero now; blank is reserved for a
+row with no deal in that column at all, which is the distinction the dash was wrongly carrying.
+
+**The game rule sits under the deal that won the half, and at the foot it was drifting.** Ruled after
+all the rows, it slid down with every deal played — a line marking a moment that had already happened,
+moving, which is the one thing a mark on a record must not do. A paper scorepad rules its line where
+the game ended and leaves it. Each column is ruled on its own row, since the two halves need not end
+on the same deal, and a column is ruled exactly when it has a bonus: that figure is the gap between
+the half's real total and its deals added up, and only `matchBonusFor` sits in that gap.
+
+**A cell says how the contract went, in bridge's notation rather than in prose.** The one-column pad
+has room for "made +2" and says it; a column of the two-game pad is about half a phone wide and
+already carries a contract, a declarer and a signed total, so it said nothing about the result at all
+— a reader could see `4♥ you +120` and not know whether that was a squeeze or a scrape. `+2` and `−1`
+fit where the words do not, and `resultMark` sits beside `dealResultText` so the notation and the
+prose are one place to be wrong rather than two. **Made exactly is `=` and not a blank**, which is the
+same lesson this pad learnt from the dash: an empty cell has to mean there is no deal there.
+
+**And the two-column pad names honors, which is the one component the row cannot already explain.**
+Overtricks, the doubling insult and a slam bonus all follow from the contract, which is right there in
+the cell; honors go to whoever *holds* them, so a figure can be surprising with nothing beside it to
+account for the surprise. A faint line under the deal, the figure in the column that paid it, on the
+one deal in five that pays any. **Named rather than marked** — a dot or an "h" is cheaper in width and
+is a key the reader has to learn, and it is the same word `DealComplete` and the single-column pad
+already use, so three surfaces agree instead of a fourth vocabulary appearing.
+
+**Two vacuous probes on the way to it, both worth recording.** The first drove a whole mirror with
+identical bots on both seats and found nothing — of course it did: identical players on mirrored
+boards are a control run, so the halves come out the same length and the same shape, and it
+structurally could not produce the case. The second was the test itself, asserting the cell
+`toContain("0")` on a row that already held a 100. It passed with the bug still in. It asserts the
+*absence of the dash* now.
+
+**The lesson across all three: a display can be correct and still be wrong.** The second version was
+truthful in every cell and defensible in every detail, and it lost to the version that needs no
+explanation.
+
+**The version before them shipped a lie.** The first attempt kept one row a deal and *reversed* the earlier run's figures under the
 "You" heading, so the comparison lined up — and it also reversed the word "you", which names a person
 rather than a position, so the line said you declared a contract your opponent had declared. Reported
 as "hard to tell which hand I played".
@@ -1535,6 +1627,110 @@ caveat, which is fair for something touched twice a year. Moved rather than copi
 two places can disagree with itself. `test/homeFormat.test.ts` holds it there, because
 `settingsRows.test.ts` structurally cannot — its list is of rows everyone must be able to *reach*, and
 a format row in either place satisfies it.
+
+**Mirror — two games on one set of boards — is a format of its own, and it is the hybrid the return
+match was pointing at.** A game, then the same boards back with the draw swapped, and the **total wins**. Rubber
+scoring, so a line and a part-score and a race to a hundred still mean something; duplicated deals, so
+most of the luck of the shuffle cancels. `MatchState` gains a `mirror` kind holding a `TableState`
+whose `RubberState.format` is `"game"` — each half really is a single game and is scored as exactly
+one, so `matchBonusFor` needs no third answer and no rubber machinery learns anything.
+
+**What makes it a pair lives above the rubber, and everything that reads the standing had to be told.**
+A half's `RubberState` is indistinguishable from a single game's, so left alone every screen declares a
+winner at half time on a format whose whole point is that the first half decides nothing. `format`
+therefore travels to `ContractBar` and `DealComplete` beside the standing: the strip says
+**Game 1 of 2**, carries the first game's total into the second, and labels the running figure
+*This game* then *Both games*; the deal-complete screen reads `matchComplete` from the session rather
+than deriving it, and half time gets a screen that states the first game's total and explicitly does
+not call it a result.
+
+**Two silent holes the compiler could not see.** `actOn` and `nextIn` both returned a hard-coded
+`{ kind: "rubber", table }` — and a mirror carries a `table` too, so that type-checks perfectly and
+demotes a two-game match to an ordinary rubber on its first action. Only a test notices. And the
+server's report parser flattened any unrecognised format to `"rubber"` directly under a comment saying
+it kept what the client said, which would have recorded every one of these as a rubber and rated it.
+
+**A mirror is playable at a table, and settling the format became a total ordering to get it there.**
+`halfFormat` rides on `join` as an optional field, since a client too old to ask reads as the default
+the format is for.
+
+**Verified against a real `wrangler dev`, which is the only thing that could say it works.** Two
+sockets both asking for a mirror played a full eight-deal match: format `mirror`, half time reached
+rather than the match ending at the first game, `previousPoints` carried into the second half, no seed
+anywhere in the payload — and **4020 to 4020, recorded with `winner: -1`**, which is the control run
+over the wire, since one policy driving both seats means the seat swap is exact and every deal cancels.
+The disagreement was checked too: one seat asking for a rubber got an eighteen-deal rubber.
+
+Two things the probe needed that are not obvious. Taking the **first** legal action passes every deal
+out, so nobody reaches a hundred and the match never ends — it has to open a real contract, which is
+the same dead end `returnMatch.test.ts` hit. And a seat has to send `next-deal` itself; a deal
+finishing is not the client carrying on.
+
+**Half time says which half comes next.** The button read "Same deals back", which is true and
+describes the cards, where what a player needs there is where they are in the pair — and the panel
+above it already says the deals come back with the draw swapped. "Play 2nd half" is the strip's and the
+pad's own words, so three surfaces agree. Its test needed a **scored** deal to be reachable at all: a
+passed-out deal scores nothing, so it cannot end a half, and the passed-out screen returns before the
+half-time panel — a fixture without a score was testing a combination that cannot happen.
+
+**Rated, and what let it in was measuring the objection rather than arguing about it.** It was
+excluded for duplicate's reason: the second half is the first half's boards replayed, so the computer
+meets every one with perfect recall where a person's is good but not exact, and the size of that gap
+was a number nobody had.
+
+`bench/rubber.ts 120 8 format=mirror control nodouble memory` is that number — one bidder against an
+exact copy of itself with a board's pairs carried into the replay as the only difference:
+
+| | |
+| --- | --- |
+| matches won | 53 to 48, **52.5% ± 4.9** |
+| from even | **0.5 standard errors** |
+| margin | +1 point a match |
+| worth | **+17 ± 34 rating points** |
+| boards recognised | 43% of deals (425 of 979) |
+
+**Nothing, and the census is what says it is a null rather than a dead control** — 43% is every
+replayed deal, so the capability was firing. So no offset and nothing invented: a mirror is rated at
+the same anchor as a rubber. The null also disposes of the objection's other half, since if perfect
+recall is worth nothing then the gap between perfect and imperfect recall is worth at most that.
+
+**Why it is +157 a session in duplicate and nothing here is not established**, and the difference is
+large enough to want an explanation. The plausible mechanism is that duplicate scores a board on the
+difference between its two runs, so playing the replay better is exactly what the unit of scoring
+measures — where a mirror's halves are games won at a hundred below the line, and thirty points played
+better usually changes nobody's race. That is a hypothesis; the measurement is the finding.
+
+Teaching the bench the format needed one thing worth naming: the board key is `localSession`'s own
+expression, copied rather than re-derived. A mirror replays through the *table* rather than through a
+`DuplicateSession`, so a bench keying memory off the session alone would have measured a capability the
+app ships in two formats in only one of them — and would not have said so.
+
+**A match played back on an earlier one's boards is still out, and the client had been drawing a
+rating line for one.** `repeated` excludes it server-side and always has; `DealComplete` suppressed the
+line by *format*, so "Same boards back" showed `1361 → 1384` for a match the walk skips. It reads
+`repeated` now, which is the fact rather than a proxy for it.
+
+**It shipped broken for one line, and the shape of that line is the lesson.** `preferredFormat` is a
+*validating* reader — it names the formats it accepts and falls back to a rubber for anything else —
+and widening `MatchFormat` did not widen it. So choosing Mirror stored `"mirror"`, the reader handed
+back `"rubber"`, and the match played was a rubber: it would not end when somebody reached a hundred
+below the line, because a rubber takes two games. The row said one thing and the game was another,
+with nothing erroring anywhere. **A validating reader is a second definition of a union, and the
+compiler does not know they are meant to agree.** `test/preferredFormat.test.ts` closes it in the only
+way that lasts: an `as const` list of every format with a type-level assertion that the list covers
+the union, so it fails to *compile* the next time one is added, and a round trip through storage for
+each.
+
+**Named Mirror, and the alternative is worth recording because it was nearly taken.** "Two games"
+described the length rather than the format, and sat oddly beside two real bridge words. The row's
+whole recent history is about labels saying what they are — it is captioned *What you're playing*, and
+a name has to be an answer to that. It also goes into stored results and onto the record screen, where
+a name that is fun once gets read a hundred times. Mirror says the mechanic: the same deals reflected.
+
+**The overrun is accepted rather than engineered away.** The second game runs longer than the first
+41% of the time, so about a quarter of it is on fresh boards. Pinning the second half to the first's
+length would cancel that and make the two halves strategically different games on the same cards —
+one where winning ends things, one where it pays a bonus — which costs more than the luck it removes.
 
 **A rubber can be played back on its own boards, and that is a third thing rather than a
 setting.** `returnMatch` in the engine replays the deals of the match just finished, each with the
@@ -1638,6 +1834,29 @@ right everywhere except at the end, where the last deal is committed and then *l
 rubber has no equivalent state, because dealing always hands it a fresh deal. The invariant is exact —
 `results[i]` describes `schedule[i]`, so "already committed" is `results.length > at`.
 
+**A mirror ends on the three figures the strip carried all match** — Total, then each half, in the
+order a player has been reading them the whole time. Above and below the line are dropped there
+rather than kept: at the end of a pair they describe the **second half only**, which is a true
+statement about a thing nobody is asking about, sitting directly above the total that decides the
+match. An ordinary rubber is untouched, because it has no pair for the line figures to be half of.
+
+**A recent match names its format, and a mirror is what exposed the gap.** The row already carried
+`matchNoun`, which answers a different question — what to call the thing *while you play it* — and
+for a mirror the honest answer there is "match", which is precisely the general word this app uses
+for all four. On a list headed "Recent matches" that row said only that it was one. `formatName` is
+the format's own name for a label, capitalised because Home's cells are, with `formatPlural` beside
+it for a row tallying several; `Record.tsx`'s private copy of the plurals is gone, since two
+vocabularies for one thing is how they drift.
+
+**The opponent's name is hoisted out of the head-to-head rows the moment there is more than one.**
+It belongs to the opponent rather than to the row, and repeating it per row is what squeezed it: the
+first column is about 120px of a 336px screen, and a split opponent's row was carrying a name, a
+`cpu` badge *and* a tag reading "mirror matches" — so the name, the one thing there that identifies
+anybody, was the part that truncated. It costs a line for an opponent who plays two formats and
+gives the whole column to whatever the row is actually distinguishing. An opponent with one format
+is unchanged, which fixes the other half of it: a long name was truncating with nothing competing
+with it at all.
+
 **A surface that fills the screen says "Back"; a panel floating over what you were doing gets a
 cross.** The question is not where you came from, which varies -- Help opens from Home, from Settings
 and from the middle of an auction -- but whether the thing you were doing is still on screen behind
@@ -1677,15 +1896,34 @@ move the rating for one — a client showing `1361 → 1384` would be inventing 
 arrives. Null rather than a guess, for the same reason `botAnchor` returns null: nobody checks a
 figure that looks right.
 
-**A table plays duplicate now, and the negotiation rule is a second rule rather than the existing
-one widened.** `formatFor` used to answer one question — the shorter of a rubber and a single game
-wins, because being held in a rubber you did not agree to costs an hour and being given a game you
-did not ask for costs nothing. Duplicate is not shorter or longer but a **different game**, so that
-ordering has nothing to say about it, and the same asymmetry argument points the other way: being
-put into a format you have never played is worse than getting the rubber you know. **So duplicate
-takes both seats**, and a seat that asked for one and did not get it falls back to a rubber rather
-than being allowed to impose a single game it never asked for. Between two seats that both want
-duplicate, the shorter session wins for the original reason.
+**A table settles the format by a total ordering — mirror, then a rubber or a game, then duplicate —
+and the version before it could not serve a queue.** `formatFor` started with one rule: the shorter of
+a rubber and a single game wins, because being held in a rubber you did not agree to costs an hour and
+being given a game you did not ask for costs nothing. Duplicate is neither shorter nor longer but a
+**different game**, so that ordering had nothing to say about it, and it grew a second rule — duplicate
+takes both seats, and later mirror too, with anything unagreed falling back to a rubber.
+
+**That rule is right at an invite and wrong in a queue, which is what made it change.** Two people who
+know each other can simply agree what to play; two strangers cannot, so "needs both seats" means
+somebody asking for a session either waits for a stranger who wants the same thing or is handed a
+rubber with nothing saying why. **A rule that leaves somebody waiting is worse here than one that hands
+them a neighbouring game**, so the ordering always produces an answer and the queue can pair on arrival
+with no format in it at all.
+
+The ordering is not arbitrary. **Duplicate is last** because it is furthest from the game everyone else
+came for — a board is a scoring unit, the deals repeat, and being dropped into one unasked is being
+dropped into a different evening; so it still takes both seats in practice, since nothing outranks a
+seat that did not ask for it. **Mirror is first** because it is the least imposing thing that is not a
+rubber: rubber scoring, a line, a part-score, a race to a hundred, over deals that come back once.
+**The cost is stated rather than hidden** — somebody who asked for a single game and meets a mirror
+gets about twice what they asked for, which is a rubber's own length, so it is one player in one
+pairing rather than a category of them.
+
+**How long stayed a separate question and kept the old asymmetry**: the shorter of the two always wins,
+and it is read off *both* seats whichever format won, because a client sends every preference it holds
+rather than only the one matching its own choice. The session *order* is the one place the both-seats
+reasoning still holds, and it says why: back to back, halves and shuffled are three different games
+rather than a longer and a shorter one.
 
 **The stored match is read through a migration rather than migrated.** A Durable Object held a bare
 `TableState` under the key `table`, and `matchFrom` wraps that as a rubber on read — so a sitting
@@ -1821,6 +2059,18 @@ average, which reads as flattery.
 The number shows in two places. The record screen, above the head-to-head table rather than in it,
 because it is the only figure there that is not relative to somebody. And in the game, **under each
 name in the standing strip and nowhere else**.
+
+**And it has now gone back to the seat labels, which is the third placement and settles the argument
+below rather than contradicting it.** The objection that moved it to the strip was that the labels
+were drawn on the play screen only, so the rating was missing through the draw and the auction — most
+of a deal. `SeatLabel` is drawn in all three phases now, so that objection no longer applies, and the
+strip turned out wrong for a *different* reason: it is the **score**, and a rating is not part of one.
+It cannot move during a match, and half of it is a pinned anchor that will never move for anybody — so
+among four figures that do change it was two that never would. A rating belongs to a player, and a
+seat label is the one thing on the board that is one. Quieter than the name and far quieter than the
+turn dot, because it is the most static thing there.
+
+**The original reasoning, kept because the conclusion moved and the argument did not.**
 
 **It sat beside the seat labels first, and that was wrong twice over.** The seat labels only carry it on
 the play screen, so it was absent through the draw and the auction — most of a deal — and a figure that

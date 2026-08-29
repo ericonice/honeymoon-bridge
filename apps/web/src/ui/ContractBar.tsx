@@ -1,5 +1,6 @@
-import { netTo, totalScore } from "@hb/engine";
+import { GAME_THRESHOLD, netTo, totalScore } from "@hb/engine";
 import type {
+  MatchFormat,
   DealPhase,
   DuplicateSummary,
   MatchStanding,
@@ -13,21 +14,18 @@ import { ContractText } from "./CardText.js";
 export interface ContractBarProps {
   /** How much room this strip may take — see `Density`. */
   readonly density: Density;
+  /**
+   * What is being played, which the standing cannot always say for itself.
+   *
+   * A two-game match's halves each *are* a single game, standing and all, so without
+   * this the strip reads as one game throughout and its total is half the story.
+   */
+  readonly format: MatchFormat;
   /** Deals played so far this rubber, including the one in progress. */
   readonly handsPlayed: number;
   readonly opponentName: string;
   /** Shown phase, same lag as `TopBar` — see its own doc for why. */
   readonly phase: DealPhase;
-  /**
-   * Both sides' ratings, either null until something has said.
-   *
-   * Here and nowhere else on the board. It sat beside the seat labels first,
-   * which put it on the play screen only — so it was missing through the draw
-   * and the auction, which is most of a deal. The standing strip is the one
-   * place a figure about the two players is on screen the whole time, and a
-   * rating shown intermittently invites reading its absence as a change.
-   */
-  readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
   readonly standing: MatchStanding;
   readonly view: PlayerView;
   /**
@@ -50,18 +48,27 @@ export interface ContractBarProps {
  */
 function Figure({
   label,
+  outOf,
   values,
   view,
 }: {
   readonly label: string;
-  readonly values: Pair<number>;
+  /** A denominator, for a figure that is progress rather than money. */
+  readonly outOf?: number;
+  /** Null for a game not yet played — dashes rather than a zero nobody scored. */
+  readonly values: Pair<number> | null;
   readonly view: PlayerView;
 }): React.JSX.Element {
+  const pair =
+    values === null
+      ? "—"
+      : `${values[view.me]}–${values[view.opponent]}${outOf === undefined ? "" : `/${outOf}`}`;
+
   return (
     <span className="whitespace-nowrap">
       {label}{" "}
-      <span className="tabular-nums text-white/60">
-        {values[view.me]}&ndash;{values[view.opponent]}
+      <span className={`tabular-nums ${values === null ? "text-white/25" : "text-white/60"}`}>
+        {pair}
       </span>
     </span>
   );
@@ -98,54 +105,58 @@ const CELL = "w-[6.5rem] text-right tabular-nums";
  */
 function StandingHeader({
   opponentName,
-  ratings,
 }: {
   readonly opponentName: string;
-  readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
 }): React.JSX.Element {
-  const rated = ratings.mine !== null && ratings.opponent !== null;
   return (
     <p className="flex justify-end gap-2 text-[0.65rem] text-white/35">
-      {/* Name and figure are separate spans rather than one string, so if a
-          column ever is too narrow it is the *name* that gives — a shortened
-          name is legible where half a rating is a different number. */}
-      <span className={`${CELL} flex justify-end`}>
-        <span className="truncate">You</span>
-        {rated ? (
-          <span className="shrink-0 tabular-nums">
-            <span className="px-1 text-white/20">·</span>
-            {ratings.mine}
-          </span>
-        ) : null}
-      </span>
-      <span className={`${CELL} flex justify-end`}>
-        <span className="truncate">{opponentName}</span>
-        {rated ? (
-          <span className="shrink-0 tabular-nums">
-            <span className="px-1 text-white/20">·</span>
-            {ratings.opponent}
-          </span>
-        ) : null}
-      </span>
+      <span className={`${CELL} truncate`}>You</span>
+      <span className={`${CELL} truncate`}>{opponentName}</span>
     </p>
   );
 }
 
 function StandingRow({
   label,
+  outOf,
   values,
   view,
 }: {
   readonly label: string;
-  readonly values: Pair<number>;
+  /**
+   * Null for a game that has not been played yet, drawn as dashes.
+   *
+   * A row rather than nothing, so the strip has the same rows in the same places all
+   * match. Zeroes would be the other option and they would be a lie: nobody has scored
+   * nothing in the second game, there is no second game.
+   */
+  readonly values: Pair<number> | null;
+  /**
+   * A denominator, for a figure that is progress rather than money.
+   *
+   * **The part score is a different kind of number from the ones above it** and looked
+   * like one of them: Total, 1st and 2nd are points banked, where this resets when a
+   * game is won and is already counted inside all three. Sitting in the same column of
+   * plain figures it invites being added to them, which is exactly wrong. A denominator
+   * cannot be mistaken for money — and it answers the question actually being asked
+   * mid-auction, which is how much more is needed.
+   */
+  readonly outOf?: number;
   readonly view: PlayerView;
 }): React.JSX.Element {
+  const figure = (player: PlayerId): string =>
+    values === null ? "—" : outOf === undefined ? String(values[player]) : `${values[player]}/${outOf}`;
+
   return (
     <p className="flex items-baseline justify-between gap-2">
       <span className="text-white/55">{label}</span>
       <span className="flex gap-2">
-        <span className={CELL}>{values[view.me]}</span>
-        <span className={`${CELL} text-white/60`}>{values[view.opponent]}</span>
+        <span className={`${CELL} ${values === null ? "text-white/25" : ""}`}>
+          {figure(view.me)}
+        </span>
+        <span className={`${CELL} ${values === null ? "text-white/25" : "text-white/60"}`}>
+          {figure(view.opponent)}
+        </span>
       </span>
     </p>
   );
@@ -270,21 +281,41 @@ function SessionFigures({
  * the full standing in detail one beat later, and a compact echo of it right
  * above would just be the same numbers said twice.
  */
+/** The pair's running total, which is the figure a two-game match is decided on. */
+function pairTotal(earlier: Pair<number> | null, here: Pair<number>): Pair<number> {
+  return earlier === null ? here : [earlier[0] + here[0], earlier[1] + here[1]];
+}
+
 function StandingLines({
   density,
+  format,
   handsPlayed,
   opponentName,
-  ratings,
   standing,
   view,
 }: {
   readonly density: Density;
+  readonly format: MatchFormat;
   readonly handsPlayed: number;
   readonly opponentName: string;
-  readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
   readonly standing: MatchStanding;
   readonly view: PlayerView;
 }): React.JSX.Element {
+  /**
+   * A two-game match is the one format whose standing does not say what it is.
+   *
+   * Each half *is* a single game and its standing is exactly a single game's, so the
+   * strip would read as one all the way through and the total on it would be half the
+   * story. The format has to come from outside the standing, and which half from
+   * whether an earlier one has been carried in.
+   */
+  const pair =
+    format === "mirror" && standing.kind === "rubber"
+      ? {
+          earlier: standing.previousPoints,
+          half: standing.previousPoints === null ? 1 : 2,
+        }
+      : null;
   // `handsPlayed` counts deals already scored into the rubber, which is one
   // short of the hand actually on the table until this one is scored into it
   // too — `view.phase`, the engine's own, says which side of that it is on.
@@ -307,26 +338,38 @@ function StandingLines({
           <SessionFigures summary={standing.summary} view={view} />
         ) : (
           <>
-            <Figure label="Total" values={totalScore(standing.rubber)} view={view} />
-            <Figure label="Part" values={standing.rubber.partScore} view={view} />
+            {pair === null ? null : (
+              <span className="whitespace-nowrap">Half {pair.half} of 2</span>
+            )}
+            <Figure
+              label="Total"
+              values={pairTotal(pair?.earlier ?? null, totalScore(standing.rubber))}
+              view={view}
+            />
+            {pair === null ? null : (
+              <>
+                <Figure
+                  label="1st half"
+                  values={pair.half === 1 ? totalScore(standing.rubber) : pair.earlier}
+                  view={view}
+                />
+                <Figure
+                  label="2nd half"
+                  values={pair.half === 2 ? totalScore(standing.rubber) : null}
+                  view={view}
+                />
+              </>
+            )}
+            <Figure
+              label="Part"
+              outOf={GAME_THRESHOLD}
+              values={standing.rubber.partScore}
+              view={view}
+            />
             {standing.rubber.format === "rubber" ? (
               <Figure label="Games" values={standing.rubber.gamesWon} view={view} />
             ) : null}
           </>
-        )}
-        {/* Compact has no names to hang a rating on, so it says "Rated" and
-            keeps the same you–them order as every other figure on the line. It
-            is included rather than dropped because this *is* the always-visible
-            score on a short phone, and leaving it out would hide the number
-            from exactly the devices that cannot reach it anywhere else. One
-            more item on a line that already wraps costs no height. */}
-        {ratings.mine === null || ratings.opponent === null ? null : (
-          <span className="whitespace-nowrap">
-            Rated{" "}
-            <span className="tabular-nums text-white/60">
-              {ratings.mine}&ndash;{ratings.opponent}
-            </span>
-          </span>
         )}
       </div>
     );
@@ -337,20 +380,63 @@ function StandingLines({
       <p className="pb-0.5 text-white/40">
         {standing.kind === "duplicate"
           ? `Deal ${handNumber} of ${standing.summary.boards.length * 2}`
-          : `Hand #${handNumber}`}
+          : pair === null
+            ? `Hand #${handNumber}`
+            : `Half ${pair.half} of 2 · hand #${handNumber}`}
         {standing.kind === "duplicate" && standing.summary.current?.replay === true
           ? " · replay"
           : ""}
       </p>
       {standing.kind === "duplicate" ? null : (
-        <StandingHeader opponentName={opponentName} ratings={ratings} />
+        <StandingHeader opponentName={opponentName} />
       )}
       {standing.kind === "duplicate" ? (
         <SessionRows summary={standing.summary} view={view} />
       ) : (
         <>
-          <StandingRow label="Total" values={totalScore(standing.rubber)} view={view} />
-          <StandingRow label="Part score" values={standing.rubber.partScore} view={view} />
+          {/* **Three rows, always, whichever half is being played.** The first version
+              changed the label on the running figure and grew a fourth row at half
+              time, so the strip you had learned to read became a different strip
+              halfway through the match — and the row that appeared moved everything
+              under it. Total is the match, This game is the half in hand, Part score is
+              what is still below the line. During the first game the top two agree,
+              which is the truth rather than a redundancy: the match *is* that game so
+              far. */}
+          <StandingRow
+            label="Total"
+            values={pairTotal(pair?.earlier ?? null, totalScore(standing.rubber))}
+            view={view}
+          />
+          {/* Named halves rather than "this game", so a row means the same thing all
+              match. "This game" pointed at a different game depending on when you read
+              it, which is the one thing a fixed row must not do. The half not yet
+              played is dashes, not zeroes: nobody has scored nothing in it. */}
+          {pair === null ? null : (
+            <>
+              <StandingRow
+                label="1st half"
+                values={pair.half === 1 ? totalScore(standing.rubber) : pair.earlier}
+                view={view}
+              />
+              <StandingRow
+                label="2nd half"
+                values={pair.half === 2 ? totalScore(standing.rubber) : null}
+                view={view}
+              />
+            </>
+          )}
+          {/* Ruled off from the three above it, which are all money. This one is
+              progress toward the next game — it resets when one is won, and it is
+              already inside every total above. The rule says "different group" and the
+              denominator says "different kind of number". */}
+          <div className="mt-0.5 border-t border-white/10 pt-0.5">
+            <StandingRow
+              label="Part score"
+              outOf={GAME_THRESHOLD}
+              values={standing.rubber.partScore}
+              view={view}
+            />
+          </div>
           {standing.rubber.format === "rubber" ? (
             <StandingRow label="Games won" values={standing.rubber.gamesWon} view={view} />
           ) : null}
@@ -373,11 +459,11 @@ function StandingLines({
  */
 export function ContractBar({
   density,
+  format,
   handsPlayed,
   onShowScore,
   opponentName,
   phase,
-  ratings,
   standing,
   view,
 }: ContractBarProps): React.JSX.Element | null {
@@ -398,9 +484,9 @@ export function ContractBar({
       {phase === "complete" ? null : (
         <StandingLines
           density={density}
+          format={format}
           handsPlayed={handsPlayed}
           opponentName={opponentName}
-          ratings={ratings}
           standing={standing}
           view={view}
         />

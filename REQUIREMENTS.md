@@ -634,6 +634,29 @@ distinction the whole rubber turns on.
 
 ---
 
+### 1.7a Playing a Rubber Back
+
+A finished rubber may be played again **on its own deals, with the draw the other way round** — so the
+cards you were offered the first time are the ones your opponent is offered the second. Offered on the
+screen that ends a rubber, beside starting a fresh one, and nowhere else.
+
+**Two results rather than one.** Each rubber is recorded on its own and the pair's comparison is
+something the player reads, not something the game settles. That is the difference between this and
+the mirror of §1.9, which is one match with one verdict; this is the lighter version, taken because a
+rubber is long enough that committing to two of them up front is a different decision from being
+offered a second when the first has just ended.
+
+**Every deal of the rubber must have been recorded for it to be offered.** A sitting already under way
+when the deals started being kept has fewer recorded deals than played ones, and pairing the replay
+against the earlier scorepad by position would line every deal up against the wrong one.
+
+**A replay is never itself replayed**: a third run of the same cards is not a game.
+
+Not offered for a duplicate session, which already plays every board twice, nor for a mirror, which
+already is one.
+
+---
+
 ### 1.8 Scoring — Duplicate
 
 A third format, alongside the rubber of §1.7 and the single game of §3.6a. It exists to take the
@@ -784,6 +807,60 @@ holds thirteen exact pairs; a person recognises some boards vaguely. So self-pla
 game nobody is playing — it just errs in the other direction now, crediting the player too little
 rather than too much. §3.7's ratings therefore skip duplicate results until enough real sessions
 exist to place it.
+
+### 1.9 Scoring — Mirror
+
+A game, then the very same deals dealt again with the draw the other way round, and the **total of
+the two decides it**. A hybrid, and deliberately so: rubber scoring inside each half, so a line and a
+part-score and a race to a hundred still mean something, over duplicated deals, so most of the luck of
+the shuffle cancels.
+
+**It is what the return match of §1.7a was pointing at.** That offers a finished rubber the chance to
+be played back and reports two results; this makes the pair one match with one verdict, which is what
+turns the comparison from something a reader does into something the game settles.
+
+**Each half is a real match in its own right** — one game by default, or a rubber if the length is set
+that way — and is scored as exactly that, bonus included. Winning the first half decides nothing.
+
+**They are called halves and not games**, everywhere a screen names them. "Game" already means three
+things here — a format on the home screen, the thing won at 100 below the line, and a game of bridge
+loosely — and once a half can *be* a rubber, calling it a game is sometimes simply wrong. A half is
+what a mirror has two of, whatever each one contains. A screen that announced it as a result would be teaching the opposite of how the format is
+scored, so half time says what the first half came to and pointedly does not call it a win.
+
+**What is given up is exact cancellation, and that is a property of duplicate scoring rather than of
+repeated deals.** Under §1.8 a board is the scoring unit and its two runs are compared directly; here
+the unit is the match and the halves are simply played, so vulnerability is *earned* as it always is
+and the two halves happen at different standings. Cancellation is not why meeting the same deals again
+is worth doing.
+
+**The second half runs to its own finish, not to the first half's length.** It is over when somebody
+wins it, which need not be inside the number of deals the first took — measured at 41% of pairs — and
+past the recorded deals it simply deals fresh. About three quarters of a second game is on the same
+deals. Pinning its length would buy exact coverage at the price of making the two halves
+strategically different games on the same cards, one where winning ends things and one where it only
+pays a bonus, which costs more than the luck it removes.
+
+**Rated, at the same anchor as a rubber, and it took measuring the objection to get there.** It was
+excluded for §1.8's reason: the second half is the first's deals replayed, so the computer meets every
+one with perfect recall where a person has a good memory of deals played minutes ago but not an exact
+one, and the size of that advantage was a number nobody had. It is worth **+17 ± 34 rating points** —
+half a standard error from even over 120 matches, with the computer knowing which board it was on in
+43% of deals, so a null rather than a dead control. Nothing has to be invented, and the argument that
+a person's recall is worse than perfect cannot matter more than perfect recall does.
+
+**A match played back on an earlier one's boards is still not rated** — §1.7a — and that is a
+different exclusion rather than the same one surviving: there the repeated deals are the whole point
+of asking for it.
+
+**Playable at a table, and it is first in the precedence** — so a mirror happens if *either* seat asks
+for one. See §3.6a: a disagreement about which game resolves by a total ordering rather than by
+formats that need both seats, because a rule that leaves somebody waiting for a stranger with the same
+preference is worse than one that hands them a neighbouring game.
+
+The *half length* is a separate question and takes the other rule: one game and a rubber a side differ
+only in how long they run, so the **shorter wins** and nobody is held for an hour they did not agree
+to. It is read off both seats whichever format won, since a client sends every preference it holds.
 
 ## 2. The Two Versions
 
@@ -1236,11 +1313,15 @@ browser.
 
 ### 3.6a What You Are Playing
 
-Three formats: a **rubber** by default — best of three games, as §1.7 describes — a **single game**,
-ending the moment somebody first reaches 100 below the line, and a **duplicate session** of §1.8. A
-rubber is the game this was built to play; a single game exists because a rubber runs the better part
-of an hour and not every sitting has that in it; duplicate exists to take the luck of the cards out of
-the result.
+Three cells, and four games behind them. A **rubber** as §1.7 describes it, whose length — first to one
+game or to two — is chosen on the line beneath rather than as a format of its own: a single game is a
+rubber that stops early, not a different kind of match, and putting it beside the others made the row
+mix categories. A **mirror** of §1.9. And a **duplicate session** of §1.8.
+
+A rubber is the game this was built to play; the one-game length exists because a rubber runs the
+better part of an hour and not every sitting has that in it; duplicate exists to take the luck of the
+cards out of the result; and a mirror does the same thing over a match short enough to finish in one
+sitting.
 
 **Chosen on the home screen, above the buttons that start a match, and not in Settings.** The test is
 not *when* a setting is read — every one of these is read once, when a match starts — but **how often
@@ -1275,13 +1356,32 @@ game ends the match — so every deal is played non-vulnerable, and the doubled 
 the vulnerable slam bonuses, and the whole pressure of being vulnerable while the opponent is not
 simply never arise. A shorter match is also a flatter one.
 
-**At a table with somebody else, the shorter format wins.** Each player has a preference; if either
-wants a single game, that is what is played. Deliberately not symmetric: somebody who wanted one
-game and is held in a rubber owes the best part of an hour they never agreed to, while somebody who
-wanted a rubber and gets a game can simply play another. The two mistakes are not the same size.
+**At a table with somebody else, two rules settle it, and they answer different questions.**
 
-This also means the queue needs no matching on length — a table settles it once both seats are
-filled, so nobody waits longer to be paired for the sake of it.
+*Which game* resolves by a **total ordering: mirror, then a rubber or a game, then duplicate.** The
+higher of the two preferences is what gets played, so a disagreement always has an answer and nobody
+is left unpaired for a preference. This replaced a rule where duplicate and mirror each needed *both*
+seats and anything else fell back to a rubber — sound at an invite, where two people who know each
+other can simply agree, and bad in a queue, where somebody asking for a session either waited for a
+stranger who wanted the same thing or was handed a rubber with nothing saying why. **A rule that
+leaves somebody waiting is worse here than one that hands them a neighbouring game.**
+
+Duplicate is last because it is the format furthest from the game everyone else came for — a board is
+a scoring unit, the deals repeat, and being dropped into one unasked is being dropped into a different
+evening. So in practice it still takes both seats, since nothing outranks somebody who did not ask for
+it. Mirror is first because it is the least imposing thing that is not a rubber: rubber scoring, a
+line, a part-score, a race to a hundred, over deals that come back once. The cost, stated because it
+is the one asymmetry the old rule existed to avoid — somebody who asked for a single game and meets a
+mirror gets about twice what they asked for, which is a rubber's own length.
+
+*How long* is separate and always takes the **shorter** of what the two asked. Deliberately not
+symmetric: somebody who wanted one game and is held in a rubber owes the best part of an hour they
+never agreed to, while somebody who wanted a rubber and gets a game can simply play another. The two
+mistakes are not the same size. It is read off both seats whichever format won, since a client sends
+every preference it holds rather than only the one matching its own choice.
+
+This also means the queue matches **right away** and needs no matching on format or on length — a
+table settles both once two seats are filled, so nobody waits to be paired for the sake of it.
 
 The preference is read **when a match starts** and never again. Changing the setting cannot move
 the goalposts on a sitting under way, and a player reconnecting mid-match carries no authority over

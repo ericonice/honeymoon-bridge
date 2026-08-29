@@ -20,6 +20,7 @@ import type {
   DealAction,
   DealState,
   MatchFormat,
+  MatchState,
   Pair,
   PlayerId,
   PlayerView,
@@ -255,7 +256,7 @@ function playMatch({ boardMemory, bots, challenger, format, oracleSeat, seed }: 
     while (dealOf(match).phase !== "complete") {
       const deal = dealOf(match);
       const seat = deal.toAct;
-      const board = match.kind === "duplicate" ? currentDeal(match.session).board : null;
+      const board = boardKeyOf(match);
       if (board !== null && deal.phase === "draw" && deal.pending !== null && deal.stock[0] !== undefined) {
         if (noting[seat]?.board !== board) {
           noting[seat] = { board, pairs: [] };
@@ -327,6 +328,25 @@ function playMatch({ boardMemory, bots, challenger, format, oracleSeat, seed }: 
     wreckPoints,
     wrecks,
   };
+}
+
+/**
+ * Which board this deal is, as its seed — **the app's own answer, copied rather than
+ * re-derived**.
+ *
+ * A mirror replays its boards through the table rather than through a session, so a
+ * bench keying memory off `DuplicateSession` alone would have measured a capability the
+ * app ships in two formats in only one of them. `localSession.boardKeyOf` is this same
+ * expression, and the two have to agree or the bench is measuring a different bot.
+ *
+ * A plain rubber deals every seed once, so nothing is ever recognised and this costs
+ * only a lookup — which is exactly what happens in the app.
+ */
+function boardKeyOf(match: MatchState): number | null {
+  if (match.kind === "duplicate") {
+    return match.session.boards[currentDeal(match.session).board]?.seed ?? null;
+  }
+  return match.table.dealt[match.table.dealt.length - 1]?.seed ?? null;
 }
 
 /** A contract this seat declared and went down two or more in, and what it paid above the line. */
@@ -542,7 +562,7 @@ function run({
   // rubber is the same class of mistake as the progress line that counted seeds
   // and said "rubbers" — the summary was right and only the label lied, which is
   // exactly the sort of thing that makes a careful reader stop and re-derive.
-  const noun = format === "duplicate" ? "sessions" : "rubbers";
+  const noun = format === "duplicate" ? "sessions" : format === "mirror" ? "matches" : "rubbers";
   const playing = createProgress(rubbers * 2, noun);
 
   for (let seed = 1; seed <= rubbers; seed++) {
@@ -802,7 +822,11 @@ const versusArg = process.argv.find((arg) => arg.startsWith("vs="));
  * two identical bidders on the same stock must come out at even, and in duplicate
  * that is unusually sharp, since every board should be flat.
  */
-const format: MatchFormat = process.argv.includes("format=duplicate") ? "duplicate" : "rubber";
+const format: MatchFormat = process.argv.includes("format=duplicate")
+  ? "duplicate"
+  : process.argv.includes("format=mirror")
+    ? "mirror"
+    : "rubber";
 const objective: Objective = process.argv.includes("objective=points")
   ? "points"
   : process.argv.includes("objective=equity")

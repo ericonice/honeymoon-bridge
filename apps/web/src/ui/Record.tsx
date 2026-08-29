@@ -1,6 +1,6 @@
 import { Fragment, useState } from "react";
 import type { MatchFormat } from "@hb/engine";
-import { matchNoun } from "../game/labels.js";
+import { formatName, formatPlural } from "../game/labels.js";
 import type { MatchRecord, OpponentRecord, Records } from "../game/records.js";
 import { resetRecord, useRecentMatches, useRecords } from "../game/records.js";
 import { useStandings } from "../game/standings.js";
@@ -188,6 +188,15 @@ function PointsBar({
   );
 }
 
+/** Says a record was taken on a browser's word rather than witnessed by the server. */
+function RobotTag(): React.JSX.Element {
+  return (
+    <span className="shrink-0 rounded-sm bg-white/10 px-1 py-px font-mono text-[0.5rem] font-semibold tracking-wide text-white/40 uppercase">
+      cpu
+    </span>
+  );
+}
+
 /**
  * One opponent, in one match format, on one line.
  *
@@ -210,16 +219,17 @@ function PointsBar({
  * beside it, since a deal can be passed out with nobody winning it.
  */
 function OpponentLine({
-  format,
-  name,
+  indent,
+  label,
   onToggle,
   open,
   record,
   robot,
 }: {
-  /** Named only when this opponent has a record in both formats. */
-  readonly format: string | null;
-  readonly name: string;
+  /** Set on a format row, which sits under a heading naming the opponent. */
+  readonly indent: boolean;
+  /** The opponent's name, or — under a heading — which format these are. */
+  readonly label: string;
   onToggle(): void;
   readonly open: boolean;
   readonly record: OpponentRecord;
@@ -235,15 +245,12 @@ function OpponentLine({
       onClick={onToggle}
     >
       <span className="flex min-w-0 items-baseline gap-1">
-        <span className={`truncate text-sm ${robot ? "text-white/60 italic" : ""}`}>{name}</span>
-        {robot ? (
-          <span className="shrink-0 rounded-sm bg-white/10 px-1 py-px font-mono text-[0.5rem] font-semibold tracking-wide text-white/40 uppercase">
-            cpu
-          </span>
-        ) : null}
-        {format === null ? null : (
-          <span className="shrink-0 text-[0.6rem] text-white/35">{format}</span>
-        )}
+        <span
+          className={`truncate ${indent ? "pl-3 text-[0.7rem] text-white/55" : "text-sm"} ${robot && !indent ? "text-white/60 italic" : ""}`}
+        >
+          {label}
+        </span>
+        {robot && !indent ? <RobotTag /> : null}
       </span>
       {/* The third figure only when there is one. Every rubber row would otherwise
           carry a "–0" for something that cannot happen to it, and this row is
@@ -422,14 +429,7 @@ interface OpponentGroup {
  * would otherwise make the list depend on which format happened to be played
  * first.
  */
-const FORMAT_ORDER: readonly MatchFormat[] = ["rubber", "game", "duplicate"];
-
-/** Plural, for a row that is naming which kind of match these are. */
-const FORMAT_PLURAL: Record<MatchFormat, string> = {
-  duplicate: "duplicate sessions",
-  game: "single games",
-  rubber: "rubbers",
-};
+const FORMAT_ORDER: readonly MatchFormat[] = ["rubber", "game", "mirror", "duplicate"];
 
 function lastPlayedOf(group: Pick<OpponentGroup, "records">): number {
   return Math.max(0, ...group.records.map((record) => record.lastPlayed));
@@ -503,19 +503,38 @@ function OpponentSection({
   /** `key|format` of the row whose panel is showing, or null. */
   readonly openRow: string | null;
 }): React.JSX.Element {
-  // Only worth naming when there is more than one to tell apart.
-  const named = group.records.length > 1;
+  // Only worth telling the formats apart when there is more than one of them.
+  const split = group.records.length > 1;
 
   return (
     <>
+      {/* **The name belongs to the opponent, not to the row**, and putting it on
+          every row is what squeezed it. The first column is about 120px of a
+          336px screen, and on a split opponent it was carrying a name, a `cpu`
+          badge *and* a tag reading "mirror matches" — so the name, the one thing
+          there that identifies anybody, was the part that truncated.
+
+          Hoisted, it costs a line for an opponent who plays two formats and gives
+          the whole column back to whichever thing the row is actually
+          distinguishing. An opponent with one format is unchanged and gets the
+          full width for their name, which was the other half of the complaint: a
+          long name truncated with nothing competing with it at all. */}
+      {split ? (
+        <div className="flex items-baseline gap-1 pt-2 pb-0.5">
+          <span className={`min-w-0 text-sm ${group.isRobot ? "text-white/60 italic" : ""}`}>
+            {group.name}
+          </span>
+          {group.isRobot ? <RobotTag /> : null}
+        </div>
+      ) : null}
       {group.records.map((record) => {
         const id = `${group.key}|${record.format}`;
         const open = openRow === id;
         return (
           <Fragment key={id}>
             <OpponentLine
-              format={named ? (FORMAT_PLURAL[record.format] ?? record.format) : null}
-              name={group.name}
+              indent={split}
+              label={split ? formatPlural(record.format) : group.name}
               open={open}
               record={record}
               robot={group.isRobot}
@@ -563,7 +582,7 @@ function MatchRow({ match }: { readonly match: MatchRecord }): React.JSX.Element
       </div>
       <div className="mt-0.5 flex items-baseline justify-between gap-3 text-xs text-white/40">
         <span>
-          {matchNoun(match.format)} · {count(match.deals, "deal")}
+          {formatName(match.format)} · {count(match.deals, "deal")}
         </span>
         <span>{formatMatchTime(match.finishedAt)}</span>
       </div>

@@ -1,5 +1,12 @@
 import { totalScore } from "@hb/engine";
-import type { DealScore, MatchStanding, Pair, PlayerView } from "@hb/engine";
+import type {
+  DealScore,
+  MatchFormat,
+  MatchStanding,
+  Pair,
+  PlayerId,
+  PlayerView,
+} from "@hb/engine";
 import { matchNoun } from "../game/labels.js";
 import { ratingChange } from "../game/records.js";
 import { Columns, DealResultHeadline, Row } from "./ScoreRows.js";
@@ -20,6 +27,8 @@ export interface DealCompleteProps {
    * than the pair the standing strip takes.
    */
   readonly opponentRating: number | null;
+  /** Played back on boards from an earlier match, which the server will not rate. */
+  readonly repeated: boolean;
   readonly standing: MatchStanding;
   readonly score: DealScore | null;
   readonly view: PlayerView;
@@ -41,20 +50,47 @@ export interface DealCompleteProps {
    * because most of the time another rubber is what somebody wants.
    */
   readonly onPlaySameBoards: (() => void) | null;
+  /** What is being played — the standing cannot say for a two-game match. */
+  readonly format: MatchFormat;
+  /** Whether the *match* is over, as opposed to the half in progress. */
+  readonly matchComplete: boolean;
+  /** The first game of a two-game match is over and the match is not. */
+  readonly halfComplete: boolean;
+  /** Who won the match. Null while it runs, and null for a draw. */
+  readonly matchWinner: PlayerId | null;
 }
 
-/** The pair's aggregate, which is the number a return match exists to produce. */
-function bothTogether(first: Pair<number>, second: Pair<number>): Pair<number> {
-  return [first[0] + second[0], first[1] + second[1]];
+/**
+ * The three figures a two-game match ends on, or null for a match that is not one.
+ *
+ * Read **unreversed**, unlike almost everything else this feature draws. Per deal the
+ * unit is the cards, so a seat is compared against whoever held them; across a whole
+ * match each player has had both sides of every deal, so the totals compare the
+ * players.
+ */
+function pairFigures(
+  standing: MatchStanding,
+): { readonly both: Pair<number>; readonly first: Pair<number>; readonly second: Pair<number> } | null {
+  if (standing.kind !== "rubber" || standing.previousPoints === null) {
+    return null;
+  }
+  const first = standing.previousPoints;
+  const second = totalScore(standing.rubber);
+  return { both: [first[0] + second[0], first[1] + second[1]], first, second };
 }
 
 export function DealComplete({
   dealBonus,
+  format,
+  halfComplete,
+  matchComplete,
+  matchWinner,
   onDone,
   onNextDeal,
   onPlaySameBoards,
   opponentName,
   opponentRating,
+  repeated,
   opponentWaitingToContinue,
   score,
   standing,
@@ -70,18 +106,29 @@ export function DealComplete({
       <SessionPad summary={standing.summary} view={view} />
     ) : (
       <Scorepad
+        format={format}
         history={standing.history}
         opponentName={opponentName}
         previous={standing.previous}
+        previousPoints={standing.previousPoints}
         rubber={standing.rubber}
         view={view}
       />
     );
-  const complete =
-    standing.kind === "duplicate" ? standing.summary.complete : standing.rubber.complete;
-  const noun = matchNoun(
-    standing.kind === "duplicate" ? "duplicate" : standing.rubber.format,
-  );
+  /**
+   * **Whether the *match* is over, which a two-game match's standing cannot say.**
+   *
+   * Each half is a real single game whose `rubber.complete` goes true when somebody
+   * reaches a hundred — and deriving the match from that, as this did, declares a
+   * winner at half time on a format whose entire point is that the first half decides
+   * nothing. So it comes from the session, which knows.
+   */
+  const complete = matchComplete;
+  const pairPoints = pairFigures(standing);
+  const noun = matchNoun(format);
+
+  /** The first half of a pair is over: a real moment, but not a result. */
+  const halfDone = halfComplete;
 
   // Side by side once there are two ways to carry on, because they are two ways to
   // carry on rather than a choice and an afterthought — stacked, the second read as a
@@ -109,6 +156,13 @@ export function DealComplete({
             `Waiting for ${opponentName}…`
           ) : complete ? (
             `New ${noun}`
+          ) : halfDone ? (
+            // **Says where you are, not what the mechanic is.** "Same deals back" was
+            // true and described the cards; what a player needs at half time is which
+            // half they are about to play, and the paragraph above already says the
+            // deals come back with the draw swapped. Same words as the strip and the
+            // pad, so the three surfaces agree.
+            "Play 2nd half"
           ) : (
             "Next deal"
           )}
@@ -166,7 +220,13 @@ export function DealComplete({
     // A drawn match is a third outcome rather than a loss, which duplicate makes
     // ordinary: a board is flat whenever both of its runs score the same, so a short
     // session really is level a fair fraction of the time.
-    const winner = standing.kind === "duplicate" ? standing.summary.winner : standing.rubber.winner;
+    // From the session, never from the standing. For a two-game match the standing is
+    // the *second game's*, and its winner is whoever won that game — so a player who
+    // won on the total was being told the computer had taken it. Reported exactly that
+    // way, and the recorded result was right all along, which is the worst shape for a
+    // bug like this: the screen and the database disagreed and only the screen was
+    // wrong.
+    const winner = matchWinner;
     const drawn = winner === null;
     const won = winner === view.me;
     // Worked out here rather than waited for. The server is authoritative and
@@ -179,8 +239,20 @@ export function DealComplete({
     // a number that never arrives. A blank is the honest answer, for the same reason
     // `botAnchor` returns null rather than guessing: nobody checks a figure that
     // looks right.
+    // No rating line for a match the server will not rate, since showing
+    // `1361 → 1384` for one would be inventing a number that never arrives.
+    //
+    // Two of them, and they are not the same exclusion. A **session** is out because
+    // its anchor cannot come from a bench: both bench seats are memoryless where a
+    // person is not, so the measurement would describe a game nobody plays. A match
+    // on **repeated boards** is out because the computer meets every one of them with
+    // perfect recall — which is the argument that used to keep a mirror out too, until
+    // it was measured at +17 ± 34 rating points and the objection turned out to be
+    // about a quantity that is zero. A mirror is rated; "Same boards back" is not.
     const rating =
-      standing.kind === "duplicate" ? null : ratingChange({ opponent: opponentRating, won });
+      standing.kind === "duplicate" || repeated
+        ? null
+        : ratingChange({ opponent: opponentRating, won });
 
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4">
@@ -210,32 +282,31 @@ export function DealComplete({
         {standing.kind === "duplicate" ? null : (
           <div className="w-full max-w-sm text-sm">
             <Columns opponentName={opponentName} />
-            <Row label="Above the line" values={standing.rubber.aboveLine} view={view} />
-            <Row divider label="Below the line" values={standing.rubber.belowLineTotal} view={view} />
-            <Row emphasis label="Final score" values={totalScore(standing.rubber)} view={view} />
-            {/* **What the pair came to, on the screen that ends the second half of
-                it.** A return match's own final score answers half a question: these
-                boards have been played twice and the interesting number is how the two
-                halves add up. Only here — the running pad compares deal by deal, where
-                the unit is the cards; this compares the players, which is fair across a
-                whole match precisely because each has now had both sides of every
-                board.
+            {/* **A mirror ends on the same three rows the strip carried all match.**
+                Total, then each half — the figures a player has been reading the whole
+                time, in the same order, one last time. Above and below the line are
+                dropped here rather than kept: at the end of a pair they describe the
+                *second half only*, which is a true statement about a thing nobody is
+                asking about, sitting directly above the total that decides the match.
 
-                Read unreversed, unlike every other figure this feature draws. */}
-            {standing.previousPoints === null ? null : (
+                Total leads rather than foots, because it is the verdict. On the strip
+                it led for the same reason. */}
+            {pairPoints === null ? (
               <>
-                <Row
-                  label="First match"
-                  values={standing.previousPoints}
-                  view={view}
-                />
+                <Row label="Above the line" values={standing.rubber.aboveLine} view={view} />
                 <Row
                   divider
-                  emphasis
-                  label="Both together"
-                  values={bothTogether(standing.previousPoints, totalScore(standing.rubber))}
+                  label="Below the line"
+                  values={standing.rubber.belowLineTotal}
                   view={view}
                 />
+                <Row emphasis label="Final score" values={totalScore(standing.rubber)} view={view} />
+              </>
+            ) : (
+              <>
+                <Row emphasis label="Total" values={pairPoints.both} view={view} />
+                <Row divider label="1st half" values={pairPoints.first} view={view} />
+                <Row label="2nd half" values={pairPoints.second} view={view} />
               </>
             )}
           </div>
@@ -292,6 +363,24 @@ export function DealComplete({
         view={view}
         vulnerable={vulnerable}
       />
+
+      {/* Half time. Said plainly, and deliberately *not* as a verdict: winning the
+          first game of a pair decides nothing, and a screen announcing it would teach
+          the opposite of how the format is scored. What it does say is the figure that
+          will decide it. */}
+      {halfDone && standing.kind === "rubber" ? (
+        <div className="w-full max-w-sm text-sm">
+          <p className="pb-1 text-xs tracking-wide text-white/45 uppercase">
+            First half done &middot; one more to come
+          </p>
+          <Columns opponentName={opponentName} />
+          <Row emphasis label="First half" values={totalScore(standing.rubber)} view={view} />
+          <p className="pt-2 text-xs text-white/50">
+            The same deals again, with the draw swapped. The two halves added together
+            decide it.
+          </p>
+        </div>
+      ) : null}
 
       {pad}
 

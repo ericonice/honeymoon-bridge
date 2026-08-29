@@ -2,9 +2,15 @@ import { describe, expect, it } from "vitest";
 import { formatFor } from "../src/matchFormat.js";
 import type { Asked } from "../src/matchFormat.js";
 
-const asked = (format: Asked["format"], deals = 10, order: Asked["order"] = "halves"): Asked => ({
+const asked = (
+  format: Asked["format"],
+  deals = 10,
+  order: Asked["order"] = "halves",
+  halfFormat: Asked["halfFormat"] = "game",
+): Asked => ({
   deals,
   format,
+  halfFormat,
   order,
 });
 
@@ -88,5 +94,66 @@ describe("agreeing how a session is ordered", () => {
     const agreed = formatFor(asked("duplicate", 4, "adjacent"), asked("duplicate", 10, "adjacent"));
     expect(agreed.boards).toBe(2);
     expect(agreed.order).toBe("adjacent");
+  });
+});
+
+/**
+ * **A disagreement always resolves, and that is the point of a total ordering.**
+ *
+ * Mirror, then a rubber or a game, then duplicate. The version this replaced made
+ * duplicate and mirror take *both* seats and fall back to a rubber, which is sound at
+ * an invite — two people who know each other can simply agree — and useless in a
+ * queue, where somebody asking for a session either waited for a stranger who wanted
+ * the same thing or was handed a rubber with nothing saying why. A rule that leaves
+ * somebody waiting is worse here than one that hands them a neighbouring game.
+ */
+describe("resolving a disagreement about the format", () => {
+  it("plays the higher-precedence of the two", () => {
+    expect(formatFor(asked("mirror"), asked("rubber")).format).toBe("mirror");
+    expect(formatFor(asked("rubber"), asked("mirror")).format).toBe("mirror");
+    expect(formatFor(asked("mirror"), asked("duplicate")).format).toBe("mirror");
+    expect(formatFor(asked("duplicate"), asked("mirror")).format).toBe("mirror");
+  });
+
+  /**
+   * Duplicate is last because it is the format furthest from the game everyone else
+   * came for, so in practice it still takes both seats — nothing outranks a seat that
+   * did not ask for it.
+   */
+  it("never imposes duplicate on somebody who did not ask", () => {
+    expect(formatFor(asked("duplicate"), asked("rubber")).format).toBe("rubber");
+    expect(formatFor(asked("duplicate"), asked("game")).format).toBe("game");
+    expect(formatFor(asked("duplicate"), asked("duplicate")).format).toBe("duplicate");
+  });
+
+  /**
+   * **How long is a separate question from which game**, and it keeps the asymmetry
+   * this has had from the start: the shorter always wins, because somebody held in a
+   * rubber they did not agree to owes the better part of an hour where somebody who
+   * wanted a rubber and gets a game can simply play another.
+   */
+  it("takes the shorter of the two lengths, whichever format won", () => {
+    const bothLong = formatFor(
+      asked("mirror", 10, "halves", "rubber"),
+      asked("mirror", 10, "halves", "rubber"),
+    );
+    expect(bothLong.halfFormat).toBe("rubber");
+
+    // One seat wants single-game halves: the shorter wins.
+    expect(formatFor(asked("mirror", 10, "halves", "rubber"), asked("mirror")).halfFormat).toBe(
+      "game",
+    );
+  });
+
+  /**
+   * The length is read off **both** seats whichever format won, because a client sends
+   * every preference it holds rather than only the one matching its own choice. A seat
+   * that asked for a rubber still has an opinion about how long a mirror's halves run.
+   */
+  it("asks the seat that did not choose the format how long it should be", () => {
+    const agreed = formatFor(asked("rubber", 10, "halves", "game"), asked("mirror", 10, "halves", "rubber"));
+
+    expect(agreed.format).toBe("mirror");
+    expect(agreed.halfFormat).toBe("game");
   });
 });

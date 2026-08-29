@@ -2,7 +2,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import type { OpponentMatch, OpponentRecord } from "../src/game/records.js";
+import type { MatchRecord, OpponentMatch, OpponentRecord } from "../src/game/records.js";
 import { Record } from "../src/ui/Record.js";
 
 const match = (over: Partial<OpponentMatch> = {}): OpponentMatch => ({
@@ -33,6 +33,20 @@ const record = (over: Partial<OpponentRecord> = {}): OpponentRecord => ({
 });
 
 let robot: readonly OpponentRecord[] = [record()];
+let recent: readonly MatchRecord[] = [];
+
+const played = (over: Partial<MatchRecord> = {}): MatchRecord => ({
+  botVersion: 3,
+  deals: 8,
+  drawn: false,
+  finishedAt: Date.UTC(2026, 7, 22, 16, 42),
+  format: "rubber",
+  opponentName: "Computer",
+  pointsAgainst: 410,
+  pointsFor: 890,
+  won: true,
+  ...over,
+});
 
 /** Twelve points, with the opponent changing at the fourth — enough to draw. */
 const HISTORY = [1470, 1440, 1442, 1444, 1447, 1449, 1451, 1453, 1427, 1434, 1441, 1514].map(
@@ -41,7 +55,7 @@ const HISTORY = [1470, 1440, 1442, 1444, 1447, 1449, 1451, 1453, 1427, 1434, 144
 
 vi.mock("../src/game/records.js", () => ({
   resetRecord: vi.fn(),
-  useRecentMatches: () => ({ loading: false, matches: [] }),
+  useRecentMatches: () => ({ loading: false, matches: recent }),
   useRecords: () => ({
     loading: false,
     records: { opponents: [], rating: { history: HISTORY, played: 31, value: 1514 }, robot },
@@ -52,7 +66,10 @@ vi.mock("../src/game/records.js", () => ({
   rememberRatings: vi.fn(),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  recent = [];
+});
 
 function show(): void {
   render(createElement(Record, { onBack: () => {}, onSignIn: () => {}, signedIn: true }));
@@ -137,14 +154,44 @@ test("nothing is captioned or restated on the row itself", () => {
   }
 });
 
+/**
+ * **The name is hoisted out of the rows the moment there is more than one.**
+ *
+ * It belongs to the opponent rather than to the row, and repeating it on each one
+ * is what squeezed it: the first column is about 120px of a 336px screen, and a
+ * split opponent's row was carrying a name, a `cpu` badge and a tag reading
+ * "mirror matches" — so the name, the one thing there that identifies anybody, was
+ * the part that truncated. Reported exactly that way.
+ *
+ * The cost is a line for an opponent who plays two formats. What it buys is the
+ * whole column for whatever the row is actually distinguishing.
+ */
 test("an opponent played in both formats names them, on a line each", () => {
   robot = [record(), record({ deals: 9, format: "game", lost: 1, pointsAgainst: 200, pointsFor: 290, won: 2 })];
   show();
 
   expect(lines().map((line) => line.replace(/ \d[\d,]* points for.*against/, ""))).toEqual([
-    "Computer cpu rubbers 13–7 146 +641",
-    "Computer cpu single games 2–1 9 +90",
+    "rubbers 13–7 146 +641",
+    "single games 2–1 9 +90",
   ]);
+  // Said once, above the pair of them, with the badge that goes with it — and not
+  // on either row, which is what the two lines above already assert.
+  const heading = document.querySelector('[class~="pb-0.5"][class~="pt-2"]');
+  expect(heading?.textContent).toBe("Computercpu");
+});
+
+/**
+ * And an opponent with one format keeps the whole column for their name, which was
+ * the other half of the complaint: a long name truncated with nothing competing
+ * with it at all. There is nothing to tell apart, so there is no heading and no tag.
+ */
+test("an opponent played in one format is still a single line", () => {
+  robot = [record({ name: "Christopher" })];
+  show();
+
+  expect(lines()).toHaveLength(1);
+  expect(lines()[0]).toContain("Christopher");
+  expect(rowText()).not.toContain("rubbers");
 });
 
 /**
@@ -163,9 +210,9 @@ test("a third format lands on the list rather than falling off it", () => {
   show();
 
   expect(lines().map((line) => line.replace(/ \d[\d,]* points for.*against/, ""))).toEqual([
-    "Computer cpu rubbers 13–7 146 +641",
-    "Computer cpu single games 2–1 9 +90",
-    "Computer cpu duplicate sessions 1–1 20 +340",
+    "rubbers 13–7 146 +641",
+    "single games 2–1 9 +90",
+    "duplicate sessions 1–1 20 +340",
   ]);
 });
 
@@ -343,4 +390,28 @@ test("the headline says how far it has moved lately, as a number", () => {
   // 1514 now against 1451 five matches back. The spans are flex items, so the
   // rendered text runs together — the figure and its unit are what matter.
   expect(rowText().replace(/\s+/g, "")).toContain("+63over5");
+});
+
+/**
+ * **A match names its format, and a mirror is why this needed saying.**
+ *
+ * The line already carried `matchNoun`, which answers a different question — what
+ * to call the thing while you play it. For a mirror the honest answer there is
+ * "match", which is precisely the general word this app uses for all four, so on a
+ * list headed "Recent matches" that row said only that it was one.
+ */
+test("a recent match says which format it was", () => {
+  robot = [record()];
+  recent = [
+    played({ format: "mirror" }),
+    played({ finishedAt: Date.UTC(2026, 7, 21, 9, 0), format: "duplicate" }),
+    played({ finishedAt: Date.UTC(2026, 7, 20, 9, 0), format: "game" }),
+    played({ finishedAt: Date.UTC(2026, 7, 19, 9, 0) }),
+  ];
+  show();
+
+  const text = rowText();
+  for (const named of ["Mirror · 8 deals", "Duplicate · 8 deals", "Single game · 8 deals", "Rubber · 8 deals"]) {
+    expect(text, `no row reads "${named}"`).toContain(named);
+  }
 });

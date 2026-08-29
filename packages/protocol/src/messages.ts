@@ -4,6 +4,7 @@ import type {
   MatchFormat,
   Pair,
   PlayerId,
+  RubberFormat,
   Unlock,
 } from "@hb/engine";
 import type { SessionSnapshot } from "./snapshot.js";
@@ -89,6 +90,15 @@ export type ClientMessage =
        * order — see `formatFor`. Absent from a client too old to have an opinion.
        */
       readonly sessionOrder?: DuplicateSchedule;
+      /**
+       * What each half of a two-game match runs to: one game, or a rubber.
+       *
+       * Consulted only when both seats asked for a mirror — see `formatFor` — and
+       * then the *shorter* wins, on the same reasoning a single game beats a rubber.
+       * Absent from a client too old to ask, which reads as no preference rather than
+       * as a rubber a side.
+       */
+      readonly halfFormat?: RubberFormat;
       readonly session: string | null;
       readonly token: string;
     }

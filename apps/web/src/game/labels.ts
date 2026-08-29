@@ -16,8 +16,39 @@ export function matchNoun(format: MatchFormat): string {
   if (format === "duplicate") {
     return "session";
   }
+  if (format === "mirror") {
+    return "match";
+  }
   return format === "game" ? "game" : "rubber";
 }
+
+/**
+ * The format's own name, for labelling a match rather than for a sentence.
+ *
+ * `matchNoun` answers a different question — what to call the thing while you are
+ * playing it — and for a mirror the honest answer there is "match", which is
+ * precisely the general word this app uses for all four. On a list already headed
+ * "Recent matches" that told the reader nothing: every other format named itself
+ * and the newest one read as a match among matches.
+ *
+ * Capitalised because a format is a proper name here. Home's cells say Rubber and
+ * Mirror and Duplicate, and a record of one should be recognisably the same thing.
+ */
+export function formatName(format: MatchFormat): string {
+  return FORMAT_NAMES[format].one;
+}
+
+/** The same names, for a row tallying several of them. */
+export function formatPlural(format: MatchFormat): string {
+  return FORMAT_NAMES[format].many;
+}
+
+const FORMAT_NAMES: Record<MatchFormat, { readonly many: string; readonly one: string }> = {
+  duplicate: { many: "duplicate sessions", one: "Duplicate" },
+  game: { many: "single games", one: "Single game" },
+  mirror: { many: "mirror matches", one: "Mirror" },
+  rubber: { many: "rubbers", one: "Rubber" },
+};
 
 const RANK_LABELS: Record<Rank, string> = {
   2: "2",

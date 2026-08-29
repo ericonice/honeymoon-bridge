@@ -39,7 +39,7 @@ import type { Contract, DealAction, DealState, Pair, PlayerId } from "./types.js
  * It lives here rather than beside `RubberFormat` because this is what widened
  * it. `rubber.ts` knowing about duplicate would be the wrong way round.
  */
-export type MatchFormat = RubberFormat | "duplicate";
+export type MatchFormat = RubberFormat | "duplicate" | "mirror";
 
 /** Boards in a session. Also the average gap between a board's two runs — see `scheduleFor`. */
 export const BOARDS_PER_SESSION = 5;

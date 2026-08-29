@@ -20,6 +20,15 @@ import { SeatLabel } from "./SeatLabel.js";
 export interface DrawPhaseProps {
   readonly lastDraw: DrawReveal | null;
   readonly opponentName: string;
+  /**
+   * Both sides' ratings, either null until something has said.
+   *
+   * Beside the seat labels, which is where a rating belongs: it is a fact about a
+   * player, and a label is the one thing on the board that is one. See `SeatLabel`.
+   */
+  readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
+  /** The computer is working out its move right now — see `GameSession.thinking`. */
+  readonly thinking: boolean;
   readonly vulnerable: Pair<boolean>;
   /**
    * Development builds only: the two cards the opponent's last turn spent, which
@@ -42,77 +51,6 @@ export interface DrawPhaseProps {
    */
   readonly walkthrough: boolean;
   onDecide(take: DrawTake): void;
-}
-
-function lastOpponentChoice(view: PlayerView): DrawChoice | null {
-  for (let index = view.drawTurns.length - 1; index >= 0; index--) {
-    const turn = view.drawTurns[index]!;
-    if (turn.by === view.opponent) {
-      return turn.choice;
-    }
-  }
-  return null;
-}
-
-/**
- * The choice itself, picked out of the sentence around it.
- *
- * Three outcomes read at a glance rather than by being read word by word, which
- * they were not: one line of uniform small text, changing twenty-six times a deal,
- * is a thing you stop looking at. Amber for the same reason the takeable edge is
- * amber — it is the one colour this screen spends on what is happening now.
- */
-function Chose({ children }: { readonly children: React.ReactNode }): React.JSX.Element {
-  return <span className="font-semibold text-amber-200">{children}</span>;
-}
-
-/**
- * The running commentary on the opponent's turn.
- *
- * Their choice is public even though neither of their cards is, and it is the only
- * thing you ever learn about their hand — so it is said in words as well as shown
- * by where their cards go.
- */
-function OpponentLine({
-  settling,
-  view,
-}: {
-  readonly settling: boolean;
-  readonly view: PlayerView;
-}): React.JSX.Element {
-  if (view.toAct === view.opponent || settling) {
-    return <>drawing…</>;
-  }
-
-  const choice = lastOpponentChoice(view);
-  if (choice === null) {
-    return <>has not drawn yet</>;
-  }
-
-  // The same words the labels under the choices use. "Rejected" was the vocabulary
-  // of the buttons those cards replaced, and it needed translating back into "and
-  // took an unknown card instead" every time it was read — which is the reason those
-  // buttons went, and applies to a sentence just as well.
-  //
-  // No name and no full stop: this is a clause finishing the seat label beside it,
-  // which is where the name now lives. It had been on the screen twice in adjacent
-  // bands, once as a label and once as the subject of this sentence.
-  switch (choice) {
-    case "kept-first": {
-      return (
-        <>
-          kept the <Chose>face-up card</Chose>
-        </>
-      );
-    }
-    case "took-second": {
-      return (
-        <>
-          took the <Chose>unseen card</Chose>
-        </>
-      );
-    }
-  }
 }
 
 /**
@@ -309,12 +247,11 @@ function TurnTrack({
         const choice = choices[index];
         if (index === taken && live) {
           return (
-            <motion.span
-              key={index}
-              className="h-1.5 w-1.5 rounded-full bg-amber-300"
-              animate={{ opacity: [0.25, 1, 0.25] }}
-              transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
-            />
+            /* CSS rather than JavaScript, for the reason `SeatLabel`'s pulse is: the
+               computer solves on the main thread, so anything animated from JavaScript
+               stops for the whole of it — and a turn indicator that freezes while the
+               opponent is thinking is saying the opposite of what it is for. */
+            <span key={index} className="think-pulse h-1.5 w-1.5 rounded-full bg-amber-300" />
           );
         }
         return (
@@ -411,6 +348,8 @@ export function DrawPhase({
   lastDraw,
   onDecide,
   opponentName,
+  ratings,
+  thinking,
   peekLastDraw,
   peekPending,
   showingTheirCards,
@@ -866,19 +805,25 @@ export function DrawPhase({
           <SeatLabel
             active={view.toAct === view.opponent || settling}
             name={opponentName}
+            rating={ratings.opponent}
+            thinking={thinking}
             vulnerable={vulnerable[view.opponent]}
           />
-          {/* One span around the whole clause, because this is a flex container — a
-              flex container makes every child its own flex item, and whitespace at an
-              item's edge is trimmed exactly as it would be at a block's, so the space
-              before an emphasized phrase disappeared and it read "took theunseen
-              card". The clause has to be a single inline item for the spaces inside it
-              to survive; `{" "}` does not help, since a whitespace-only text node
-              between two items is discarded outright. The space between the label and
-              the clause is `gap-x`, for the same reason. */}
-          <span>
-            <OpponentLine settling={settling} view={view} />
-          </span>
+          {/* **The clause that used to finish this line is gone, and the turn track is
+              why.** It said what the opponent had just done — kept the face-up card, or
+              took the unseen one — which is exactly what the newest dot says, in a row
+              that says it for every turn of the deal rather than only the last. Prose
+              restating the most recent item of a record beside it is the weaker of the
+              two.
+
+              Its other two states went with it and were redundant in their own ways.
+              "drawing…" said it was their turn, which the pulsing dot on the label says
+              — and once the label could say "thinking…" the two sat side by side saying
+              nearly the same thing twice. "has not drawn yet" said the deal had not
+              started, which an empty turn track already shows.
+
+              `min-h-10` holds the band's height, so nothing below it moved when this
+              went. */}
         </div>
       </div>
 
@@ -936,7 +881,7 @@ export function DrawPhase({
       </div>
 
       <div ref={youRef} className="flex flex-col items-center gap-1">
-        <SeatLabel active={decidable} name="You" vulnerable={vulnerable[view.me]} />
+        <SeatLabel active={decidable} name="You" rating={ratings.mine} vulnerable={vulnerable[view.me]} />
         <TurnTrack choices={choicesFor(view, view.me)} live={decidable} />
       </div>
 

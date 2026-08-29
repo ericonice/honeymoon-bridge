@@ -367,6 +367,32 @@ export async function ratingsFor(env: Env): Promise<Ratings> {
   // releases and rungs, since both sides there are equally memoryless; the single
   // invented number waits for played sessions.
   //
+  // **A two-game match is rated, and what let it in was measuring the objection
+  // rather than arguing about it.** It was excluded for duplicate's reason: its second
+  // half is the first half's boards replayed, so the computer meets every one with
+  // perfect recall where a person's is good but not exact, and the size of that gap
+  // was a number nobody had.
+  //
+  // It is worth nothing. `bench/rubber.ts 120 8 format=mirror control nodouble memory`
+  // plays one bidder against an exact copy of itself with a board's pairs carried into
+  // the replay as the only difference: **52.5% ± 4.9, half a standard error from even,
+  // +1 point a match — +17 ± 34 rating points**, which is inside the rounding on the
+  // difficulty offsets below. The capability was firing, so this is a null and not a
+  // dead control: the challenger knew which board it was on in 43% of deals, which is
+  // every replayed one.
+  //
+  // So no offset, and nothing invented — the format is rated at the same anchor as a
+  // rubber. Note what the null also settles: the objection was that the *bot* has
+  // perfect recall and a person does not, and if perfect recall is worth nothing then
+  // the gap between perfect and imperfect recall is worth at most that.
+  //
+  // Why it is worth +157 a session in duplicate and nothing here is not established.
+  // The plausible mechanism is that duplicate scores a board on the difference between
+  // its two runs, so playing the replay better is exactly what the unit of scoring
+  // measures, where a mirror's halves are games won at a hundred below the line — and
+  // thirty points played better usually changes nobody's race. That is a hypothesis;
+  // the measurement is the finding.
+  //
   // Rating a session against the *rubber* anchor in the meantime would be worse
   // than not rating it, for the reason this whole file exists: a figure that looks
   // authoritative and is not is the error that never gets corrected. Duplicate

@@ -58,11 +58,11 @@ function show(standing: MatchStanding): void {
   render(
     createElement(ContractBar, {
       density: "normal",
+      format: "rubber",
       handsPlayed: 0,
       onShowScore: null,
       opponentName: "Computer",
       phase: "auction",
-      ratings: { mine: null, opponent: null },
       standing,
       view: VIEW,
     }),

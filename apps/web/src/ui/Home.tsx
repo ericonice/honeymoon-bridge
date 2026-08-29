@@ -8,8 +8,10 @@ import {
   SESSION_DEALS_STEP,
   SESSION_ORDERS,
   cleanSessionDeals,
+  mirrorGames,
   rubberFormatFor,
   rubberGames,
+  setMirrorGames,
 } from "../game/identity.js";
 import { createTableUrl } from "../game/serverUrl.js";
 import { AchievementIcon, HelpIcon, RecordIcon, SettingsIcon } from "./icons.js";
@@ -106,7 +108,7 @@ function Secondary({
  * re-modelling of them. That matters because `ratings.ts` pools the formats and a
  * match recorded under a new name would quietly leave the pool.
  */
-const CELLS = ["rubber", "duplicate"] as const;
+const CELLS = ["rubber", "mirror", "duplicate"] as const;
 
 function Format({
   format,
@@ -115,9 +117,9 @@ function Format({
   readonly format: MatchFormat;
   onChange(format: MatchFormat): void;
 }): React.JSX.Element {
-  const labels = { duplicate: "Duplicate", rubber: "Rubber" } as const;
+  const labels = { duplicate: "Duplicate", mirror: "Mirror", rubber: "Rubber" } as const;
   // A single game is the rubber cell at a length of one, so both live under it.
-  const chosen = format === "duplicate" ? "duplicate" : "rubber";
+  const chosen = format === "duplicate" || format === "mirror" ? format : "rubber";
 
   return (
     <div className="flex gap-1 rounded-xl bg-white/5 p-1">
@@ -133,7 +135,7 @@ function Format({
             // Coming back to Rubber restores the length last chosen for it, rather
             // than defaulting to two — which is what a trip through Duplicate used to
             // do, silently promoting a single game to a full rubber.
-            onChange(cell === "duplicate" ? "duplicate" : rubberFormatFor(rubberGames()));
+            onChange(cell === "rubber" ? rubberFormatFor(rubberGames()) : cell);
           }}
         >
           {labels[cell]}
@@ -213,13 +215,49 @@ function FormatNote({
   format,
   onDealsChange,
   onFormatChange,
+  onMirrorGamesChange,
 }: {
   readonly deals: number;
   readonly format: MatchFormat;
   onDealsChange(deals: number): void;
   onFormatChange(format: MatchFormat): void;
+  onMirrorGamesChange(games: 1 | 2): void;
 }): React.JSX.Element {
-  const lean = leanFor(format === "duplicate" ? 1 : 0, CELLS.length);
+  const lean = leanFor(CELLS.indexOf(format === "game" ? "rubber" : format), CELLS.length);
+
+  if (format === "mirror") {
+    // The same stepper the rubber gets, asking the same question of a different thing:
+    // how long each *side* of the comparison runs. One game is what the format is for —
+    // the pair is then about six deals — and a rubber a side is the long version.
+    const games = mirrorGames();
+    return (
+      <div className={`${NOTE_HEIGHT} ${lean} gap-1 px-1 text-xs text-white/45`}>
+        <span>Each side, first to</span>
+        <Step
+          label="One game each side"
+          disabled={games === 1}
+          onClick={() => {
+            onMirrorGamesChange(1);
+          }}
+        >
+          &lsaquo;
+        </Step>
+        <output className="w-4 text-center font-semibold tabular-nums text-white/90">
+          {games}
+        </output>
+        <Step
+          label="A rubber each side"
+          disabled={games === 2}
+          onClick={() => {
+            onMirrorGamesChange(2);
+          }}
+        >
+          &rsaquo;
+        </Step>
+        <span>{games === 1 ? "game" : "games"}</span>
+      </div>
+    );
+  }
 
   if (format !== "duplicate") {
     // **A stepper with two stops, for the same reason duplicate has one.** Two arrows
@@ -480,6 +518,9 @@ export function Home({
   const [joining, setJoining] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  // Held here only so the stepper redraws; `mirrorGames` remains the single source, read
+  // fresh on every render and when a match starts.
+  const [, setMirrorLength] = useState(mirrorGames);
   const [error, setError] = useState<string | null>(null);
 
   const startTable = async (): Promise<void> => {
@@ -556,6 +597,10 @@ export function Home({
             format={format}
             onDealsChange={onSessionDealsChange}
             onFormatChange={onFormatChange}
+            onMirrorGamesChange={(games) => {
+              setMirrorGames(games);
+              setMirrorLength(games);
+            }}
           />
         </div>
 
@@ -565,7 +610,9 @@ export function Home({
           description={
             format === "duplicate"
               ? `On this device. ${sessionDeals} deals: ${boardWord(sessionDeals / 2)}, each played twice from both sides.`
-              : "On this device. Works offline, and needs nobody else."
+              : format === "mirror"
+                ? "On this device. The same deals from both sides; the total wins."
+                : "On this device. Works offline, and needs nobody else."
           }
           onClick={onPlayComputer}
         />
@@ -596,9 +643,15 @@ export function Home({
         </div>
 
         <p className="min-h-8 text-xs text-white/45">
+          {/* Duplicate still needs both in practice — it is last in the table's
+              precedence, so nothing outranks a seat that did not ask for it — where
+              a mirror is first and happens if either of you asks. Two different
+              sentences because they are two different facts, not one hedge. */}
           {format === "duplicate"
             ? "Playing a person needs an account — and a session needs you both to want one."
-            : "Playing a person needs an account. The computer needs nothing."}
+            : format === "mirror"
+              ? "Playing a person needs an account. A mirror happens if either of you asks."
+              : "Playing a person needs an account. The computer needs nothing."}
         </p>
 
         {/* Opens under the row rather than replacing a button, which is what it did
