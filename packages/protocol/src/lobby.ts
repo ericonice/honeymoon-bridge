@@ -1,3 +1,5 @@
+import type { MatchFormat } from "@hb/engine";
+
 /**
  * Being paired with whoever else is waiting, rather than being sent a link.
  *
@@ -24,6 +26,13 @@ export type LobbyClientMessage =
    */
   | {
       readonly type: "queue";
+      /**
+       * What this player wants to play. Absent means any format — the default,
+       * and what every client before this one always meant — so a waiter only
+       * narrows the pool by asking to, and two waiters pair when either has no
+       * opinion or both name the same thing. See `Lobby#compatible`.
+       */
+      readonly format?: MatchFormat;
       readonly session: string | null;
       readonly token: string;
     }

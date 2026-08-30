@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatFor } from "../src/matchFormat.js";
+import { compatibleFormats, formatFor } from "../src/matchFormat.js";
 import type { Asked } from "../src/matchFormat.js";
 
 const asked = (
@@ -7,11 +7,13 @@ const asked = (
   deals = 10,
   order: Asked["order"] = "halves",
   halfFormat: Asked["halfFormat"] = "game",
+  role: Asked["role"] = null,
 ): Asked => ({
   deals,
   format,
   halfFormat,
   order,
+  role,
 });
 
 describe("agreeing what the sitting plays", () => {
@@ -155,5 +157,117 @@ describe("resolving a disagreement about the format", () => {
 
     expect(agreed.format).toBe("mirror");
     expect(agreed.halfFormat).toBe("game");
+  });
+});
+
+/**
+ * **At an invite, the guest's whole ask wins outright — format and length both, not
+ * just which game.** This is not the same rule as `PRECEDENCE`, and it can go the
+ * other way. The host has already committed to playing somebody; the guest is the
+ * one deciding whether to spend an evening on it, and what they asked for is not a
+ * preference to be outranked, or trimmed, by whatever the host's device happened to
+ * have stored from last time.
+ */
+describe("letting the invitee decide, at an invite", () => {
+  it("plays whatever the guest asked for, even against a higher-precedence host", () => {
+    // Rubber outranks nothing here, but duplicate outranks mirror in the ordinary
+    // precedence and loses to it below — the guest's ask is not being ranked at all.
+    expect(
+      formatFor(asked("mirror", 10, "halves", "game", "host"), asked("rubber", 10, "halves", "game", "guest"))
+        .format,
+    ).toBe("rubber");
+    expect(
+      formatFor(asked("duplicate", 10, "halves", "game", "host"), asked("mirror", 10, "halves", "game", "guest"))
+        .format,
+    ).toBe("mirror");
+  });
+
+  it("works from either seat", () => {
+    expect(
+      formatFor(asked("rubber", 10, "halves", "game", "guest"), asked("mirror", 10, "halves", "game", "host"))
+        .format,
+    ).toBe("rubber");
+  });
+
+  it("falls back to precedence when both are guests, both are hosts, or neither said", () => {
+    expect(
+      formatFor(asked("mirror", 10, "halves", "game", "guest"), asked("rubber", 10, "halves", "game", "guest"))
+        .format,
+    ).toBe("mirror");
+    expect(
+      formatFor(asked("mirror", 10, "halves", "game", "host"), asked("rubber", 10, "halves", "game", "host"))
+        .format,
+    ).toBe("mirror");
+    // A queue match: neither stranger invited the other.
+    expect(formatFor(asked("mirror"), asked("rubber")).format).toBe("mirror");
+  });
+
+  /**
+   * The guest's whole sitting, not just which game — a host who stored a shorter
+   * length does not get to trim what the guest actually asked to play.
+   */
+  it("plays the guest's length too, even against a host who asked for less of it", () => {
+    const agreed = formatFor(
+      asked("game", 10, "halves", "game", "host"),
+      asked("rubber", 10, "halves", "game", "guest"),
+    );
+    expect(agreed.format).toBe("rubber");
+  });
+
+  it("plays the guest's mirror length, ignoring the host's shorter one", () => {
+    const agreed = formatFor(
+      asked("mirror", 10, "halves", "game", "host"),
+      asked("mirror", 10, "halves", "rubber", "guest"),
+    );
+    expect(agreed.halfFormat).toBe("rubber");
+  });
+
+  it("plays the guest's duplicate length, ignoring the host's shorter one", () => {
+    const agreed = formatFor(
+      asked("duplicate", 4, "halves", "game", "host"),
+      asked("duplicate", 10, "halves", "game", "guest"),
+    );
+    expect(agreed.boards).toBe(5);
+  });
+
+  it("plays the guest's session order without needing the host to agree", () => {
+    const agreed = formatFor(
+      asked("duplicate", 10, "adjacent", "game", "host"),
+      asked("duplicate", 10, "random", "game", "guest"),
+    );
+    expect(agreed.order).toBe("random");
+  });
+});
+
+/**
+ * `null` means "anything", which is what every waiter meant before this existed —
+ * so it has to agree with everything, including another `null`, or an old client's
+ * queue request would stop pairing with anybody.
+ */
+describe("whether two queue waiters could pair", () => {
+  it("agrees with anything when either side has no opinion", () => {
+    expect(compatibleFormats(null, null)).toBe(true);
+    expect(compatibleFormats(null, "duplicate")).toBe(true);
+    expect(compatibleFormats("mirror", null)).toBe(true);
+  });
+
+  it("agrees when both name the same format", () => {
+    expect(compatibleFormats("rubber", "rubber")).toBe(true);
+  });
+
+  it("does not pair two different specific formats", () => {
+    expect(compatibleFormats("rubber", "duplicate")).toBe(false);
+    expect(compatibleFormats("mirror", "game")).toBe(false);
+  });
+
+  /**
+   * A rubber and a single game are one format at two lengths, the same grouping
+   * `formatFor` uses — so asking for one pairs with somebody asking for the
+   * other rather than waiting for an exact match on a distinction that gets
+   * settled afterward anyway.
+   */
+  it("pairs a rubber with a single game", () => {
+    expect(compatibleFormats("rubber", "game")).toBe(true);
+    expect(compatibleFormats("game", "rubber")).toBe(true);
   });
 });

@@ -6,6 +6,7 @@ import type { BotRelease } from "../bot/release.js";
 import { readStored, writeStored } from "./storage.js";
 
 const FORMAT_KEY = "hb.format";
+const QUEUE_FORMAT_KEY = "hb.queueFormat";
 const RUBBER_GAMES_KEY = "hb.rubberGames";
 const MIRROR_GAMES_KEY = "hb.mirrorGames";
 const SESSION_DEALS_KEY = "hb.sessionDeals";
@@ -91,6 +92,33 @@ export function setPreferredFormat(format: MatchFormat): void {
   if (format === "game" || format === "rubber") {
     writeStored(RUBBER_GAMES_KEY, format === "game" ? "1" : "2");
   }
+}
+
+/**
+ * What format the queue should look for, or null for anyone — the default, and
+ * what asking to be matched always meant before this existed.
+ *
+ * **Its own preference rather than `preferredFormat`**, because the two answer
+ * different questions. `preferredFormat` governs Invite and Play the computer,
+ * where a real format is always wanted; a stranger in the queue may genuinely
+ * have no preference, and forcing one onto them here would mean two people who
+ * would happily have played each other no longer pair, because their unrelated
+ * "what I'd play if I had to name something" preferences happened to differ.
+ *
+ * Anything unrecognised reads as no preference rather than as a guess, the same
+ * conservatism `preferredFormat` takes in the other direction — a stored value
+ * from a future client naming a format this build does not know is safer read
+ * as "anything" than silently narrowed to the wrong thing.
+ */
+export function queueFormat(): MatchFormat | null {
+  const stored = readStored(QUEUE_FORMAT_KEY);
+  return stored === "game" || stored === "duplicate" || stored === "mirror" || stored === "rubber"
+    ? stored
+    : null;
+}
+
+export function setQueueFormat(format: MatchFormat | null): void {
+  writeStored(QUEUE_FORMAT_KEY, format ?? "");
 }
 
 /**

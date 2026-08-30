@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { MatchFormat } from "@hb/engine";
+import type { TableRole } from "@hb/protocol";
 import type { Account } from "../game/account.js";
 import { storedSession } from "../game/account.js";
 import {
@@ -26,7 +27,7 @@ export interface HomeProps {
   readonly sessionDeals: number;
   onSessionDealsChange(deals: number): void;
   onFindOpponent(): void;
-  onJoinTable(code: string): void;
+  onJoinTable(code: string, role: TableRole): void;
   onPlayComputer(): void;
   onShowAccount(): void;
   onShowAchievements(): void;
@@ -545,7 +546,7 @@ export function Home({
         return;
       }
       const body = (await response.json()) as { code: string };
-      onJoinTable(body.code);
+      onJoinTable(body.code, "host");
     } catch {
       setError("Could not reach the table server.");
     } finally {
@@ -673,7 +674,7 @@ export function Home({
               className="rounded-xl bg-white px-5 text-base font-semibold text-stone-900 disabled:opacity-35"
               disabled={code.length !== 6}
               onClick={() => {
-                onJoinTable(code);
+                onJoinTable(code, "guest");
               }}
             >
               Join

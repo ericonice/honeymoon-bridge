@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { Share } from "@capacitor/share";
 import { opponentOf } from "@hb/engine";
+import type { TableRole } from "@hb/protocol";
 import { useEffect, useState } from "react";
 import { matchNoun } from "../game/labels.js";
 import { useNetworkSession } from "../game/networkSession.js";
@@ -17,6 +18,8 @@ export interface TableGameProps {
   readonly density: Density;
   readonly devTools: boolean;
   readonly peeking: boolean;
+  /** Having minted this code or been handed one, or neither — see `TableRole`. */
+  readonly role: TableRole | null;
   readonly sound: boolean;
   readonly tapToSelect: boolean;
   /** Whether the play screen draws each side's trick countdown. */
@@ -206,11 +209,12 @@ export function TableGame({
   onLeave,
   onShowSettings,
   peeking,
+  role,
   sound,
   tapToSelect,
   trickCount,
 }: TableGameProps): React.JSX.Element {
-  const game = useNetworkSession(code);
+  const game = useNetworkSession(code, role);
 
   // Every way out of this screen goes through here, so the other player is
   // always told rather than left watching a countdown for somebody who has

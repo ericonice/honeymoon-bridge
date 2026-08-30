@@ -33,6 +33,16 @@ export interface Seating {
 }
 
 /**
+ * How this player arrived at the table: having minted the code and sent it, or
+ * having been sent one.
+ *
+ * Absent for a queue match, where a stranger is not an invitee — pairing there
+ * is symmetric between two people who asked to be matched, and nothing about
+ * that ordering resembles one of them inviting the other. See `formatFor`.
+ */
+export type TableRole = "guest" | "host";
+
+/**
  * The table itself, as distinct from the game on it.
  *
  * Kept apart from `SessionSnapshot` because it changes for different reasons —
@@ -126,6 +136,15 @@ export type ClientMessage =
        * as a rubber a side.
        */
       readonly halfFormat?: RubberFormat;
+      /**
+       * Whether this seat minted the code or was handed one — see `TableRole`.
+       *
+       * Absent from a queue match and from a client too old to say, both of
+       * which read as "no invite" rather than as a guess: `formatFor` falls
+       * back to its ordinary precedence exactly as it always has whenever
+       * neither seat, or both, claim to be the guest.
+       */
+      readonly role?: TableRole;
       readonly session: string | null;
       readonly token: string;
     }

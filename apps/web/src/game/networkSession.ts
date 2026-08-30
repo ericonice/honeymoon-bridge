@@ -1,7 +1,7 @@
 import { opponentOf } from "@hb/engine";
 import type { DealAction, PlayerId, Unlock } from "@hb/engine";
 import { PROTOCOL_VERSION } from "@hb/protocol";
-import type { ClientMessage, ServerMessage, SessionSnapshot, TableInfo } from "@hb/protocol";
+import type { ClientMessage, ServerMessage, SessionSnapshot, TableInfo, TableRole } from "@hb/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { storedSession } from "./account.js";
 import {
@@ -134,7 +134,7 @@ function sessionFrom({
  * rather than a diff, coming back is just being told the state again. There is
  * no replay to catch up on and no way to be quietly out of step.
  */
-export function useNetworkSession(code: string): NetworkGame {
+export function useNetworkSession(code: string, role: TableRole | null): NetworkGame {
   const [connection, setConnection] = useState<Connection>("connecting");
   // Not plain state: a card that opens a new trick waits for the trick it is
   // leading past to have been seen here. See `useTrickGate`.
@@ -202,6 +202,9 @@ export function useNetworkSession(code: string): NetworkGame {
             // wins — the half length is a matter of how long, where the format itself
             // is a matter of which game.
             halfFormat: mirrorHalfFormat(),
+            // Absent for a queue match, where role is deliberately omitted rather
+            // than sent as neither — see `TableRole` and `guestAsk` on the server.
+            ...(role === null ? {} : { role }),
             session: storedSession(),
             token: playerToken(),
           } satisfies ClientMessage),
@@ -274,7 +277,7 @@ export function useNetworkSession(code: string): NetworkGame {
       socket.current?.close();
       socket.current = null;
     };
-  }, [code, receive, send]);
+  }, [code, receive, role, send]);
 
   const dropSocket = useCallback(() => {
     // Closed as though the network did it, so the retry path runs for real.

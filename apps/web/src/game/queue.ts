@@ -1,3 +1,4 @@
+import type { MatchFormat } from "@hb/engine";
 import type { LobbyClientMessage, LobbyServerMessage } from "@hb/protocol";
 import { useEffect, useRef, useState } from "react";
 import { storedSession } from "./account.js";
@@ -22,8 +23,13 @@ export interface QueueState {
  * closing is what removes the place. That means a closed tab, a crashed
  * browser and a tapped Cancel all leave the queue the same way, and none of
  * them can strand a place nobody is standing in.
+ *
+ * `format` is read fresh into every connection rather than captured once —
+ * changing it while still searching reconnects with the new preference, the
+ * same way `useNetworkSession` treats a changed setting as taking effect on
+ * the next attempt rather than needing this to be torn down and remounted.
  */
-export function useQueue(active: boolean): QueueState {
+export function useQueue(active: boolean, format: MatchFormat | null): QueueState {
   const [matched, setMatched] = useState<string | null>(null);
   const [others, setOthers] = useState(0);
   const [searching, setSearching] = useState(false);
@@ -45,6 +51,9 @@ export function useQueue(active: boolean): QueueState {
       ws.send(
         JSON.stringify({
           type: "queue",
+          // Omitted rather than sent as null: absent is what "anything" already
+          // means to the server — see `LobbyClientMessage`.
+          ...(format === null ? {} : { format }),
           session: storedSession(),
           token: playerToken(),
         } satisfies LobbyClientMessage),
@@ -79,7 +88,7 @@ export function useQueue(active: boolean): QueueState {
       ws.close();
       socket.current = null;
     };
-  }, [active]);
+  }, [active, format]);
 
   return { error, matched, others, searching };
 }

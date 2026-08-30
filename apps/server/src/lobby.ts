@@ -1,13 +1,17 @@
 import { DurableObject } from "cloudflare:workers";
+import type { MatchFormat } from "@hb/engine";
 import type { LobbyClientMessage, LobbyServerMessage } from "@hb/protocol";
 import { verifySession } from "./auth.js";
 import { inviteCode } from "./codes.js";
 import type { Env } from "./env.js";
+import { compatibleFormats } from "./matchFormat.js";
 
 /** Kept on the socket so a hibernated lobby still knows who is queued. */
 interface Waiting {
   /** The verified account. Nobody reaches the queue without one (§3.7). */
   readonly accountId: string;
+  /** What this waiter asked for, or null for anyone — see `LobbyClientMessage`. */
+  readonly format: MatchFormat | null;
   readonly token: string;
 }
 
@@ -59,7 +63,11 @@ export class Lobby extends DurableObject<Env> {
       return;
     }
 
-    ws.serializeAttachment({ accountId, token: message.token } satisfies Waiting);
+    ws.serializeAttachment({
+      accountId,
+      format: message.format ?? null,
+      token: message.token,
+    } satisfies Waiting);
     await this.#pair();
   }
 
@@ -95,25 +103,36 @@ export class Lobby extends DurableObject<Env> {
     return a.token !== b.token && a.accountId !== b.accountId;
   }
 
+  /**
+   * The first compatible, distinct pair in arrival order.
+   *
+   * Anchored on every waiter in turn rather than only the first, so somebody
+   * waiting for a format nobody else wants yet does not also block whoever is
+   * behind them in the queue from pairing with each other.
+   */
   async #pair(): Promise<void> {
     const queued = this.#queued();
 
-    const first = queued[0];
-    const second =
-      first === undefined
-        ? undefined
-        : queued.find((entry) => this.#distinct(first.seat, entry.seat));
+    for (let index = 0; index < queued.length; index++) {
+      const first = queued[index]!;
+      const second = queued
+        .slice(index + 1)
+        .find(
+          (entry) =>
+            this.#distinct(first.seat, entry.seat) && compatibleFormats(first.seat.format, entry.seat.format),
+        );
+      if (second === undefined) {
+        continue;
+      }
 
-    if (first === undefined || second === undefined) {
+      const code = inviteCode();
+      for (const entry of [first, second]) {
+        // Cleared before sending, so a socket that lingers is not still queued.
+        entry.ws.serializeAttachment(null);
+        this.#send(entry.ws, { type: "matched", code });
+      }
       this.#announce();
       return;
-    }
-
-    const code = inviteCode();
-    for (const entry of [first, second]) {
-      // Cleared before sending, so a socket that lingers is not still queued.
-      entry.ws.serializeAttachment(null);
-      this.#send(entry.ws, { type: "matched", code });
     }
     this.#announce();
   }

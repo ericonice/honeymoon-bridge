@@ -21,7 +21,7 @@ import type {
   Unlock,
 } from "@hb/engine";
 import { PROTOCOL_VERSION, snapshotFor } from "@hb/protocol";
-import type { ClientMessage, Seating, ServerMessage, TableInfo } from "@hb/protocol";
+import type { ClientMessage, Seating, ServerMessage, TableInfo, TableRole } from "@hb/protocol";
 import { applyDealAchievements, applyRubberAchievements } from "./achievements.js";
 import { accountFor, verifySession } from "./auth.js";
 import { dealSeed } from "./codes.js";
@@ -59,6 +59,12 @@ interface SeatRecord {
   readonly halfFormat: RubberFormat;
   /** How they want a session ordered. Only consulted when both asked for the same. */
   readonly order: DuplicateSchedule;
+  /**
+   * Having minted this table's code, having been handed one, or neither —
+   * see `TableRole` and `guestAsk`. Null for a queue match and for a client
+   * too old to say, both of which read as "no invite" rather than a guess.
+   */
+  readonly role: TableRole | null;
   readonly nickname: string;
   /** The opaque value in the client's `localStorage`. This is what holds a seat. */
   readonly token: string;
@@ -358,6 +364,11 @@ export class Table extends DurableObject<Env> {
       // A client too old to have an opinion reads as the default, which is what it
       // would have been playing.
       order: message.sessionOrder ?? "halves",
+      // Reread on every reconnect rather than pinned from the first join: the
+      // role only matters once, at `startingMatch`, so whichever value is on
+      // hand when both seats first fill is the one that counts and nothing
+      // later can revisit it.
+      role: message.role ?? previous?.role ?? null,
       // The last fallback is unreachable: a seat is either being resumed, and
       // has a name already, or has just passed `refuse`, which requires one.
       nickname: account?.name ?? previous?.nickname ?? "",

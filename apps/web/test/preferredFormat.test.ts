@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import type { MatchFormat } from "@hb/engine";
 import { beforeEach, describe, expect, it } from "vitest";
-import { preferredFormat, setPreferredFormat } from "../src/game/identity.js";
+import {
+  preferredFormat,
+  queueFormat,
+  setPreferredFormat,
+  setQueueFormat,
+} from "../src/game/identity.js";
 
 /**
  * Every format there is.
@@ -54,5 +59,37 @@ describe("what format comes back out of storage", () => {
     localStorage.setItem("hb.format", "whist");
 
     expect(preferredFormat()).toBe("rubber");
+  });
+});
+
+/**
+ * A separate preference from `preferredFormat`, on purpose: Invite and Play the
+ * computer always want a real format, but a stranger in the queue may genuinely
+ * have none — so its default and its unknown-value fallback both read as "anyone"
+ * rather than as a rubber.
+ */
+describe("what the queue is asked to look for", () => {
+  it("reads back every format that was written", () => {
+    for (const format of FORMATS) {
+      setQueueFormat(format);
+      expect(queueFormat()).toBe(format);
+    }
+  });
+
+  it("reads back null for anyone", () => {
+    setQueueFormat("rubber");
+    setQueueFormat(null);
+
+    expect(queueFormat()).toBeNull();
+  });
+
+  it("defaults to anyone when nothing has been chosen", () => {
+    expect(queueFormat()).toBeNull();
+  });
+
+  it("reads an unrecognised value as anyone rather than as a guess", () => {
+    localStorage.setItem("hb.queueFormat", "whist");
+
+    expect(queueFormat()).toBeNull();
   });
 });

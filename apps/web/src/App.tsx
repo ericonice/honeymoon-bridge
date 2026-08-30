@@ -1,3 +1,4 @@
+import type { TableRole } from "@hb/protocol";
 import { useState } from "react";
 import { useAccount } from "./game/account.js";
 import { applyCardColor, readCardColor, writeCardColor } from "./game/cardColor.js";
@@ -70,7 +71,7 @@ type Screen =
   | { readonly kind: "robot" }
   | { readonly kind: "searching" }
   | { readonly destination: Destination; readonly kind: "signin" }
-  | { readonly code: string; readonly kind: "table" };
+  | { readonly code: string; readonly kind: "table"; readonly role: TableRole | null };
 
 /**
  * What an account is needed for here, and where to come back to afterwards.
@@ -103,7 +104,11 @@ export function App(): React.JSX.Element {
       return { kind: "redeem", to: destinationFromWire(signIn.to), token: signIn.token };
     }
     const code = codeFromLocation();
-    return code === null ? { kind: "home" } : { code, kind: "table" };
+    // A code already in the address bar was put there by opening somebody
+    // else's link — the one exception is the host's own refresh mid-wait,
+    // which this cannot tell apart from a guest arriving for the first time
+    // and which simply falls back to the ordinary precedence in `formatFor`.
+    return code === null ? { kind: "home" } : { code, kind: "table", role: "guest" };
   });
   const account = useAccount();
   const [showingSettings, setShowingSettings] = useState(false);
@@ -179,7 +184,10 @@ export function App(): React.JSX.Element {
       }
       case "table": {
         setLocationCode(destination.code);
-        setScreen({ code: destination.code, kind: "table" });
+        // Only a guest's sign-in round trip passes through here at all: the host
+        // flow already requires a session before it ever mints a code, so
+        // `gateFor` never has an unauthenticated host's table to remember.
+        setScreen({ code: destination.code, kind: "table", role: "guest" });
         return;
       }
     }
@@ -275,9 +283,9 @@ export function App(): React.JSX.Element {
             onFindOpponent={() => {
               setScreen({ kind: "searching" });
             }}
-            onJoinTable={(code) => {
+            onJoinTable={(code, role) => {
               setLocationCode(code);
-              setScreen({ code, kind: "table" });
+              setScreen({ code, kind: "table", role });
             }}
             onPlayComputer={() => {
               // Nothing gates this, per §3.7. The game against the computer needs no
@@ -353,7 +361,8 @@ export function App(): React.JSX.Element {
             onCancel={goHome}
             onMatched={(code) => {
               setLocationCode(code);
-              setScreen({ code, kind: "table" });
+              // Neither stranger here invited the other — see `TableRole`.
+              setScreen({ code, kind: "table", role: null });
             }}
           />
         );
@@ -380,6 +389,7 @@ export function App(): React.JSX.Element {
             code={screen.code}
             devTools={devTools}
             peeking={peeking}
+            role={screen.role}
             sound={sound}
             density={layout}
             tapToSelect={tapToSelect}
