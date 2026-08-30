@@ -5,6 +5,7 @@ import { drawPlayout } from "../game/timing.js";
 import type { Density } from "../game/identity.js";
 import type { GameSession } from "../game/session.js";
 import { useGameFeedback } from "../game/useGameFeedback.js";
+import { useWakeLock } from "../game/wakeLock.js";
 import { AchievementToast } from "./AchievementToast.js";
 import { AuctionPhase } from "./AuctionPhase.js";
 import { BiddingOverlay } from "./BiddingOverlay.js";
@@ -512,6 +513,10 @@ export function GameBoard({
     session,
     showingFinalScore: phase === "complete" && session.matchComplete,
   });
+  // Unconditional: a match is on screen for as long as this component is
+  // mounted, robot game or table alike, and that is exactly the window this
+  // needs to cover.
+  useWakeLock(true);
   // Captured the instant a card is tapped, before `session.act` removes it
   // from the hand — `PlayPhase` reads this once to aim that card's flight,
   // rather than the fixed point it would otherwise have nothing better than.

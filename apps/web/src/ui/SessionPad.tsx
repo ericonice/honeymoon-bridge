@@ -1,22 +1,17 @@
-import { drewFirstOn, netTo } from "@hb/engine";
-import type {
-  BoardOutcome,
-  DuplicateResult,
-  DuplicateSummary,
-  PlayerId,
-  PlayerView,
-} from "@hb/engine";
+import { firstPlayOf, firstPlayTotal, netTo, replayOf, replayTotal } from "@hb/engine";
+import type { BoardOutcome, DuplicateResult, DuplicateSummary, PlayerView } from "@hb/engine";
 import { ContractText } from "./CardText.js";
 import { resultMark } from "./ScoreRows.js";
 
 /**
- * The scorepad of a duplicate session: a column per side of the stock, a row per board.
+ * The scorepad of a duplicate session: a column per pass through the boards, a row per
+ * board.
  *
  * A rubber's pad is a flat column of deals because a rubber is *made* of deals — the
  * part-score carries and a line is ruled when a game falls, so reading down the column
- * is how the standing arose. A session is made of **boards**, each played twice from
- * opposite sides, so the two figures that have to be compared belong beside each other
- * rather than several rows apart.
+ * is how the standing arose. A session is made of **boards**, each played twice, so the
+ * two figures that have to be compared belong beside each other rather than several rows
+ * apart.
  *
  * **The arithmetic is shown rather than asserted.** A board's worth to you is the *sum*
  * of your two nets across its runs — not a difference to be taken on trust. It falls out
@@ -24,20 +19,25 @@ import { resultMark } from "./ScoreRows.js";
  * the second run hands that seat to the other player, so subtracting their run is adding
  * your own. Side by side that addition is a glance, which is why no third figure repeats
  * it per row: the board's own margin was the headline of the version this replaces, and
- * two adjacent cells say it more plainly than a number claiming it.
+ * two adjacent cells say it more plainly than a number claiming it. That property holds
+ * under either heading — which run lands in which column changes, the sum of the row
+ * never does.
  *
- * **The columns are the two sides of the stock, not the order the runs were played.**
- * "Replay" names when a deal happened, which is the one thing about a pair of runs that
- * does not matter — the same stock offered the other way round is what differs, and it
- * is what makes the two numbers comparable at all. Heading the columns that way also
- * costs nothing per row: which side you held is fixed for a whole column, so no cell
- * needs a marker and no reader has to learn a key.
+ * **The columns are first play and replay, matching the same distinction mirror's own
+ * pad makes for its two halves.** This was tried the other way first — a column per side
+ * of the stock, on the reasoning that "replay" names *when* a deal happened rather than
+ * *which cards*, and it is the cards that make two numbers comparable. True, and it also
+ * meant a session pad had nothing in common with a mirror pad even though both exist to
+ * compare a first pass against a second — reading one after the other meant learning two
+ * different axes for what looks like the same idea. Heading by pass instead costs
+ * something a side-of-the-stock heading did not: which side you held on a given run is no
+ * longer fixed for a whole column, so the small tag on each cell says it per cell rather
+ * than once in the header.
  *
- * **And it is what makes the two feet mean something.** Duplication hands each player
- * both sides of every board, so "what I made holding the first draw" against "what I
- * made holding the second" is a comparison the format has already cancelled the luck out
- * of. That is the one thing a session knows which a single total cannot say, and it was
- * in the old pad's numbers without ever being added up.
+ * **And it is what makes the two feet mean something.** "What I made across every first
+ * play so far" against "what I made across every replay so far" is a comparison the
+ * format has already cancelled the luck out of, the same as the side-of-the-stock reading
+ * was — just organised by when rather than by which hand.
  *
  * **An open board shows its one deal.** An earlier version listed closed boards only, on
  * the grounds that half a board is a score with nothing to compare it to and invites
@@ -62,8 +62,9 @@ export function SessionPad({
     <div className="w-full max-w-sm text-sm">
       <p className="pb-1 text-xs tracking-wide text-white/45 uppercase">The session</p>
       {/* Every figure below is yours, in both columns — nothing is reversed and nothing
-          needs a caption saying so. A column is which side of the stock you held, so
-          both headings are about you either way. */}
+          needs a caption saying so. A column is which pass through the boards this was,
+          not which side of the stock you held, so a cell says who drew first on its own
+          run rather than the header saying it once for the whole column. */}
       <div className="relative">
         <span
           aria-hidden="true"
@@ -77,8 +78,8 @@ export function SessionPad({
         />
         <div className="flex items-baseline gap-2 pb-1 text-xs text-white/45">
           <span className="w-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1">You drew</span>
-          <span className="min-w-0 flex-1">They drew</span>
+          <span className="min-w-0 flex-1">First play</span>
+          <span className="min-w-0 flex-1">Replay</span>
         </div>
 
         {started.length === 0 ? (
@@ -89,8 +90,8 @@ export function SessionPad({
               <span className="w-4 shrink-0 text-xs text-white/35 tabular-nums">
                 {board.board + 1}
               </span>
-              <RunCell board={board} run={runWhere(board, view.me, true)} view={view} />
-              <RunCell board={board} run={runWhere(board, view.me, false)} view={view} />
+              <RunCell board={board} run={firstPlayOf(board)} view={view} />
+              <RunCell board={board} run={replayOf(board)} view={view} />
             </div>
           ))
         )}
@@ -99,10 +100,10 @@ export function SessionPad({
         <div className="mt-1 flex items-baseline gap-2 border-t border-white/15 pt-1 text-xs text-white/55">
           <span className="w-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1 text-right tabular-nums">
-            {signed(totalOn(started, view.me, true))}
+            {signed(firstPlayTotal(summary, view.me) ?? 0)}
           </span>
           <span className="min-w-0 flex-1 text-right tabular-nums">
-            {signed(totalOn(started, view.me, false))}
+            {signed(replayTotal(summary, view.me) ?? 0)}
           </span>
         </div>
       </div>
@@ -113,23 +114,6 @@ export function SessionPad({
       </p>
     </div>
   );
-}
-
-/** The run of this board on which `seat` did — or did not — hold the first draw. */
-function runWhere(
-  board: BoardOutcome,
-  seat: PlayerId,
-  drew: boolean,
-): DuplicateResult | undefined {
-  return board.played.find((run) => (drewFirstOn(board, run) === seat) === drew);
-}
-
-/** Your points across every run on which you did, or did not, hold the first draw. */
-function totalOn(boards: readonly BoardOutcome[], seat: PlayerId, drew: boolean): number {
-  return boards.reduce((total, board) => {
-    const run = runWhere(board, seat, drew);
-    return run === undefined ? total : total + netTo(board, run, seat);
-  }, 0);
 }
 
 /**
@@ -146,10 +130,10 @@ function RunCell({
   view,
 }: {
   readonly board: BoardOutcome;
-  readonly run: DuplicateResult | undefined;
+  readonly run: DuplicateResult | null;
   readonly view: PlayerView;
 }): React.JSX.Element {
-  if (run === undefined) {
+  if (run === null) {
     return <span className="min-w-0 flex-1" aria-hidden="true" />;
   }
 

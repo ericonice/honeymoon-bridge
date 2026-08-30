@@ -83,10 +83,10 @@ function text(): string {
  * nobody needed to follow.
  */
 describe("the fixed score during a session", () => {
-  it("shows one signed score and no columns", () => {
+  it("shows a total and no two-sided columns", () => {
     show({ kind: "duplicate", summary: session({ margin: [250, -250] }) });
 
-    expect(text()).toContain("Score");
+    expect(text()).toContain("Total");
     expect(text()).toContain("+250");
     // The You / opponent header belongs to a two-column standing.
     expect(screen.queryByText("Computer")).toBeNull();
@@ -105,20 +105,21 @@ describe("the fixed score during a session", () => {
   });
 
   /**
-   * The one thing the strip could not say and the reason it changed: whether this
-   * is a deal you have played before. Which board it is stays hidden — the replay
-   * order is random so that identifying it is the player's job.
+   * First play and replay read "—" until at least one board has a run of that
+   * kind — the same convention mirror's own not-yet-played half uses — so a
+   * fresh session says nothing has happened rather than claiming a zero.
    */
-  it("says nothing about a replay on a deal nobody has seen", () => {
+  it("reads first play and replay as dashes before anything is played", () => {
     show({ kind: "duplicate", summary: session() });
 
     expect(text()).not.toContain("replay");
-    // The row is still there, so the strip keeps its height from deal to deal.
-    expect(text()).toContain("Played before");
+    // The rows are still there, so the strip keeps its height from deal to deal.
+    expect(text()).toContain("First play");
+    expect(text()).toContain("Replay");
     expect(text()).toContain("—");
   });
 
-  it("flags a replay and what the deal came to the first time", () => {
+  it("flags a replay and totals what has been made across first plays so far", () => {
     show({
       kind: "duplicate",
       summary: session({
@@ -130,6 +131,7 @@ describe("the fixed score during a session", () => {
     });
 
     expect(text()).toContain("replay");
+    expect(text()).toContain("First play");
     expect(text()).toContain("+170");
   });
 

@@ -20,6 +20,9 @@ interface Row {
   readonly account0: string | null;
   readonly account1: string | null;
   readonly bot_version: number | null;
+  readonly deals?: number;
+  readonly difficulty?: string;
+  readonly format?: string;
   readonly token0: string;
   readonly token1: string;
   readonly winner: number;
@@ -35,7 +38,12 @@ function env(rows: readonly Row[]): Env {
 }
 
 /** A match against the computer, from the person's side as seat 0. */
-function vsBot(winner: 0 | 1, version: number | null = 2, account = "ada"): Row {
+function vsBot(
+  winner: 0 | 1,
+  version: number | null = 2,
+  account = "ada",
+  over: Partial<Row> = {},
+): Row {
   return {
     account0: account,
     account1: null,
@@ -43,6 +51,7 @@ function vsBot(winner: 0 | 1, version: number | null = 2, account = "ada"): Row 
     token0: `device-${account}`,
     token1: ROBOT_TOKEN,
     winner,
+    ...over,
   };
 }
 
@@ -191,6 +200,46 @@ describe("ratingsFor", () => {
     const ratings = await ratingsFor(env([vsPerson(0), vsBot(0)]));
     expect(ratings.played.get("account:ada")).toBe(2);
     expect(ratings.played.get("account:noah")).toBe(1);
+  });
+});
+
+describe("weighing a match by its length", () => {
+  it("weighs a rubber and a mirror twice as much as a single game", async () => {
+    // A rung below the top one, so the mirror recall offset — a separate effect
+    // from the one under test here — stays zero and does not confound it.
+    const difficulty = "club";
+    const gameDelta =
+      (await of([vsBot(1, 2, "ada", { difficulty, format: "game" })])) - START_RATING;
+    const rubberDelta =
+      (await of([vsBot(1, 2, "ada", { difficulty, format: "rubber" })])) - START_RATING;
+    const mirrorDelta =
+      (await of([vsBot(1, 2, "ada", { difficulty, format: "mirror" })])) - START_RATING;
+    expect(rubberDelta).toBeCloseTo(gameDelta * 2, 5);
+    expect(mirrorDelta).toBeCloseTo(gameDelta * 2, 5);
+  });
+
+  it("scales a duplicate session by its board count, inside the clamp", async () => {
+    const gameDelta = (await of([vsBot(1, 2, "ada", { format: "game" })])) - START_RATING;
+    // Five boards, ten deals: 5 * 0.3 = 1.5×, comfortably inside [0.5, 3].
+    const fiveBoards =
+      (await of([vsBot(1, 2, "ada", { deals: 10, format: "duplicate" })])) - START_RATING;
+    expect(fiveBoards).toBeCloseTo(gameDelta * 1.5, 5);
+  });
+
+  it("floors a very short duplicate session rather than letting it move almost nothing", async () => {
+    const gameDelta = (await of([vsBot(1, 2, "ada", { format: "game" })])) - START_RATING;
+    // One board, two deals: 1 * 0.3 = 0.3×, below the 0.5 floor.
+    const oneBoard =
+      (await of([vsBot(1, 2, "ada", { deals: 2, format: "duplicate" })])) - START_RATING;
+    expect(oneBoard).toBeCloseTo(gameDelta * 0.5, 5);
+  });
+
+  it("caps a very long duplicate session rather than letting it dominate a rating", async () => {
+    const gameDelta = (await of([vsBot(1, 2, "ada", { format: "game" })])) - START_RATING;
+    // Twenty boards, forty deals: 20 * 0.3 = 6×, above the 3 ceiling.
+    const twentyBoards =
+      (await of([vsBot(1, 2, "ada", { deals: 40, format: "duplicate" })])) - START_RATING;
+    expect(twentyBoards).toBeCloseTo(gameDelta * 3, 5);
   });
 });
 

@@ -168,10 +168,10 @@ describe("a session's scorepad", () => {
     );
 
     const shown = text();
-    // The columns are the two sides of the stock, said once at the top rather than
-    // once per run — which is what buys the room for both figures to sit side by side.
-    expect(shown).toContain("You drew");
-    expect(shown).toContain("They drew");
+    // The columns are first play and replay, said once at the top rather than once
+    // per run — which is what buys the room for both figures to sit side by side.
+    expect(shown).toContain("First play");
+    expect(shown).toContain("Replay");
     // Side by side, in that order, so the board's worth is the two of them added up.
     expect(cells()).toEqual(["4♥ you = +420", "3♥ opp = −170"]);
     // 420 − 170 = 250, and the session total is the only place it is stated.
@@ -200,11 +200,11 @@ describe("a session's scorepad", () => {
 
   /**
    * The two feet, which are the reason the columns are what they are. Duplication hands
-   * each player both sides of every board, so what you made holding the first draw
-   * against what you made holding the second is a comparison with the luck already
-   * cancelled — and it was in the old pad's numbers without ever being added up.
+   * each player both sides of every board, so what you made across every first play
+   * against what you made across every replay is a comparison with the luck already
+   * cancelled — organised by *when*, the same axis mirror's own two halves use.
    */
-  it("foots each side of the stock separately", () => {
+  it("foots first play and replay separately", () => {
     show(
       summaryOf(
         [
@@ -218,7 +218,8 @@ describe("a session's scorepad", () => {
           board({
             board: 1,
             margin: -60,
-            // They drew first on this board, so your two cells are the other way round.
+            // They drew first here, so this board's first play is *their* run —
+            // the column is about when a run happened, not which side you held.
             starter: THEM,
             played: [
               run({ board: 1, contract: contract(2, "S", THEM), points: 110 }),
@@ -230,9 +231,10 @@ describe("a session's scorepad", () => {
       ),
     );
 
-    // Holding the first draw: +420 on board 1 and +50 on board 2. Holding the second:
-    // −170 and −110. The two feet are those sums and nothing else.
-    expect(feet()).toEqual(["+470", "−280"]);
+    // First play: +420 on board 1, −110 on board 2 (their run, so negated to you).
+    // Replay: −170 on board 1, +50 on board 2 (your run there). The two feet are
+    // those sums and nothing else.
+    expect(feet()).toEqual(["+310", "−120"]);
   });
 
   it("foots the column with the session total", () => {

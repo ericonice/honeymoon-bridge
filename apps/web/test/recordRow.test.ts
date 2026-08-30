@@ -111,7 +111,7 @@ test("an opponent is one line, in the columns the header names", () => {
   expect(headings()).toEqual(["opponent", "w–l", "hands", "points", "diff", ""]);
   expect(lines()).toHaveLength(1);
   expect(lines()[0]).toBe(
-    "Computer cpu 13–7 146 12,430 points for, 11,789 against +641",
+    "Computer 1200 cpu 13–7 146 12,430 points for, 11,789 against +641",
   );
 });
 
@@ -167,17 +167,17 @@ test("nothing is captioned or restated on the row itself", () => {
  * whole column for whatever the row is actually distinguishing.
  */
 test("an opponent played in both formats names them, on a line each", () => {
-  robot = [record(), record({ deals: 9, format: "game", lost: 1, pointsAgainst: 200, pointsFor: 290, won: 2 })];
+  robot = [record(), record({ deals: 9, format: "mirror", lost: 1, pointsAgainst: 200, pointsFor: 290, won: 2 })];
   show();
 
   expect(lines().map((line) => line.replace(/ \d[\d,]* points for.*against/, ""))).toEqual([
     "rubbers 13–7 146 +641",
-    "single games 2–1 9 +90",
+    "mirror matches 2–1 9 +90",
   ]);
-  // Said once, above the pair of them, with the badge that goes with it — and not
-  // on either row, which is what the two lines above already assert.
+  // Said once, above the pair of them, with the rating and the badge that go with
+  // it — and not on either row, which is what the two lines above already assert.
   const heading = document.querySelector('[class~="pb-0.5"][class~="pt-2"]');
-  expect(heading?.textContent).toBe("Computercpu");
+  expect(heading?.textContent).toBe("Computer1200cpu");
 });
 
 /**
@@ -204,14 +204,14 @@ test("an opponent played in one format is still a single line", () => {
 test("a third format lands on the list rather than falling off it", () => {
   robot = [
     record(),
-    record({ deals: 9, format: "game", lost: 1, pointsAgainst: 200, pointsFor: 290, won: 2 }),
+    record({ deals: 9, format: "mirror", lost: 1, pointsAgainst: 200, pointsFor: 290, won: 2 }),
     record({ deals: 20, format: "duplicate", lost: 1, pointsAgainst: 0, pointsFor: 340, won: 1 }),
   ];
   show();
 
   expect(lines().map((line) => line.replace(/ \d[\d,]* points for.*against/, ""))).toEqual([
     "rubbers 13–7 146 +641",
-    "single games 2–1 9 +90",
+    "mirror matches 2–1 9 +90",
     "duplicate sessions 1–1 20 +340",
   ]);
 });
@@ -329,9 +329,39 @@ test("the open panel carries the exact totals the row only draws as a bar", () =
     Margin: "+641 +4.4 a deal",
     Matches: "20 played 13–7",
     Points: "12,430 for 11,789 against",
-    // Pinned at 1200 against a rating of 1514, so it is said to be below.
-    Rating: "1200below you",
   });
+});
+
+/**
+ * A rubber and a single game read the same "won" and "lost" on the row above —
+ * that is the whole point of combining them — so the split lives only here, where
+ * there is room to say which was which.
+ */
+test("a combined rubber record breaks itself down by length in the panel", () => {
+  robot = [
+    record({
+      byLength: {
+        game: { deals: 9, drawn: 0, lost: 1, won: 2 },
+        rubber: { deals: 137, drawn: 0, lost: 6, won: 11 },
+      },
+    }),
+  ];
+  show();
+  tap();
+
+  expect(facts()).toMatchObject({
+    Rubbers: "11–6 137 deals",
+    "Single games": "2–1 9 deals",
+  });
+});
+
+test("a record with only one length says nothing about the split", () => {
+  robot = [record()];
+  show();
+  tap();
+
+  expect(facts()).not.toHaveProperty("Rubbers");
+  expect(facts()).not.toHaveProperty("Single games");
 });
 
 /**

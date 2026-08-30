@@ -229,11 +229,21 @@ export interface OpponentMatch {
   /** Which rung it was played at. Null for a person, or before the setting existed. */
   readonly difficulty: string | null;
   readonly finishedAt: number;
+  /** This match's own length, within whichever family its `OpponentRecord` groups. */
+  readonly format: MatchFormat;
   readonly pointsAgainst: number;
   readonly pointsFor: number;
   /** Neither won nor lost. `won` false with this false is a loss. */
   readonly drawn: boolean;
   readonly won: boolean;
+}
+
+/** One length's own tally, within a combined record — see `OpponentRecord.byLength`. */
+export interface LengthBreakdown {
+  readonly deals: number;
+  readonly drawn: number;
+  readonly lost: number;
+  readonly won: number;
 }
 
 /**
@@ -247,16 +257,27 @@ export interface OpponentMatch {
 const MATCHES_PER_OPPONENT = 20;
 
 /**
- * A record against one opponent at one match length, from the asker's side.
+ * A record against one opponent at one match *family*, from the asker's side.
  *
- * One per opponent *per format*: a rubber and a game are not the same
- * achievement, and a combined tally would be one number meaning two things.
+ * One per opponent per family, not per format: a single game and a full rubber
+ * are the same achievement at two different lengths and combine into one
+ * record — `format` reads "rubber" for both — where mirror and duplicate stay
+ * apart, since those really are different games rather than different
+ * lengths of one. `byLength` is where the length itself is still visible.
  */
 export interface OpponentRecord {
+  /**
+   * How a combined rubber-family record splits between a single game and a
+   * full rubber. Present only for that family — mirror and duplicate have no
+   * such split to make — and computed over every match, not just the ones in
+   * `matches`, the same as every other total here.
+   */
+  readonly byLength?: { readonly game: LengthBreakdown; readonly rubber: LengthBreakdown };
   /** Deals across all of these matches, which is how long the sittings ran. */
   readonly deals: number;
   /** Matches that ended level. Zero for every format but duplicate, in practice. */
   readonly drawn: number;
+  /** The family these are grouped by — "rubber" covers both a game and a rubber. */
   readonly format: MatchFormat;
   readonly lastPlayed: number;
   readonly lost: number;
@@ -375,6 +396,43 @@ export type Tallied = Omit<OpponentRecord, "opponentKey" | "rating"> & {
 };
 
 /**
+ * A single game and a full rubber group into one record; mirror and
+ * duplicate never do, since those are different games rather than different
+ * lengths of one.
+ */
+function formatFamily(format: MatchFormat): MatchFormat {
+  return format === "game" ? "rubber" : format;
+}
+
+function emptyLength(): LengthBreakdown {
+  return { deals: 0, drawn: 0, lost: 0, won: 0 };
+}
+
+function addedLength(base: LengthBreakdown, delta: LengthBreakdown): LengthBreakdown {
+  return {
+    deals: base.deals + delta.deals,
+    drawn: base.drawn + delta.drawn,
+    lost: base.lost + delta.lost,
+    won: base.won + delta.won,
+  };
+}
+
+/**
+ * Folds one match into a rubber-family record's length split. Only ever
+ * called within that family, so `format` here is always "game" or "rubber".
+ */
+function withLength(
+  running: NonNullable<OpponentRecord["byLength"]> | undefined,
+  format: MatchFormat,
+  delta: LengthBreakdown,
+): NonNullable<OpponentRecord["byLength"]> {
+  const base = running ?? { game: emptyLength(), rubber: emptyLength() };
+  return format === "game"
+    ? { game: addedLength(base.game, delta), rubber: base.rubber }
+    : { game: base.game, rubber: addedLength(base.rubber, delta) };
+}
+
+/**
  * Everyone this account has finished a rubber against.
  *
  * Aggregated here rather than in SQL. A person is two different columns
@@ -425,8 +483,11 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
 
     // Grouped by account where there is one, and otherwise by the device. Two
     // anonymous opponents are two different people; the same one twice is one.
-    // Split by format as well, so a rubber record and a game record stay apart.
-    const key = `${theirAccount ?? `token:${theirToken}`}|${row.format}`;
+    // Split by family as well, so a rubber-length record and a mirror or
+    // duplicate record stay apart — a single game and a full rubber, though,
+    // fold into the same family. See `formatFamily`.
+    const family = formatFamily(row.format);
+    const key = `${theirAccount ?? `token:${theirToken}`}|${family}`;
     const running = tally.get(key);
     // Three outcomes, not two. `winner` is a seat or `DRAWN`, and reading a draw
     // as `winner === seat` would have made it a **loss for both players** — which
@@ -445,6 +506,7 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
       difficulty: theirToken === ROBOT_TOKEN ? row.difficulty : null,
       deals: row.deals,
       finishedAt: row.finished_at,
+      format: row.format,
       pointsAgainst: theirPoints,
       pointsFor: myPoints,
       // A drawn match is neither won nor lost, and the pair says which without a
@@ -456,8 +518,22 @@ export async function recordsFor(env: Env, accountId: string): Promise<Records> 
 
     tally.set(key, {
       account: theirAccount,
+      // Only a rubber-family record has a length to split — see `withLength`,
+      // which is only ever handed "game" or "rubber" for exactly that reason.
+      // The key is omitted rather than set to `undefined` for every other
+      // family: `exactOptionalPropertyTypes` treats those as different things.
+      ...(family === "rubber"
+        ? {
+            byLength: withLength(running?.byLength, row.format, {
+              deals: row.deals,
+              drawn: drawn ? 1 : 0,
+              lost: won || drawn ? 0 : 1,
+              won: won ? 1 : 0,
+            }),
+          }
+        : {}),
       deals: (running?.deals ?? 0) + row.deals,
-      format: row.format,
+      format: family,
       lastPlayed: row.finished_at,
       drawn: (running?.drawn ?? 0) + (drawn ? 1 : 0),
       lost: (running?.lost ?? 0) + (won || drawn ? 0 : 1),

@@ -513,6 +513,16 @@ export function drewFirstOn(outcome: BoardOutcome, result: DuplicateResult): Pla
   return result.replay ? opponentOf(outcome.starter) : outcome.starter;
 }
 
+/** A board's first-play run, or null before it has been played. */
+export function firstPlayOf(outcome: BoardOutcome): DuplicateResult | null {
+  return outcome.played.find((run) => !run.replay) ?? null;
+}
+
+/** A board's replay, or null before it has been played. */
+export function replayOf(outcome: BoardOutcome): DuplicateResult | null {
+  return outcome.played.find((run) => run.replay) ?? null;
+}
+
 export function marginTo(outcome: BoardOutcome, seat: PlayerId): number {
   if (outcome.margin === null) {
     return 0;
@@ -617,6 +627,33 @@ export function summarizeDuplicate(session: DuplicateState): DuplicateSummary {
     // closed boards at all, so an interim winner would be a claim about nothing.
     winner: !complete || toSeatZero === 0 ? null : toSeatZero > 0 ? 0 : 1,
   };
+}
+
+function subtotalBy(
+  summary: DuplicateSummary,
+  seat: PlayerId,
+  pick: (outcome: BoardOutcome) => DuplicateResult | null,
+): number | null {
+  let total = 0;
+  let any = false;
+  for (const board of summary.boards) {
+    const run = pick(board);
+    if (run !== null) {
+      total += netTo(board, run, seat);
+      any = true;
+    }
+  }
+  return any ? total : null;
+}
+
+/** This seat's net across every board's first play so far, or null before any exist. */
+export function firstPlayTotal(summary: DuplicateSummary, seat: PlayerId): number | null {
+  return subtotalBy(summary, seat, firstPlayOf);
+}
+
+/** This seat's net across every board's replay so far, or null before any exist. */
+export function replayTotal(summary: DuplicateSummary, seat: PlayerId): number | null {
+  return subtotalBy(summary, seat, replayOf);
 }
 
 /**

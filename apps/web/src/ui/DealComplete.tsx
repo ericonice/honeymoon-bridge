@@ -231,28 +231,21 @@ export function DealComplete({
     const won = winner === view.me;
     // Worked out here rather than waited for. The server is authoritative and
     // the next record fetch confirms it, but the moment worth showing is now.
-    // **No rating line for a session, and this would have been a lie on screen.**
-    // Duplicate results are recorded and deliberately left out of the rating walk —
-    // the anchor for the format cannot come from self-play, since a bench has no
-    // memory on either side and a person does. So the server will never move the
-    // rating for this match, and a client showing "1361 → 1384" would be inventing
-    // a number that never arrives. A blank is the honest answer, for the same reason
-    // `botAnchor` returns null rather than guessing: nobody checks a figure that
-    // looks right.
-    // No rating line for a match the server will not rate, since showing
-    // `1361 → 1384` for one would be inventing a number that never arrives.
+    // A session is rated like a rubber or a mirror now — see `ratingsFor` for
+    // what that concedes (no dedicated duplicate anchor, only the rubber one
+    // standing in) — so it earns a line here too. This preview does not yet
+    // know the per-match length weight the server applies there, only the
+    // account's own settling-vs-settled step, so a long or short session's
+    // shown delta can be a rough preview of the real one; the next fetch
+    // still confirms the true number, the same tolerance the provisional
+    // period already relies on.
     //
-    // Two of them, and they are not the same exclusion. A **session** is out because
-    // its anchor cannot come from a bench: both bench seats are memoryless where a
-    // person is not, so the measurement would describe a game nobody plays. A match
-    // on **repeated boards** is out because the computer meets every one of them with
-    // perfect recall — which is the argument that used to keep a mirror out too, until
-    // it was measured at +17 ± 34 rating points and the objection turned out to be
-    // about a quantity that is zero. A mirror is rated; "Same boards back" is not.
-    const rating =
-      standing.kind === "duplicate" || repeated
-        ? null
-        : ratingChange({ opponent: opponentRating, won });
+    // No rating line for a match on **repeated boards**, though: the computer
+    // meets every one of them with perfect recall — which is the argument
+    // that used to keep a mirror out too, until it was measured at +17 ± 34
+    // rating points and the objection turned out to be about a quantity that
+    // is zero. A mirror is rated; "Same boards back" is not.
+    const rating = repeated ? null : ratingChange({ opponent: opponentRating, won });
 
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4">

@@ -25,6 +25,8 @@ export interface OpponentMatch {
   readonly botVersion: number | null;
   readonly deals: number;
   readonly finishedAt: number;
+  /** This match's own length, within whichever family its `OpponentRecord` groups. Absent from a server too old to send it. */
+  readonly format?: MatchFormat;
   readonly pointsAgainst: number;
   readonly pointsFor: number;
   /** Neither won nor lost. `won` false with this false is a loss. */
@@ -39,11 +41,26 @@ export interface RatingPoint {
   readonly rating: number;
 }
 
+/** One length's own tally, within a combined record — see `OpponentRecord.byLength`. */
+export interface LengthBreakdown {
+  readonly deals: number;
+  readonly drawn: number;
+  readonly lost: number;
+  readonly won: number;
+}
+
 /** A record against one opponent. The computer's looks exactly like a person's. */
 export interface OpponentRecord {
+  /**
+   * How a combined rubber-family record splits between a single game and a
+   * full rubber. Present only for that family, and absent from a server too
+   * old to send it.
+   */
+  readonly byLength?: { readonly game: LengthBreakdown; readonly rubber: LengthBreakdown };
   readonly deals: number;
   /** Matches that ended level. In practice duplicate's alone — see the server's `DRAWN`. */
   readonly drawn: number;
+  /** The family these are grouped by — "rubber" covers both a game and a rubber. */
   readonly format: MatchFormat;
   readonly lastPlayed: number;
   readonly lost: number;

@@ -198,6 +198,18 @@ function RobotTag(): React.JSX.Element {
 }
 
 /**
+ * An opponent's rating, wherever their name is shown — and nowhere else now.
+ *
+ * A `shrink-0` sibling of the truncating name span rather than text appended
+ * inside it, the same fix this project already learned for the seat label:
+ * "Computer (1400)" as one string clips a long name before the rating even
+ * gets read. Kept separate, the name can lose width and the number cannot.
+ */
+function RatingTag({ rating }: { readonly rating: number }): React.JSX.Element {
+  return <span className="shrink-0 font-mono text-[0.65rem] text-white/40">{rating}</span>;
+}
+
+/**
  * One opponent, in one match format, on one line.
  *
  * `name · won–lost · hands · points · margin`, under one header at the top of the
@@ -250,6 +262,9 @@ function OpponentLine({
         >
           {label}
         </span>
+        {/* The opponent's name, not the format's — a format label on an indented
+            row already sits under the heading that carries the rating once. */}
+        {indent ? null : <RatingTag rating={record.rating} />}
         {robot && !indent ? <RobotTag /> : null}
       </span>
       {/* The third figure only when there is one. Every rubber row would otherwise
@@ -303,14 +318,7 @@ function OpponentLine({
  * list as a whole one — and it is empty from a server too old to send it, which
  * reads as a record with no history rather than as an error.
  */
-function OpponentPanel({
-  myRating,
-  record,
-}: {
-  /** The asker's own, so this one can be called above or below it. */
-  readonly myRating: number;
-  readonly record: OpponentRecord;
-}): React.JSX.Element {
+function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.JSX.Element {
   const margin = record.pointsFor - record.pointsAgainst;
   // Every match, drawn ones included — this is what the panel compares its
   // truncated match list against to say how much it is not showing, so leaving
@@ -341,10 +349,23 @@ function OpponentPanel({
           {record.deals.toLocaleString()}{" "}
           <Dim>{played === 0 ? "—" : `${(record.deals / played).toFixed(1)} a match`}</Dim>
         </Fact>
-        <Fact label="Rating">
-          {record.rating}
-          <Dim>{record.rating >= myRating ? "above you" : "below you"}</Dim>
-        </Fact>
+        {/* Only a combined rubber-family record has a length to split — see
+            `byLength`. A single game and a full rubber read the same "won" and
+            "lost" above; this is the one place that says which was which. */}
+        {record.byLength === undefined ? null : (
+          <>
+            <Fact label="Rubbers">
+              {record.byLength.rubber.won}–{record.byLength.rubber.lost}
+              {record.byLength.rubber.drawn > 0 ? `–${record.byLength.rubber.drawn}` : ""}{" "}
+              <Dim>{count(record.byLength.rubber.deals, "deal")}</Dim>
+            </Fact>
+            <Fact label="Single games">
+              {record.byLength.game.won}–{record.byLength.game.lost}
+              {record.byLength.game.drawn > 0 ? `–${record.byLength.game.drawn}` : ""}{" "}
+              <Dim>{count(record.byLength.game.deals, "deal")}</Dim>
+            </Fact>
+          </>
+        )}
         <Fact label="Last played">
           <Dim>{whenPlayed(record.lastPlayed)}</Dim>
         </Fact>
@@ -473,16 +494,6 @@ function groupByOpponent(records: Records): readonly OpponentGroup[] {
 }
 
 /**
- * One opponent, with a row underneath for each format played against them.
- *
- * The computer is flagged rather than walled off under its own heading: a
- * networked match was witnessed by the server, which owned the state and
- * applied every rule, while one against the computer was played entirely in a
- * browser and is taken on its word. They are not the same kind of fact and
- * should not read as one — but naming that difference on the row itself is
- * enough; it does not need a whole section to itself to say it.
- */
-/**
  * One opponent's rows, and the panel under whichever of them is open.
  *
  * One open at a time across the whole list — see `Body`. A panel breaks the column
@@ -492,13 +503,10 @@ function groupByOpponent(records: Records): readonly OpponentGroup[] {
  */
 function OpponentSection({
   group,
-  myRating,
   onToggle,
   openRow,
 }: {
   readonly group: OpponentGroup;
-  /** See `OpponentPanel`. */
-  readonly myRating: number;
   onToggle(row: string): void;
   /** `key|format` of the row whose panel is showing, or null. */
   readonly openRow: string | null;
@@ -524,6 +532,9 @@ function OpponentSection({
           <span className={`min-w-0 text-sm ${group.isRobot ? "text-white/60 italic" : ""}`}>
             {group.name}
           </span>
+          {/* One rating per identity regardless of format, so any record here
+              says the same thing — the first is as good as any. */}
+          <RatingTag rating={group.records[0]!.rating} />
           {group.isRobot ? <RobotTag /> : null}
         </div>
       ) : null}
@@ -542,7 +553,7 @@ function OpponentSection({
                 onToggle(id);
               }}
             />
-            {open ? <OpponentPanel myRating={myRating} record={record} /> : null}
+            {open ? <OpponentPanel record={record} /> : null}
           </Fragment>
         );
       })}
@@ -782,7 +793,6 @@ function Body({
             <OpponentSection
               key={group.key}
               group={group}
-              myRating={records.rating.value}
               openRow={openRow}
               onToggle={(row) => {
                 // Tapping the open one closes it, which is the only way back to a

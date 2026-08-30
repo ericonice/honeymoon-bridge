@@ -1,4 +1,4 @@
-import { GAME_THRESHOLD, netTo, totalScore } from "@hb/engine";
+import { GAME_THRESHOLD, firstPlayTotal, replayTotal, totalScore } from "@hb/engine";
 import type {
   MatchFormat,
   DealPhase,
@@ -162,40 +162,26 @@ function StandingRow({
   );
 }
 
-/**
- * A session's standing: **one signed score, and what the hand before it came to.**
- *
- * No two columns, and no boards. A rubber has two running totals because both sides
- * really do have one; a session has a single number that is positive or negative,
- * and drawing it twice — once negated — was the same fact said twice in the space a
- * phone has for five short rows. Boards went for the same reason: the total is the
- * sum of every hand's own score, so counting boards was arithmetic nobody needed to
- * follow.
- *
- * What replaced them is the fact the strip could not say at all: **whether this deal
- * is one you have played before**, and if so what it came to the first time. Which
- * board it is stays hidden — the replay order is random precisely so that
- * identifying it is the player's job.
- *
- * "Played before" hands you a number your memory was otherwise meant to supply, and
- * that is a deliberate trade rather than an oversight: it is the score, not the
- * cards, and knowing you were +170 on this deal does not tell you which
- * twenty-six cards are about to be offered.
- */
-function playedBefore(summary: DuplicateSummary, seat: PlayerId): number | null {
-  const current = summary.current;
-  if (current === null || !current.replay) {
-    return null;
-  }
-  const board = summary.boards[current.board];
-  const first = board?.played.find((run) => !run.replay);
-  return board === undefined || first === undefined ? null : netTo(board, first, seat);
-}
-
 function signed(value: number): string {
   return value === 0 ? "0" : `${value > 0 ? "+" : "−"}${Math.abs(value)}`;
 }
 
+/**
+ * A session's standing: the total, and the two passes it is built from.
+ *
+ * Used to be one signed score plus "what this deal came to before" — right for a
+ * session with no two-sided rubber under it, but it said nothing about how the two
+ * *passes* through the boards compare, which is exactly the question mirror's own
+ * strip answers for its two halves. First play and replay are that same question
+ * asked of a duplicate session: not two sides of one score, since a session's total
+ * is already a single number rather than a pair, but two subtotals of the runs seen
+ * so far — one per pass — that sum to it. Replay reads "—" until at least one board's
+ * second run exists, the same convention mirror's own not-yet-played half uses.
+ *
+ * "Played before" — the deal in hand's own earlier score — is gone rather than kept
+ * alongside these: it answered a narrower question, this one board rather than the
+ * session, and three rows was already the budget a duplicate standing has here.
+ */
 function SessionRows({
   summary,
   view,
@@ -203,30 +189,34 @@ function SessionRows({
   readonly summary: DuplicateSummary;
   readonly view: PlayerView;
 }): React.JSX.Element {
-  const before = playedBefore(summary, view.me);
+  const first = firstPlayTotal(summary, view.me);
+  const replay = replayTotal(summary, view.me);
 
   return (
     <>
-      {/* Always rendered, reading "—" on a deal nobody has seen, so the strip keeps
-          the same number of rows from deal to deal. A row that came and went would
-          move the board underneath it, which is the fault the format row just had. */}
       <p className="flex items-baseline justify-between gap-2 text-white/40">
-        <span>Played before</span>
-        <span className="tabular-nums text-white/60">
-          {before === null ? "—" : signed(before)}
+        <span>Total</span>
+        <span className="font-semibold tabular-nums text-white/90">
+          {signed(summary.margin[view.me])}
         </span>
       </p>
       <p className="flex items-baseline justify-between gap-2 text-white/40">
-        <span>Score</span>
-        <span className="font-semibold tabular-nums text-white/90">
-          {signed(summary.margin[view.me])}
+        <span>First play</span>
+        <span className="tabular-nums text-white/60">
+          {first === null ? "—" : signed(first)}
+        </span>
+      </p>
+      <p className="flex items-baseline justify-between gap-2 text-white/40">
+        <span>Replay</span>
+        <span className="tabular-nums text-white/60">
+          {replay === null ? "—" : signed(replay)}
         </span>
       </p>
     </>
   );
 }
 
-/** The same two figures on one wrapping line, for a phone with no room for rows. */
+/** The same three figures on one wrapping line, for a phone with no room for rows. */
 function SessionFigures({
   summary,
   view,
@@ -234,19 +224,27 @@ function SessionFigures({
   readonly summary: DuplicateSummary;
   readonly view: PlayerView;
 }): React.JSX.Element {
-  const before = playedBefore(summary, view.me);
+  const first = firstPlayTotal(summary, view.me);
+  const replay = replayTotal(summary, view.me);
 
   return (
     <>
-      {before === null ? null : (
-        <span className="whitespace-nowrap">
-          Before <span className="tabular-nums text-white/60">{signed(before)}</span>
-        </span>
-      )}
       <span className="whitespace-nowrap">
-        Score{" "}
+        Total{" "}
         <span className="font-semibold tabular-nums text-white/90">
           {signed(summary.margin[view.me])}
+        </span>
+      </span>
+      <span className="whitespace-nowrap">
+        First play{" "}
+        <span className="tabular-nums text-white/60">
+          {first === null ? "—" : signed(first)}
+        </span>
+      </span>
+      <span className="whitespace-nowrap">
+        Replay{" "}
+        <span className="tabular-nums text-white/60">
+          {replay === null ? "—" : signed(replay)}
         </span>
       </span>
     </>

@@ -6,6 +6,8 @@ import {
   boardsForDeals,
   dealsFor,
   drewFirstOn,
+  firstPlayOf,
+  firstPlayTotal,
   minGapFor,
   netTo,
   applyDuplicateAction,
@@ -13,6 +15,8 @@ import {
   impsFor,
   marginTo,
   nextDuplicateDeal,
+  replayOf,
+  replayTotal,
   scheduleFor,
   scoreDuplicateDeal,
   startDuplicate,
@@ -610,6 +614,30 @@ describe("a session", () => {
         expect(summed, `board ${board.board}, seat ${seat}`).toBe(marginTo(board, seat));
       }
     }
+  });
+
+  /**
+   * The pad and the strip both build on this: first play and replay are a second
+   * way to split the same margin, organised by *when* a run happened rather than
+   * by which side of the stock it was, so the two must still add up to the whole.
+   */
+  it("splits the margin into first-play and replay subtotals that sum to it", () => {
+    const summary = summarizeDuplicate(playOut(startDuplicate({ ...options, boards: 3, minGap: 2 })));
+
+    for (const seat of [0, 1] as PlayerId[]) {
+      const first = firstPlayTotal(summary, seat) ?? 0;
+      const replay = replayTotal(summary, seat) ?? 0;
+      expect(first + replay).toBe(summary.margin[seat]);
+    }
+  });
+
+  it("reads first play and replay as null before either has happened", () => {
+    const summary = summarizeDuplicate(startDuplicate({ ...options, boards: 2, minGap: 2 }));
+
+    expect(firstPlayOf(summary.boards[0]!)).toBeNull();
+    expect(replayOf(summary.boards[0]!)).toBeNull();
+    expect(firstPlayTotal(summary, 0)).toBeNull();
+    expect(replayTotal(summary, 0)).toBeNull();
   });
 
   it("names the other seat as the replay's first drawer", () => {

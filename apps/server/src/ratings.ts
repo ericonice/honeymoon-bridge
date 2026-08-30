@@ -365,12 +365,49 @@ interface RatingRow {
   readonly account0: string | null;
   readonly account1: string | null;
   readonly bot_version: number | null;
+  readonly deals: number;
   readonly difficulty: string | null;
   /** Read for one reason: a mirror's top rung meets a replayed board remembering it. */
   readonly format: string | null;
   readonly token0: string;
   readonly token1: string;
   readonly winner: number;
+}
+
+/**
+ * How much one match should move a rating, by length — a considered guess,
+ * not a measurement, the same as `MIRROR_RECALL_OFFSET` was before its own
+ * bench existed.
+ *
+ * Rubber and mirror only ever take a handful of shapes, so a lookup rather
+ * than a formula: a single game is the baseline unit, a full rubber needs
+ * winning two of them, and a mirror is always two games regardless of which
+ * kind either half is — the stored `format` has no column for that anyway.
+ * Duplicate has no such fixed shape, anywhere from a couple of boards to a
+ * long session, so it scales with how many were actually played instead.
+ *
+ * The duplicate figure folds two guesses into one on purpose: how long a
+ * session feels next to a game, and how much more of a board's result is
+ * skill rather than the deal's own luck, since duplicate cancels most of
+ * that luck by playing the same stock both ways. Neither is independently
+ * measurable — there is no bench that isolates one from the other — so two
+ * constants here would only dress up one guess as two. Clamped so neither a
+ * short blip nor an unusually long session can swing a rating alone, the
+ * same reasoning the provisional period already applies to a new player.
+ */
+const DUPLICATE_BOARD_WEIGHT = 0.3;
+
+function matchWeight(format: string | null, deals: number): number {
+  if (format === "duplicate") {
+    const boards = deals / 2;
+    return Math.min(3, Math.max(0.5, boards * DUPLICATE_BOARD_WEIGHT));
+  }
+  if (format === "rubber" || format === "mirror") {
+    return 2;
+  }
+  // "game" and anything unrecognised (older rows, predating formats
+  // altogether) are the baseline unit everything else is weighed against.
+  return 1;
 }
 
 /** How a seat is identified for rating: the account if there is one, else the device. */
@@ -420,22 +457,25 @@ export interface Ratings {
  * reason `recordsFor` aggregates in TypeScript instead of SQL.
  */
 export async function ratingsFor(env: Env): Promise<Ratings> {
-  // Duplicate sessions are recorded and are deliberately left out of the walk.
+  // Duplicate sessions were excluded from the walk for a while, and are rated
+  // now on request, at the same anchor as a rubber or a mirror against the
+  // same rung — which was never measured for duplicate specifically, because
+  // it cannot be. A bench plays bot against bot, where *neither* side has
+  // cross-deal memory, and duplicate's whole point is a bot that remembers a
+  // board against a person who does not; a bench pitting two memoryless bots
+  // against each other cancels exactly the thing being measured. So there is
+  // no dedicated duplicate anchor, only the rubber/mirror one standing in for
+  // it — a known, accepted gap, not an oversight. The choice is to have a
+  // rating that moves by an uncalibrated amount rather than a whole format
+  // that never appears in anybody's number at all.
   //
-  // Not because they could not be rated — the computer plays them, so there is
-  // something to anchor to — but because the anchor cannot come from a bench. A
-  // bench plays bot against bot, where *neither* side has cross-deal memory, and
-  // a person does; so a bench measurement of the bot's duplicate strength
-  // describes a game nobody is playing, and it is wrong in the direction nobody
-  // notices, over-crediting the player. The bench can give the spread between
-  // releases and rungs, since both sides there are equally memoryless; the single
-  // invented number waits for played sessions.
-  //
-  // **A two-game match is rated, and what let it in was measuring the objection
-  // rather than arguing about it.** It was excluded for duplicate's reason: its second
-  // half is the first half's boards replayed, so the computer meets every one with
-  // perfect recall where a person's is good but not exact, and the size of that gap
-  // was a number nobody had.
+  // **A two-game match (mirror) carries the same objection, and it is rated
+  // with an offset because the gap was measured rather than guessed at.** Its
+  // second half is the first half's boards replayed, so the computer meets
+  // every one with perfect recall where a person's is good but not exact —
+  // `MIRROR_RECALL_OFFSET`, below, is that measured size. Duplicate has no
+  // equivalent offset measured yet, so it rides the plain anchor unadjusted;
+  // that is the specific approximation this decision accepts.
   //
   // It measured as worth nothing, and that measurement was wrong. `bench/rubber.ts 120
   // 8 format=mirror control nodouble memory` gave **52.5% ± 4.9, half a standard error
@@ -449,22 +489,17 @@ export async function ratingsFor(env: Env): Promise<Ratings> {
   // So a mirror is rated at the rubber anchor *plus* `MIRROR_RECALL_OFFSET`, at the one
   // rung that carries a board into its replay.
   //
-  // Why it is worth +157 a session in duplicate and less here is still not established.
-  // The plausible mechanism is that duplicate scores a board on the difference between
-  // its two runs, so playing the replay better is exactly what the unit of scoring
-  // measures, where a mirror's halves are games won at a hundred below the line — and
-  // thirty points played better usually changes nobody's race. That is a hypothesis;
-  // the measurement is the finding.
-  //
-  // Rating a session against the *rubber* anchor in the meantime would be worse
-  // than not rating it, for the reason this whole file exists: a figure that looks
-  // authoritative and is not is the error that never gets corrected. Duplicate
-  // matches still appear on the record screen, where `recordsFor` already keeps
-  // one record per format.
+  // Why perfect recall was worth +157 a session in duplicate's own bench and less
+  // here is still not established. The plausible mechanism is that duplicate scores
+  // a board on the difference between its two runs, so playing the replay better is
+  // exactly what the unit of scoring measures, where a mirror's halves are games won
+  // at a hundred below the line — and thirty points played better usually changes
+  // nobody's race. That is a hypothesis; the measurement is the finding, and it is
+  // the reason duplicate's own gap has no offset yet: nobody has measured it.
   const rows = await env.DB.prepare(
-    `SELECT account0, account1, bot_version, difficulty, format, token0, token1, winner
+    `SELECT account0, account1, bot_version, deals, difficulty, format, token0, token1, winner
      FROM results
-      WHERE format != 'duplicate' AND coalesce(repeated, 0) = 0
+      WHERE coalesce(repeated, 0) = 0
       ORDER BY finished_at`,
   ).all<RatingRow>();
 
@@ -497,7 +532,8 @@ export async function ratingsFor(env: Env): Promise<Ratings> {
       const expected = expectedScore(before[index], before[index === 0 ? 1 : 0]);
       // How many *this identity* has played, not how many the pool has, so a
       // newcomer to an established pool still gets their own settling period.
-      const after = before[index] + stepFor(played.get(id) ?? 0) * (scored - expected);
+      const weight = matchWeight(row.format, row.deals);
+      const after = before[index] + stepFor(played.get(id) ?? 0) * weight * (scored - expected);
       rating.set(id, after);
       played.set(id, (played.get(id) ?? 0) + 1);
 
