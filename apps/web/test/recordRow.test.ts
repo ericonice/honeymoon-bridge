@@ -110,25 +110,59 @@ test("an opponent is one line, in the columns the header names", () => {
   // Six, the last empty: labelling the chevron would be labelling the whole row.
   expect(headings()).toEqual(["opponent", "w–l", "hands", "points", "diff", ""]);
   expect(lines()).toHaveLength(1);
-  expect(lines()[0]).toBe(
-    "Computer 1200 cpu 13–7 146 12,430 points for, 11,789 against +641",
-  );
+  // No points bar and no for/against text: the summary row folds every format
+  // together, and there is no real pair left to draw a proportion of once
+  // they are pooled — see `combinedOf`.
+  expect(lines()[0]).toBe("Computer 1200 cpu 13–7 146 +641");
 });
 
 /**
- * The bar is the only thing on this screen that holds the point totals, and it
- * holds them as a proportion — so the figures themselves live on a visually hidden
- * node, which is the one place they are free. Losing them there as well would make
- * the record unreadable rather than merely compact.
+ * The sparkline is the only thing on a format row that draws the match
+ * history, and it draws the *cumulative* margin across it rather than a
+ * proportion of one pair of totals — so it can say whether a lead has been
+ * widening or shrinking, which a single ratio never could.
+ *
+ * Only reachable one drill-down in: the summary row that lists first never has
+ * a pair to show, since it is every format pooled together — see `combinedOf`.
  */
-test("the points bar states its totals for anything not looking at it", () => {
-  robot = [record()];
+test("a format row draws a sparkline of the cumulative margin, oldest to newest", () => {
+  robot = [
+    record({ format: "mirror" }),
+    record({
+      deals: 4,
+      format: "duplicate",
+      lost: 0,
+      // Oldest first as passed here; the row reverses to draw oldest-to-newest.
+      matches: [
+        match({ pointsAgainst: 50, pointsFor: 20 }), // newest: down 30
+        match({ pointsAgainst: 20, pointsFor: 200 }), // oldest: up 180
+      ],
+      pointsAgainst: 70,
+      pointsFor: 220,
+      won: 1,
+    }),
+  ];
   show();
+  tap();
 
-  expect(rowText()).toContain("12,430 points for, 11,789 against");
-  const [mine, theirs] = [...document.querySelectorAll('[class~="h-full"]')];
-  expect(mine!.getAttribute("style")).toContain("width: 51.");
-  expect(theirs!.getAttribute("style")).toContain("width: 48.");
+  const [mirrorRow, duplicateRow] = rows().slice(1);
+  expect(mirrorRow!.querySelector('svg[width="60"]')).not.toBeNull();
+  // Ahead by 180 after the older match, behind by 30 after the newer one, but
+  // still ahead overall — the final point is what colours the line.
+  expect(duplicateRow!.querySelector('[class~="stroke-emerald-300"]')).not.toBeNull();
+});
+
+/** A lone match has no direction to draw, only a result the margin figure already states. */
+test("a format row with fewer than two matches draws no sparkline", () => {
+  robot = [
+    record({ format: "mirror" }),
+    record({ deals: 8, format: "duplicate", lost: 0, matches: [match()], won: 1 }),
+  ];
+  show();
+  tap();
+
+  const [, duplicateRow] = rows().slice(1);
+  expect(duplicateRow!.querySelector('svg[width="60"]')).toBeNull();
 });
 
 /**
@@ -155,29 +189,28 @@ test("nothing is captioned or restated on the row itself", () => {
 });
 
 /**
- * **The name is hoisted out of the rows the moment there is more than one.**
+ * **The name is said once, on the summary row, whatever it drills down into.**
  *
- * It belongs to the opponent rather than to the row, and repeating it on each one
- * is what squeezed it: the first column is about 120px of a 336px screen, and a
- * split opponent's row was carrying a name, a `cpu` badge and a tag reading
- * "mirror matches" — so the name, the one thing there that identifies anybody, was
- * the part that truncated. Reported exactly that way.
+ * It belongs to the opponent rather than to a format, and repeating it on each
+ * one is what squeezed it: the first column is about 120px of a 336px screen,
+ * and a split opponent's row was carrying a name, a `cpu` badge and a tag
+ * reading "mirror matches" — so the name, the one thing there that identifies
+ * anybody, was the part that truncated. Reported exactly that way.
  *
- * The cost is a line for an opponent who plays two formats. What it buys is the
- * whole column for whatever the row is actually distinguishing.
+ * The cost is a line for an opponent who plays two formats — the summary row —
+ * which buys back the whole column underneath it for whatever a format row is
+ * actually distinguishing.
  */
 test("an opponent played in both formats names them, on a line each", () => {
   robot = [record(), record({ deals: 9, format: "mirror", lost: 1, pointsAgainst: 200, pointsFor: 290, won: 2 })];
   show();
+  tap();
 
   expect(lines().map((line) => line.replace(/ \d[\d,]* points for.*against/, ""))).toEqual([
+    "Computer 1200 cpu 15–8 155 +731",
     "rubbers 13–7 146 +641",
     "mirror matches 2–1 9 +90",
   ]);
-  // Said once, above the pair of them, with the rating and the badge that go with
-  // it — and not on either row, which is what the two lines above already assert.
-  const heading = document.querySelector('[class~="pb-0.5"][class~="pt-2"]');
-  expect(heading?.textContent).toBe("Computer1200cpu");
 });
 
 /**
@@ -208,8 +241,10 @@ test("a third format lands on the list rather than falling off it", () => {
     record({ deals: 20, format: "duplicate", lost: 1, pointsAgainst: 0, pointsFor: 340, won: 1 }),
   ];
   show();
+  tap();
 
   expect(lines().map((line) => line.replace(/ \d[\d,]* points for.*against/, ""))).toEqual([
+    "Computer 1200 cpu 16–9 175 +1,071",
     "rubbers 13–7 146 +641",
     "mirror matches 2–1 9 +90",
     "duplicate sessions 1–1 20 +340",
@@ -247,14 +282,40 @@ test("a losing record shows the margin as negative, with a real minus sign", () 
   expect(lines()[0]).toContain("−641");
 });
 
-test("a record with nothing in it yet draws an empty bar rather than dividing by zero", () => {
+test("a record with nothing in it yet shows a level line rather than dividing by zero", () => {
   robot = [record({ deals: 0, lost: 0, pointsAgainst: 0, pointsFor: 0, won: 0 })];
   show();
 
   expect(lines()[0]).toContain("0–0");
   expect(lines()[0]).toContain("+0");
-  expect(document.querySelectorAll('[class~="h-full"]')).toHaveLength(0);
   expect(rowText()).not.toContain("NaN");
+});
+
+/**
+ * Every match netting to zero is the sparkline's own zero-division case — the
+ * highest and lowest points on the line are both zero, so the span a share
+ * would divide by is nothing. Checked with real matches rather than none, since
+ * a single-format opponent never reaches a format row's sparkline at all.
+ */
+test("a sparkline of an entirely level run of matches draws a flat line rather than NaN", () => {
+  robot = [
+    record({ format: "mirror" }),
+    record({
+      deals: 4,
+      format: "duplicate",
+      lost: 1,
+      matches: [match({ pointsAgainst: 0, pointsFor: 0 }), match({ pointsAgainst: 0, pointsFor: 0 })],
+      pointsAgainst: 0,
+      pointsFor: 0,
+      won: 0,
+    }),
+  ];
+  show();
+  tap();
+
+  const [, duplicateRow] = rows().slice(1);
+  expect(duplicateRow!.querySelector('svg[width="60"]')).not.toBeNull();
+  expect(duplicateRow!.textContent).not.toContain("NaN");
 });
 
 /**
@@ -277,6 +338,13 @@ function tap(index = 0): void {
   });
 }
 
+/** Opens the "Recent matches" section, which is collapsed by default. */
+function openRecentMatches(): void {
+  act(() => {
+    screen.getByText("Recent matches").closest("button")!.click();
+  });
+}
+
 /** The opened panel's label/value pairs. */
 function facts(): Record<string, string> {
   const list = document.querySelector("dl");
@@ -293,6 +361,9 @@ function facts(): Record<string, string> {
 /**
  * The row is a control, not a decorated div. It has to be one for the keyboard and
  * for a screen reader to be told the panel exists at all, which `aria-expanded` is.
+ *
+ * Two levels deep now: the opponent's own row opens onto its formats, and a
+ * format row opens onto its detail — each one open at a time, at its own depth.
  */
 test("a row says whether it is open, and only one is", () => {
   robot = [record(), record({ deals: 9, format: "game", lost: 1, pointsAgainst: 200, pointsFor: 290, won: 2 })];
@@ -301,21 +372,31 @@ test("a row says whether it is open, and only one is", () => {
   const expanded = (): (string | null)[] =>
     rows().map((row) => row.getAttribute("aria-expanded"));
 
-  expect(expanded()).toEqual(["false", "false"]);
+  expect(expanded()).toEqual(["false"]);
   expect(document.querySelector("dl")).toBeNull();
 
+  // Opens onto the two formats — neither of their panels is open yet.
   tap(0);
-  expect(expanded()).toEqual(["true", "false"]);
+  expect(expanded()).toEqual(["true", "false", "false"]);
+
+  tap(1);
+  expect(expanded()).toEqual(["true", "true", "false"]);
 
   // Opening another closes the first: a panel breaks the column alignment where it
   // sits, so two at once would leave the list looking like the sentence it replaced.
-  tap(1);
-  expect(expanded()).toEqual(["false", "true"]);
+  tap(2);
+  expect(expanded()).toEqual(["true", "false", "true"]);
 
-  // And the open one closes, which is the only way back to a list that is a list.
-  tap(1);
-  expect(expanded()).toEqual(["false", "false"]);
+  // The open format panel closes, stepping back up to the format list rather
+  // than collapsing the opponent — that list is still where the reader was.
+  tap(2);
+  expect(expanded()).toEqual(["true", "false", "false"]);
   expect(document.querySelector("dl")).toBeNull();
+
+  // And the opponent's own row closes the whole thing, which is the only way
+  // back to a list that is a list.
+  tap(0);
+  expect(expanded()).toEqual(["false"]);
 });
 
 test("the open panel carries the exact totals the row only draws as a bar", () => {
@@ -362,6 +443,43 @@ test("a record with only one length says nothing about the split", () => {
 
   expect(facts()).not.toHaveProperty("Rubbers");
   expect(facts()).not.toHaveProperty("Single games");
+});
+
+/**
+ * **A duplicate session has a real for/against pair now, the same as any other
+ * format.** `DuplicateSummary.points` sums the genuine two-sided score
+ * `DuplicateDealScore` already computes — honors and undertrick penalties
+ * included, not the signed margin `DuplicateResult.points` collapses a run to
+ * — so the "Points" fact and each match's pair draw it exactly like a
+ * rubber's or a mirror's. (Its sparkline drawing the same way as any other
+ * format's is covered directly above.)
+ */
+test("a duplicate panel states the real pair, the same as a rubber's", () => {
+  robot = [record({ deals: 60, format: "duplicate", lost: 0, pointsAgainst: 290, pointsFor: 320, won: 1 })];
+  show();
+  tap();
+
+  expect(facts().Points).toContain("320");
+  expect(facts().Points).toContain("290");
+  expect(facts().Margin).toContain("+30");
+});
+
+test("a duplicate match in the history shows its real pair, not a fabricated one", () => {
+  robot = [
+    record({
+      deals: 60,
+      format: "duplicate",
+      lost: 0,
+      matches: [match({ deals: 20, format: "duplicate", pointsAgainst: 290, pointsFor: 320 })],
+      pointsAgainst: 290,
+      pointsFor: 320,
+      won: 1,
+    }),
+  ];
+  show();
+  tap();
+
+  expect(rowText()).toContain("320–290");
 });
 
 /**
@@ -439,9 +557,44 @@ test("a recent match says which format it was", () => {
     played({ finishedAt: Date.UTC(2026, 7, 19, 9, 0) }),
   ];
   show();
+  openRecentMatches();
 
   const text = rowText();
   for (const named of ["Mirror · 8 deals", "Duplicate · 8 deals", "Single game · 8 deals", "Rubber · 8 deals"]) {
     expect(text, `no row reads "${named}"`).toContain(named);
   }
+});
+
+/**
+ * Collapsed by default: up to twenty matches at two lines each is a real
+ * scroll for something that is supplementary detail once the tallies above
+ * already say how things stand.
+ */
+test("recent matches start collapsed and open on a tap", () => {
+  robot = [record()];
+  recent = [played()];
+  show();
+
+  const button = screen.getByText("Recent matches").closest("button")!;
+  expect(button.getAttribute("aria-expanded")).toBe("false");
+  expect(rowText()).not.toContain("vs Computer");
+
+  openRecentMatches();
+  expect(button.getAttribute("aria-expanded")).toBe("true");
+  expect(rowText()).toContain("vs Computer");
+});
+
+/**
+ * A recent duplicate match draws its real pair too, the same as any other
+ * format — `MatchRecord` gets it from the same `DuplicateSummary.points` as
+ * everything else on this screen, so there is nothing left for this
+ * component, or the opponent panel's own history list, to special-case.
+ */
+test("a recent duplicate match shows its real pair", () => {
+  robot = [record()];
+  recent = [played({ format: "duplicate", pointsAgainst: 290, pointsFor: 320 })];
+  show();
+  openRecentMatches();
+
+  expect(rowText()).toContain("320–290");
 });

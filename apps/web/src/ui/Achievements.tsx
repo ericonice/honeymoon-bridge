@@ -3,6 +3,8 @@ import type { AchievementId, CounterKey, Tier } from "@hb/engine";
 import { ACHIEVEMENT_ORDER, ACHIEVEMENTS, tierLabel } from "../game/labels.js";
 import type { AchievementSnapshot } from "../game/achievements.js";
 import { useAchievements } from "../game/achievements.js";
+import { useSwipeBack } from "../game/swipeBack.js";
+import { BackButton } from "./BackButton.js";
 import { FamilyIcon } from "./icons.js";
 import { TIER_FILL, TIER_INK, TIER_UNHELD, bestHeld } from "./tiers.js";
 
@@ -154,21 +156,16 @@ function Body({
  * Settings: this grows with play, and Settings is a list of things to change.
  */
 export function Achievements({ onBack, onSignIn, signedIn }: AchievementsProps): React.JSX.Element {
+  useSwipeBack(onBack);
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-8">
+      <div className="px-4 pt-4">
+        <BackButton onBack={onBack} />
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 pt-2 pb-8">
         <h1 className="text-2xl font-semibold">Achievements</h1>
         <Body signedIn={signedIn} onSignIn={onSignIn} />
-      </div>
-
-      <div className="px-6 pb-6">
-        <button
-          type="button"
-          className="w-full rounded-xl border border-white/25 px-4 py-3.5 text-base text-white"
-          onClick={onBack}
-        >
-          Back
-        </button>
       </div>
     </div>
   );

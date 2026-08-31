@@ -1,9 +1,11 @@
 import { Fragment, useState } from "react";
 import type { MatchFormat } from "@hb/engine";
 import { formatName, formatPlural } from "../game/labels.js";
-import type { MatchRecord, OpponentRecord, Records } from "../game/records.js";
+import type { MatchRecord, OpponentMatch, OpponentRecord, Records } from "../game/records.js";
 import { resetRecord, useRecentMatches, useRecords } from "../game/records.js";
 import { useStandings } from "../game/standings.js";
+import { useSwipeBack } from "../game/swipeBack.js";
+import { BackButton } from "./BackButton.js";
 import { RatingTrend } from "./RatingTrend.js";
 import { Standings } from "./Standings.js";
 
@@ -149,42 +151,83 @@ function ListHeader(): React.JSX.Element {
   );
 }
 
+const SPARKLINE_WIDTH = 60;
+const SPARKLINE_HEIGHT = 16;
+
 /**
- * Points for against points against, as a share of everything scored.
+ * Cumulative margin against this opponent, over the matches this screen still
+ * holds — up to `MATCHES_PER_OPPONENT`, oldest to newest so it reads the same
+ * direction the rating trend does.
  *
- * The exact totals are gone from this screen, deliberately — three fuller versions
- * were drawn first and this is the one that read fastest, because "am I behind
- * against this person" turns out to be a question about proportion rather than
- * about two six-digit numbers. A bar answers it without a digit being read, and it
- * is *scale-aware* in a way the margin is not: +641 across 146 deals is a nearly
- * even bar, which is the truth of it, where the same +641 in nine deals would not
- * be.
- *
- * The totals still exist for a screen reader, which is the one place they are free.
- * For everyone else the individual match list below carries every game's own points.
+ * **Replaces a proportion bar of the point totals, and answers a different
+ * question.** "Am I ahead against this person" was a fair question for a bar to
+ * answer, but the answer sat still — a single ratio cannot say whether that lead
+ * is widening or has been shrinking for months, which is the more interesting
+ * fact once the plain total is already on screen as the margin figure beside it.
+ * Below two matches there is no direction to draw, only a result the margin
+ * figure already states, so this renders nothing rather than one dot pretending
+ * to be a trend.
  */
-function PointsBar({
-  against,
-  points,
-}: {
-  readonly against: number;
-  readonly points: number;
-}): React.JSX.Element {
-  const total = points + against;
-  const share = total === 0 ? 0 : (points / total) * 100;
+function MarginSparkline({ matches }: { readonly matches: readonly OpponentMatch[] }): React.JSX.Element | null {
+  if (matches.length < 2) {
+    return null;
+  }
+  // Newest first coming in — see `results.ts` — reversed so the line reads left
+  // to right the way it actually happened.
+  let running = 0;
+  const cumulative = [...matches]
+    .reverse()
+    .map((match) => (running += match.pointsFor - match.pointsAgainst));
+
+  const low = Math.min(0, ...cumulative);
+  const high = Math.max(0, ...cumulative);
+  const span = high - low || 1;
+  const x = (index: number): number =>
+    (index / (cumulative.length - 1)) * (SPARKLINE_WIDTH - 2) + 1;
+  const y = (value: number): number =>
+    SPARKLINE_HEIGHT - 2 - ((value - low) / span) * (SPARKLINE_HEIGHT - 4);
+
+  const path = cumulative
+    .map((value, index) => `${index === 0 ? "M" : "L"} ${x(index).toFixed(1)} ${y(value).toFixed(1)}`)
+    .join(" ");
+  const final = cumulative[cumulative.length - 1]!;
+  const ahead = final >= 0;
 
   return (
-    <div className="flex h-1.5 self-center overflow-hidden rounded-sm bg-white/12">
-      <span className="sr-only">
-        {points.toLocaleString()} points for, {against.toLocaleString()} against
-      </span>
-      {total === 0 ? null : (
-        <>
-          <div className="h-full bg-emerald-300" style={{ width: `${share}%` }} />
-          <div className="h-full bg-amber-300" style={{ width: `${100 - share}%` }} />
-        </>
-      )}
-    </div>
+    <svg
+      aria-hidden="true"
+      className="self-center"
+      height={SPARKLINE_HEIGHT}
+      preserveAspectRatio="none"
+      viewBox={`0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`}
+      width={SPARKLINE_WIDTH}
+    >
+      {/* Zero, not the average — this is a running total against a fixed opponent
+          rather than a spread of independent results, so "level" is the one
+          reference line that means something drawn over it. */}
+      <line
+        className="stroke-white/15"
+        strokeDasharray="1.5 1.5"
+        x1={0}
+        x2={SPARKLINE_WIDTH}
+        y1={y(0)}
+        y2={y(0)}
+      />
+      <path
+        className={ahead ? "stroke-emerald-300" : "stroke-amber-200"}
+        d={path}
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.4}
+      />
+      <circle
+        className={ahead ? "fill-emerald-300" : "fill-amber-200"}
+        cx={x(cumulative.length - 1)}
+        cy={y(final)}
+        r={1.6}
+      />
+    </svg>
   );
 }
 
@@ -209,43 +252,52 @@ function RatingTag({ rating }: { readonly rating: number }): React.JSX.Element {
   return <span className="shrink-0 font-mono text-[0.65rem] text-white/40">{rating}</span>;
 }
 
+/** The one thing that says a row opens something, so both drill-down levels draw it alike. */
+function Chevron({ open }: { readonly open: boolean }): React.JSX.Element {
+  return (
+    <svg
+      aria-hidden="true"
+      className={`self-center transition-transform ${open ? "rotate-180 text-white/55" : "text-white/30"}`}
+      fill="none"
+      height="10"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeWidth="1.6"
+      viewBox="0 0 10 10"
+      width="10"
+    >
+      <path d="M2 3.6 L5 6.6 L8 3.6" />
+    </svg>
+  );
+}
+
 /**
- * One opponent, in one match format, on one line.
+ * One opponent, in one match format, on one line — the second drill-down level,
+ * nested under the opponent's own summary row (`OpponentSummaryLine`) and shown
+ * only while that row is open.
  *
- * `name · won–lost · hands · points · margin`, under one header at the top of the
- * list. Getting here took four shapes and the lesson is worth keeping: **what made
- * the original unreadable was not how many figures it held but that they did not
- * line up.** It was a sentence of middot-separated values, so the third figure sat
- * somewhere different on every row and each one had to be read from the beginning.
- * A fixed grid with the labels paid for once fixes that without dropping anything.
- *
- * A version with a captioned column per figure was drawn too, and repeating those
- * captions per opponent is what made it cost five lines each.
+ * `format · won–lost · hands · points · margin`. Getting here took four shapes
+ * and the lesson is worth keeping: **what made the original unreadable was not
+ * how many figures it held but that they did not line up.** It was a sentence of
+ * middot-separated values, so the third figure sat somewhere different on every
+ * row and each one had to be read from the beginning. A fixed grid with the
+ * labels paid for once fixes that without dropping anything.
  *
  * **Hands sits beside the points rather than beside the record** because it is the
  * sample size — it is what makes a margin mean anything.
  *
- * Deals won and lost is not here and cannot be: `results` records a match winner, a
- * deal count and each side's points, with no per-deal outcome, so it would need a
- * column blank for every game already recorded. It is also weaker than the margin
- * beside it, since a deal can be passed out with nobody winning it.
+ * The name and the rating are not here: they are said once, on the summary row
+ * this sits under, and repeating them on every format would be the row that
+ * squeezed the name in the first place, come back under a new heading.
  */
 function OpponentLine({
-  indent,
-  label,
   onToggle,
   open,
   record,
-  robot,
 }: {
-  /** Set on a format row, which sits under a heading naming the opponent. */
-  readonly indent: boolean;
-  /** The opponent's name, or — under a heading — which format these are. */
-  readonly label: string;
   onToggle(): void;
   readonly open: boolean;
   readonly record: OpponentRecord;
-  readonly robot: boolean;
 }): React.JSX.Element {
   const margin = record.pointsFor - record.pointsAgainst;
 
@@ -257,15 +309,9 @@ function OpponentLine({
       onClick={onToggle}
     >
       <span className="flex min-w-0 items-baseline gap-1">
-        <span
-          className={`truncate ${indent ? "pl-3 text-[0.7rem] text-white/55" : "text-sm"} ${robot && !indent ? "text-white/60 italic" : ""}`}
-        >
-          {label}
+        <span className="truncate pl-3 text-[0.7rem] text-white/55">
+          {formatPlural(record.format)}
         </span>
-        {/* The opponent's name, not the format's — a format label on an indented
-            row already sits under the heading that carries the rating once. */}
-        {indent ? null : <RatingTag rating={record.rating} />}
-        {robot && !indent ? <RobotTag /> : null}
       </span>
       {/* The third figure only when there is one. Every rubber row would otherwise
           carry a "–0" for something that cannot happen to it, and this row is
@@ -277,25 +323,13 @@ function OpponentLine({
       <span className="text-right font-mono text-xs tabular-nums text-white/70">
         {record.deals.toLocaleString()}
       </span>
-      <PointsBar against={record.pointsAgainst} points={record.pointsFor} />
+      <MarginSparkline matches={record.matches} />
       <span
         className={`text-right font-mono text-sm tabular-nums ${margin >= 0 ? "text-emerald-300" : "text-amber-200"}`}
       >
         {signed(margin)}
       </span>
-      <svg
-        aria-hidden="true"
-        className={`self-center transition-transform ${open ? "rotate-180 text-white/55" : "text-white/30"}`}
-        fill="none"
-        height="10"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.6"
-        viewBox="0 0 10 10"
-        width="10"
-      >
-        <path d="M2 3.6 L5 6.6 L8 3.6" />
-      </svg>
+      <Chevron open={open} />
     </button>
   );
 }
@@ -493,70 +527,156 @@ function groupByOpponent(records: Records): readonly OpponentGroup[] {
     .sort((a, b) => lastPlayedOf(b) - lastPlayedOf(a));
 }
 
+/** An opponent's totals with every format folded in — see `OpponentSummaryLine`. */
+interface CombinedRecord {
+  readonly deals: number;
+  readonly drawn: number;
+  readonly lost: number;
+  readonly margin: number;
+  readonly won: number;
+}
+
 /**
- * One opponent's rows, and the panel under whichever of them is open.
- *
- * One open at a time across the whole list — see `Body`. A panel breaks the column
- * alignment where it sits, which is the thing that makes the table readable, so
- * having several open at once would leave the list looking like the sentence this
- * replaced.
+ * Won, lost, drawn and deals add up the same way regardless of format — a
+ * sitting is won or it is not, whatever game it was. Points do not: a rubber's
+ * are real card play and duplicate's are a margin standing in for one (see
+ * `PointsBar`'s own doc comment), so nothing here sums them into a pair. The
+ * *margin* still adds up, because "how much better did this go than it went
+ * for them" is the same question in every format — the same reasoning
+ * `ratings.ts` already leans on to pool formats into one number at all.
  */
-function OpponentSection({
+function combinedOf(group: OpponentGroup): CombinedRecord {
+  return group.records.reduce<CombinedRecord>(
+    (total, record) => ({
+      deals: total.deals + record.deals,
+      drawn: total.drawn + record.drawn,
+      lost: total.lost + record.lost,
+      margin: total.margin + (record.pointsFor - record.pointsAgainst),
+      won: total.won + record.won,
+    }),
+    { deals: 0, drawn: 0, lost: 0, margin: 0, won: 0 },
+  );
+}
+
+/**
+ * One opponent, every format folded into one line — the first drill-down level,
+ * and the only row on the list before anything is tapped.
+ *
+ * `name · won–lost · hands · margin`, the same columns `OpponentLine` uses one
+ * level down, minus the points bar: nothing here is a real pair to draw a
+ * proportion of once formats are pooled — see `combinedOf`.
+ */
+function OpponentSummaryLine({
+  combined,
   group,
   onToggle,
-  openRow,
+  open,
 }: {
+  readonly combined: CombinedRecord;
   readonly group: OpponentGroup;
-  onToggle(row: string): void;
-  /** `key|format` of the row whose panel is showing, or null. */
-  readonly openRow: string | null;
+  onToggle(): void;
+  readonly open: boolean;
 }): React.JSX.Element {
-  // Only worth telling the formats apart when there is more than one of them.
-  const split = group.records.length > 1;
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      className={`${COLUMNS} w-full border-b border-white/7 py-1.5 text-left last:border-b-0 ${open ? "border-b-transparent bg-white/5" : ""}`}
+      onClick={onToggle}
+    >
+      <span className="flex min-w-0 items-baseline gap-1">
+        <span className={`truncate text-sm ${group.isRobot ? "text-white/60 italic" : ""}`}>
+          {group.name}
+        </span>
+        <RatingTag rating={group.records[0]!.rating} />
+        {group.isRobot ? <RobotTag /> : null}
+      </span>
+      <span className="text-right font-mono text-xs tabular-nums">
+        {combined.won}–{combined.lost}
+        {combined.drawn > 0 ? `–${combined.drawn}` : ""}
+      </span>
+      <span className="text-right font-mono text-xs tabular-nums text-white/70">
+        {combined.deals.toLocaleString()}
+      </span>
+      <span />
+      <span
+        className={`text-right font-mono text-sm tabular-nums ${combined.margin >= 0 ? "text-emerald-300" : "text-amber-200"}`}
+      >
+        {signed(combined.margin)}
+      </span>
+      <Chevron open={open} />
+    </button>
+  );
+}
+
+/**
+ * Where the list currently is — the whole list, one opponent's formats, or one
+ * format's own detail. Exactly one shape at a time rather than two independent
+ * booleans, because the two levels are not independent: a format panel only
+ * ever belongs to the one opponent currently drilled into, and modelling that
+ * as `openOpponent` plus `openFormat` would let them name two different
+ * opponents at once — a state nothing here should be able to reach but nothing
+ * would stop.
+ */
+type Drill =
+  | { readonly level: "list" }
+  | { readonly key: string; readonly level: "opponent" }
+  | { readonly format: MatchFormat; readonly key: string; readonly level: "format" };
+
+/**
+ * One opponent's summary row, and — while it is open — the breakdown or the
+ * detail underneath it.
+ *
+ * **Two drill-downs, not one.** The summary row folds every format together;
+ * tapping it reveals one row per format actually played (skipped entirely for
+ * an opponent with only one, who goes straight to its detail — a second tap on
+ * a row that could only ever say "this one" would be asking a question with no
+ * second answer); tapping a format row reveals its detail, exactly what used to
+ * open straight from the old per-format row. Tapping the open summary row again
+ * closes the whole thing, at whichever depth it was left.
+ */
+function OpponentSection({
+  drill,
+  group,
+  onToggleFormat,
+  onToggleOpponent,
+}: {
+  readonly drill: Drill;
+  readonly group: OpponentGroup;
+  onToggleFormat(format: MatchFormat): void;
+  onToggleOpponent(): void;
+}): React.JSX.Element {
+  const combined = combinedOf(group);
+  const opponentOpen = drill.level !== "list" && drill.key === group.key;
+  const openFormat = drill.level === "format" && drill.key === group.key ? drill.format : null;
+  const single = group.records.length === 1;
 
   return (
     <>
-      {/* **The name belongs to the opponent, not to the row**, and putting it on
-          every row is what squeezed it. The first column is about 120px of a
-          336px screen, and on a split opponent it was carrying a name, a `cpu`
-          badge *and* a tag reading "mirror matches" — so the name, the one thing
-          there that identifies anybody, was the part that truncated.
-
-          Hoisted, it costs a line for an opponent who plays two formats and gives
-          the whole column back to whichever thing the row is actually
-          distinguishing. An opponent with one format is unchanged and gets the
-          full width for their name, which was the other half of the complaint: a
-          long name truncated with nothing competing with it at all. */}
-      {split ? (
-        <div className="flex items-baseline gap-1 pt-2 pb-0.5">
-          <span className={`min-w-0 text-sm ${group.isRobot ? "text-white/60 italic" : ""}`}>
-            {group.name}
-          </span>
-          {/* One rating per identity regardless of format, so any record here
-              says the same thing — the first is as good as any. */}
-          <RatingTag rating={group.records[0]!.rating} />
-          {group.isRobot ? <RobotTag /> : null}
-        </div>
-      ) : null}
-      {group.records.map((record) => {
-        const id = `${group.key}|${record.format}`;
-        const open = openRow === id;
-        return (
-          <Fragment key={id}>
-            <OpponentLine
-              indent={split}
-              label={split ? formatPlural(record.format) : group.name}
-              open={open}
-              record={record}
-              robot={group.isRobot}
-              onToggle={() => {
-                onToggle(id);
-              }}
-            />
-            {open ? <OpponentPanel record={record} /> : null}
-          </Fragment>
-        );
-      })}
+      <OpponentSummaryLine
+        combined={combined}
+        group={group}
+        open={opponentOpen}
+        onToggle={onToggleOpponent}
+      />
+      {single && openFormat !== null ? <OpponentPanel record={group.records[0]!} /> : null}
+      {!single && opponentOpen
+        ? group.records.map((record) => {
+            const open = openFormat === record.format;
+            return (
+              <Fragment key={record.format}>
+                <OpponentLine
+                  open={open}
+                  record={record}
+                  onToggle={() => {
+                    onToggleFormat(record.format);
+                  }}
+                />
+                {open ? <OpponentPanel record={record} /> : null}
+              </Fragment>
+            );
+          })
+        : null}
     </>
   );
 }
@@ -608,9 +728,16 @@ function MatchRow({ match }: { readonly match: MatchRecord }): React.JSX.Element
  * evening or how a string of wins actually happened one game at a time — this
  * is for that, so it stays a short, ungrouped list rather than another set of
  * sections.
+ *
+ * **Collapsed by default, and expandable.** Up to twenty matches at two lines
+ * each is a real scroll for something that is supplementary detail once the
+ * tallies above already say how things stand — the same reasoning behind
+ * every panel on this screen, so it reuses the same tap-to-open heading and
+ * chevron rather than a second interaction language for the same idea.
  */
 function RecentMatches({ signedIn }: { readonly signedIn: boolean }): React.JSX.Element | null {
   const { matches } = useRecentMatches(signedIn);
+  const [open, setOpen] = useState(false);
 
   if (matches === null || matches.length === 0) {
     return null;
@@ -618,12 +745,24 @@ function RecentMatches({ signedIn }: { readonly signedIn: boolean }): React.JSX.
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-lg font-semibold">Recent matches</h2>
-      <div>
-        {matches.map((match) => (
-          <MatchRow key={`${match.finishedAt}-${match.opponentName}`} match={match} />
-        ))}
-      </div>
+      <button
+        type="button"
+        aria-expanded={open}
+        className="flex items-center justify-between text-left"
+        onClick={() => {
+          setOpen((current) => !current);
+        }}
+      >
+        <span className="text-lg font-semibold">Recent matches</span>
+        <Chevron open={open} />
+      </button>
+      {open ? (
+        <div>
+          {matches.map((match) => (
+            <MatchRow key={`${match.finishedAt}-${match.opponentName}`} match={match} />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -743,9 +882,9 @@ function Body({
   onSignIn(): void;
 }): React.JSX.Element {
   const { loading, records, reload } = useRecords(signedIn);
-  // `key|format` of the one open row. Declared before the early returns below so
-  // the hook order does not depend on whether there is anything to show.
-  const [openRow, setOpenRow] = useState<string | null>(null);
+  // Declared before the early returns below so the hook order does not depend
+  // on whether there is anything to show.
+  const [drill, setDrill] = useState<Drill>({ level: "list" });
 
   if (!signedIn) {
     return (
@@ -792,12 +931,30 @@ function Body({
           {groups.map((group) => (
             <OpponentSection
               key={group.key}
+              drill={drill}
               group={group}
-              openRow={openRow}
-              onToggle={(row) => {
-                // Tapping the open one closes it, which is the only way back to a
-                // list that is purely a list.
-                setOpenRow((current) => (current === row ? null : row));
+              onToggleFormat={(format) => {
+                // Tapping the open one steps back up to the format list rather
+                // than closing everything, since that list is still where the
+                // reader was browsing.
+                setDrill((current) =>
+                  current.level === "format" && current.key === group.key && current.format === format
+                    ? { key: group.key, level: "opponent" }
+                    : { format, key: group.key, level: "format" },
+                );
+              }}
+              onToggleOpponent={() => {
+                // Tapping the open one — at either depth — closes the whole
+                // thing, which is the only way back to a list that is a list.
+                // A single-format opponent has no format list to land on, so it
+                // goes straight to the one detail there is to show.
+                setDrill((current) =>
+                  current.level !== "list" && current.key === group.key
+                    ? { level: "list" }
+                    : group.records.length === 1
+                      ? { format: group.records[0]!.format, key: group.key, level: "format" }
+                      : { key: group.key, level: "opponent" },
+                );
               }}
             />
           ))}
@@ -890,10 +1047,14 @@ export function Record({ onBack, onSignIn, signedIn }: RecordProps): React.JSX.E
   // Held here rather than in the board, so the switch is free after the first
   // look — and fetched only once somebody has actually asked for it.
   const board = useStandings(signedIn && view === "everyone");
+  useSwipeBack(onBack);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-8">
+      <div className="px-4 pt-4">
+        <BackButton onBack={onBack} />
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 pt-2 pb-8">
         <h1 className="text-2xl font-semibold">
           {view === "you" ? "Your record" : "Standings"}
         </h1>
@@ -903,16 +1064,6 @@ export function Record({ onBack, onSignIn, signedIn }: RecordProps): React.JSX.E
         ) : (
           <Standings loading={board.loading} standings={board.standings} />
         )}
-      </div>
-
-      <div className="px-6 pb-6">
-        <button
-          type="button"
-          className="w-full rounded-xl border border-white/25 px-4 py-3.5 text-base text-white"
-          onClick={onBack}
-        >
-          Back
-        </button>
       </div>
     </div>
   );

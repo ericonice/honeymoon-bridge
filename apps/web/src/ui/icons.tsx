@@ -48,6 +48,17 @@ export function HelpIcon({
   );
 }
 
+/** The iOS back chevron — see `BackButton`, the one place this is used. */
+export function ChevronLeftIcon({
+  className = "h-6 w-6",
+}: { readonly className?: string } = {}): React.JSX.Element {
+  return (
+    <Glyph className={className}>
+      <path d="M14.5 5.5 8 12l6.5 6.5" />
+    </Glyph>
+  );
+}
+
 export function SettingsIcon({
   className = "h-6 w-6",
 }: { readonly className?: string } = {}): React.JSX.Element {

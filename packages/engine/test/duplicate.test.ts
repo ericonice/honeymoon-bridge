@@ -617,6 +617,26 @@ describe("a session", () => {
   });
 
   /**
+   * **`points` is not `margin` in disguise, even though the two agree on the
+   * one thing they share.** Subtracting one seat's real score from the
+   * other's always gives back the same margin `netTo` already computes —
+   * that has to hold, since a run's signed net *is* `score.points[0] -
+   * score.points[1]` by construction (see `resultFor`) — but the two real
+   * scores are not each other's negative in general: honors and undertrick
+   * penalties can pay both seats on the same deal, so `points` carries
+   * information `margin` has already thrown away. Both real scores are
+   * non-negative too, the same guarantee a rubber's own points have, which is
+   * what let the server reporting drop its winner-takes-the-margin clamp.
+   */
+  it("sums a real, non-negative score for each seat, which nets to the same margin", () => {
+    const summary = summarizeDuplicate(playOut(startDuplicate({ ...options, boards: 3, minGap: 2 })));
+
+    expect(summary.points[0] - summary.points[1]).toBe(summary.margin[0]);
+    expect(summary.points[0]).toBeGreaterThanOrEqual(0);
+    expect(summary.points[1]).toBeGreaterThanOrEqual(0);
+  });
+
+  /**
    * The pad and the strip both build on this: first play and replay are a second
    * way to split the same margin, organised by *when* a run happened rather than
    * by which side of the stock it was, so the two must still add up to the whole.

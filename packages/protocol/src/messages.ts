@@ -142,7 +142,7 @@ export type ClientMessage =
        * Absent from a queue match and from a client too old to say, both of
        * which read as "no invite" rather than as a guess: `formatFor` falls
        * back to its ordinary precedence exactly as it always has whenever
-       * neither seat, or both, claim to be the guest.
+       * neither seat, or both, claim to be the host.
        */
       readonly role?: TableRole;
       readonly session: string | null;

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useSwipeBack } from "../game/swipeBack.js";
+import { BackButton } from "./BackButton.js";
 import { ScoringOverlay } from "./ScoringOverlay.js";
 import { resetWalkthrough } from "../game/walkthrough.js";
 
@@ -109,6 +111,8 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
     scoring: false,
   });
 
+  useSwipeBack(onClose);
+
   function toggle(key: SectionKey): void {
     setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   }
@@ -125,7 +129,10 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
 
   return (
     <div className="safe-inset absolute inset-0 z-30 flex flex-col bg-table-dark/97">
-      <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto px-5 py-6">
+      <div className="px-4 pt-4">
+        <BackButton onBack={onClose} />
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto px-5 pt-2 pb-6">
         <div className="w-full max-w-sm">
           <h1 className="text-lg font-semibold">How this differs from bridge</h1>
           <p className="mt-1 text-sm text-white/40">
@@ -221,8 +228,7 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
           <Rule title="Rubber scoring">
             Best of three games, with vulnerability following from having won one, exactly as at a
             rubber. The home screen will shorten a sitting to a single game instead, or swap it for a
-            duplicate session; at a table with somebody else, one game wins if either of you asks for
-            it.
+            duplicate session.
           </Rule>
           {/* A page rather than more rules here. It is what somebody opens mid-auction,
               and it is the one part of this app written for a person who has never
@@ -386,14 +392,6 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
               ? "Three notes on the board itself, starting with your next deal against the computer."
               : "Three short notes on the board itself, on the turns they matter. The draw is the part of this game that exists nowhere else."}
           </span>
-        </button>
-
-        <button
-          type="button"
-          className="w-full rounded-xl border border-white/25 px-4 py-3.5 text-base text-white"
-          onClick={onClose}
-        >
-          Back
         </button>
       </div>
     </div>

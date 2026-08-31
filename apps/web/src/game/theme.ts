@@ -47,9 +47,14 @@ export function writeTheme(theme: Theme): void {
 export function applyTheme(theme: Theme): void {
   document.documentElement.dataset["theme"] = theme;
 
-  const tint = getComputedStyle(document.documentElement)
-    .getPropertyValue("--color-table-dark")
-    .trim();
+  // `--color-table`, not `--color-table-dark`: the browser's own chrome sits
+  // directly against the frame's own colour on a phone, where the frame *is*
+  // the screen — never against the darker ground colour, which only exists
+  // behind a desktop's letterboxed card. Tinting it with the wrong one reads
+  // as a seam of a visibly different blue at the edge of the screen, which is
+  // exactly what was reported from a real phone: outside the page entirely,
+  // so no amount of `body`'s own background could have fixed it.
+  const tint = getComputedStyle(document.documentElement).getPropertyValue("--color-table").trim();
   const meta = document.querySelector('meta[name="theme-color"]');
   if (tint !== "" && meta !== null) {
     meta.setAttribute("content", tint);

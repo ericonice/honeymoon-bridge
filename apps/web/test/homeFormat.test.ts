@@ -5,7 +5,7 @@ import type { MatchFormat } from "@hb/engine";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DESCRIPTION_LIMIT, Home } from "../src/ui/Home.js";
 import type { HomeProps } from "../src/ui/Home.js";
-import { MAX_SESSION_DEALS, setPreferredFormat } from "../src/game/identity.js";
+import { MAX_SESSION_DEALS, setPreferredFormat, setQueueFormat } from "../src/game/identity.js";
 
 afterEach(() => {
   cleanup();
@@ -108,29 +108,30 @@ describe("choosing what to play, on Home", () => {
   });
 
   /**
-   * A table can run a session now, so nothing is shut — but it takes **both** seats
-   * to have asked for one, and the buttons say so rather than letting somebody
-   * discover it when the table deals a rubber. A session is a different game rather
-   * than a longer or shorter one, which is why the rule is "both" instead of the
-   * "shorter wins" that settles a rubber against a single game; `formatFor` on the
-   * server is where that lives.
+   * A table can run a session now, so nothing is shut — a session is a different
+   * game rather than a longer or shorter one, which is why it takes **both** seats
+   * to have asked for one instead of the "shorter wins" that settles a rubber
+   * against a single game; `formatFor` on the server is where that lives. Nothing
+   * on this screen says so any more — the caption under the row was dropped —
+   * so this is only left checking that duplicate does not disable any of them.
    */
-  it("leaves the table open for a session, and says it takes both", () => {
+  it("leaves the table open for a session", () => {
     show("duplicate");
 
     expect(action("Play the computer").disabled).toBe(false);
     for (const way of ["Find", "Invite", "Join"]) {
       expect(screen.getByRole("button", { name: new RegExp(way) })).toBeTruthy();
     }
-    // Said once under the row now rather than three times, once per button. Three
-    // full-width buttons with a line of description each cost 240px on the one screen
-    // that must not scroll.
-    expect(screen.getAllByText(/needs you both to want one/).length).toBe(1);
   });
 
+  /**
+   * Said twice now — Play the computer and Invite are grouped with the picker for
+   * the same reason, and a session explains itself the same way regardless of
+   * who ends up on the other side of it.
+   */
   it("says what a session actually is, since nobody has met one before", () => {
     show("duplicate");
-    expect(screen.getByText(/10 deals: 5 boards, each played twice/)).toBeTruthy();
+    expect(screen.getAllByText(/10 deals: 5 boards, each played twice/)).toHaveLength(2);
   });
 });
 
@@ -239,16 +240,17 @@ describe("how long a session runs", () => {
     );
   });
 
+  /** Said twice now — see Play the computer and Invite, grouped with the picker. */
   it("says how many boards the chosen length comes to", () => {
     cleanup();
     render0("duplicate", 8);
-    expect(screen.getByText(/8 deals: 4 boards/)).toBeTruthy();
+    expect(screen.getAllByText(/8 deals: 4 boards/)).toHaveLength(2);
   });
 
   it("says one board rather than one boards at the shortest length", () => {
     cleanup();
     render0("duplicate", 2);
-    expect(screen.getByText(/2 deals: 1 board, each played twice/)).toBeTruthy();
+    expect(screen.getAllByText(/2 deals: 1 board, each played twice/)).toHaveLength(2);
   });
 });
 
@@ -398,5 +400,41 @@ describe("the block above the buttons", () => {
     show("rubber");
 
     expect(screen.getByText(/What you.re playing/)).toBeTruthy();
+  });
+});
+
+/**
+ * **"Find" says what it is currently narrowed to, since the filter is set on the
+ * Searching screen rather than here.** Somebody returning to Home after choosing a
+ * format there would otherwise see the same caption it always had and have no way
+ * to tell "Find" no longer means anyone.
+ */
+describe("what Find says it is looking for", () => {
+  afterEach(() => {
+    setQueueFormat(null);
+  });
+
+  it("says whoever is free when nothing has been narrowed", () => {
+    setQueueFormat(null);
+    show("rubber");
+
+    expect(action("Find").textContent).toContain("whoever is free");
+  });
+
+  it("names the format once the search has been narrowed to one", () => {
+    setQueueFormat("duplicate");
+    show("rubber");
+
+    expect(action("Find").textContent).toContain("only duplicate");
+    expect(action("Find").textContent).not.toContain("whoever is free");
+  });
+
+  /** Read once at mount, the same as every other setting on this screen. */
+  it("does not change while Home stays mounted", () => {
+    setQueueFormat(null);
+    show("rubber");
+    setQueueFormat("mirror");
+
+    expect(action("Find").textContent).toContain("whoever is free");
   });
 });

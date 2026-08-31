@@ -11,11 +11,18 @@ const config: CapacitorConfig = {
   appId: "com.ericonice.honeymoonbridge",
   appName: "Honeymoon Bridge",
   // Matches the manifest's own `theme_color`/`background_color` (vite.config.ts)
-  // so the native frame and the launch splash are the same navy the web app
-  // already commits to, rather than Capacitor's default template colour.
+  // and `--color-table` (index.css) — the frame's own colour, not the darker
+  // `--color-table-dark` a desktop letterbox needs. The splash view sits behind
+  // the WebView natively, so if the WebView's own bounds ever fall a sliver
+  // short of the true screen edge — reported from a real device as a band of a
+  // visibly different blue at the bottom, present immediately and on every
+  // screen, so outside any single web screen's own CSS entirely — this is what
+  // shows through the gap. Matching it does not fix the WebView's own bounds,
+  // but it makes a gap in them invisible regardless, the same trade the web
+  // app's own background made for the same kind of shortfall.
   plugins: {
     SplashScreen: {
-      backgroundColor: "#081827",
+      backgroundColor: "#14324f",
       launchAutoHide: true,
     },
   },

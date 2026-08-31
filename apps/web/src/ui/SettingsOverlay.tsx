@@ -13,9 +13,11 @@ import { botAnchor } from "../game/records.js";
 import type { CardColor } from "../game/cardColor.js";
 import type { Boldness, Density, Pace } from "../game/identity.js";
 import { clearStuck, flush, outboxState } from "../game/outbox.js";
+import { useSwipeBack } from "../game/swipeBack.js";
 import type { Theme } from "../game/theme.js";
 import { playAchievement } from "../game/soundEffects.js";
 import { AchievementToast } from "./AchievementToast.js";
+import { BackButton } from "./BackButton.js";
 import { HandLogsOverlay } from "./HandLogsOverlay.js";
 import { LatestGamesOverlay } from "./LatestGamesOverlay.js";
 
@@ -337,9 +339,14 @@ export function SettingsOverlay({
   const [previewUnlocks, setPreviewUnlocks] = useState<readonly Unlock[]>([]);
   const [bidCost, setBidCost] = useState<string | null>(null);
 
+  useSwipeBack(onClose);
+
   return (
     <div className="safe-inset absolute inset-0 z-30 flex flex-col bg-table-dark/97">
-      <div className="flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto px-5 py-6">
+      <div className="px-4 pt-4">
+        <BackButton onBack={onClose} />
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto px-5 pt-2 pb-6">
         <h2 className="w-full max-w-sm text-lg font-semibold">Settings</h2>
 
         {/* Not a setting, and here anyway: the gear is the only control on the
@@ -682,16 +689,6 @@ export function SettingsOverlay({
             A trailing + means the build had uncommitted changes.
           </p>
         </div>
-      </div>
-
-      <div className="px-5 pb-5">
-        <button
-          type="button"
-          className="w-full rounded-xl border border-white/25 px-4 py-3.5 text-base text-white"
-          onClick={onClose}
-        >
-          Back
-        </button>
       </div>
 
       <AchievementToast

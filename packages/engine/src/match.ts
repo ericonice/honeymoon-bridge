@@ -406,7 +406,7 @@ export function summarizeMatch(match: MatchState): MatchSummary {
       halfComplete: false,
       dealsPlayed: summary.dealsPlayed,
       format: "duplicate",
-      points: summary.margin,
+      points: summary.points,
       score: summary.score?.deal ?? null,
       repeated: false,
       standing: { kind: "duplicate", summary },

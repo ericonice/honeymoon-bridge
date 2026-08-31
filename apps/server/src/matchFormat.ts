@@ -11,7 +11,7 @@ export interface Asked {
   readonly halfFormat: RubberFormat;
   /** How they want a session ordered. Ignored unless both asked for the same. */
   readonly order: DuplicateSchedule;
-  /** Having minted the code or been handed one, or neither — see `guestAsk`. */
+  /** Having minted the code or been handed one, or neither — see `hostAsk`. */
   readonly role: TableRole | null;
 }
 
@@ -31,7 +31,7 @@ export interface Agreed {
  * The order a disagreement resolves in: **mirror, then a rubber or a game, then
  * duplicate.**
  *
- * This is the fallback — see `guestAsk` for the rule that runs first at an
+ * This is the fallback — see `hostAsk` for the rule that runs first at an
  * invite, where which format wins is not a disagreement to split but a question
  * with one right answer. It is what a queue match still resolves by, since
  * neither stranger there invited the other.
@@ -100,22 +100,25 @@ function ranks(format: MatchFormat): number {
 }
 
 /**
- * The invitee's ask, when there is one to defer to.
+ * The host's ask, when there is one to defer to.
  *
- * Whoever created the table has already committed to playing somebody — the
- * whole sitting, not just which game, is the guest's to choose rather than a
- * preference to be split against whatever the host's device happened to have
- * stored from last time. Only when exactly one seat is marked `"guest"` does
- * this apply: two guests, two hosts, and the ordinary case of neither — a
- * queue match, or a client too old to say — all fall back to `PRECEDENCE`
- * below, which is the rule this cannot improve on because nobody there was
- * invited by anybody.
+ * A code carries no format of its own — "creating a table is just minting a
+ * code" — so the only thing that can stand in for "what this invite is" is
+ * whoever created it. The whole sitting, not just which game, is the host's
+ * to decide rather than a preference to be split against whatever a guest's
+ * device happens to have stored from a different session entirely: typing in
+ * somebody's code is joining a game they have already chosen, not proposing
+ * one of your own. Only when exactly one seat is marked `"host"` does this
+ * apply: two hosts, two guests, and the ordinary case of neither — a queue
+ * match, or a client too old to say — all fall back to `PRECEDENCE` below,
+ * which is the rule this cannot improve on because nobody there created
+ * anything for the other to join.
  */
-function guestAsk(first: Asked, second: Asked): Asked | null {
-  if (first.role === "guest" && second.role !== "guest") {
+function hostAsk(first: Asked, second: Asked): Asked | null {
+  if (first.role === "host" && second.role !== "host") {
     return first;
   }
-  if (second.role === "guest" && first.role !== "guest") {
+  if (second.role === "host" && first.role !== "host") {
     return second;
   }
   return null;
@@ -124,13 +127,13 @@ function guestAsk(first: Asked, second: Asked): Asked | null {
 /**
  * What the table will actually play, from what the two players each asked for.
  *
- * **At an invite, the guest's whole ask wins outright — see `guestAsk`.**
- * Format and length are one decision there, not two: a person deciding whether
- * to spend an evening on this gets the sitting they actually asked for, rather
- * than the game they named discounted by a host's stored length preference
- * they never weighed in on.
+ * **At an invite, the host's whole ask wins outright — see `hostAsk`.** Format
+ * and length are one decision there, not two: the host already committed to a
+ * particular evening before ever sending the code, and a guest's own stored
+ * preference — quite possibly left over from an unrelated session — has no
+ * more claim on what gets played than a stranger's would.
  *
- * **Without a guest to defer to, the two questions split.** Which *game* comes
+ * **Without a host to defer to, the two questions split.** Which *game* comes
  * from `PRECEDENCE`, so a disagreement always resolves and nobody waits. How
  * *long* is separate and always takes the **shorter** of what the two asked —
  * the asymmetry this has kept from the start, since somebody held in a rubber
@@ -147,13 +150,13 @@ function guestAsk(first: Asked, second: Asked): Asked | null {
  * the computer has only one preference to consult.
  */
 export function formatFor(first: Asked, second: Asked): Agreed {
-  const invited = guestAsk(first, second);
-  if (invited !== null) {
+  const decided = hostAsk(first, second);
+  if (decided !== null) {
     return {
-      boards: invited.format === "duplicate" ? boardsForDeals(invited.deals) : 0,
-      format: invited.format,
-      halfFormat: invited.halfFormat,
-      order: invited.order,
+      boards: decided.format === "duplicate" ? boardsForDeals(decided.deals) : 0,
+      format: decided.format,
+      halfFormat: decided.halfFormat,
+      order: decided.order,
     };
   }
 

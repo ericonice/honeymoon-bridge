@@ -69,6 +69,10 @@ function summaryOf(boards: readonly BoardOutcome[], margin: Pair<number>): Dupli
     complete: false,
     dealsPlayed: boards.reduce((total, one) => total + one.played.length, 0),
     margin,
+    // Not exercised by anything in this file, which is about the pad's layout
+    // rather than what a real score would be — reusing `margin` is a
+    // type-safe placeholder, not a claim that the two agree in general.
+    points: margin,
     score: null,
     vulnerable: [false, false],
     winner: null,

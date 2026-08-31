@@ -56,8 +56,15 @@
     repeating-linear-gradient(63deg, rgb(90 130 170 / 0.06) 0 1px, transparent 1px 6px),
     repeating-linear-gradient(-63deg, rgb(90 130 170 / 0.045) 0 1px, transparent 1px 9px);
   /* Ice lit from above. The only gradient in the app, and the whole difference
-     between "a blue screen" and a rink. */
-  --table-sheen: radial-gradient(125% 75% at 50% 15%, #1e4c78 0%, #14324f 48%, #0c2440 100%);
+     between "a blue screen" and a rink.
+
+     **92%, not 75%, of vertical radius.** Centred 15% down, a 75% radius put the
+     final stop at 90% down the screen — so the bottom tenth was flat, unchanging
+     colour rather than still shading, and the rate of change stopping dead right
+     there read as a sharp edge of a visibly different blue, reported from a real
+     phone as "about a cm at the bottom". 92% moves that stop to right at the true
+     edge, so the shading never runs out before the screen does. */
+  --table-sheen: radial-gradient(125% 92% at 50% 15%, #1e4c78 0%, #14324f 48%, #0c2440 100%);
 }
 
 /* Literal values rather than `var(--color-red-600)` and friends: Tailwind drops
@@ -103,7 +110,18 @@ body,
 }
 
 body {
-  background-color: var(--color-table-dark);
+  /* Matches `.table-surface` rather than the darker `--color-table-dark` a
+     desktop "ground" needs — see the media query below, which is the only
+     place `body` is meant to read as a surface behind the frame at all. On a
+     phone the frame is the whole screen and `body` should never be seen; but
+     `100dvh` is dynamic, tracking Safari's collapsing address bar, and does
+     not always land exactly on the true visible viewport. A sliver of `body`
+     showing through a frame that came up fractionally short read as a sharp
+     line of a visibly different blue at the bottom edge — reported from a
+     real phone, and absent from the native app, which has no address bar to
+     desync from. Matching the colour does not fix the geometry, but it makes
+     the gap this one CSS property can create invisible regardless. */
+  background-color: var(--color-table);
   /* No page-level scrolling anywhere: the app is a fixed frame and each region
      scrolls on its own. Rubber-banding the whole board feels broken on iOS. */
   overscroll-behavior: none;
@@ -190,10 +208,16 @@ body {
    932 CSS pixels — because a gap above and below the board on an actual phone would
    be the bug this is fixing, in reverse.
 
-   The ground is `--color-table-dark`, which `body` already paints and which switches
-   with the theme, so this borrows the app's own vocabulary rather than introducing a
-   colour that would need its own light and dark answers. */
+   The ground is `--color-table-dark`, which switches with the theme, so this borrows
+   the app's own vocabulary rather than introducing a colour that would need its own
+   light and dark answers. `body` no longer paints it by default — see `body`'s own
+   comment — so it is restated here, which is the one place it is actually a ground
+   rather than a phone-sized frame with nothing behind it to see. */
 @media (min-width: 480px) and (min-height: 720px) {
+  body {
+    background-color: var(--color-table-dark);
+  }
+
   /* `html` has no height, so `body`/`#root`'s `height: 100%` resolves against an auto
      containing block and collapses to their content. That never mattered while the
      frame set its own `100dvh` — but centering needs something to centre *in*, and a

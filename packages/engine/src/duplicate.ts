@@ -513,6 +513,18 @@ export function drewFirstOn(outcome: BoardOutcome, result: DuplicateResult): Pla
   return result.replay ? opponentOf(outcome.starter) : outcome.starter;
 }
 
+/**
+ * One run's real score for a fixed seat — not a margin, and not signed toward
+ * whoever drew first. `DuplicateDealScore.points` is already indexed by the
+ * fixed seat that played that run (see `resultFor`, which reads it the same
+ * way to build the signed net), so this needs no `drewFirstOn` translation at
+ * all: it is simply what that seat scored, honors and bonuses included, on a
+ * run that may have been passed out and scored nothing.
+ */
+export function rawScoreTo(result: DuplicateResult, seat: PlayerId): number {
+  return result.score === null ? 0 : result.score.points[seat];
+}
+
 /** A board's first-play run, or null before it has been played. */
 export function firstPlayOf(outcome: BoardOutcome): DuplicateResult | null {
   return outcome.played.find((run) => !run.replay) ?? null;
@@ -557,6 +569,16 @@ export interface DuplicateSummary {
    * two runs. Summing the deals is what makes the score move as a session is played.
    */
   readonly margin: Pair<number>;
+  /**
+   * Each seat's real accumulated score — honors, overtricks and undertrick
+   * penalties all included, exactly as `scoreDeal` awards them, not the signed
+   * net `margin` already is. The two are genuinely different numbers: a deal
+   * can pay both seats at once (a made contract for one, honors for the
+   * other), so this is not `[x, -x]` the way `margin` always is. Summed the
+   * same way `margin` is, from `DuplicateDealScore.points` rather than from
+   * `DuplicateResult.points`, which has already collapsed a run to its net.
+   */
+  readonly points: Pair<number>;
   /** The current deal's duplicate score, once it is complete and was not passed out. */
   readonly score: DuplicateDealScore | null;
   /** Vulnerability as it stood for the deal in progress or just finished. */
@@ -612,6 +634,13 @@ export function summarizeDuplicate(session: DuplicateState): DuplicateSummary {
       total + outcome.played.reduce((sum, run) => sum + netTo(outcome, run, 0), 0),
     0,
   );
+  // Folded over every run directly rather than through `boards`, since a board
+  // pairing is what a *margin* needs — two runs to subtract — and a real score
+  // has nothing to pair against: each run stands on its own.
+  const points: Pair<number> = results.reduce<Pair<number>>(
+    (totals, run) => [totals[0] + rawScoreTo(run, 0), totals[1] + rawScoreTo(run, 1)],
+    [0, 0],
+  );
   const complete = results.length === session.schedule.length;
 
   return {
@@ -621,6 +650,7 @@ export function summarizeDuplicate(session: DuplicateState): DuplicateSummary {
     complete,
     dealsPlayed: results.length,
     margin: [toSeatZero, 0 - toSeatZero],
+    points,
     score,
     vulnerable,
     // Only once every board is in. A session led at the halfway point has no

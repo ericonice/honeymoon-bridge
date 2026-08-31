@@ -10,10 +10,12 @@ import {
   SESSION_ORDERS,
   cleanSessionDeals,
   mirrorGames,
+  queueFormat,
   rubberFormatFor,
   rubberGames,
   setMirrorGames,
 } from "../game/identity.js";
+import { formatName } from "../game/labels.js";
 import { createTableUrl } from "../game/serverUrl.js";
 import { AchievementIcon, HelpIcon, RecordIcon, SettingsIcon } from "./icons.js";
 
@@ -523,6 +525,10 @@ export function Home({
   // fresh on every render and when a match starts.
   const [, setMirrorLength] = useState(mirrorGames);
   const [error, setError] = useState<string | null>(null);
+  // Read once, the same as every other setting here — it is set on the Searching
+  // screen, which is a fresh mount away, so Home never needs to react to it changing
+  // out from under a screen that is still up.
+  const [findsFormat] = useState(queueFormat);
 
   const startTable = async (): Promise<void> => {
     // Minting a code needs an account, so ask before spending a round trip on
@@ -579,60 +585,86 @@ export function Home({
       </div>
 
       <div className="flex flex-col gap-3 py-5">
-        {/* The row and its one line of explanation are one control, so they sit close
-            to each other — and well clear of the buttons below, which act on the
-            choice rather than being part of making it. Without that gap the note read
-            as a caption on the primary button. */}
-        <div className="mb-2 flex flex-col gap-1.5">
-          {/* **The row said nothing about what it was choosing.** Three words sat at
-              the top of the screen and the line underneath explained the one that was
-              selected, so somebody who had never seen it could read "Best of three
-              games" and still not know that was one of three answers to a question
-              nobody had asked. The label is the question. */}
-          <p className="px-1 text-xs tracking-wide text-white/45 uppercase">
-            What you&rsquo;re playing
-          </p>
-          <Format format={format} onChange={onFormatChange} />
-          <FormatNote
-            deals={sessionDeals}
-            format={format}
-            onDealsChange={onSessionDealsChange}
-            onFormatChange={onFormatChange}
-            onMirrorGamesChange={(games) => {
-              setMirrorGames(games);
-              setMirrorLength(games);
+        {/* **Boxed rather than merely grouped by spacing**, because a gap says
+            "these happen to be near each other" and a border says "these are
+            one thing" — which is the actual claim: playing the computer or
+            sending an invite means *you* decide the sitting, the host's whole
+            ask wins outright once somebody joins (see `formatFor`), and the
+            picker above is what that decision draws on. Find and Join are both
+            "somebody else already decided" and sit outside the box entirely,
+            on the plain background, rather than inside it looking governed by
+            a setting that does not apply to them. No fill on the box itself —
+            the picker's own `bg-white/5` is the only tint here, and stacking a
+            second one on top of it would read as one tint bleeding into another
+            rather than as two distinct surfaces. */}
+        <div className="flex flex-col gap-3 rounded-2xl border border-white/10 p-3">
+          {/* The row and its one line of explanation are one control, so they sit close
+              to each other — and well clear of the buttons below, which act on the
+              choice rather than being part of making it. Without that gap the note read
+              as a caption on the primary button. */}
+          <div className="mb-2 flex flex-col gap-1.5">
+            {/* **The row said nothing about what it was choosing.** Three words sat at
+                the top of the screen and the line underneath explained the one that was
+                selected, so somebody who had never seen it could read "Best of three
+                games" and still not know that was one of three answers to a question
+                nobody had asked. The label is the question. */}
+            <p className="px-1 text-xs tracking-wide text-white/45 uppercase">
+              What you&rsquo;re playing
+            </p>
+            <Format format={format} onChange={onFormatChange} />
+            <FormatNote
+              deals={sessionDeals}
+              format={format}
+              onDealsChange={onSessionDealsChange}
+              onFormatChange={onFormatChange}
+              onMirrorGamesChange={(games) => {
+                setMirrorGames(games);
+                setMirrorLength(games);
+              }}
+            />
+          </div>
+
+          <Choice
+            primary
+            label="Play the computer"
+            description={
+              format === "duplicate"
+                ? `On this device. ${sessionDeals} deals: ${boardWord(sessionDeals / 2)}, each played twice from both sides.`
+                : format === "mirror"
+                  ? "On this device. The same deals from both sides; the total wins."
+                  : "On this device. Works offline, and needs nobody else."
+            }
+            onClick={onPlayComputer}
+          />
+
+          <Choice
+            disabled={busy}
+            label="Invite"
+            description={
+              format === "duplicate"
+                ? `Send a link. ${sessionDeals} deals: ${boardWord(sessionDeals / 2)}, each played twice from both sides.`
+                : format === "mirror"
+                  ? "Send a link. The same deals from both sides; the total wins."
+                  : "Send a link. Whoever opens it plays what you chose."
+            }
+            onClick={() => {
+              void startTable();
             }}
           />
         </div>
 
-        <Choice
-          primary
-          label="Play the computer"
-          description={
-            format === "duplicate"
-              ? `On this device. ${sessionDeals} deals: ${boardWord(sessionDeals / 2)}, each played twice from both sides.`
-              : format === "mirror"
-                ? "On this device. The same deals from both sides; the total wins."
-                : "On this device. Works offline, and needs nobody else."
-          }
-          onClick={onPlayComputer}
-        />
-
-        {/* None of the three is shut for duplicate: a table can run a session now. It
-            still takes *both* seats to have asked for one — a session is a different
-            game rather than a longer or shorter one, so being put into it unasked is a
-            worse mistake than getting the rubber you know. `formatFor` on the server
-            is where that rule lives, and the line under the row is where it is said,
-            once, rather than three times. */}
+        {/* Neither of these is shut for duplicate: a table can run a session now.
+            Find still needs both strangers to have asked for one — duplicate is
+            last in `formatFor`'s precedence, so nothing outranks a seat that did
+            not ask for it, since being put into a session unasked is a worse
+            mistake than getting the rubber you know. Join needs nothing from
+            this seat at all: the host already decided, duplicate included, and
+            what this seat has set above plays no part in it. */}
         <div className="flex gap-2">
-          <TableAction label="Find" sub="whoever is free" onClick={onFindOpponent} />
           <TableAction
-            disabled={busy}
-            label="Invite"
-            sub="send a link"
-            onClick={() => {
-              void startTable();
-            }}
+            label="Find"
+            sub={findsFormat === null ? "whoever is free" : `only ${formatName(findsFormat).toLowerCase()}`}
+            onClick={onFindOpponent}
           />
           <TableAction
             label="Join"
@@ -642,18 +674,6 @@ export function Home({
             }}
           />
         </div>
-
-        <p className="min-h-8 text-xs text-white/45">
-          {/* Duplicate still needs both in practice — it is last in the table's
-              precedence, so nothing outranks a seat that did not ask for it — where
-              a mirror is first and happens if either of you asks. Two different
-              sentences because they are two different facts, not one hedge. */}
-          {format === "duplicate"
-            ? "Playing a person needs an account — and a session needs you both to want one."
-            : format === "mirror"
-              ? "Playing a person needs an account. A mirror happens if either of you asks."
-              : "Playing a person needs an account. The computer needs nothing."}
-        </p>
 
         {/* Opens under the row rather than replacing a button, which is what it did
             when there was a full-width button to replace. */}

@@ -38,6 +38,7 @@ function session(over: Partial<DuplicateSummary> = {}): DuplicateSummary {
     current: { board: 0, replay: false },
     dealsPlayed: 0,
     margin: [0, 0],
+    points: [0, 0],
     score: null,
     vulnerable: [false, false],
     winner: null,

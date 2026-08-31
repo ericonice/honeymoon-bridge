@@ -14,7 +14,6 @@ import type {
   MatchFormat,
   MatchState,
   MatchSummary,
-  Pair,
   PlayerId,
   RubberFormat,
   TableState,
@@ -61,7 +60,7 @@ interface SeatRecord {
   readonly order: DuplicateSchedule;
   /**
    * Having minted this table's code, having been handed one, or neither —
-   * see `TableRole` and `guestAsk`. Null for a queue match and for a client
+   * see `TableRole` and `hostAsk`. Null for a queue match and for a client
    * too old to say, both of which read as "no invite" rather than a guess.
    */
   readonly role: TableRole | null;
@@ -455,16 +454,11 @@ export class Table extends DurableObject<Env> {
     // whenever both of its runs come to the same score, so a short session is level a
     // fair fraction of the time. `DRAWN` is what says so — see `results.ts`.
     //
-    // A rubber and a mirror report each side's real accumulated points, always
-    // non-negative. A session has no such pair — its own currency is a single
-    // signed margin, one side's exact negative of the other — so sending it
-    // straight through as each seat's "points" would write a negative number
-    // into a column meant to hold a real score. Rebuilt as a winner-takes-the-
-    // margin split, the same non-negative shape a rubber's own points have.
-    const points: Pair<number> =
-      summary.format === "duplicate"
-        ? [Math.max(summary.points[0], 0), Math.max(summary.points[1], 0)]
-        : summary.points;
+    // Every format's points are a real accumulated score now, always
+    // non-negative — see `DuplicateSummary.points`, which replaced a session's
+    // old currency (a signed margin, one side's exact negative of the other)
+    // with the genuine two-sided score `DuplicateDealScore` already computes.
+    const points = summary.points;
     try {
       await recordRubber(
         this.env,

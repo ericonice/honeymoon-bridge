@@ -69,11 +69,13 @@ export default defineConfig({
         // layout assumes a hand held one-handed.
         display: "standalone",
         orientation: "portrait",
-        // The default theme's colors. The manifest is read at install time, so
-        // unlike the meta tag these cannot follow a change made in Settings —
-        // they only decide the splash screen.
-        background_color: "#081827",
-        theme_color: "#081827",
+        // The default theme's `--color-table`, matching the frame itself rather
+        // than the darker ground a desktop letterbox needs — see `theme.ts`'s
+        // own comment. The manifest is read at install time, so unlike the meta
+        // tag these cannot follow a change made in Settings — they only decide
+        // the splash screen.
+        background_color: "#14324f",
+        theme_color: "#14324f",
         start_url: "/",
         // Not declared maskable: the crest runs close to the edge, and a
         // maskable icon is cropped to a center circle that would take the

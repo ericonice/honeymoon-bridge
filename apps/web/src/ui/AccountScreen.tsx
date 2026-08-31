@@ -2,6 +2,8 @@ import { useState } from "react";
 import { setAccountName } from "../game/account.js";
 import { nickname, setNickname } from "../game/identity.js";
 import { deleteAccount } from "../game/records.js";
+import { useSwipeBack } from "../game/swipeBack.js";
+import { BackButton } from "./BackButton.js";
 
 export interface AccountScreenProps {
   readonly email: string;
@@ -41,6 +43,8 @@ export function AccountScreen({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  useSwipeBack(onBack);
+
   const confirmDelete = async (): Promise<void> => {
     setDeleting(true);
     setDeleteError(null);
@@ -77,107 +81,106 @@ export function AccountScreen({
   };
 
   return (
-    <div className="flex flex-1 flex-col justify-between overflow-y-auto px-6 py-8">
-      <div>
-        <h1 className="text-2xl font-semibold">
-          {existing === null ? "What should people call you?" : "Your name"}
-        </h1>
-        <p className="mt-2 text-sm text-white/55">
-          This is what your opponent sees across the table, and what your record shows against them
-          afterwards.
-        </p>
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="px-4 pt-4">
+        <BackButton onBack={onBack} />
       </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pt-2 pb-8">
+        <div>
+          <h1 className="text-2xl font-semibold">
+            {existing === null ? "What should people call you?" : "Your name"}
+          </h1>
+          <p className="mt-2 text-sm text-white/55">
+            This is what your opponent sees across the table, and what your record shows against them
+            afterwards.
+          </p>
+        </div>
 
-      <div className="py-6">
-        <input
-          autoFocus
-          className="w-full rounded-xl border border-white/25 bg-black/20 px-4 py-3 text-base"
-          placeholder="Eric"
-          value={name}
-          maxLength={20}
-          onChange={(event) => {
-            setName(event.target.value);
-          }}
-        />
-        <button
-          type="button"
-          className="mt-2 w-full rounded-xl bg-white px-4 py-3 text-base font-semibold text-stone-900 disabled:opacity-35"
-          disabled={saving || name.trim() === ""}
-          onClick={() => {
-            void save();
-          }}
-        >
-          {saving ? "Saving…" : existing === null ? "That's me" : "Save"}
-        </button>
-        {error === null ? null : <p className="mt-1 text-sm text-amber-200">{error}</p>}
-
-        <div className="mt-6 rounded-xl border border-white/15 px-4 py-3">
-          <span className="block text-xs tracking-wide text-white/45 uppercase">Signed in as</span>
-          <span className="mt-0.5 block truncate text-base font-medium">{email}</span>
+        <div className="py-6">
+          <input
+            autoFocus
+            className="w-full rounded-xl border border-white/25 bg-black/20 px-4 py-3 text-base"
+            placeholder="Eric"
+            value={name}
+            maxLength={20}
+            onChange={(event) => {
+              setName(event.target.value);
+            }}
+          />
           <button
             type="button"
-            className="mt-2 text-sm text-white/50 underline underline-offset-4"
-            onClick={onSignOut}
+            className="mt-2 w-full rounded-xl bg-white px-4 py-3 text-base font-semibold text-stone-900 disabled:opacity-35"
+            disabled={saving || name.trim() === ""}
+            onClick={() => {
+              void save();
+            }}
           >
-            Sign out
+            {saving ? "Saving…" : existing === null ? "That's me" : "Save"}
           </button>
-        </div>
+          {error === null ? null : <p className="mt-1 text-sm text-amber-200">{error}</p>}
 
-        <div className="mt-4 rounded-xl border border-red-400/25 px-4 py-3">
-          {confirmingDelete ? (
-            <>
-              <span className="block text-sm font-medium text-red-200">
-                Delete your account for good?
-              </span>
-              <p className="mt-1 text-xs text-white/55">
-                Your matches stay on the people you played — only your own identity and name are
-                removed. This cannot be undone.
-              </p>
-              <div className="mt-3 flex gap-3">
-                <button
-                  type="button"
-                  className="flex-1 rounded-lg border border-white/25 px-3 py-2 text-sm text-white disabled:opacity-35"
-                  disabled={deleting}
-                  onClick={() => {
-                    setConfirmingDelete(false);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="flex-1 rounded-lg bg-red-500/90 px-3 py-2 text-sm font-semibold text-white disabled:opacity-35"
-                  disabled={deleting}
-                  onClick={() => {
-                    void confirmDelete();
-                  }}
-                >
-                  {deleting ? "Deleting…" : "Delete account"}
-                </button>
-              </div>
-              {deleteError === null ? null : (
-                <p className="mt-2 text-sm text-amber-200">{deleteError}</p>
-              )}
-            </>
-          ) : (
+          <div className="mt-6 rounded-xl border border-white/15 px-4 py-3">
+            <span className="block text-xs tracking-wide text-white/45 uppercase">Signed in as</span>
+            <span className="mt-0.5 block truncate text-base font-medium">{email}</span>
             <button
               type="button"
-              className="text-sm text-red-300/80 underline underline-offset-4"
-              onClick={() => {
-                setConfirmingDelete(true);
-              }}
+              className="mt-2 text-sm text-white/50 underline underline-offset-4"
+              onClick={onSignOut}
             >
-              Delete account
+              Sign out
             </button>
-          )}
+          </div>
+
+          <div className="mt-4 rounded-xl border border-red-400/25 px-4 py-3">
+            {confirmingDelete ? (
+              <>
+                <span className="block text-sm font-medium text-red-200">
+                  Delete your account for good?
+                </span>
+                <p className="mt-1 text-xs text-white/55">
+                  Your matches stay on the people you played — only your own identity and name are
+                  removed. This cannot be undone.
+                </p>
+                <div className="mt-3 flex gap-3">
+                  <button
+                    type="button"
+                    className="flex-1 rounded-lg border border-white/25 px-3 py-2 text-sm text-white disabled:opacity-35"
+                    disabled={deleting}
+                    onClick={() => {
+                      setConfirmingDelete(false);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-1 rounded-lg bg-red-500/90 px-3 py-2 text-sm font-semibold text-white disabled:opacity-35"
+                    disabled={deleting}
+                    onClick={() => {
+                      void confirmDelete();
+                    }}
+                  >
+                    {deleting ? "Deleting…" : "Delete account"}
+                  </button>
+                </div>
+                {deleteError === null ? null : (
+                  <p className="mt-2 text-sm text-amber-200">{deleteError}</p>
+                )}
+              </>
+            ) : (
+              <button
+                type="button"
+                className="text-sm text-red-300/80 underline underline-offset-4"
+                onClick={() => {
+                  setConfirmingDelete(true);
+                }}
+              >
+                Delete account
+              </button>
+            )}
+          </div>
         </div>
       </div>
-
-      <button type="button" className="w-full rounded-xl border border-white/25 px-4 py-3.5 text-base text-white"
-        onClick={onBack}
-      >
-        Back
-      </button>
     </div>
   );
 }

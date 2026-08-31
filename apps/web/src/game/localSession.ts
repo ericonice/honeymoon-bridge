@@ -541,21 +541,17 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
       return;
     }
     reported.current = true;
-    // A rubber and a mirror report each side's real accumulated points, and
-    // `totalScore` guarantees both are non-negative — a rubber cannot end with
-    // negative points on the board. A session has no such pair: its own
-    // currency is a single signed margin, one side's exact negative of the
-    // other, and sending that margin straight through as "points" put a
-    // negative number in a field the server validates as non-negative —
-    // silently and permanently rejecting every duplicate result ever
-    // reported, won, lost or drawn alike, since whichever side trails a
-    // margin of any size fails the check. Rebuilt as a winner-takes-the-margin
-    // split, the same non-negative shape a rubber's own points already have.
-    const margin = summary.points[HUMAN];
-    const [points, pointsAgainst] =
-      summary.format === "duplicate"
-        ? [Math.max(margin, 0), Math.max(-margin, 0)]
-        : [margin, summary.points[OPPONENT]];
+    // Every format reports each side's real accumulated points now, and they are
+    // always non-negative — a rubber or a mirror through `totalScore`'s own
+    // guarantee, a session through `scoreDeal` itself, since honors, overtricks
+    // and undertrick penalties are never negative numbers. That used to be
+    // false for duplicate, whose only accumulated figure was a signed margin —
+    // sending it straight through as "points" put a negative number in a field
+    // the server validates as non-negative, silently and permanently rejecting
+    // every duplicate result ever reported. `DuplicateSummary.points` is the
+    // fix: a genuine two-sided score, not the margin in disguise.
+    const points = summary.points[HUMAN];
+    const pointsAgainst = summary.points[OPPONENT];
     reportRobotRubber({
       botVersion: release.version,
       deals: summary.dealsPlayed,

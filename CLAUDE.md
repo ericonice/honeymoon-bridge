@@ -3242,6 +3242,17 @@ auction.
 
 - **Turn clock.** None in v1. Revisit if the 26-turn draw phase drags.
 
+- **The Record screen is slow, and `ratingsFor` is why.** `GET /api/results` calls it on every
+  read, and it scans the *entire* `results` table system-wide with no account filter — `ratingsFor`
+  cannot be scoped, since a rating is only comparable if it comes out of the same sequential pass as
+  everybody else's. There is no index on `finished_at`, the sort column, or on `repeated`, the filter
+  column added in migration 0011, so D1 likely does a full scan plus an unindexed sort on a query
+  whose cost grows with every match anyone in the pool ever plays. Achievements does not share this
+  path — `GET /api/achievements` is two small account-indexed lookups — so it is specifically Record
+  that will keep getting slower. Two candidate fixes, neither built: index `finished_at`/`repeated` to
+  speed the scan itself, or cache the walk for a short TTL and accept slightly-stale ratings. Measure
+  the real row count and query time with `wrangler d1 execute --remote` before picking one.
+
 ### Deploying: the app and the server ship together
 
 **`npm run deploy --workspace @hb/web` and `npm run deploy --workspace @hb/server` are one release,

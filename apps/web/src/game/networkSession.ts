@@ -203,7 +203,7 @@ export function useNetworkSession(code: string, role: TableRole | null): Network
             // is a matter of which game.
             halfFormat: mirrorHalfFormat(),
             // Absent for a queue match, where role is deliberately omitted rather
-            // than sent as neither — see `TableRole` and `guestAsk` on the server.
+            // than sent as neither — see `TableRole` and `hostAsk` on the server.
             ...(role === null ? {} : { role }),
             session: storedSession(),
             token: playerToken(),

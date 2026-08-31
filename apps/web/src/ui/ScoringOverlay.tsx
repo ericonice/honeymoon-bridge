@@ -1,5 +1,7 @@
 import type { Strain } from "@hb/engine";
 import { strainIsRed, strainSymbol } from "../game/labels.js";
+import { useSwipeBack } from "../game/swipeBack.js";
+import { BackButton } from "./BackButton.js";
 import {
   GAME_THRESHOLD,
   honorValues,
@@ -134,6 +136,8 @@ function Figures({
 }
 
 export function ScoringOverlay({ onClose }: { onClose(): void }): React.JSX.Element {
+  useSwipeBack(onClose);
+
   const strains = strainValues();
   const bonus = matchBonuses();
   const honors = honorValues();
@@ -148,7 +152,10 @@ export function ScoringOverlay({ onClose }: { onClose(): void }): React.JSX.Elem
 
   return (
     <div className="safe-inset absolute inset-0 z-40 flex flex-col bg-table-dark/97">
-      <div className="flex min-h-0 flex-1 flex-col items-center gap-5 overflow-y-auto px-5 py-6">
+      <div className="px-4 pt-4">
+        <BackButton onBack={onClose} />
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col items-center gap-5 overflow-y-auto px-5 pt-2 pb-6">
         <div className="w-full max-w-sm">
           <h1 className="text-lg font-semibold">Scoring</h1>
           <p className="mt-1 text-sm text-white/40">
@@ -331,16 +338,6 @@ export function ScoringOverlay({ onClose }: { onClose(): void }): React.JSX.Elem
             outcome, if the alternative was letting them bid and make a game.
           </p>
         </Note>
-      </div>
-
-      <div className="safe-bottom px-5 pb-5">
-        <button
-          type="button"
-          className="w-full rounded-xl border border-white/25 px-4 py-3.5 text-base text-white"
-          onClick={onClose}
-        >
-          Back
-        </button>
       </div>
     </div>
   );

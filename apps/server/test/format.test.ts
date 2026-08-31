@@ -161,41 +161,41 @@ describe("resolving a disagreement about the format", () => {
 });
 
 /**
- * **At an invite, the guest's whole ask wins outright — format and length both, not
+ * **At an invite, the host's whole ask wins outright — format and length both, not
  * just which game.** This is not the same rule as `PRECEDENCE`, and it can go the
- * other way. The host has already committed to playing somebody; the guest is the
- * one deciding whether to spend an evening on it, and what they asked for is not a
- * preference to be outranked, or trimmed, by whatever the host's device happened to
- * have stored from last time.
+ * other way. A code carries no format of its own, so the host's choice is the only
+ * thing an invite can mean; a guest typing in that code is joining a game already
+ * decided, not proposing one of their own from whatever their device happens to
+ * have stored from an unrelated session.
  */
-describe("letting the invitee decide, at an invite", () => {
-  it("plays whatever the guest asked for, even against a higher-precedence host", () => {
+describe("letting the host decide, at an invite", () => {
+  it("plays whatever the host asked for, even against a higher-precedence guest", () => {
     // Rubber outranks nothing here, but duplicate outranks mirror in the ordinary
-    // precedence and loses to it below — the guest's ask is not being ranked at all.
+    // precedence and loses to it below — the host's ask is not being ranked at all.
     expect(
-      formatFor(asked("mirror", 10, "halves", "game", "host"), asked("rubber", 10, "halves", "game", "guest"))
+      formatFor(asked("mirror", 10, "halves", "game", "guest"), asked("rubber", 10, "halves", "game", "host"))
         .format,
     ).toBe("rubber");
     expect(
-      formatFor(asked("duplicate", 10, "halves", "game", "host"), asked("mirror", 10, "halves", "game", "guest"))
+      formatFor(asked("duplicate", 10, "halves", "game", "guest"), asked("mirror", 10, "halves", "game", "host"))
         .format,
     ).toBe("mirror");
   });
 
   it("works from either seat", () => {
     expect(
-      formatFor(asked("rubber", 10, "halves", "game", "guest"), asked("mirror", 10, "halves", "game", "host"))
+      formatFor(asked("rubber", 10, "halves", "game", "host"), asked("mirror", 10, "halves", "game", "guest"))
         .format,
     ).toBe("rubber");
   });
 
-  it("falls back to precedence when both are guests, both are hosts, or neither said", () => {
+  it("falls back to precedence when both are hosts, both are guests, or neither said", () => {
     expect(
-      formatFor(asked("mirror", 10, "halves", "game", "guest"), asked("rubber", 10, "halves", "game", "guest"))
+      formatFor(asked("mirror", 10, "halves", "game", "host"), asked("rubber", 10, "halves", "game", "host"))
         .format,
     ).toBe("mirror");
     expect(
-      formatFor(asked("mirror", 10, "halves", "game", "host"), asked("rubber", 10, "halves", "game", "host"))
+      formatFor(asked("mirror", 10, "halves", "game", "guest"), asked("rubber", 10, "halves", "game", "guest"))
         .format,
     ).toBe("mirror");
     // A queue match: neither stranger invited the other.
@@ -203,37 +203,37 @@ describe("letting the invitee decide, at an invite", () => {
   });
 
   /**
-   * The guest's whole sitting, not just which game — a host who stored a shorter
-   * length does not get to trim what the guest actually asked to play.
+   * The host's whole sitting, not just which game — a guest who stored a shorter
+   * length does not get to trim what the host actually set up.
    */
-  it("plays the guest's length too, even against a host who asked for less of it", () => {
+  it("plays the host's length too, even against a guest who asked for less of it", () => {
     const agreed = formatFor(
-      asked("game", 10, "halves", "game", "host"),
-      asked("rubber", 10, "halves", "game", "guest"),
+      asked("game", 10, "halves", "game", "guest"),
+      asked("rubber", 10, "halves", "game", "host"),
     );
     expect(agreed.format).toBe("rubber");
   });
 
-  it("plays the guest's mirror length, ignoring the host's shorter one", () => {
+  it("plays the host's mirror length, ignoring the guest's shorter one", () => {
     const agreed = formatFor(
-      asked("mirror", 10, "halves", "game", "host"),
-      asked("mirror", 10, "halves", "rubber", "guest"),
+      asked("mirror", 10, "halves", "game", "guest"),
+      asked("mirror", 10, "halves", "rubber", "host"),
     );
     expect(agreed.halfFormat).toBe("rubber");
   });
 
-  it("plays the guest's duplicate length, ignoring the host's shorter one", () => {
+  it("plays the host's duplicate length, ignoring the guest's shorter one", () => {
     const agreed = formatFor(
-      asked("duplicate", 4, "halves", "game", "host"),
-      asked("duplicate", 10, "halves", "game", "guest"),
+      asked("duplicate", 4, "halves", "game", "guest"),
+      asked("duplicate", 10, "halves", "game", "host"),
     );
     expect(agreed.boards).toBe(5);
   });
 
-  it("plays the guest's session order without needing the host to agree", () => {
+  it("plays the host's session order without needing the guest to agree", () => {
     const agreed = formatFor(
-      asked("duplicate", 10, "adjacent", "game", "host"),
-      asked("duplicate", 10, "random", "game", "guest"),
+      asked("duplicate", 10, "adjacent", "game", "guest"),
+      asked("duplicate", 10, "random", "game", "host"),
     );
     expect(agreed.order).toBe("random");
   });
