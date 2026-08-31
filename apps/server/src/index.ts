@@ -13,6 +13,7 @@ import {
   redeemLink,
   requestLink,
   setAccountName,
+  setHideFromLeaderboard,
   signInAs,
 } from "./auth.js";
 import { inviteCode, isInviteCode } from "./codes.js";
@@ -889,6 +890,21 @@ export default {
       }
       await setAccountName(env, accountId, name);
       return json(request, { name });
+    }
+
+    // Whether this account's name appears to anyone else on the leaderboard.
+    // Their own row is unaffected either way — see `buildStandings`.
+    if (url.pathname === "/api/auth/hide-from-leaderboard" && request.method === "POST") {
+      const accountId = await accountFromRequest(request, env, Date.now());
+      if (accountId === null) {
+        return json(request, { error: "Not signed in" }, 401);
+      }
+      const body = (await request.json().catch(() => ({}))) as { hidden?: unknown };
+      if (typeof body.hidden !== "boolean") {
+        return json(request, { error: "That is not a valid setting" }, 400);
+      }
+      await setHideFromLeaderboard(env, accountId, body.hidden);
+      return json(request, { hidden: body.hidden });
     }
 
     // What each computer opponent is rated, on each difficulty rung.

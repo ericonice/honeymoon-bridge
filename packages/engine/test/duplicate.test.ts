@@ -24,7 +24,8 @@ import {
   summarizeDuplicate,
   vulnerableFor,
 } from "../src/duplicate.js";
-import type { DuplicateState } from "../src/duplicate.js";
+import type { DuplicateSchedule, DuplicateState } from "../src/duplicate.js";
+import { scheduleKindOf } from "../src/match.js";
 import type { Card, Contract, DealState, Level, Pair, PlayerId, Rank, Strain, Suit } from "../src/types.js";
 
 function card(rank: Rank, suit: Suit): Card {
@@ -254,6 +255,21 @@ describe("how a session orders its deals", () => {
   });
 
   /**
+   * The one schedule with no randomness in it at all — every board once, then
+   * the replays in that identical order, whichever seed is handed in.
+   */
+  it("replays every board in the same order it was first dealt, when asked to", () => {
+    for (const seed of [1, 2, 3]) {
+      const schedule = scheduleFor(4, seed, 3, "sequence");
+      checkShape(schedule, 4);
+      expect(schedule.map((entry) => entry.board)).toEqual([0, 1, 2, 3, 0, 1, 2, 3]);
+      expect(schedule.map((entry) => entry.replay)).toEqual([
+        false, false, false, false, true, true, true, true,
+      ]);
+    }
+  });
+
+  /**
    * Deliberately no floor, which is the difference between this and `halves`: asking
    * for completely random and getting a constrained shuffle would be the setting not
    * doing what it says.
@@ -297,7 +313,7 @@ describe("how a session orders its deals", () => {
 
   /** Every schedule plays out, and every one still cancels between identical players. */
   it("is a dead heat between identical players under any order", () => {
-    for (const schedule of ["adjacent", "halves", "random"] as const) {
+    for (const schedule of ["adjacent", "halves", "random", "sequence"] as const) {
       const summary = summarizeDuplicate(
         playOut(startDuplicate({ ...OPTIONS, boards: 3, schedule })),
       );
@@ -305,6 +321,57 @@ describe("how a session orders its deals", () => {
       expect(summary.dealsPlayed, schedule).toBe(6);
       expect(summary.margin, schedule).toEqual([0, 0]);
     }
+  });
+});
+
+/**
+ * `scheduleKindOf` reads a session's own schedule back, rather than trusting a
+ * separately stored value — see its own doc for why. `sequence` is the one kind
+ * added by fixing what would otherwise have been a real gap here: it shares
+ * `halves`'s own first-half-then-second-half shape, and the two are told apart
+ * only by whether the replay half repeats the first half's order exactly.
+ */
+describe("recovering which order a session was dealt in", () => {
+  const asSession = (schedule: DuplicateState["schedule"]): DuplicateState =>
+    ({ schedule }) as DuplicateState;
+
+  it("recognises the two deterministic kinds, every time", () => {
+    for (const kind of ["adjacent", "sequence"] as const) {
+      const schedule = scheduleFor(5, 12, minGapFor(5), kind);
+      expect(scheduleKindOf(asSession(schedule)), kind).toBe(kind);
+    }
+  });
+
+  /**
+   * Not every seed, because a `random` schedule can coincidentally land on
+   * exactly the shape `halves` or `sequence` would have produced — see this
+   * function's own doc — and that is not a failure to recognise it, it is the
+   * same schedule either name would deal. Across enough seeds, some read back
+   * as `halves` and some as `random`, which is what the discriminating check
+   * is actually for.
+   */
+  it("recognises halves and random across a spread of seeds", () => {
+    const seen = new Set<DuplicateSchedule>();
+    for (let seed = 1; seed <= 30; seed++) {
+      seen.add(scheduleKindOf(asSession(scheduleFor(5, seed, minGapFor(5), "halves"))));
+      seen.add(scheduleKindOf(asSession(scheduleFor(5, seed, minGapFor(5), "random"))));
+    }
+    expect(seen.has("halves")).toBe(true);
+    expect(seen.has("random")).toBe(true);
+  });
+
+  /**
+   * `halves`'s own rejection sampling falls back to the identity permutation when
+   * nothing shuffled satisfies its floor — see `scheduleFor`. That fallback deals
+   * exactly like `sequence` would, so reading it as `sequence` is not a
+   * misdiagnosis: it is the same schedule either name would produce.
+   */
+  it("reads halves's own identity-permutation fallback as sequence", () => {
+    // A floor above the board count leaves no shuffle able to satisfy it, so
+    // every attempt is rejected and the guaranteed-valid fallback is what ships.
+    const schedule = scheduleFor(4, 1, 10, "halves");
+    expect(schedule.slice(4).map((entry) => entry.board)).toEqual([0, 1, 2, 3]);
+    expect(scheduleKindOf(asSession(schedule))).toBe("sequence");
   });
 });
 

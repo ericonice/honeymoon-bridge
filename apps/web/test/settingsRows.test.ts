@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { SettingsOverlay } from "../src/ui/SettingsOverlay.js";
@@ -16,9 +16,23 @@ vi.mock("../src/game/soundEffects.js", () => ({
 
 afterEach(cleanup);
 
+/**
+ * Every section starts collapsed — see `SettingsSection`'s own doc — so a row
+ * reachability check has to open them first. Every closed section rather than
+ * naming one, so this stays correct if a row ever moves to a different group.
+ */
+function openAllSections(): void {
+  act(() => {
+    for (const button of document.querySelectorAll('button[aria-expanded="false"]')) {
+      (button as HTMLButtonElement).click();
+    }
+  });
+}
+
 function settings(playtester: boolean): SettingsOverlayProps {
   const noop = (): void => {};
   return {
+    account: null,
     boldness: "normal",
     cardColor: "gold",
     density: "normal",
@@ -28,6 +42,8 @@ function settings(playtester: boolean): SettingsOverlayProps {
   sessionOrder: "halves",
   onSessionOrderChange: () => {},
     opponent: 3,
+    onAccountSaved: noop,
+    onAccountDeleted: noop,
     onBoldnessChange: noop,
     onCardColorChange: noop,
     onClose: noop,
@@ -35,10 +51,12 @@ function settings(playtester: boolean): SettingsOverlayProps {
     onDevToolsChange: noop,
     onDifficultyChange: noop,
     onDisguiseChange: noop,
+    onLeaderboardVisibilityChange: noop,
     onOpponentChange: noop,
     onPaceChange: noop,
     onPeekingChange: noop,
-    onShowHelp: noop,
+    onShowSignIn: noop,
+    onSignOut: noop,
     onSoundChange: noop,
     onTapToSelectChange: noop,
     onThemeChange: noop,
@@ -83,6 +101,7 @@ const ORDINARY = [
 
 test("every ordinary preference is reachable without the playtester flag", () => {
   render(createElement(SettingsOverlay, settings(false)));
+  openAllSections();
 
   for (const label of ORDINARY) {
     expect(screen.queryByText(label), `"${label}" is not on the settings screen`).not.toBeNull();
@@ -94,6 +113,7 @@ test("every ordinary preference is reachable without the playtester flag", () =>
 
 test("the playtester panel adds rows rather than moving them", () => {
   render(createElement(SettingsOverlay, settings(true)));
+  openAllSections();
 
   expect(screen.queryByText("Testing only")).not.toBeNull();
   for (const label of ORDINARY) {
@@ -115,5 +135,50 @@ test("the rows that show other people's games are behind the flag", () => {
 
   for (const label of ["Latest games", "Logged hands"]) {
     expect(screen.queryByText(label), `"${label}" is reachable without the flag`).toBeNull();
+  }
+});
+
+/**
+ * Account info sits at the top of this one screen now — see `SettingsOverlay`'s
+ * own doc for why — and it has to degrade to a sign-in prompt when there is no
+ * account to show fields for, the same as `Achievements`/`Record` already do.
+ */
+test("the account section prompts to sign in when signed out", () => {
+  render(createElement(SettingsOverlay, { ...settings(false), account: null }));
+  openAllSections();
+
+  expect(screen.queryByText("Sign in")).not.toBeNull();
+  expect(screen.queryByText("Signed in as")).toBeNull();
+});
+
+test("the account section shows the real fields when signed in", () => {
+  render(
+    createElement(SettingsOverlay, {
+      ...settings(false),
+      account: { email: "eric@example.com", hideFromLeaderboard: false, name: "Eric" },
+    }),
+  );
+  openAllSections();
+
+  expect(screen.queryByText("Signed in as")).not.toBeNull();
+  expect(screen.queryByText("Hide my name on the leaderboard")).not.toBeNull();
+  expect(screen.queryByText("Sign in")).toBeNull();
+});
+
+/** Collapsed is the whole point — a screen with this many settings should not open onto all of them. */
+test("every section starts collapsed", () => {
+  render(
+    createElement(SettingsOverlay, {
+      ...settings(true),
+      account: { email: "eric@example.com", hideFromLeaderboard: false, name: "Eric" },
+    }),
+  );
+
+  for (const heading of ["Account", "Gameplay", "Display", "Sound & pace", "Testing only"]) {
+    expect(screen.queryByText(heading), `"${heading}"'s own heading is missing`).not.toBeNull();
+  }
+  // The rows underneath are not, since nothing has been opened yet.
+  for (const label of [...ORDINARY, "Signed in as", "Hockey theme"]) {
+    expect(screen.queryByText(label), `"${label}" is visible before its section opened`).toBeNull();
   }
 });

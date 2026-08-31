@@ -65,6 +65,15 @@
      phone as "about a cm at the bottom". 92% moves that stop to right at the true
      edge, so the shading never runs out before the screen does. */
   --table-sheen: radial-gradient(125% 92% at 50% 15%, #1e4c78 0%, #14324f 48%, #0c2440 100%);
+  /* The sheen's own final stop, restated rather than derived — CSS has no way to
+     read a gradient's own last colour back out, so this is a literal duplicate
+     of `--table-sheen`'s `#0c2440` and the two must be changed together. It
+     exists for `body` to match: every gap this file has found so far (Safari's
+     collapsing address bar, a home-screen install's short `100dvh`) opens at
+     the *bottom* edge, where the sheen is at its darkest — matching that value
+     rather than the sheen's own middle tone is what actually makes a gap there
+     invisible instead of merely close. */
+  --table-edge: #0c2440;
 }
 
 /* Literal values rather than `var(--color-red-600)` and friends: Tailwind drops
@@ -87,6 +96,10 @@ html[data-theme="felt"] {
   --color-tier-silver: #b2c0cc;
   --color-tier-gold: #dcac2c;
   --table-sheen: none;
+  /* No sheen means no darker edge to match — the table is one flat colour top
+     to bottom, so that flat colour is already the right value for a gap to
+     hide behind. */
+  --table-edge: var(--color-table);
 }
 
 /* The other two curated card-back options, same contrast reasoning as the
@@ -110,18 +123,21 @@ body,
 }
 
 body {
-  /* Matches `.table-surface` rather than the darker `--color-table-dark` a
-     desktop "ground" needs — see the media query below, which is the only
-     place `body` is meant to read as a surface behind the frame at all. On a
-     phone the frame is the whole screen and `body` should never be seen; but
-     `100dvh` is dynamic, tracking Safari's collapsing address bar, and does
-     not always land exactly on the true visible viewport. A sliver of `body`
-     showing through a frame that came up fractionally short read as a sharp
-     line of a visibly different blue at the bottom edge — reported from a
-     real phone, and absent from the native app, which has no address bar to
-     desync from. Matching the colour does not fix the geometry, but it makes
-     the gap this one CSS property can create invisible regardless. */
-  background-color: var(--color-table);
+  /* Close to `.table-surface`'s own darkest tone rather than its middle one —
+     see `--table-edge`. On a phone the frame is the whole screen and `body`
+     should never be seen; but `100dvh` does not always land exactly on the
+     true visible viewport, on more than one occasion and for more than one
+     reason: Safari's collapsing address bar desyncs it by a sliver, and a
+     home-screen install's own `100dvh` comes up noticeably short of the true
+     bottom edge, confirmed on a real device by swapping this colour for a
+     debug one and watching it bleed through. Both gaps open at the bottom,
+     where the sheen is darkest, which is why this matches the edge rather
+     than the middle. A geometry fix for the second was tried and reverted —
+     it closed the gap but pushed the safe content area, and everything
+     anchored to its bottom, lower than the native app's own layout. Matching
+     the colour instead leaves the layout exactly where it was and simply
+     makes whichever gap opens hard to see. */
+  background-color: var(--table-edge);
   /* No page-level scrolling anywhere: the app is a fixed frame and each region
      scrolls on its own. Rubber-banding the whole board feels broken on iOS. */
   overscroll-behavior: none;
@@ -189,6 +205,32 @@ body {
 @supports (height: 100dvh) {
   .viewport-height {
     height: 100dvh;
+  }
+}
+
+/* A home-screen install is the one display mode with no browser chrome at
+   all, and there `100dvh` measures short of the true screen at the bottom —
+   `body`'s own colour bled through the gap this left, confirmed on a real
+   device, and its comment is the reason `body` is coloured to match rather
+   than left to show through.
+
+   The shortfall is not the full home indicator height, though — that was the
+   first guess, and compensating for the whole of it pushed the button row
+   measurably *lower* than the native app, which has no such shortfall to
+   begin with. Compensating for none of it (relying on `body`'s colour alone)
+   put the same row measurably *higher*. Both were checked on a real device
+   against the native app as the reference for "correct," so the true
+   shortfall sits between zero and the full inset — half of it is the
+   present compromise, and the number to nudge if it is ever checked again. */
+@media (display-mode: standalone) {
+  .viewport-height {
+    height: calc(100vh + (env(safe-area-inset-bottom, 0px) / 2));
+  }
+
+  @supports (height: 100dvh) {
+    .viewport-height {
+      height: calc(100dvh + (env(safe-area-inset-bottom, 0px) / 2));
+    }
   }
 }
 

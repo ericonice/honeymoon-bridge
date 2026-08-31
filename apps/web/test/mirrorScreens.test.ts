@@ -15,11 +15,24 @@ afterEach(() => {
 const ME: PlayerId = 0;
 const view = { contract: null, me: ME, opponent: 1, phase: "auction" } as PlayerView;
 
-function standingWith(previousPoints: Pair<number> | null): MatchStanding {
-  return { history: [], kind: "rubber", previous: [], previousPoints, rubber: newRubber("game") };
+function standingWith(
+  previousPoints: Pair<number> | null,
+  halfFormat: "game" | "rubber" = "game",
+): MatchStanding {
+  return {
+    history: [],
+    kind: "rubber",
+    previous: [],
+    previousPoints,
+    rubber: newRubber(halfFormat),
+  };
 }
 
-function show(previousPoints: Pair<number> | null, format: MatchFormat = "mirror"): void {
+function show(
+  previousPoints: Pair<number> | null,
+  format: MatchFormat = "mirror",
+  halfFormat: "game" | "rubber" = "game",
+): void {
   render(
     createElement(ContractBar, {
       density: "normal",
@@ -28,7 +41,7 @@ function show(previousPoints: Pair<number> | null, format: MatchFormat = "mirror
       onShowScore: null,
       opponentName: "Computer",
       phase: "auction",
-      standing: standingWith(previousPoints),
+      standing: standingWith(previousPoints, halfFormat),
       view,
     }),
   );
@@ -106,6 +119,27 @@ describe("the score strip on a two-game match", () => {
     show([420, 130]);
     expect(labels()).toEqual(["Total", "1st half", "2nd half", "Part score"]);
     expect(text()).toContain("420");
+  });
+
+  /**
+   * **A mirror's half can itself be a rubber**, chosen independently of the
+   * outer format via Home's own "each side, first to 1/2 games" stepper — so
+   * this row is gated on the *half's* own format, not on whether the match is
+   * a mirror or an ordinary rubber. "0 of 2" rather than "0/2": a count of
+   * games reads as a sentence, where Part score reads as a fraction of a
+   * hundred points, and the two must not be confused for the same kind of
+   * number.
+   */
+  it("says how many games the half itself needs, when the half is a rubber", () => {
+    show(null, "mirror", "rubber");
+    expect(text()).toContain("Games won");
+    expect(text()).toContain("0 of 2");
+    expect(text()).not.toContain("0/2");
+
+    cleanup();
+    // A one-game half has no "games needed" to speak of — nothing to show.
+    show(null, "mirror", "game");
+    expect(text()).not.toContain("Games won");
   });
 
   it("says none of that for an ordinary rubber", () => {

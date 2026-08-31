@@ -10,6 +10,8 @@ const SESSION_KEY = "hb.session";
 
 export interface Account {
   readonly email: string;
+  /** Whether this name is hidden from the leaderboard — see `setHideFromLeaderboard`. */
+  readonly hideFromLeaderboard: boolean;
   /**
    * What other players see. Null until it has been asked for, which is the
    * first thing after a first sign-in — the server refuses a seat without one,
@@ -145,7 +147,10 @@ function keep(body: unknown): Account {
     session: string;
   };
   writeStored(SESSION_KEY, session);
-  return { email, name };
+  // A fresh sign-in has not set this, and the caller refreshes from
+  // `/api/auth/me` right afterwards regardless — see every `onSignedIn` call
+  // site — so a placeholder here is never actually shown for long.
+  return { email, hideFromLeaderboard: false, name };
 }
 
 /**
@@ -181,6 +186,20 @@ export async function setAccountName(name: string): Promise<boolean> {
   }
   const response = await fetch(authUrl("name"), {
     body: JSON.stringify({ name }),
+    headers: { Authorization: `Bearer ${session}`, "Content-Type": "application/json" },
+    method: "POST",
+  });
+  return response.ok;
+}
+
+/** Sets whether this name is hidden from the leaderboard. Returns false if the server refused it. */
+export async function setHideFromLeaderboard(hidden: boolean): Promise<boolean> {
+  const session = storedSession();
+  if (session === null) {
+    return false;
+  }
+  const response = await fetch(authUrl("hide-from-leaderboard"), {
+    body: JSON.stringify({ hidden }),
     headers: { Authorization: `Bearer ${session}`, "Content-Type": "application/json" },
     method: "POST",
   });

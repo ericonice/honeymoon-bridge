@@ -20,14 +20,13 @@ function show(
 ): void {
   render(
     createElement(Home, {
-      account: { email: "eric@example.com", name: "Eric" },
+      account: { email: "eric@example.com", hideFromLeaderboard: false, name: "Eric" },
       checkingAccount: false,
       format,
       onFindOpponent: noop,
       onFormatChange,
       onJoinTable: noop,
       onPlayComputer: noop,
-      onShowAccount: noop,
       onShowAchievements: noop,
       onShowHelp: noop,
       onShowRecord: noop,
@@ -258,7 +257,7 @@ describe("how long a session runs", () => {
 function render0(format: MatchFormat, deals: number): void {
   render(
     createElement(Home, {
-      account: { email: "eric@example.com", name: "Eric" },
+      account: { email: "eric@example.com", hideFromLeaderboard: false, name: "Eric" },
       checkingAccount: false,
       format,
       onFindOpponent: noop,
@@ -266,7 +265,6 @@ function render0(format: MatchFormat, deals: number): void {
       onJoinTable: noop,
       onPlayComputer: noop,
       onSessionDealsChange: noop,
-      onShowAccount: noop,
       onShowAchievements: noop,
       onShowHelp: noop,
       onShowRecord: noop,

@@ -57,10 +57,14 @@ function buttonMatching(pattern: RegExp): HTMLButtonElement | undefined {
 function showSettings(): void {
   render(
     createElement(SettingsOverlay, {
+      account: null,
+      onAccountSaved: () => {},
+      onAccountDeleted: () => {},
       onClose: () => {},
-      onShowAccount: () => {},
-      onShowHelp: () => {},
+      onLeaderboardVisibilityChange: () => {},
       onShowRecord: () => {},
+      onShowSignIn: () => {},
+      onSignOut: () => {},
     } as never),
   );
 }

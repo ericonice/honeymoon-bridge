@@ -20,10 +20,21 @@ function ratings(
 }
 
 function pool(
-  accounts: readonly { readonly id: string; readonly name: string | null }[],
+  accounts: readonly {
+    readonly hideFromLeaderboard?: boolean;
+    readonly id: string;
+    readonly name: string | null;
+  }[],
   tokens: Readonly<Record<string, readonly string[]>> = {},
 ): Pool {
-  return { accounts, tokens: new Map(Object.entries(tokens)) };
+  return {
+    accounts: accounts.map((account) => ({
+      hideFromLeaderboard: account.hideFromLeaderboard ?? false,
+      id: account.id,
+      name: account.name,
+    })),
+    tokens: new Map(Object.entries(tokens)),
+  };
 }
 
 const settled = PROVISIONAL_MATCHES;
@@ -106,6 +117,25 @@ describe("buildStandings", () => {
     });
 
     expect(names(standings)).toEqual(["Ada"]);
+  });
+
+  // Hidden means hidden from other people, not from yourself — the whole point
+  // is that a player can still check their own standing.
+  it("leaves out an account that asked to be hidden, except from itself", () => {
+    const withPool = pool([
+      { id: "ada", name: "Ada" },
+      { hideFromLeaderboard: true, id: "noah", name: "Noah" },
+    ]);
+    const withRatings = ratings([
+      { id: "account:ada", played: settled, rating: 1500 },
+      { id: "account:noah", played: settled, rating: 1700 },
+    ]);
+
+    expect(names(board({ me: "ada", pool: withPool, ratings: withRatings }))).toEqual(["Ada"]);
+    expect(names(board({ me: "noah", pool: withPool, ratings: withRatings }))).toEqual([
+      "Noah",
+      "Ada",
+    ]);
   });
 
   // A device nobody has claimed is a browser rather than a player, and there is

@@ -63,7 +63,6 @@ import { TableGame } from "./ui/TableGame.js";
  * to know about.
  */
 type Screen =
-  | { readonly kind: "account" }
   | { readonly kind: "achievements" }
   | { readonly kind: "home" }
   | { readonly kind: "record" }
@@ -219,8 +218,10 @@ export function App(): React.JSX.Element {
         <AccountScreen
           email={account.account.email}
           existing={null}
+          hideFromLeaderboard={account.account.hideFromLeaderboard}
           onBack={goHome}
           onDeleted={account.signOut}
+          onLeaderboardVisibilityChange={account.refresh}
           onSaved={account.refresh}
           onSignOut={account.signOut}
         />
@@ -231,29 +232,6 @@ export function App(): React.JSX.Element {
 
   const screenElement = ((): React.JSX.Element => {
     switch (screen.kind) {
-      case "account": {
-        return account.account === null ? (
-          <SignInWall destination={HOME} onBack={goHome} onSignedIn={account.refresh} />
-        ) : (
-          <AccountScreen
-            email={account.account.email}
-            existing={account.account.name}
-            onBack={goHome}
-            onDeleted={() => {
-              account.signOut();
-              goHome();
-            }}
-            onSaved={() => {
-              account.refresh();
-              goHome();
-            }}
-            onSignOut={() => {
-              account.signOut();
-              goHome();
-            }}
-          />
-        );
-      }
       case "achievements": {
         return (
           <Achievements
@@ -296,9 +274,6 @@ export function App(): React.JSX.Element {
               // also had the home screen promising "the computer never asks"
               // directly above a button that then asked.
               setScreen({ kind: "robot" });
-            }}
-            onShowAccount={() => {
-              setScreen({ kind: "account" });
             }}
             onShowAchievements={() => {
               setScreen({ kind: "achievements" });
@@ -433,6 +408,7 @@ export function App(): React.JSX.Element {
 
         {showingSettings ? (
           <SettingsOverlay
+            account={account.account}
             sessionOrder={order}
             onSessionOrderChange={(next) => {
               setSessionOrder(next);
@@ -452,10 +428,17 @@ export function App(): React.JSX.Element {
             tapToSelect={tapToSelect}
             trickCount={trickCount}
             theme={theme}
+            onAccountSaved={account.refresh}
+            onAccountDeleted={account.signOut}
+            onLeaderboardVisibilityChange={account.refresh}
+            onSignOut={account.signOut}
+            onShowSignIn={() => {
+              setShowingSettings(false);
+              setScreen({ destination: HOME, kind: "signin" });
+            }}
             onClose={() => {
               setShowingSettings(false);
             }}
-            onShowHelp={showHelp}
             onDevToolsChange={(enabled) => {
               writeDevTools(enabled);
               setDevTools(enabled);

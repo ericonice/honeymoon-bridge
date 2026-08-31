@@ -318,13 +318,19 @@ export function duplicateFrom(
 /**
  * How a session orders its deals.
  *
- * Three genuinely different games rather than three cosmetic orderings, because what
- * changes is how much of a board you can still remember when it comes round:
+ * Four genuinely different games rather than cosmetic orderings, because what
+ * changes is how much of a board you can still remember when it comes round —
+ * and, separately, whether you can tell *which* board is coming back at all:
  *
  *  - `adjacent` plays a board's two runs back to back. The comparison is immediate
  *    and recall is complete, so the board turns purely on what each side did with the
  *    same stock — the clearest statement of what duplicate *is*, and no test of
  *    memory at all.
+ *  - `sequence` plays every board once, then replays them in that same fixed order —
+ *    a real gap to remember across, unlike `adjacent`, but which board is coming
+ *    back is never in question the way it is under `halves`. The identity
+ *    permutation `halves` falls back to when nothing shuffled satisfies its floor,
+ *    made a first-class choice rather than an accident of that rejection loop.
  *  - `halves` plays every board once, then replays them in a random order with a
  *    floor on how soon one may come back. Memory matters most here, and working out
  *    which board you are on is part of it.
@@ -332,14 +338,15 @@ export function duplicateFrom(
  *    run, immediately included — no floor, because being completely random is the
  *    point of asking for it.
  */
-export type DuplicateSchedule = "adjacent" | "halves" | "random";
+export type DuplicateSchedule = "adjacent" | "halves" | "random" | "sequence";
 
 /**
  * The order a session's deals are played in.
  *
  * `minGap` applies to `halves` alone. Under `adjacent` a board comes back at once by
- * definition, and under `random` a floor is the thing that would stop it being
- * random — so in neither case is there anything for it to constrain.
+ * definition, under `sequence` the gap is always the full board count by definition,
+ * and under `random` a floor is the thing that would stop it being random — so in
+ * none of the three is there anything for it to constrain.
  */
 export function scheduleFor(
   boards: number,
@@ -354,6 +361,13 @@ export function scheduleFor(
       { board, replay: false },
       { board, replay: true },
     ]);
+  }
+
+  if (kind === "sequence") {
+    return [
+      ...order.map((board) => ({ board, replay: false })),
+      ...order.map((board) => ({ board, replay: true })),
+    ];
   }
 
   const rng = createRng(scheduleSeed);

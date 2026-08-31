@@ -320,6 +320,8 @@ export interface SignedIn {
 
 export interface Account {
   readonly email: string;
+  /** Whether this account asked not to appear on the public leaderboard by name. */
+  readonly hideFromLeaderboard: boolean;
   readonly name: string | null;
 }
 
@@ -340,14 +342,28 @@ export function isPlaytester(env: Env, email: string): boolean {
 }
 
 export async function accountFor(env: Env, accountId: string): Promise<Account | null> {
-  const row = await env.DB.prepare("SELECT email, name FROM accounts WHERE id = ?")
+  const row = await env.DB.prepare(
+    "SELECT email, hide_from_leaderboard, name FROM accounts WHERE id = ?",
+  )
     .bind(accountId)
-    .first<{ email: string; name: string | null }>();
-  return row === null ? null : { email: row.email, name: row.name };
+    .first<{ email: string; hide_from_leaderboard: number | null; name: string | null }>();
+  return row === null
+    ? null
+    : { email: row.email, hideFromLeaderboard: row.hide_from_leaderboard === 1, name: row.name };
 }
 
 export async function setAccountName(env: Env, accountId: string, name: string): Promise<void> {
   await env.DB.prepare("UPDATE accounts SET name = ? WHERE id = ?").bind(name, accountId).run();
+}
+
+export async function setHideFromLeaderboard(
+  env: Env,
+  accountId: string,
+  hidden: boolean,
+): Promise<void> {
+  await env.DB.prepare("UPDATE accounts SET hide_from_leaderboard = ? WHERE id = ?")
+    .bind(hidden ? 1 : 0, accountId)
+    .run();
 }
 
 /**

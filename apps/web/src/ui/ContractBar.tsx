@@ -49,20 +49,25 @@ export interface ContractBarProps {
 function Figure({
   label,
   outOf,
+  outOfWord,
   values,
   view,
 }: {
   readonly label: string;
   /** A denominator, for a figure that is progress rather than money. */
   readonly outOf?: number;
+  /**
+   * "0 of 2" rather than "0/2" — a count of games reads as a sentence, where a
+   * part score reads as a fraction of a hundred points. Slash stays the
+   * default so Part score is untouched.
+   */
+  readonly outOfWord?: boolean;
   /** Null for a game not yet played — dashes rather than a zero nobody scored. */
   readonly values: Pair<number> | null;
   readonly view: PlayerView;
 }): React.JSX.Element {
-  const pair =
-    values === null
-      ? "—"
-      : `${values[view.me]}–${values[view.opponent]}${outOf === undefined ? "" : `/${outOf}`}`;
+  const denominator = outOf === undefined ? "" : outOfWord === true ? ` of ${outOf}` : `/${outOf}`;
+  const pair = values === null ? "—" : `${values[view.me]}–${values[view.opponent]}${denominator}`;
 
   return (
     <span className="whitespace-nowrap">
@@ -119,6 +124,7 @@ function StandingHeader({
 function StandingRow({
   label,
   outOf,
+  outOfWord,
   values,
   view,
 }: {
@@ -142,10 +148,21 @@ function StandingRow({
    * mid-auction, which is how much more is needed.
    */
   readonly outOf?: number;
+  /**
+   * "0 of 2" rather than "0/2" — see `Figure`'s own doc. Games won is a count,
+   * not a fraction of a target the way Part score is.
+   */
+  readonly outOfWord?: boolean;
   readonly view: PlayerView;
 }): React.JSX.Element {
   const figure = (player: PlayerId): string =>
-    values === null ? "—" : outOf === undefined ? String(values[player]) : `${values[player]}/${outOf}`;
+    values === null
+      ? "—"
+      : outOf === undefined
+        ? String(values[player])
+        : outOfWord === true
+          ? `${values[player]} of ${outOf}`
+          : `${values[player]}/${outOf}`;
 
   return (
     <p className="flex items-baseline justify-between gap-2">
@@ -365,7 +382,7 @@ function StandingLines({
               view={view}
             />
             {standing.rubber.format === "rubber" ? (
-              <Figure label="Games" values={standing.rubber.gamesWon} view={view} />
+              <Figure label="Games" outOf={2} outOfWord values={standing.rubber.gamesWon} view={view} />
             ) : null}
           </>
         )}
@@ -436,7 +453,7 @@ function StandingLines({
             />
           </div>
           {standing.rubber.format === "rubber" ? (
-            <StandingRow label="Games won" values={standing.rubber.gamesWon} view={view} />
+            <StandingRow label="Games won" outOf={2} outOfWord values={standing.rubber.gamesWon} view={view} />
           ) : null}
         </>
       )}

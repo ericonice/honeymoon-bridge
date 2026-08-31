@@ -512,10 +512,17 @@ export function rubberFormatOf(standing: MatchStanding): RubberFormat | null {
  *
  * Recovered rather than stored, so there is one statement of what a session is
  * playing and no second field to disagree with it. Adjacent is the shape that can be
- * recognised — every replay directly follows its own first run — and the other two
- * are told apart by whether the first half is all first runs. A `random` schedule
- * that happens to look like `halves` is one that would deal identically anyway, so
- * reading it as halves costs nothing.
+ * recognised — every replay directly follows its own first run — and `random` is
+ * told apart from the other two by whether the first half is all first runs. A
+ * `random` schedule that happens to look like one of those is one that would deal
+ * identically anyway, so reading it as such costs nothing.
+ *
+ * `sequence` and `halves` share that same first-half-then-second-half shape and are
+ * told apart only by whether the replay half repeats the first half's board order
+ * exactly — which is also true of the rare `halves` schedule whose shuffle landed on
+ * the identity permutation (`scheduleFor`'s own guaranteed-valid fallback), read as
+ * `sequence` for the same reason a coincidentally-ordered `random` schedule is read
+ * as whichever fixed one it matches: it would deal identically either way.
  */
 export function scheduleKindOf(session: DuplicateState): DuplicateSchedule {
   const { schedule } = session;
@@ -526,5 +533,12 @@ export function scheduleKindOf(session: DuplicateState): DuplicateSchedule {
     return "adjacent";
   }
   const half = schedule.length / 2;
-  return schedule.slice(0, half).every((entry) => !entry.replay) ? "halves" : "random";
+  const first = schedule.slice(0, half);
+  const second = schedule.slice(half);
+  if (!first.every((entry) => !entry.replay)) {
+    return "random";
+  }
+  return first.every((entry, index) => entry.board === second[index]?.board)
+    ? "sequence"
+    : "halves";
 }

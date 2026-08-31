@@ -18,7 +18,9 @@ export function createTableUrl(): string {
   return `${ORIGIN}/api/tables`;
 }
 
-export function authUrl(action: "code" | "dev" | "me" | "name" | "request" | "verify"): string {
+export function authUrl(
+  action: "code" | "dev" | "hide-from-leaderboard" | "me" | "name" | "request" | "verify",
+): string {
   return `${ORIGIN}/api/auth/${action}`;
 }
 

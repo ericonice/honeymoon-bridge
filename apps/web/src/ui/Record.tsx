@@ -6,6 +6,7 @@ import { resetRecord, useRecentMatches, useRecords } from "../game/records.js";
 import { useStandings } from "../game/standings.js";
 import { useSwipeBack } from "../game/swipeBack.js";
 import { BackButton } from "./BackButton.js";
+import { Chevron } from "./Chevron.js";
 import { RatingTrend } from "./RatingTrend.js";
 import { Standings } from "./Standings.js";
 
@@ -121,36 +122,6 @@ function Rating({
   );
 }
 
-/**
- * The column layout, shared by the header and every row so they cannot drift.
- *
- * Fixed widths rather than content-sized, which is the entire point: a column that
- * sizes to its own row puts the same figure in a different place on every line, and
- * then the eye has to parse each row from scratch. Fixed, it learns the positions
- * once. 384px of app minus the screen's 24px padding each side leaves 336px, and
- * the four numeric columns plus their gaps take 202 of it.
- */
-const COLUMNS = "grid grid-cols-[1fr_40px_30px_60px_44px_12px] items-baseline gap-1.5";
-
-/** The header, paid for once above the whole list rather than on every row. */
-function ListHeader(): React.JSX.Element {
-  return (
-    <div className={`${COLUMNS} border-b border-white/15 pb-1`}>
-      {/* The sixth is the chevron's column, and it is empty on purpose: labelling
-          the control would be labelling the whole row, which is what the name
-          already does. */}
-      {["opponent", "w–l", "hands", "points", "diff", ""].map((label) => (
-        <span
-          key={label === "" ? "chevron" : label}
-          className={`font-mono text-[0.55rem] tracking-wider text-white/40 uppercase ${label === "opponent" ? "" : "text-right"}`}
-        >
-          {label}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 const SPARKLINE_WIDTH = 60;
 const SPARKLINE_HEIGHT = 16;
 
@@ -168,9 +139,14 @@ const SPARKLINE_HEIGHT = 16;
  * figure already states, so this renders nothing rather than one dot pretending
  * to be a trend.
  */
-function MarginSparkline({ matches }: { readonly matches: readonly OpponentMatch[] }): React.JSX.Element | null {
+function MarginSparkline({ matches }: { readonly matches: readonly OpponentMatch[] }): React.JSX.Element {
   if (matches.length < 2) {
-    return null;
+    // A real, empty grid cell rather than nothing at all — `OpponentLine`'s row is a
+    // CSS grid with six fixed-width tracks and this is the fourth. Returning `null`
+    // renders no DOM node here, and the grid places the *next* child into this track
+    // instead — the margin figure took the sparkline's 60px column and the chevron
+    // took the margin's 44px one, shifting both out from under their own headers.
+    return <span />;
   }
   // Newest first coming in — see `results.ts` — reversed so the line reads left
   // to right the way it actually happened.
@@ -252,39 +228,28 @@ function RatingTag({ rating }: { readonly rating: number }): React.JSX.Element {
   return <span className="shrink-0 font-mono text-[0.65rem] text-white/40">{rating}</span>;
 }
 
-/** The one thing that says a row opens something, so both drill-down levels draw it alike. */
-function Chevron({ open }: { readonly open: boolean }): React.JSX.Element {
-  return (
-    <svg
-      aria-hidden="true"
-      className={`self-center transition-transform ${open ? "rotate-180 text-white/55" : "text-white/30"}`}
-      fill="none"
-      height="10"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeWidth="1.6"
-      viewBox="0 0 10 10"
-      width="10"
-    >
-      <path d="M2 3.6 L5 6.6 L8 3.6" />
-    </svg>
-  );
-}
-
 /**
- * One opponent, in one match format, on one line — the second drill-down level,
- * nested under the opponent's own summary row (`OpponentSummaryLine`) and shown
- * only while that row is open.
+ * One opponent, in one match format, on two lines — the second drill-down
+ * level, nested under the opponent's own summary row (`OpponentSummaryLine`)
+ * and shown only while that row is open.
  *
- * `format · won–lost · hands · points · margin`. Getting here took four shapes
- * and the lesson is worth keeping: **what made the original unreadable was not
- * how many figures it held but that they did not line up.** It was a sentence of
- * middot-separated values, so the third figure sat somewhere different on every
- * row and each one had to be read from the beginning. A fixed grid with the
- * labels paid for once fixes that without dropping anything.
+ * **A fifth shape, replacing the fixed six-column grid the last one settled
+ * on.** That grid fixed the real problem it was built for — a sentence of
+ * middot-separated values where the third figure sat somewhere different on
+ * every row — by giving every figure one place to be, always. It stayed correct
+ * right up until a row's *content* varied: a missing sparkline or a drawn
+ * record's longer string didn't leave its column blank, it either skipped the
+ * track entirely (an absent child in CSS grid auto-placement shifts everything
+ * after it) or wrapped inside a track too narrow for it. Both shipped, both
+ * were reported as the same row looking wrong, and fixing either was a patch
+ * on a shape that keeps finding new ways to need one.
  *
- * **Hands sits beside the points rather than beside the record** because it is the
- * sample size — it is what makes a margin mean anything.
+ * A title line and a muted detail line under it — the shape Mail, Messages and
+ * Contacts all use — has no columns for a missing or oversized figure to
+ * disturb, because nothing is placed by position. The margin moves up to sit
+ * beside the name, as the one number worth reading at a glance; everything
+ * else — the record, the hand count, the sparkline — is one line of context
+ * underneath it, in reading order rather than column order.
  *
  * The name and the rating are not here: they are said once, on the summary row
  * this sits under, and repeating them on every format would be the row that
@@ -305,31 +270,35 @@ function OpponentLine({
     <button
       type="button"
       aria-expanded={open}
-      className={`${COLUMNS} w-full border-b border-white/7 py-1.5 text-left last:border-b-0 ${open ? "border-b-transparent bg-white/5" : ""}`}
+      className={`flex w-full flex-col gap-0.5 border-b border-white/7 py-2 pl-3 text-left last:border-b-0 ${open ? "border-b-transparent bg-white/5" : ""}`}
       onClick={onToggle}
     >
-      <span className="flex min-w-0 items-baseline gap-1">
-        <span className="truncate pl-3 text-[0.7rem] text-white/55">
-          {formatPlural(record.format)}
+      <span className="flex items-baseline justify-between gap-2">
+        <span className="truncate text-[0.7rem] text-white/55">{formatPlural(record.format)}</span>
+        <span className="flex shrink-0 items-baseline gap-1.5">
+          <span
+            className={`text-right font-mono text-sm tabular-nums ${margin >= 0 ? "text-emerald-300" : "text-amber-200"}`}
+          >
+            {signed(margin)}
+          </span>
+          <Chevron open={open} />
         </span>
       </span>
-      {/* The third figure only when there is one. Every rubber row would otherwise
-          carry a "–0" for something that cannot happen to it, and this row is
-          scanned rather than read. */}
-      <span className="text-right font-mono text-xs tabular-nums">
-        {record.won}–{record.lost}
-        {record.drawn > 0 ? `–${record.drawn}` : ""}
+      <span className="flex items-baseline justify-between gap-2">
+        {/* The third figure only when there is one. Every rubber row would otherwise
+            carry a "–0" for something that cannot happen to it, and this row is
+            scanned rather than read. */}
+        <span className="flex items-baseline gap-1 font-mono text-xs text-white/45">
+          <span className="whitespace-nowrap tabular-nums">
+            {record.won}–{record.lost}
+            {record.drawn > 0 ? `–${record.drawn}` : ""}
+          </span>
+          <Dim>·</Dim>
+          <span className="tabular-nums">{record.deals.toLocaleString()}</span>
+          <Dim>hands</Dim>
+        </span>
+        <MarginSparkline matches={record.matches} />
       </span>
-      <span className="text-right font-mono text-xs tabular-nums text-white/70">
-        {record.deals.toLocaleString()}
-      </span>
-      <MarginSparkline matches={record.matches} />
-      <span
-        className={`text-right font-mono text-sm tabular-nums ${margin >= 0 ? "text-emerald-300" : "text-amber-200"}`}
-      >
-        {signed(margin)}
-      </span>
-      <Chevron open={open} />
     </button>
   );
 }
@@ -364,39 +333,44 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
   return (
     <div className="border-b border-white/7 bg-white/5 px-0.5 pt-1 pb-3">
       <dl className="grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 pb-2">
-        <Fact label="Points">
-          {record.pointsFor.toLocaleString()} <Dim>for</Dim> {record.pointsAgainst.toLocaleString()}{" "}
-          <Dim>against</Dim>
+        <Fact detail={<>{record.pointsAgainst.toLocaleString()} against</>} label="Points">
+          {record.pointsFor.toLocaleString()} for
         </Fact>
-        <Fact label="Margin">
+        <Fact detail={`${rate(margin, record.deals)} a deal`} label="Margin">
           <span className={margin >= 0 ? "text-emerald-300" : "text-amber-200"}>
             {signed(margin)}
-          </span>{" "}
-          <Dim>{rate(margin, record.deals)} a deal</Dim>
+          </span>
         </Fact>
-        <Fact label="Matches">
-          {played} <Dim>played</Dim> {record.won}–{record.lost}
-          {record.drawn > 0 ? `–${record.drawn}` : ""}
-          {record.drawn > 0 ? <Dim>won–lost–drawn</Dim> : null}
+        <Fact
+          detail={
+            <>
+              {record.won}–{record.lost}
+              {record.drawn > 0 ? `–${record.drawn}` : ""}
+              {record.drawn > 0 ? " won–lost–drawn" : ""}
+            </>
+          }
+          label="Matches"
+        >
+          {played} played
         </Fact>
-        <Fact label="Hands">
-          {record.deals.toLocaleString()}{" "}
-          <Dim>{played === 0 ? "—" : `${(record.deals / played).toFixed(1)} a match`}</Dim>
+        <Fact
+          detail={played === 0 ? "—" : `${(record.deals / played).toFixed(1)} a match`}
+          label="Hands"
+        >
+          {record.deals.toLocaleString()}
         </Fact>
         {/* Only a combined rubber-family record has a length to split — see
             `byLength`. A single game and a full rubber read the same "won" and
             "lost" above; this is the one place that says which was which. */}
         {record.byLength === undefined ? null : (
           <>
-            <Fact label="Rubbers">
+            <Fact detail={count(record.byLength.rubber.deals, "deal")} label="Rubbers">
               {record.byLength.rubber.won}–{record.byLength.rubber.lost}
-              {record.byLength.rubber.drawn > 0 ? `–${record.byLength.rubber.drawn}` : ""}{" "}
-              <Dim>{count(record.byLength.rubber.deals, "deal")}</Dim>
+              {record.byLength.rubber.drawn > 0 ? `–${record.byLength.rubber.drawn}` : ""}
             </Fact>
-            <Fact label="Single games">
+            <Fact detail={count(record.byLength.game.deals, "deal")} label="Single games">
               {record.byLength.game.won}–{record.byLength.game.lost}
-              {record.byLength.game.drawn > 0 ? `–${record.byLength.game.drawn}` : ""}{" "}
-              <Dim>{count(record.byLength.game.deals, "deal")}</Dim>
+              {record.byLength.game.drawn > 0 ? `–${record.byLength.game.drawn}` : ""}
             </Fact>
           </>
         )}
@@ -413,19 +387,21 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
           {record.matches.map((match) => (
             <div
               key={match.finishedAt}
-              className="grid grid-cols-[62px_1fr_26px_74px] items-baseline gap-1.5 py-0.5"
+              className="flex flex-col gap-0.5 border-t border-white/8 py-1.5 first:border-t-0"
             >
-              <span className="font-mono text-[0.65rem] text-white/40">
-                {formatMatchTime(match.finishedAt)}
+              <span className="flex items-baseline justify-between gap-2">
+                <span
+                  className={`font-mono text-[0.65rem] font-semibold tracking-wide uppercase ${match.won ? "text-emerald-300" : "text-amber-200"}`}
+                >
+                  {match.won ? "Won" : "Lost"}
+                </span>
+                <span className="font-mono text-[0.75rem] tabular-nums text-white/80">
+                  {match.pointsFor.toLocaleString()}–{match.pointsAgainst.toLocaleString()}
+                </span>
               </span>
-              <span className="text-[0.68rem] text-white/40">{count(match.deals, "deal")}</span>
-              <span
-                className={`font-mono text-[0.55rem] font-semibold tracking-wide uppercase ${match.won ? "text-emerald-300" : "text-amber-200"}`}
-              >
-                {match.won ? "won" : "lost"}
-              </span>
-              <span className="text-right font-mono text-[0.7rem] tabular-nums text-white/70">
-                {match.pointsFor.toLocaleString()}–{match.pointsAgainst.toLocaleString()}
+              <span className="flex items-baseline justify-between gap-2 font-mono text-[0.65rem] text-white/40">
+                <span className="whitespace-nowrap">{formatMatchTime(match.finishedAt)}</span>
+                <span>{count(match.deals, "deal")}</span>
               </span>
             </div>
           ))}
@@ -440,19 +416,37 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
   );
 }
 
-/** A label and its value, on one line of the panel's list. */
+/**
+ * A label and its value, on one row of the panel's list.
+ *
+ * **The value is a total, then — where there is one — the rate it came from,
+ * stacked rather than run together.** One right-aligned line crammed both, so
+ * "+14,510" and "+71.8 a deal" read as one string with no visual break between
+ * a real total and a per-deal average of it, two different kinds of number a
+ * reader has to separate by parsing rather than by looking. Stacking them is
+ * the same information with the total left to stand on its own.
+ */
 function Fact({
   children,
+  detail,
   label,
 }: {
   readonly children: React.ReactNode;
+  /** The rate or the split beneath the total — omitted where there is only one figure. */
+  readonly detail?: React.ReactNode;
   readonly label: string;
 }): React.JSX.Element {
   return (
     <>
       <dt className="text-[0.7rem] text-white/40">{label}</dt>
-      <dd className="m-0 text-right font-mono text-[0.74rem] tabular-nums text-white/80">
-        {children}
+      <dd className="m-0 flex flex-col items-end font-mono text-[0.74rem] tabular-nums text-white/80">
+        <span>{children}</span>
+        {detail === undefined ? null : (
+          <>
+            {" "}
+            <span className="text-[0.65rem] text-white/45">{detail}</span>
+          </>
+        )}
       </dd>
     </>
   );
@@ -562,9 +556,18 @@ function combinedOf(group: OpponentGroup): CombinedRecord {
  * One opponent, every format folded into one line — the first drill-down level,
  * and the only row on the list before anything is tapped.
  *
- * `name · won–lost · hands · margin`, the same columns `OpponentLine` uses one
- * level down, minus the points bar: nothing here is a real pair to draw a
- * proportion of once formats are pooled — see `combinedOf`.
+ * The same title-line-and-detail-line shape `OpponentLine` moved to, and the
+ * same reason — see that component's own doc for the shapes this replaced and
+ * why. No sparkline here: nothing is a real pair to draw a proportion of once
+ * formats are pooled — see `combinedOf`.
+ *
+ * **Nothing above this list names its columns any more, because neither row has
+ * any.** A fixed grid needed a header — a position meant something only once
+ * every row put the same figure there. Nothing here is read by position: the
+ * margin reads as a margin because it is signed and coloured, the record
+ * because it is three numbers joined by dashes, the same way a `Contract`
+ * reads as a contract with no column telling you so. A header above a shape
+ * like that would be labelling what the row already says.
  */
 function OpponentSummaryLine({
   combined,
@@ -581,30 +584,35 @@ function OpponentSummaryLine({
     <button
       type="button"
       aria-expanded={open}
-      className={`${COLUMNS} w-full border-b border-white/7 py-1.5 text-left last:border-b-0 ${open ? "border-b-transparent bg-white/5" : ""}`}
+      className={`flex w-full flex-col gap-0.5 border-b border-white/7 py-2 text-left last:border-b-0 ${open ? "border-b-transparent bg-white/5" : ""}`}
       onClick={onToggle}
     >
-      <span className="flex min-w-0 items-baseline gap-1">
-        <span className={`truncate text-sm ${group.isRobot ? "text-white/60 italic" : ""}`}>
-          {group.name}
+      <span className="flex items-baseline justify-between gap-2">
+        <span className="flex min-w-0 items-baseline gap-1">
+          <span className={`truncate text-sm ${group.isRobot ? "text-white/60 italic" : ""}`}>
+            {group.name}
+          </span>
+          <RatingTag rating={group.records[0]!.rating} />
+          {group.isRobot ? <RobotTag /> : null}
         </span>
-        <RatingTag rating={group.records[0]!.rating} />
-        {group.isRobot ? <RobotTag /> : null}
+        <span className="flex shrink-0 items-baseline gap-1.5">
+          <span
+            className={`text-right font-mono text-sm tabular-nums ${combined.margin >= 0 ? "text-emerald-300" : "text-amber-200"}`}
+          >
+            {signed(combined.margin)}
+          </span>
+          <Chevron open={open} />
+        </span>
       </span>
-      <span className="text-right font-mono text-xs tabular-nums">
-        {combined.won}–{combined.lost}
-        {combined.drawn > 0 ? `–${combined.drawn}` : ""}
+      <span className="flex items-baseline gap-1 font-mono text-xs text-white/45">
+        <span className="whitespace-nowrap tabular-nums">
+          {combined.won}–{combined.lost}
+          {combined.drawn > 0 ? `–${combined.drawn}` : ""}
+        </span>
+        <Dim>·</Dim>
+        <span className="tabular-nums">{combined.deals.toLocaleString()}</span>
+        <Dim>hands</Dim>
       </span>
-      <span className="text-right font-mono text-xs tabular-nums text-white/70">
-        {combined.deals.toLocaleString()}
-      </span>
-      <span />
-      <span
-        className={`text-right font-mono text-sm tabular-nums ${combined.margin >= 0 ? "text-emerald-300" : "text-amber-200"}`}
-      >
-        {signed(combined.margin)}
-      </span>
-      <Chevron open={open} />
     </button>
   );
 }
@@ -687,6 +695,14 @@ function OpponentSection({
  * Precise to the minute rather than "3 days ago", because this is the individual
  * match list: telling two matches from the same afternoon apart is the whole job,
  * and how long ago they were is what the ordering says.
+ *
+ * One string on its own line rather than a column of any width: both places
+ * this is used are a detail line under a title now — see `OpponentPanel` and
+ * `MatchRow` — and a full-width line has room for a date and a time together.
+ * That used to matter: this sat in a 62px table column, too narrow for the
+ * string in most locales, so it wrapped wherever the browser broke it, often
+ * mid-word. `whitespace-nowrap` at the call site is what stops it happening
+ * again in whatever the narrowest row this ever ends up in next.
  */
 function formatMatchTime(at: number): string {
   return new Date(at).toLocaleString(undefined, {
@@ -927,7 +943,6 @@ function Body({
         <Rating rating={records.rating} />
         <h2 className="text-lg font-semibold">Head to head</h2>
         <div>
-          <ListHeader />
           {groups.map((group) => (
             <OpponentSection
               key={group.key}

@@ -31,7 +31,6 @@ export interface HomeProps {
   onFindOpponent(): void;
   onJoinTable(code: string, role: TableRole): void;
   onPlayComputer(): void;
-  onShowAccount(): void;
   onShowAchievements(): void;
   onShowHelp(): void;
   onShowRecord(): void;
@@ -367,12 +366,12 @@ function Step({
 function Identity({
   account,
   checking,
-  onShowAccount,
+  onShowSettings,
   onSignIn,
 }: {
   readonly account: Account | null;
   readonly checking: boolean;
-  onShowAccount(): void;
+  onShowSettings(): void;
   onSignIn(): void;
 }): React.JSX.Element {
   if (checking) {
@@ -398,7 +397,7 @@ function Identity({
     <button
       type="button"
       className="w-full rounded-xl border border-white/15 px-4 py-3 text-left"
-      onClick={onShowAccount}
+      onClick={onShowSettings}
     >
       <span className="block text-xs tracking-wide text-white/45 uppercase">Playing as</span>
       <span className="mt-0.5 block truncate text-base font-medium">
@@ -511,7 +510,6 @@ export function Home({
   onSessionDealsChange,
   sessionDeals,
   onPlayComputer,
-  onShowAccount,
   onShowAchievements,
   onShowHelp,
   onShowRecord,
@@ -579,7 +577,7 @@ export function Home({
         <Identity
           account={account}
           checking={checkingAccount}
-          onShowAccount={onShowAccount}
+          onShowSettings={onShowSettings}
           onSignIn={onSignIn}
         />
       </div>

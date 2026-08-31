@@ -80,20 +80,17 @@ function rowText(): string {
   return (document.body.textContent ?? "").replace(/\s+/g, " ");
 }
 
-/** The column headings, in order. */
-function headings(): readonly string[] {
-  const head = document.querySelector('[class~="items-baseline"][class~="pb-1"]');
-  return [...(head?.querySelectorAll("span") ?? [])].map((span) => span.textContent ?? "");
-}
-
 /**
- * One opponent line, as its parts.
+ * One opponent row, as its parts — a title line and a detail line, joined in
+ * reading order.
  *
  * Joined from the leaf spans rather than read off `textContent`: the row's gaps are
- * flex, not whitespace, so the raw text runs every figure together.
+ * flex, not whitespace, so the raw text runs every figure together. Each row is a
+ * `button[aria-expanded]`, the same element `rows()` finds — there is no longer a
+ * fixed grid position to select on, since neither line reads anything by position.
  */
 function lines(): readonly string[] {
-  return [...document.querySelectorAll('[class~="items-baseline"][class~="py-1.5"]')].map((row) =>
+  return rows().map((row) =>
     [...row.querySelectorAll("span")]
       .filter((span) => span.children.length === 0)
       .map((span) => (span.textContent ?? "").trim())
@@ -102,18 +99,22 @@ function lines(): readonly string[] {
   );
 }
 
-test("an opponent is one line, in the columns the header names", () => {
+/**
+ * There is no column header above this list any more, and there is nothing to
+ * assert about it — a header names positions, and neither row reads anything
+ * by position. See `OpponentSummaryLine`'s own doc for why.
+ */
+test("an opponent is a title line and a detail line", () => {
   robot = [record()];
   show();
 
-  // The header is paid for once above the list, not per row.
-  // Six, the last empty: labelling the chevron would be labelling the whole row.
-  expect(headings()).toEqual(["opponent", "w–l", "hands", "points", "diff", ""]);
   expect(lines()).toHaveLength(1);
-  // No points bar and no for/against text: the summary row folds every format
+  // The margin sits on the title line now, beside the name, rather than at
+  // the end of a row of columns — it is the one figure worth a glance. No
+  // points bar and no for/against text: the summary row folds every format
   // together, and there is no real pair left to draw a proportion of once
   // they are pooled — see `combinedOf`.
-  expect(lines()[0]).toBe("Computer 1200 cpu 13–7 146 +641");
+  expect(lines()[0]).toBe("Computer 1200 cpu +641 13–7 · 146 hands");
 });
 
 /**
@@ -152,8 +153,15 @@ test("a format row draws a sparkline of the cumulative margin, oldest to newest"
   expect(duplicateRow!.querySelector('[class~="stroke-emerald-300"]')).not.toBeNull();
 });
 
-/** A lone match has no direction to draw, only a result the margin figure already states. */
-test("a format row with fewer than two matches draws no sparkline", () => {
+/**
+ * A lone match has no direction to draw, only a result the margin figure already
+ * states. This used to matter for a second reason too: a fixed six-column grid
+ * with no explicit `grid-column` on any child let a missing sparkline shift
+ * everything after it into the wrong track. A title line and a detail line has
+ * no tracks to shift — the row still has exactly two lines whether or not the
+ * second one carries a sparkline — which is the property this now checks.
+ */
+test("a format row with fewer than two matches draws no sparkline, and its row still has two lines", () => {
   robot = [
     record({ format: "mirror" }),
     record({ deals: 8, format: "duplicate", lost: 0, matches: [match()], won: 1 }),
@@ -163,6 +171,7 @@ test("a format row with fewer than two matches draws no sparkline", () => {
 
   const [, duplicateRow] = rows().slice(1);
   expect(duplicateRow!.querySelector('svg[width="60"]')).toBeNull();
+  expect(duplicateRow!.children).toHaveLength(2);
 });
 
 /**
@@ -206,10 +215,10 @@ test("an opponent played in both formats names them, on a line each", () => {
   show();
   tap();
 
-  expect(lines().map((line) => line.replace(/ \d[\d,]* points for.*against/, ""))).toEqual([
-    "Computer 1200 cpu 15–8 155 +731",
-    "rubbers 13–7 146 +641",
-    "mirror matches 2–1 9 +90",
+  expect(lines()).toEqual([
+    "Computer 1200 cpu +731 15–8 · 155 hands",
+    "rubbers +641 13–7 · 146 hands",
+    "mirror matches +90 2–1 · 9 hands",
   ]);
 });
 
@@ -243,11 +252,11 @@ test("a third format lands on the list rather than falling off it", () => {
   show();
   tap();
 
-  expect(lines().map((line) => line.replace(/ \d[\d,]* points for.*against/, ""))).toEqual([
-    "Computer 1200 cpu 16–9 175 +1,071",
-    "rubbers 13–7 146 +641",
-    "mirror matches 2–1 9 +90",
-    "duplicate sessions 1–1 20 +340",
+  expect(lines()).toEqual([
+    "Computer 1200 cpu +1,071 16–9 · 175 hands",
+    "rubbers +641 13–7 · 146 hands",
+    "mirror matches +90 2–1 · 9 hands",
+    "duplicate sessions +340 1–1 · 20 hands",
   ]);
 });
 
@@ -263,6 +272,22 @@ test("a drawn match is counted as neither won nor lost", () => {
   show();
 
   expect(lines()[0]).toContain("5–3–2");
+});
+
+/**
+ * A drawn record's three-figure string is the longest thing this column ever
+ * holds, and jsdom cannot see whether it actually wraps — but it can see whether
+ * the column still says it must not, which is what stops a row with a draw
+ * silently growing back to two lines.
+ */
+test("a drawn record's win-loss-draw figure does not wrap", () => {
+  robot = [record({ drawn: 1, lost: 28, won: 42 })];
+  show();
+
+  const [figure] = [...document.querySelectorAll("span")].filter(
+    (span) => (span.textContent ?? "").trim() === "42–28–1",
+  );
+  expect(figure?.className).toContain("whitespace-nowrap");
 });
 
 test("a record with no draws says nothing about them", () => {
@@ -495,6 +520,25 @@ test("the panel admits how much of the history it is not showing", () => {
   expect(rowText()).toContain("620–980");
   // 20 played, 2 sent.
   expect(rowText()).toContain("18 older matches not shown");
+});
+
+/**
+ * A match in the panel's history is a title line (result and score) and a
+ * detail line (when, and how many deals) under it now, rather than a table row
+ * — so the timestamp has a full-width line to itself and needs no splitting.
+ * `whitespace-nowrap` stays as the guard for whatever row this ends up in next.
+ */
+test("a match in the panel's history states its full timestamp on one line", () => {
+  robot = [record()];
+  show();
+  tap();
+
+  const stamp = [...document.querySelectorAll("span")].find(
+    (span) => span.children.length === 0 && (span.textContent ?? "").startsWith("Aug 22"),
+  );
+  expect(stamp, "no timestamp found").not.toBeUndefined();
+  expect(stamp!.className).toContain("whitespace-nowrap");
+  expect(stamp!.textContent).toMatch(/^Aug 22, \d{1,2}:\d{2}/);
 });
 
 test("a server too old to send any history leaves the rest of the panel alone", () => {

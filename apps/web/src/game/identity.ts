@@ -222,22 +222,30 @@ export function setSessionDeals(deals: number): void {
 /**
  * How a session orders its deals — see `DuplicateSchedule` for what each one is.
  *
- * A real setting rather than a constant because the three are different *games*
- * rather than three arrangements of one, and which is the better game is not
+ * A real setting rather than a constant because the four are different *games*
+ * rather than four arrangements of one, and which is the better game is not
  * something a bench has an opinion about. Playing a board's two halves back to back
  * makes the comparison immediate and the strategy about beating a line you have just
- * seen; shuffling makes recognising the board part of it. Both are wanted.
+ * seen; shuffling makes recognising the board part of it, and playing every board's
+ * replay in the same order it was first dealt sits between the two — a real gap to
+ * remember across, with no guessing which board is coming back. Every one is wanted.
  *
  * `halves` is the default because it is what a duplicate evening is: everybody plays
  * every board once, then they come round again.
  */
-export const SESSION_ORDERS: readonly DuplicateSchedule[] = ["adjacent", "halves", "random"];
+export const SESSION_ORDERS: readonly DuplicateSchedule[] = [
+  "adjacent",
+  "sequence",
+  "halves",
+  "random",
+];
 
 /** What each order is called wherever one is offered. */
 export const ORDER_LABEL: Record<DuplicateSchedule, string> = {
   adjacent: "Back to back",
   halves: "Halves",
   random: "Shuffled",
+  sequence: "In order",
 };
 
 export function sessionOrder(): DuplicateSchedule {

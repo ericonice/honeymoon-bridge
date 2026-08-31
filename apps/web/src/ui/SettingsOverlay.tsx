@@ -7,6 +7,7 @@ import {
 } from "../bot/difficulty.js";
 import type { Difficulty } from "../bot/difficulty.js";
 import { BOT_RELEASES, LATEST_RELEASE } from "../bot/release.js";
+import type { Account } from "../game/account.js";
 import { runBidTiming } from "../game/bidCost.js";
 import { ORDER_LABEL, SESSION_ORDERS, preferredRelease } from "../game/identity.js";
 import { botAnchor } from "../game/records.js";
@@ -16,10 +17,14 @@ import { clearStuck, flush, outboxState } from "../game/outbox.js";
 import { useSwipeBack } from "../game/swipeBack.js";
 import type { Theme } from "../game/theme.js";
 import { playAchievement } from "../game/soundEffects.js";
+import { AccountFields } from "./AccountFields.js";
 import { AchievementToast } from "./AchievementToast.js";
 import { BackButton } from "./BackButton.js";
+import { Choice } from "./Choice.js";
 import { HandLogsOverlay } from "./HandLogsOverlay.js";
 import { LatestGamesOverlay } from "./LatestGamesOverlay.js";
+import { SettingsSection } from "./SettingsSection.js";
+import { Toggle } from "./Toggle.js";
 
 /**
  * What a rung plays like, and what beating it is worth.
@@ -53,7 +58,12 @@ const PREVIEW_UNLOCKS: readonly Unlock[] = [
   { achievement: "two-suiter", tier: "bronze" },
 ];
 
+/** Which group of settings, so each can hold its own open/closed state. */
+type SectionKey = "account" | "display" | "gameplay" | "sound" | "testing";
+
 export interface SettingsOverlayProps {
+  /** Null when signed out — the Account section shows a sign-in prompt instead. */
+  readonly account: Account | null;
   readonly cardColor: CardColor;
   readonly devTools: boolean;
   /** Takes effect on the next match; changing it cannot alter one under way. */
@@ -92,94 +102,20 @@ export interface SettingsOverlayProps {
   onTapToSelectChange(enabled: boolean): void;
   onTrickCountChange(enabled: boolean): void;
   readonly theme: Theme;
+  /** The account's own name save, distinct from `onClose` — neither dismisses the overlay. */
+  onAccountSaved(): void;
+  onAccountDeleted(): void;
   onClose(): void;
   onDevToolsChange(enabled: boolean): void;
+  onLeaderboardVisibilityChange(): void;
   onPeekingChange(enabled: boolean): void;
   onDisguiseChange(enabled: boolean): void;
-  onShowHelp(): void;
+  /** Closes the overlay and hands off to the sign-in flow, which is a full screen. */
+  onShowSignIn(): void;
+  onSignOut(): void;
   onThemeChange(theme: Theme): void;
 }
 
-function Toggle({
-  description,
-  label,
-  on,
-  onChange,
-}: {
-  readonly description: string;
-  readonly label: string;
-  readonly on: boolean;
-  onChange(next: boolean): void;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      className="flex w-full items-start gap-3 rounded-xl border border-white/15 px-4 py-3 text-left"
-      aria-pressed={on}
-      onClick={() => {
-        onChange(!on);
-      }}
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block text-base font-medium">{label}</span>
-        <span className="mt-0.5 block text-xs text-white/55">{description}</span>
-      </span>
-      <span
-        className={`mt-1 flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 ${
-          on ? "bg-emerald-400" : "bg-white/20"
-        }`}
-      >
-        <span
-          className={`h-5 w-5 rounded-full bg-white ${on ? "translate-x-4" : "translate-x-0"}`}
-        />
-      </span>
-    </button>
-  );
-}
-
-/**
- * A choice between three, for the testing rows.
- *
- * A toggle cannot say "more or less of this", and every one of those settings
- * is a number whose right value is unknown rather than a thing to be on or off.
- */
-function Choice<T extends string>({
-  description,
-  label,
-  onChange,
-  options,
-  value,
-}: {
-  readonly description: string;
-  readonly label: string;
-  onChange(next: T): void;
-  readonly options: readonly { readonly label: string; readonly value: T }[];
-  readonly value: T;
-}): React.JSX.Element {
-  return (
-    <div className="rounded-xl border border-white/15 px-4 py-3">
-      <span className="block text-base font-medium">{label}</span>
-      <span className="mt-0.5 block text-xs text-white/55">{description}</span>
-      <div className="mt-2.5 flex gap-2">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={option.value === value}
-            className={`flex-1 rounded-lg px-2 py-1.5 text-sm font-medium ${
-              option.value === value ? "bg-white text-stone-900" : "border border-white/15"
-            }`}
-            onClick={() => {
-              onChange(option.value);
-            }}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /**
  * Settings, reachable from every screen.
@@ -302,6 +238,7 @@ function sinceQueued(at: number): string {
 }
 
 export function SettingsOverlay({
+  account,
   boldness,
   difficulty,
   opponent,
@@ -309,8 +246,11 @@ export function SettingsOverlay({
   density,
   devTools,
   disguise,
+  onAccountSaved,
+  onAccountDeleted,
   onBoldnessChange,
   onDifficultyChange,
+  onLeaderboardVisibilityChange,
   onSessionOrderChange,
   onOpponentChange,
   onCardColorChange,
@@ -320,7 +260,8 @@ export function SettingsOverlay({
   onDisguiseChange,
   onPaceChange,
   onPeekingChange,
-  onShowHelp,
+  onShowSignIn,
+  onSignOut,
   onSoundChange,
   onTapToSelectChange,
   onTrickCountChange,
@@ -338,6 +279,20 @@ export function SettingsOverlay({
   const [showingGames, setShowingGames] = useState(false);
   const [previewUnlocks, setPreviewUnlocks] = useState<readonly Unlock[]>([]);
   const [bidCost, setBidCost] = useState<string | null>(null);
+  // Collapsed by default — see `SettingsSection`'s own doc — and each section
+  // owns its own state rather than an accordion, the same choice `HelpOverlay`
+  // made for the same reason: opening one to check something should not close
+  // whatever else was already open.
+  const [open, setOpen] = useState<Record<SectionKey, boolean>>({
+    account: false,
+    display: false,
+    gameplay: false,
+    sound: false,
+    testing: false,
+  });
+  const toggle = (key: SectionKey): void => {
+    setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   useSwipeBack(onClose);
 
@@ -349,31 +304,63 @@ export function SettingsOverlay({
       <div className="flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto px-5 pt-2 pb-6">
         <h2 className="w-full max-w-sm text-lg font-semibold">Settings</h2>
 
-        {/* Not a setting, and here anyway: the gear is the only control on the
-            board, so this is the one place the rules can be reached from inside
-            a game — which is where the question gets asked. */}
-        <button
-          type="button"
-          className="w-full max-w-sm rounded-xl border border-white/15 px-4 py-3 text-left"
-          onClick={onShowHelp}
+        {/* Account info first, above every gameplay setting — the same shape
+            Apple's own Settings app uses, and the reason Home's "Playing as"
+            row now opens here rather than a separate screen: there is exactly
+            one place this app's identity settings live, whichever door you
+            came in by. */}
+        <SettingsSection
+          onToggle={() => {
+            toggle("account");
+          }}
+          open={open.account}
+          title="Account"
         >
-          <span className="block text-base font-medium">How to play</span>
-          <span className="mt-0.5 block text-xs text-white/55">
-            What this game does differently from bridge.
-          </span>
-        </button>
-
-        {/* What is being played is chosen on Home now, above the buttons that
-            start a match — it changes session to session, unlike everything left
-            here, and it had to grow a third option that nobody would have found
-            behind a gear. Moved rather than copied: a preference in two places is
-            one that can disagree with itself. */}
+          {account === null ? (
+            <div className="px-4 py-3">
+              <p className="text-sm text-white/60">
+                Sign in to set your name and control what other players see.
+              </p>
+              <button
+                type="button"
+                className="mt-3 w-full rounded-xl border border-white/25 px-4 py-3 text-base"
+                onClick={onShowSignIn}
+              >
+                Sign in
+              </button>
+            </div>
+          ) : (
+            <AccountFields
+              email={account.email}
+              existing={account.name}
+              hideFromLeaderboard={account.hideFromLeaderboard}
+              onDeleted={onAccountDeleted}
+              onLeaderboardVisibilityChange={onLeaderboardVisibilityChange}
+              onSaved={onAccountSaved}
+              onSignOut={onSignOut}
+            />
+          )}
+        </SettingsSection>
 
         {/* How hard the computer plays, and the one control that replaced four.
             Strength, boldness, the disguise and the opponent picker all changed
             the difficulty, none of them said so, and using them meant knowing
-            what a sample count is. */}
-        <div className="w-full max-w-sm">
+            what a sample count is.
+
+            What is being played (rubber, mirror, duplicate) is chosen on Home
+            instead, above the buttons that start a match — it changes session to
+            session, unlike anything in this group, and it had to grow a third
+            option that nobody would have found behind a gear. Moved rather than
+            copied: a preference in two places is one that can disagree with
+            itself. Its own length and duplicate's order stayed here, since those
+            are chosen once and left the way everything else in this group is. */}
+        <SettingsSection
+          onToggle={() => {
+            toggle("gameplay");
+          }}
+          open={open.gameplay}
+          title="Gameplay"
+        >
           <Choice
             label="How hard it plays"
             description={describeRung(difficulty)}
@@ -384,42 +371,37 @@ export function SettingsOverlay({
               value: one,
             }))}
           />
-        </div>
-
-        {/* **Here rather than on Home, on Home's own test.** What is being played
-            moved to Home because the format changes session to session; the order does
-            not — it is how you like duplicate played, chosen once and left, the same
-            shape as the pace. It was on Home only because the format is, which is a
-            reason about where its neighbour lives rather than about how often the
-            answer changes. It also cost a row of three buttons on the one screen that
-            must not scroll, in service of one format in three.
-
-            Shown to everybody rather than only while duplicate is chosen: a row that
-            comes and goes is one nobody can find when they want it. */}
-        <div className="w-full max-w-sm">
           <Choice
             label="Order of a duplicate session"
-            description="Back to back plays a board's two halves one after the other, so the comparison is immediate and you remember everything. Halves plays every board once and then brings them round again in a random order, which is what a duplicate evening is. Shuffled mixes the lot."
+            description="Back to back plays a board's two halves one after the other, so the comparison is immediate and you remember everything. In order plays every board once, then replays them in that same order — a real gap to remember across, but never a guess which board is next. Halves plays every board once and then brings them round again in a random order, which is what a duplicate evening is. Shuffled mixes the lot."
             value={sessionOrder}
             onChange={onSessionOrderChange}
             options={SESSION_ORDERS.map((one) => ({ label: ORDER_LABEL[one], value: one }))}
           />
-        </div>
+        </SettingsSection>
 
-        {/* The app is a fixed frame with nothing scrollable in it, so a screen
-            that does not fit is cut off and there is nothing to scroll to reach
-            it — and on a 667px phone it does not fit. Compact is what buys the
-            room back.
+        {/* Layout: the app is a fixed frame with nothing scrollable in it, so a
+            screen that does not fit is cut off — and on a 667px phone it does not
+            fit. Compact is what buys the room back.
 
-            **Its default is the viewport, not a stored value**, which is the
-            whole reason this is worth a row rather than a media query: somebody
-            whose phone cannot afford the room should never have to find this,
-            and somebody whose phone can should not lose the roomier layout to a
-            phone they do not own. The row exists for the two cases automatic
-            cannot serve — a large phone whose owner wants more board, and a
-            small one whose owner would rather have the fuller scoring and live
-            with it. */}
-        <div className="w-full max-w-sm">
+            **Its default is the viewport, not a stored value**, which is the whole
+            reason this is worth a row rather than a media query: somebody whose
+            phone cannot afford the room should never have to find this, and
+            somebody whose phone can should not lose the roomier layout to a phone
+            they do not own.
+
+            Count the tricks: an ordinary preference, and it spent one release in
+            the testing panel by mistake — where nobody who is not a playtester
+            could reach it, which is everybody the setting exists for. It joins
+            Layout and Card back here because all three are about what the board
+            itself shows, not how the game plays. */}
+        <SettingsSection
+          onToggle={() => {
+            toggle("display");
+          }}
+          open={open.display}
+          title="Display"
+        >
           <Choice
             label="Layout"
             description="How much room the scoring and the chrome around the board may take. Normal spells the standing out over several lines; compact puts the same figures on one. Starts on whichever suits this screen, and stays wherever you put it."
@@ -430,60 +412,18 @@ export function SettingsOverlay({
               { label: "Compact", value: "compact" },
             ]}
           />
-        </div>
-
-        {/* Out of the testing panel, where it sat while it was still a question —
-            twenty-six turns of the same decision either read as deliberate or as
-            waiting, and no bench has an opinion about which. Playing it answered
-            fast, which is what it already defaulted to, so the question is closed
-            and what is left is an ordinary preference. It belongs out here now that
-            the game is shared beyond the family: the fastest pace is not the right
-            one for somebody meeting the draw for the first time, which is exactly
-            who the walkthrough is for. */}
-        <div className="w-full max-w-sm">
-          <Choice
-            label="Game speed"
-            description="How fast the draw's twenty-six turns play out, and how long a finished trick sits before the next one starts — one pace for both. Fast is the default; slower is worth a try while you are still learning the draw."
-            value={pace}
-            onChange={onPaceChange}
-            options={[
-              { label: "Fast", value: "fast" },
-              { label: "Normal", value: "normal" },
-              { label: "Slow", value: "slow" },
-            ]}
-          />
-        </div>
-
-        {/* An ordinary preference, and it spent one release in the testing panel by
-            mistake — where nobody who is not a playtester could reach it, which is
-            everybody the setting exists for. Nothing here is under test: the
-            question "how many tricks do I need" is asked out loud every deal, and
-            whether you want it answered for you is a matter of taste. */}
-        <div className="w-full max-w-sm">
           <Toggle
             label="Count the tricks each side needs"
             description="A small ring beside each played card: one segment per trick that side has to take — ten to make 4♠, four to set it — filling as they take them. It turns orange when one more lost trick would put them on the edge, and closes when the deal is decided, which is often several tricks before the last card. Off if you would rather keep the count yourself."
             on={trickCount}
             onChange={onTrickCountChange}
           />
-        </div>
-
-        <div className="w-full max-w-sm">
-          <Toggle
-            label="Sound"
-            description="A few short cues — a call in the auction, a made or a down contract, the rubber won. Works against the computer and at a table with somebody else."
-            on={sound}
-            onChange={onSoundChange}
-          />
-        </div>
-
-        {/* Only under the theme it was curated for — felt's blue-on-green
-            never had the contrast problem these are picked to solve, so
-            there is nothing yet to offer it. Offered to everyone rather than
-            gated with the theme toggle itself: the theme is still unsettled,
-            but whichever one somebody is on, this is a real preference. */}
-        {theme === "hockey" ? (
-          <div className="w-full max-w-sm">
+          {/* Only under the theme it was curated for — felt's blue-on-green never
+              had the contrast problem these are picked to solve, so there is
+              nothing yet to offer it. Offered to everyone rather than gated with
+              the theme toggle itself: the theme is still unsettled, but whichever
+              one somebody is on, this is a real preference. */}
+          {theme === "hockey" ? (
             <Choice
               label="Card back"
               description="A few options, each checked for contrast against the rink."
@@ -495,181 +435,199 @@ export function SettingsOverlay({
                 { label: "Pewter", value: "pewter" },
               ]}
             />
-          </div>
-        ) : null}
+          ) : null}
+        </SettingsSection>
+
+        {/* Game speed came out of the testing panel too, where it sat while it was
+            still a question — twenty-six turns of the same decision either read as
+            deliberate or as waiting, and no bench has an opinion about which.
+            Playing it answered fast, which is what it already defaulted to, so the
+            question is closed and what is left is an ordinary preference. */}
+        <SettingsSection
+          onToggle={() => {
+            toggle("sound");
+          }}
+          open={open.sound}
+          title="Sound & pace"
+        >
+          <Choice
+            label="Game speed"
+            description="How fast the draw's twenty-six turns play out, and how long a finished trick sits before the next one starts — one pace for both. Fast is the default; slower is worth a try while you are still learning the draw."
+            value={pace}
+            onChange={onPaceChange}
+            options={[
+              { label: "Fast", value: "fast" },
+              { label: "Normal", value: "normal" },
+              { label: "Slow", value: "slow" },
+            ]}
+          />
+          <Toggle
+            label="Sound"
+            description="A few short cues — a call in the auction, a made or a down contract, the rubber won. Works against the computer and at a table with somebody else."
+            on={sound}
+            onChange={onSoundChange}
+          />
+        </SettingsSection>
 
         {playtester ? (
-          <div className="w-full max-w-sm rounded-2xl border border-amber-300/30 bg-amber-300/5 p-3">
-            {/* Padded to match the rows below. Each of those is a bordered box
-                with its own px-4, so heading text sitting at the panel's own
-                padding edge lands on a different left edge from every label
-                underneath it. */}
-            <div className="px-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-amber-200/90">
-                Testing only
-              </p>
-              <p className="mt-1 text-xs text-white/50">
-                Not preferences. Some of these change how the computer plays while the right setting
-                is still being worked out; the rest just show what it is up to. All of them will
-                change or disappear.
-              </p>
-            </div>
-
-            {/* One stack with one gap, so no row can drift out of step with the
-                others as they are added and removed. */}
-            <div className="mt-3 space-y-3">
-              <Toggle
-                label="Hockey theme"
-                description="An arena palette and a face-off card back. Turn it off for the green baize a card game usually comes on. Still settling on a look, which is why it's here rather than a permanent preference."
-                on={theme === "hockey"}
-                onChange={(on) => {
-                  onThemeChange(on ? "hockey" : "felt");
-                }}
-              />
-
-              <Toggle
-                label="Noah's tap-to-play"
-                description="Tap a card to raise it, tap it again to play it. Tapping a different card just moves the raise there instead. Off plays a card as soon as you lift your finger from it."
-                on={tapToSelect}
-                onChange={onTapToSelectChange}
-              />
-
-              <Toggle
-                label="Let the computer bid unpredictably"
-                description="It will sometimes name a decent suit rather than its objectively best one, so a bid alone can't be read as this hand's exact shape. It will never name a suit with fewer than three cards, and rarely one with only three. Takes effect on the next match."
-                on={disguise}
-                onChange={onDisguiseChange}
-              />
-
-              {/* A measurement tool now rather than a preference. It was the best
-                  difficulty lever in here until there was a difficulty setting;
-                  now it answers "which opponent", which only matters when
-                  comparing one release against another. */}
-              {BOT_RELEASES.length > 1 ? (
-                <div className="w-full max-w-sm">
-                  <Choice
-              label="Which computer you play"
-              description="Each is a version of the computer as it was when that version shipped, kept playable so the older, gentler opponent stays available. Takes effect on the next match."
-              value={String(opponent)}
-              onChange={(next) => {
-                onOpponentChange(Number(next));
+          <SettingsSection
+            accent
+            description="Not preferences. Some of these change how the computer plays while the right setting is still being worked out; the rest just show what it is up to. All of them will change or disappear."
+            onToggle={() => {
+              toggle("testing");
+            }}
+            open={open.testing}
+            title="Testing only"
+          >
+            <Toggle
+              label="Hockey theme"
+              description="An arena palette and a face-off card back. Turn it off for the green baize a card game usually comes on. Still settling on a look, which is why it's here rather than a permanent preference."
+              on={theme === "hockey"}
+              onChange={(on) => {
+                onThemeChange(on ? "hockey" : "felt");
               }}
-              options={BOT_RELEASES.map((release) => ({
-                label: `${release.name} (v${release.version})`,
-                value: String(release.version),
-              }))}
-                  />
-                </div>
-              ) : null}
+            />
 
+            <Toggle
+              label="Noah's tap-to-play"
+              description="Tap a card to raise it, tap it again to play it. Tapping a different card just moves the raise there instead. Off plays a card as soon as you lift your finger from it."
+              on={tapToSelect}
+              onChange={onTapToSelectChange}
+            />
+
+            <Toggle
+              label="Let the computer bid unpredictably"
+              description="It will sometimes name a decent suit rather than its objectively best one, so a bid alone can't be read as this hand's exact shape. It will never name a suit with fewer than three cards, and rarely one with only three. Takes effect on the next match."
+              on={disguise}
+              onChange={onDisguiseChange}
+            />
+
+            {/* A measurement tool now rather than a preference. It was the best
+                difficulty lever in here until there was a difficulty setting;
+                now it answers "which opponent", which only matters when
+                comparing one release against another. */}
+            {BOT_RELEASES.length > 1 ? (
               <Choice
-                label="How boldly it bids"
-                description="What a game in hand is worth to it. Measured against itself the answer came out higher than what is shipped, because a computer that never doubles you cannot punish overbidding — and you can."
-                value={boldness}
-                onChange={onBoldnessChange}
-                options={[
-                  { label: "Cautious", value: "cautious" },
-                  { label: "Normal", value: "normal" },
-                  { label: "Bold", value: "bold" },
-                ]}
+                label="Which computer you play"
+                description="Each is a version of the computer as it was when that version shipped, kept playable so the older, gentler opponent stays available. Takes effect on the next match."
+                value={String(opponent)}
+                onChange={(next) => {
+                  onOpponentChange(Number(next));
+                }}
+                options={BOT_RELEASES.map((release) => ({
+                  label: `${release.name} (v${release.version})`,
+                  value: String(release.version),
+                }))}
               />
+            ) : null}
 
-              {/* Only ever the computer's cards, and only in the game against
-                  it. Over a network the server does not send the other hand at
-                  all, so this cannot reveal a person's cards however it is set —
-                  see `networkSession`, which holds `opponentHand` at null. */}
-              <Toggle
-                label="Reveal the computer's cards"
-                description="Shows the bot's hand, the card it is deciding on, and names both cards of its last draw. Only against the computer — at a table with a person their cards are never sent to your device at all."
-                on={peeking}
-                onChange={onPeekingChange}
-              />
+            <Choice
+              label="How boldly it bids"
+              description="What a game in hand is worth to it. Measured against itself the answer came out higher than what is shipped, because a computer that never doubles you cannot punish overbidding — and you can."
+              value={boldness}
+              onChange={onBoldnessChange}
+              options={[
+                { label: "Cautious", value: "cautious" },
+                { label: "Normal", value: "normal" },
+                { label: "Bold", value: "bold" },
+              ]}
+            />
 
-              <Toggle
-                label="Developer shortcuts"
-                description="Adds a control that plays the current phase out at once, for reaching the auction or the scoring without playing every turn."
-                on={devTools}
-                onChange={onDevToolsChange}
-              />
+            {/* Only ever the computer's cards, and only in the game against
+                it. Over a network the server does not send the other hand at
+                all, so this cannot reveal a person's cards however it is set —
+                see `networkSession`, which holds `opponentHand` at null. */}
+            <Toggle
+              label="Reveal the computer's cards"
+              description="Shows the bot's hand, the card it is deciding on, and names both cards of its last draw. Only against the computer — at a table with a person their cards are never sent to your device at all."
+              on={peeking}
+              onChange={onPeekingChange}
+            />
 
-              {/* An unlock is a rare event — the counter families cross at 50,
-                  250 and 1000, and most of the rest are once-ever — so the one
-                  thing that cannot be checked by playing is the notification
-                  itself. This shows all three tiers at once, which is also the
-                  only way to compare the metals side by side, and plays the
-                  sound.
+            <Toggle
+              label="Developer shortcuts"
+              description="Adds a control that plays the current phase out at once, for reaching the auction or the scoring without playing every turn."
+              on={devTools}
+              onChange={onDevToolsChange}
+            />
 
-                  It exercises the toast and the cue, not the detection: whether
-                  a real unlock reaches `justUnlocked` is `useAchievementTracker`
-                  and the server's business, and nothing here stands in for it. */}
-              <button
-                type="button"
-                className="w-full rounded-xl border border-white/15 px-4 py-3 text-left"
-                onClick={() => {
-                  setPreviewUnlocks(PREVIEW_UNLOCKS);
-                  playAchievement();
-                }}
-              >
-                <span className="block text-base font-medium">Preview an unlock</span>
-                <span className="mt-0.5 block text-xs text-white/55">
-                  Shows the notification with a bronze, a silver and a gold, and plays the sound it
-                  arrives with.
-                </span>
-              </button>
+            {/* An unlock is a rare event — the counter families cross at 50,
+                250 and 1000, and most of the rest are once-ever — so the one
+                thing that cannot be checked by playing is the notification
+                itself. This shows all three tiers at once, which is also the
+                only way to compare the metals side by side, and plays the
+                sound.
 
-              {/* The one measurement that cannot be taken anywhere but here.
-                  `bench/bidcost.ts` runs the identical code on a desktop; what
-                  decides whether bidding can search is the ratio between the two,
-                  and phones vary by a factor of two either way. */}
-              <button
-                type="button"
-                className="w-full rounded-xl border border-white/15 px-4 py-3 text-left"
-                onClick={() => {
-                  setBidCost(runBidTiming());
-                }}
-              >
-                <span className="block text-base font-medium">Time a bid search</span>
-                <span className="mt-0.5 block text-xs text-white/55">
-                  {bidCost === null
-                    ? "Guesses the other hand 25 times and solves each, which is what bidding by search would cost. Blocks for a second or two on purpose."
-                    : bidCost}
-                </span>
-              </button>
+                It exercises the toast and the cue, not the detection: whether
+                a real unlock reaches `justUnlocked` is `useAchievementTracker`
+                and the server's business, and nothing here stands in for it. */}
+            <button
+              type="button"
+              className="w-full px-4 py-3 text-left"
+              onClick={() => {
+                setPreviewUnlocks(PREVIEW_UNLOCKS);
+                playAchievement();
+              }}
+            >
+              <span className="block text-base font-medium">Preview an unlock</span>
+              <span className="mt-0.5 block text-xs text-white/55">
+                Shows the notification with a bronze, a silver and a gold, and plays the sound it
+                arrives with.
+              </span>
+            </button>
 
-              {/* Every match anybody has finished, both seats named. A sibling
-                  of the logged hands and gated identically: neither is scoped to
-                  the asker, so a session is not the right permission for either.
-                  Per match where that one is per deal — they answer different
-                  questions and both are wanted. */}
-              <button
-                type="button"
-                className="w-full rounded-xl border border-white/15 px-4 py-3 text-left"
-                onClick={() => {
-                  setShowingGames(true);
-                }}
-              >
-                <span className="block text-base font-medium">Latest games</span>
-                <span className="block pt-1 text-sm text-white/50">
-                  The most recent matches by anyone, with both players and how each finished.
-                </span>
-              </button>
+            {/* The one measurement that cannot be taken anywhere but here.
+                `bench/bidcost.ts` runs the identical code on a desktop; what
+                decides whether bidding can search is the ratio between the two,
+                and phones vary by a factor of two either way. */}
+            <button
+              type="button"
+              className="w-full px-4 py-3 text-left"
+              onClick={() => {
+                setBidCost(runBidTiming());
+              }}
+            >
+              <span className="block text-base font-medium">Time a bid search</span>
+              <span className="mt-0.5 block text-xs text-white/55">
+                {bidCost === null
+                  ? "Guesses the other hand 25 times and solves each, which is what bidding by search would cost. Blocks for a second or two on purpose."
+                  : bidCost}
+              </span>
+            </button>
 
-              {/* What a later pass will actually assess the bot against, not a
-                  preference. */}
-              <button
-                type="button"
-                className="w-full rounded-xl border border-white/15 px-4 py-3 text-left"
-                onClick={() => {
-                  setShowingHandLogs(true);
-                }}
-              >
-                <span className="block text-base font-medium">Logged hands</span>
-                <span className="mt-0.5 block text-xs text-white/55">
-                  Every robot-game deal reported so far, raw.
-                </span>
-              </button>
-            </div>
-          </div>
+            {/* Every match anybody has finished, both seats named. A sibling
+                of the logged hands and gated identically: neither is scoped to
+                the asker, so a session is not the right permission for either.
+                Per match where that one is per deal — they answer different
+                questions and both are wanted. */}
+            <button
+              type="button"
+              className="w-full px-4 py-3 text-left"
+              onClick={() => {
+                setShowingGames(true);
+              }}
+            >
+              <span className="block text-base font-medium">Latest games</span>
+              <span className="block pt-1 text-sm text-white/50">
+                The most recent matches by anyone, with both players and how each finished.
+              </span>
+            </button>
+
+            {/* What a later pass will actually assess the bot against, not a
+                preference. */}
+            <button
+              type="button"
+              className="w-full px-4 py-3 text-left"
+              onClick={() => {
+                setShowingHandLogs(true);
+              }}
+            >
+              <span className="block text-base font-medium">Logged hands</span>
+              <span className="mt-0.5 block text-xs text-white/55">
+                Every robot-game deal reported so far, raw.
+              </span>
+            </button>
+          </SettingsSection>
         ) : null}
 
         {/* From a phone there is otherwise no way to tell a fresh deployment

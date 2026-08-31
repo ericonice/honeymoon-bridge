@@ -86,7 +86,11 @@ interface Player {
 
 /** Who has an account, and which devices each of them has claimed. */
 export interface Pool {
-  readonly accounts: readonly { readonly id: string; readonly name: string | null }[];
+  readonly accounts: readonly {
+    readonly hideFromLeaderboard: boolean;
+    readonly id: string;
+    readonly name: string | null;
+  }[];
   readonly tokens: ReadonlyMap<string, readonly string[]>;
 }
 
@@ -98,8 +102,11 @@ export interface Pool {
  * about a row, and that walk has already happened by the time anybody asks.
  */
 export async function poolFor(env: Env): Promise<Pool> {
-  const accounts = await env.DB.prepare("SELECT id, name FROM accounts").all<{
+  const accounts = await env.DB.prepare(
+    "SELECT id, hide_from_leaderboard, name FROM accounts",
+  ).all<{
     id: string;
+    hide_from_leaderboard: number | null;
     name: string | null;
   }>();
   const claimed = await env.DB.prepare("SELECT account_id, token FROM account_tokens").all<{
@@ -114,7 +121,14 @@ export async function poolFor(env: Env): Promise<Pool> {
     tokens.set(row.account_id, held);
   }
 
-  return { accounts: accounts.results, tokens };
+  return {
+    accounts: accounts.results.map((row) => ({
+      hideFromLeaderboard: row.hide_from_leaderboard === 1,
+      id: row.id,
+      name: row.name,
+    })),
+    tokens,
+  };
 }
 
 /**
@@ -176,11 +190,13 @@ function botRow(bot: PinnedOpponent): Standing {
  * function here is what keeps a board row agreeing with the number that person
  * reads on their own record.
  *
- * Three kinds of row are deliberately absent. An account with no name, because a
+ * Four kinds of row are deliberately absent. An account with no name, because a
  * row reading "—" beside a rating is worse than a shorter list. An account that has
  * never finished a rated match, because an untouched 1500 is a starting value rather
- * than a rating. And a device token no account has claimed, because that is a
- * browser rather than a player and has nothing to be called.
+ * than a rating. A device token no account has claimed, because that is a
+ * browser rather than a player and has nothing to be called. And an account that
+ * asked to be hidden — except from itself: `hideFromLeaderboard` means hidden from
+ * *other* people, not from the asker's own view of their own standing.
  */
 export function buildStandings(input: {
   readonly bots: readonly PinnedOpponent[];
@@ -192,6 +208,9 @@ export function buildStandings(input: {
   for (const account of input.pool.accounts) {
     const name = account.name?.trim() ?? "";
     if (name === "") {
+      continue;
+    }
+    if (account.hideFromLeaderboard && account.id !== input.me) {
       continue;
     }
     const found = ratingOf(input.ratings, account.id, input.pool.tokens.get(account.id) ?? []);
