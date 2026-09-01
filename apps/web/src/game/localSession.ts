@@ -24,6 +24,9 @@ import { botForLevel } from "../bot/build.js";
 import type { BoardOutcome } from "../bot/boardRecall.js";
 import { useAchievementTracker } from "./achievements.js";
 import { botActionFor } from "./botTurn.js";
+import { DIFFICULTIES } from "../bot/difficulty.js";
+import type { Difficulty } from "../bot/difficulty.js";
+import { releaseFor } from "../bot/release.js";
 import { reportHandLog } from "./handLog.js";
 import {
   boldness,
@@ -37,6 +40,11 @@ import {
   sessionOrder,
 } from "./identity.js";
 import { botTuningFor } from "./botTuning.js";
+import {
+  clearRobotMatch,
+  loadRobotMatch,
+  saveRobotMatch,
+} from "./robotPersistence.js";
 import { reportRobotRubber } from "./records.js";
 import type { GameSession } from "./session.js";
 import { boardKeyOf } from "./boardKey.js";
@@ -134,6 +142,77 @@ function pauseBefore(state: DealState, peek: boolean): number {
   }
 }
 
+export interface StartingPoint {
+  readonly boardOffers: Map<number, { pairs: readonly Pair<Card>[]; result: BoardOutcome }>;
+  readonly dealSeed: number;
+  readonly format: ReturnType<typeof preferredFormat>;
+  readonly match: MatchState;
+  /** Whether this match's finish has already been reported — see `RobotMatchSnapshot`. */
+  readonly reportedAlready: boolean;
+  readonly rung: Difficulty;
+  readonly version: number;
+}
+
+/**
+ * A saved rubber, restored — or a fresh one, dealt the way this hook always has.
+ *
+ * The one place both paths meet, so every other piece of the hook below reads
+ * a single resolved starting point rather than each separately guessing
+ * whether it is resuming or starting. A saved snapshot is trusted only as far
+ * as it actually works: `summarizeMatch` is asked of it before anything else
+ * commits to it, inside the same `try` that a stale or foreign snapshot falls
+ * through from — a build whose `MatchState` shape has since moved on must
+ * fall back to a fresh rubber rather than crash the one it was meant to save
+ * time in.
+ */
+export function startingPoint(): StartingPoint {
+  const saved = loadRobotMatch();
+  if (saved !== null) {
+    try {
+      const format = summarizeMatch(saved.match).format;
+      return {
+        boardOffers: new Map(saved.boardOffers),
+        dealSeed: saved.dealSeed,
+        format,
+        match: saved.match,
+        reportedAlready: saved.reported,
+        rung: DIFFICULTIES.includes(saved.rung) ? saved.rung : difficulty(),
+        version: saved.version,
+      };
+    } catch {
+      // Falls through to a fresh rubber below.
+    }
+  }
+
+  const format = preferredFormat();
+  const seed = randomSeed();
+  return {
+    boardOffers: new Map(),
+    dealSeed: seed,
+    format,
+    match: startMatch({
+      boards: boardsForDeals(sessionDeals()),
+      schedule: sessionOrder(),
+      // Where a session's board numbers begin. Random for now, which is the
+      // honest version until a catalogue exists: nobody is being scored against
+      // a field yet, so what matters is only that a session's boards are
+      // recorded, and `dealSeed` is what records them.
+      firstBoard: randomSeed() % 1_000_000,
+      format,
+      // Only a mirror reads it; every other format's length is its format.
+      halfFormat: mirrorHalfFormat(),
+      seed,
+      // Randomized rather than always the human: every deal after this one
+      // already alternates who starts — see `nextDeal` — so this is the only
+      // starter in the entire match that was ever fixed rather than earned.
+      starter: randomSeed() % 2 === 0 ? HUMAN : OPPONENT,
+    }),
+    reportedAlready: false,
+    rung: difficulty(),
+    version: preferredRelease().version,
+  };
+}
+
 /**
  * A rubber against the computer, played out in this browser.
  *
@@ -163,22 +242,41 @@ export interface LocalSessionOptions {
   readonly peek?: boolean;
 }
 
-export function useLocalSession(options: LocalSessionOptions = {}): GameSession {
+/**
+ * `GameSession` plus the two pinned values a restored match cannot be
+ * re-derived without — see `RobotGame`, which reads these instead of taking
+ * its own separate guess at what is currently preferred. A resumed rubber's
+ * pinned release and rung can disagree with what is preferred *now*, which is
+ * the whole point of pinning them; a second, independent read here would
+ * silently show the rating of the wrong opponent.
+ */
+export interface LocalGameSession extends GameSession {
+  readonly releaseVersion: number;
+  readonly rung: Difficulty;
+}
+
+export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSession {
   const peek = options.peek === true;
+  // Resolved once, at mount — a saved rubber restored, or a fresh one dealt —
+  // so everything below reads one settled answer rather than separately
+  // guessing whether this is a resume. See `startingPoint`'s own doc.
+  const [initial] = useState(startingPoint);
   // Read once, when the match starts, for the same reason the format is: an
   // opponent that changed how hard it played halfway through a rubber would be
   // two opponents in one match, and the version and difficulty both travel with
-  // every record the match produces.
-  const release = useMemo(() => preferredRelease(), []);
+  // every record the match produces. `releaseFor` rather than `preferredRelease`
+  // on a resume, so a setting changed since the rubber started cannot swap the
+  // opponent partway through it.
+  const release = useMemo(() => releaseFor(initial.version) ?? preferredRelease(), [initial]);
   // The rung itself, not just what it resolves to. Both the hand log and the
   // rubber report name it, and re-reading the setting per deal would let a match
   // record two different opponents if somebody changed it mid-rubber.
-  const rung = useMemo(() => difficulty(), []);
+  const rung = initial.rung;
   const level = useMemo(() => levelFor(rung), [rung]);
   // Read once and shared with `startMatch` below rather than read twice, because
   // the bidder and the match have to be answering about the same format — which is
   // the whole reason `objectiveFor` is a function.
-  const format = useMemo(() => preferredFormat(), []);
+  const format = initial.format;
   const bot = useMemo(
     () =>
       botForLevel({
@@ -206,7 +304,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
    * it. This is the browser's own record of what it dealt, and it goes to the
    * server only once the deal is over and there is nothing left to spoil.
    */
-  const dealSeed = useRef(randomSeed());
+  const dealSeed = useRef(initial.dealSeed);
   /**
    * What the computer was offered on each board it has finished, so it can recognise a
    * board that comes round again.
@@ -224,32 +322,13 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
    * Keyed by `boardKeyOf`, which is one rule for all three formats a board comes
    * round in rather than a board index in one and nothing in the others.
    */
-  const boardOffers = useRef(new Map<number, { pairs: readonly Pair<Card>[]; result: BoardOutcome }>());
+  const boardOffers = useRef(initial.boardOffers);
   const inPlay = useRef<{ board: number; pairs: Pair<Card>[] } | null>(null);
 
-  // Read once, when the match starts. Changing the setting mid-match would move
-  // the goalposts on a sitting already under way.
-  const [match, setMatch] = useState<MatchState>(() =>
-    startMatch({
-      // In deals, which is what the player chose, converted where the two units
-      // meet rather than doubled here.
-      boards: boardsForDeals(sessionDeals()),
-      schedule: sessionOrder(),
-      // Where a session's board numbers begin. Random for now, which is the
-      // honest version until a catalogue exists: nobody is being scored against
-      // a field yet, so what matters is only that a session's boards are
-      // recorded, and `dealSeed` is what records them.
-      firstBoard: randomSeed() % 1_000_000,
-      format,
-      // Only a mirror reads it; every other format's length is its format.
-      halfFormat: mirrorHalfFormat(),
-      seed: dealSeed.current,
-      // Randomized rather than always the human: every deal after this one
-      // already alternates who starts — see `nextDeal` — so this is the only
-      // starter in the entire match that was ever fixed rather than earned.
-      starter: randomSeed() % 2 === 0 ? HUMAN : OPPONENT,
-    }),
-  );
+  // Restored from a save, or dealt fresh — see `startingPoint`. Changing a
+  // setting mid-match would move the goalposts on a sitting already under way,
+  // which is exactly why a resume must not re-read any of them.
+  const [match, setMatch] = useState<MatchState>(initial.match);
 
   // Read on every render rather than once: unlike the bot, which would be two
   // opponents if it changed mid-rubber, pacing can change under way with no
@@ -535,12 +614,16 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
   // session is level a fair fraction of the time — and a match somebody played
   // going missing is the failure `outbox.ts` exists to prevent. A rubber can tie on
   // exactly equal totals as well, and that was silently unrecorded.
-  const reported = useRef(false);
+  const reported = useRef(initial.reportedAlready);
   useEffect(() => {
     if (!summary.complete || reported.current) {
       return;
     }
     reported.current = true;
+    // Nothing left to resume once a finished match is reported — see
+    // `clearRobotMatch`'s own doc for why this is the other moment it fires,
+    // alongside a deliberate leave.
+    clearRobotMatch();
     // Every format reports each side's real accumulated points now, and they are
     // always non-negative — a rubber or a mirror through `totalScore`'s own
     // guarantee, a session through `scoreDeal` itself, since honors, overtricks
@@ -587,6 +670,27 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     }
   }, [summary.complete]);
 
+  // Written on every change to the match, so a reload resumes rather than
+  // starting over — see `startingPoint`, the other half of this. Placed after
+  // the reporting effect above rather than before it: both run in the same
+  // commit, in this order, so `reported.current` already reflects a report
+  // that just went out before this ever reads it. Skipped once the match is
+  // complete and reported, since `clearRobotMatch` already ran there and
+  // writing again would put the finished match straight back.
+  useEffect(() => {
+    if (summary.complete && reported.current) {
+      return;
+    }
+    saveRobotMatch({
+      boardOffers: [...boardOffers.current.entries()],
+      dealSeed: dealSeed.current,
+      match,
+      reported: reported.current,
+      rung,
+      version: release.version,
+    });
+  }, [match, release.version, rung, summary.complete]);
+
   return {
     act,
     clearUnlocks: achievements.clear,
@@ -613,6 +717,10 @@ export function useLocalSession(options: LocalSessionOptions = {}): GameSession 
     // sight-unseen gamble the phase is built on, even in a development build.
     opponentPending:
       peek && deal.phase === "draw" && deal.toAct === OPPONENT ? deal.pending : null,
+    // The pinned values themselves, for `RobotGame` to read rather than take
+    // its own separate guess — see `LocalGameSession`'s own doc.
+    releaseVersion: release.version,
+    rung,
     // The computer neither waits nor asks: `nextDeal` simply deals.
     opponentWaitingToContinue: false,
     matchComplete: summary.complete,

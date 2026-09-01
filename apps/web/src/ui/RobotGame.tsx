@@ -1,8 +1,7 @@
-import { useState } from "react";
 import { matchNoun } from "../game/labels.js";
 import { useLocalSession } from "../game/localSession.js";
-import { difficulty, preferredRelease } from "../game/identity.js";
 import type { Density } from "../game/identity.js";
+import { clearRobotMatch } from "../game/robotPersistence.js";
 import { knownRatings, useBotAnchor } from "../game/records.js";
 import { GameBoard } from "./GameBoard.js";
 
@@ -32,18 +31,13 @@ export function RobotGame({
 }: RobotGameProps): React.JSX.Element {
   // Read once a mount. It changes only when a match ends, and this screen is one match.
   const cached = knownRatings();
-  // Which opponent this is: the release, and the rung it is set to play at. Read
-  // on this same first render, which is when `useLocalSession` pins its own copy
-  // — so the number shown beside the seat is the one the match will be recorded
-  // under, even if somebody changes the setting while the rubber is running.
-  const [version] = useState(() => preferredRelease().version);
-  const [rung] = useState(() => difficulty());
   const session = useLocalSession({ peek: peeking });
-  // Asked with the format as well, because a two-game match is worth more to beat: the
-  // computer meets the second half's boards remembering them and a person does not.
-  // Taken off the session rather than read from the setting a second time — the session
-  // pinned it when the match started, and two reads is how they come to disagree.
-  const opponent = useBotAnchor(version, rung, session.format);
+  // Which opponent this is: the release, and the rung it is set to play at.
+  // Read off the session itself rather than the current setting a second
+  // time — `useLocalSession` is what actually pinned these, whether this
+  // match just started or was resumed from one already under way, and a
+  // second, independent read here is how the two come to disagree.
+  const opponent = useBotAnchor(session.releaseVersion, session.rung, session.format);
   const noun = matchNoun(session.format);
 
   return (
@@ -51,9 +45,14 @@ export function RobotGame({
       density={density}
       devTools={devTools}
       // Nobody is kept waiting and nobody is told, so the warning is only about
-      // what this browser is about to throw away.
+      // what this browser is about to throw away — which `clearRobotMatch` is
+      // what actually makes true. Without it, the warning would be a promise
+      // a reload could quietly keep anyway.
       exit={{
-        leave: onLeave,
+        leave: () => {
+          clearRobotMatch();
+          onLeave();
+        },
         title: `Leave this ${noun}?`,
         warning: "The deals played so far are lost — an unfinished match is not kept anywhere.",
       }}

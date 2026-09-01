@@ -34,6 +34,7 @@ import {
   tapToSelectEnabled,
   trickCountEnabled,
 } from "./game/identity.js";
+import { clearRobotMatch, hasSavedRobotMatch } from "./game/robotPersistence.js";
 import {
   clearLocationHash,
   codeFromLocation,
@@ -63,7 +64,7 @@ import { TableGame } from "./ui/TableGame.js";
  * trick, which is why it is a hash too rather than a path the server would have
  * to know about.
  */
-type Screen =
+export type Screen =
   | { readonly kind: "achievements" }
   | { readonly kind: "home" }
   | { readonly kind: "record" }
@@ -95,21 +96,37 @@ function gateFor(screen: Screen): Destination | null {
   }
 }
 
+/**
+ * Where a launch lands, before anything about an account is even known.
+ *
+ * Precedence rather than independent checks, because more than one of these
+ * can be true at once and only one may win. A sign-in link and a table code
+ * both live in the same address bar, so the link just opened is checked
+ * first — a stale hash left over from an earlier visit must not steal a
+ * fresher one. A saved robot match is last and weakest: it is only "where you
+ * left off", not something anybody navigated to on purpose, so an explicit
+ * destination in the address bar always wins over it.
+ */
+export function initialScreen(): Screen {
+  const signIn = signInFromLocation();
+  if (signIn !== null) {
+    return { kind: "redeem", to: destinationFromWire(signIn.to), token: signIn.token };
+  }
+  const code = codeFromLocation();
+  // A code already in the address bar was put there by opening somebody
+  // else's link — the one exception is the host's own refresh mid-wait,
+  // which this cannot tell apart from a guest arriving for the first time
+  // and which simply falls back to the ordinary precedence in `formatFor`.
+  if (code !== null) {
+    return { code, kind: "table", role: "guest" };
+  }
+  // `useLocalSession` is what actually restores a saved match; this is only
+  // what stops the reload landing on Home first.
+  return hasSavedRobotMatch() ? { kind: "robot" } : { kind: "home" };
+}
+
 export function App(): React.JSX.Element {
-  const [screen, setScreen] = useState<Screen>(() => {
-    // Checked before the table code: arriving with both would mean a stale hash,
-    // and the link just opened is the one this person meant.
-    const signIn = signInFromLocation();
-    if (signIn !== null) {
-      return { kind: "redeem", to: destinationFromWire(signIn.to), token: signIn.token };
-    }
-    const code = codeFromLocation();
-    // A code already in the address bar was put there by opening somebody
-    // else's link — the one exception is the host's own refresh mid-wait,
-    // which this cannot tell apart from a guest arriving for the first time
-    // and which simply falls back to the ordinary precedence in `formatFor`.
-    return code === null ? { kind: "home" } : { code, kind: "table", role: "guest" };
-  });
+  const [screen, setScreen] = useState<Screen>(initialScreen);
   const account = useAccount();
   const [showingSettings, setShowingSettings] = useState(false);
   // Which row Settings should already be open to, for a link that promised a
@@ -289,6 +306,13 @@ export function App(): React.JSX.Element {
               // yet to answer with. It gated on a stored session for a while, which
               // also had the home screen promising "the computer never asks"
               // directly above a button that then asked.
+              //
+              // Tapping this is always a request for a *new* match, never a resume
+              // — reaching Home at all with a saved one still sitting there should
+              // not be possible, since a saved match routes here straight past Home
+              // on load, but this is what stops a fresh rubber from silently picking
+              // up an old one if that path is ever wrong.
+              clearRobotMatch();
               setScreen({ kind: "robot" });
             }}
             onShowAchievements={() => {
