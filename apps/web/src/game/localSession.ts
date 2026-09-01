@@ -23,7 +23,8 @@ import { levelFor } from "../bot/difficulty.js";
 import { botForLevel } from "../bot/build.js";
 import type { BoardOutcome } from "../bot/boardRecall.js";
 import { useAchievementTracker } from "./achievements.js";
-import { botActionFor } from "./botTurn.js";
+import { recordBotError } from "./botErrors.js";
+import { botActionFor, fallbackActionFor } from "./botTurn.js";
 import { DIFFICULTIES } from "../bot/difficulty.js";
 import type { Difficulty } from "../bot/difficulty.js";
 import { releaseFor } from "../bot/release.js";
@@ -323,7 +324,20 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
    * round in rather than a board index in one and nothing in the others.
    */
   const boardOffers = useRef(initial.boardOffers);
-  const inPlay = useRef<{ board: number; pairs: Pair<Card>[] } | null>(null);
+  /**
+   * `count` exists because `pairs.length` cannot be trusted for this: a reload
+   * mid-draw resets this ref (it is deliberately not persisted — see below) while
+   * `deal.drawTurns` is, so the first write after a reload lands at whatever turn
+   * index the persisted deal had already reached, leaving every earlier index an
+   * actual hole. `pairs.length` reads as 13 regardless — a JS array's length is
+   * its highest index plus one, not a count of what is actually there — so a
+   * board interrupted by a reload was being committed to memory as complete with
+   * cards missing from the middle, and the sampler throws the moment it iterates
+   * one: `for...of`, unlike the array methods elsewhere in `boardRecall.ts`, does
+   * not skip holes. `count` only increments on a genuinely new index, so it is
+   * the real number of turns this ref has actually seen since it was last reset.
+   */
+  const inPlay = useRef<{ board: number; count: number; pairs: Pair<Card>[] } | null>(null);
 
   // Restored from a save, or dealt fresh — see `startingPoint`. Changing a
   // setting mid-match would move the goalposts on a sitting already under way,
@@ -438,24 +452,36 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
         const second = deal.stock[0];
         if (second !== undefined) {
           if (inPlay.current?.board !== board) {
-            inPlay.current = { board, pairs: [] };
+            inPlay.current = { board, count: 0, pairs: [] };
           }
           const turn = deal.drawTurns.filter((one) => one.by === OPPONENT).length;
+          if (inPlay.current.pairs[turn] === undefined) {
+            inPlay.current.count += 1;
+          }
           inPlay.current.pairs[turn] = [deal.pending, second];
         }
       }
 
-      const action = botActionFor({
-        boards: [...boardOffers.current].map(([one, noted]) => ({
-          board: one,
-          offers: noted.pairs,
-          result: noted.result,
-        })),
-        bot,
-        seat: OPPONENT,
-        standing: summary.botStanding,
-        state: deal,
-      });
+      // A decision that throws must never leave the seat "thinking" forever —
+      // see `fallbackActionFor`. This is the difference between a bug in the
+      // bot costing one move and it costing the rest of the match.
+      let action: DealAction;
+      try {
+        action = botActionFor({
+          boards: [...boardOffers.current].map(([one, noted]) => ({
+            board: one,
+            offers: noted.pairs,
+            result: noted.result,
+          })),
+          bot,
+          seat: OPPONENT,
+          standing: summary.botStanding,
+          state: deal,
+        });
+      } catch (error) {
+        recordBotError({ board, error, phase: deal.phase });
+        action = fallbackActionFor(deal, OPPONENT);
+      }
         solveTimes.current.set(size, performance.now() - began);
         setThinking(false);
         setMatch((current) => (current === match ? actOn(current, OPPONENT, action) : current));
@@ -488,12 +514,18 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
     let next = match;
     while (dealOf(next).phase === phase) {
       const state = dealOf(next);
-      const action = botActionFor({
-        bot,
-        seat: state.toAct,
-        standing: summarizeMatch(next).botStanding,
-        state,
-      });
+      let action: DealAction;
+      try {
+        action = botActionFor({
+          bot,
+          seat: state.toAct,
+          standing: summarizeMatch(next).botStanding,
+          state,
+        });
+      } catch (error) {
+        recordBotError({ board: boardKeyOf(next), error, phase: state.phase });
+        action = fallbackActionFor(state, state.toAct);
+      }
       next = actOn(next, state.toAct, action);
     }
     setMatch(next);
@@ -544,8 +576,10 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
     // The finished deal's offers become memory. Only the *first* run of a board is
     // kept: by the time the second is over the board is done and will not come round
     // again, so overwriting would replace a useful record with a spent one.
+    // `count`, not `pairs.length` — see the field's own doc for why the length
+    // of a sparse array cannot be trusted to mean "nothing is missing".
     const noted = inPlay.current;
-    if (noted !== null && noted.pairs.length === 13 && !boardOffers.current.has(noted.board)) {
+    if (noted !== null && noted.count === 13 && !boardOffers.current.has(noted.board)) {
       boardOffers.current.set(noted.board, {
         pairs: noted.pairs,
         // What the board came to, in the computer's own frame — see `BoardOutcome`.

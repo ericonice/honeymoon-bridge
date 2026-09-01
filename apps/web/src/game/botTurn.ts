@@ -1,4 +1,4 @@
-import { newRubber, viewFor, vulnerability } from "@hb/engine";
+import { legalActionsForView, newRubber, viewFor, vulnerability } from "@hb/engine";
 import type { DealAction, DealState, PlayerId } from "@hb/engine";
 import { shouldAcceptClaim } from "../bot/claimDecision.js";
 import type { BoardMemory, Bot, Standing } from "../bot/types.js";
@@ -76,4 +76,26 @@ export function botActionFor({ boards = [], bot, seat, standing, state }: BotTur
       throw new Error("A completed deal has nothing left to decide");
     }
   }
+}
+
+/**
+ * The safest legal action for this seat, for when the bot's own decision has
+ * just thrown rather than answered.
+ *
+ * Never invented: every candidate is one `legalActionsForView` already
+ * considers legal, so this can only ever apply a move the engine accepts.
+ * Pass is preferred wherever it is legal, since it changes the auction least;
+ * rejecting a claim over accepting one, for the same reason; otherwise
+ * whichever legal action comes first. A seat with no legal action at all is
+ * not a case this should paper over, so that throws rather than guessing.
+ */
+export function fallbackActionFor(state: DealState, seat: PlayerId): DealAction {
+  const legal = legalActionsForView(viewFor(state, seat));
+  const first = legal[0];
+  if (first === undefined) {
+    throw new Error("No legal action for a seat that is on turn");
+  }
+  const pass = legal.find((action) => action.type === "call" && action.call.type === "pass");
+  const rejectClaim = legal.find((action) => action.type === "claim-response" && !action.accept);
+  return pass ?? rejectClaim ?? first;
 }

@@ -13,6 +13,7 @@ import { ORDER_LABEL, SESSION_ORDERS, preferredRelease } from "../game/identity.
 import { botAnchor } from "../game/records.js";
 import type { CardColor } from "../game/cardColor.js";
 import type { Boldness, Density, Pace } from "../game/identity.js";
+import { readBotErrors } from "../game/botErrors.js";
 import { clearStuck, flush, outboxState } from "../game/outbox.js";
 import { useSwipeBack } from "../game/swipeBack.js";
 import type { Theme } from "../game/theme.js";
@@ -245,6 +246,35 @@ function sinceQueued(at: number): string {
   }
   const hours = Math.round(minutes / 60);
   return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
+}
+
+/**
+ * The last few times the computer's own turn threw rather than answered.
+ *
+ * A bug here used to mean the seat sat "thinking" forever with no way out and
+ * nothing to show for it afterwards — `localSession.ts` now falls back to the
+ * safest legal action instead, but the fallback is a safety net, not a
+ * diagnosis. This is the diagnosis: whatever actually went wrong, kept where
+ * whoever hit it can read it out, same placement rule as `Unsent`.
+ */
+function BotErrors(): React.JSX.Element | null {
+  const [samples] = useState(readBotErrors);
+  if (samples.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 rounded-lg border border-amber-300/25 bg-amber-300/5 px-3 py-2">
+      <p className="text-sm text-amber-100/90">The computer's move failed and was worked around</p>
+      <ul className="mt-1 flex flex-col gap-0.5">
+        {samples.map((sample) => (
+          <li key={sample.when} className="text-xs text-white/55">
+            {sample.phase} {sinceQueued(sample.when)} · {sample.message}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 export function SettingsOverlay({
@@ -653,6 +683,7 @@ export function SettingsOverlay({
           </p>
           <p className="mt-2 text-sm text-white/55">Version {__APP_VERSION__}</p>
           <Unsent />
+          <BotErrors />
           <p className="mt-0.5">
             Build {__BUILD_ID__} · {__BUILD_TIME__} UTC
           </p>
