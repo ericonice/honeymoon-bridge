@@ -59,12 +59,22 @@ const PREVIEW_UNLOCKS: readonly Unlock[] = [
 ];
 
 /** Which group of settings, so each can hold its own open/closed state. */
-type SectionKey = "account" | "display" | "gameplay" | "sound" | "testing";
+export type SectionKey = "account" | "display" | "gameplay" | "sound" | "testing";
 
 export interface SettingsOverlayProps {
   /** Null when signed out — the Account section shows a sign-in prompt instead. */
   readonly account: Account | null;
   readonly cardColor: CardColor;
+  /**
+   * Opened already expanded to this section, for a link that promised more than
+   * "somewhere in Settings" — the duplicate order mention on Home and in a
+   * session both land here rather than a closed screen the answer is still
+   * a search away in. Absent for the gear icon's own plain open, which is why
+   * this is read once at mount rather than reacted to: the overlay remounts
+   * fresh every time it opens, and a stale section from the last visit must
+   * not survive into an ordinary one.
+   */
+  readonly initialSection?: SectionKey;
   readonly devTools: boolean;
   /** Takes effect on the next match; changing it cannot alter one under way. */
   /** The house variant, likewise only from the next match onwards. */
@@ -246,6 +256,7 @@ export function SettingsOverlay({
   density,
   devTools,
   disguise,
+  initialSection,
   onAccountSaved,
   onAccountDeleted,
   onBoldnessChange,
@@ -282,13 +293,15 @@ export function SettingsOverlay({
   // Collapsed by default — see `SettingsSection`'s own doc — and each section
   // owns its own state rather than an accordion, the same choice `HelpOverlay`
   // made for the same reason: opening one to check something should not close
-  // whatever else was already open.
+  // whatever else was already open. `initialSection` opens exactly one on top
+  // of that default rather than replacing it, for a link that promised a
+  // particular row rather than merely the screen it lives on.
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
-    account: false,
-    display: false,
-    gameplay: false,
-    sound: false,
-    testing: false,
+    account: initialSection === "account",
+    display: initialSection === "display",
+    gameplay: initialSection === "gameplay",
+    sound: initialSection === "sound",
+    testing: initialSection === "testing",
   });
   const toggle = (key: SectionKey): void => {
     setOpen((prev) => ({ ...prev, [key]: !prev[key] }));

@@ -49,6 +49,7 @@ import { Record } from "./ui/Record.js";
 import { RobotGame } from "./ui/RobotGame.js";
 import { Searching } from "./ui/Searching.js";
 import { SettingsOverlay } from "./ui/SettingsOverlay.js";
+import type { SectionKey } from "./ui/SettingsOverlay.js";
 import { SignIn } from "./ui/SignIn.js";
 import { SignInWall } from "./ui/SignInWall.js";
 import { TableGame } from "./ui/TableGame.js";
@@ -111,6 +112,11 @@ export function App(): React.JSX.Element {
   });
   const account = useAccount();
   const [showingSettings, setShowingSettings] = useState(false);
+  // Which row Settings should already be open to, for a link that promised a
+  // particular answer rather than merely the screen it lives on — see
+  // `SettingsOverlay`'s own doc on `initialSection`. Reset on every plain open
+  // so a shortcut taken once does not silently redirect the gear icon too.
+  const [settingsSection, setSettingsSection] = useState<SectionKey | null>(null);
   // An overlay rather than a screen, so the rules can be checked from inside a
   // game. Anybody wondering whether a pass ends the auction is in an auction.
   const [showingHelp, setShowingHelp] = useState(false);
@@ -147,6 +153,14 @@ export function App(): React.JSX.Element {
   const [cardColor, setCardColor] = useState(readCardColor);
 
   const showSettings = (): void => {
+    setSettingsSection(null);
+    setShowingSettings(true);
+  };
+
+  // For a link that names the row rather than just the screen — the duplicate
+  // order mention on Home and the one shown during a session both land here.
+  const showGameplaySettings = (): void => {
+    setSettingsSection("gameplay");
     setShowingSettings(true);
   };
 
@@ -258,6 +272,8 @@ export function App(): React.JSX.Element {
               setSessionDeals(next);
               setDeals(next);
             }}
+            sessionOrder={order}
+            onShowGameplaySettings={showGameplaySettings}
             onFindOpponent={() => {
               setScreen({ kind: "searching" });
             }}
@@ -409,6 +425,7 @@ export function App(): React.JSX.Element {
         {showingSettings ? (
           <SettingsOverlay
             account={account.account}
+            {...(settingsSection === null ? {} : { initialSection: settingsSection })}
             sessionOrder={order}
             onSessionOrderChange={(next) => {
               setSessionOrder(next);

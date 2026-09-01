@@ -73,6 +73,7 @@ function summaryOf(boards: readonly BoardOutcome[], margin: Pair<number>): Dupli
     // rather than what a real score would be — reusing `margin` is a
     // type-safe placeholder, not a claim that the two agree in general.
     points: margin,
+    schedule: "halves",
     score: null,
     vulnerable: [false, false],
     winner: null,
@@ -123,6 +124,11 @@ describe("a session's scorepad", () => {
   it("says so before anything has been played", () => {
     show(summaryOf([board()], [0, 0]));
     expect(screen.getByText("No deals yet.")).toBeTruthy();
+  });
+
+  it("names which order the session was dealt in", () => {
+    show({ ...summaryOf([board()], [0, 0]), schedule: "sequence" });
+    expect(text()).toContain("In order");
   });
 
   /**

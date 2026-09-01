@@ -1,11 +1,12 @@
 import { useState } from "react";
-import type { MatchFormat } from "@hb/engine";
+import type { DuplicateSchedule, MatchFormat } from "@hb/engine";
 import type { TableRole } from "@hb/protocol";
 import type { Account } from "../game/account.js";
 import { storedSession } from "../game/account.js";
 import {
   MAX_SESSION_DEALS,
   MIN_SESSION_DEALS,
+  ORDER_LABEL,
   SESSION_DEALS_STEP,
   SESSION_ORDERS,
   cleanSessionDeals,
@@ -28,6 +29,14 @@ export interface HomeProps {
   /** How long a duplicate session runs, in deals. Only shown while one is chosen. */
   readonly sessionDeals: number;
   onSessionDealsChange(deals: number): void;
+  /**
+   * How a duplicate session orders its deals — read here only to name it in the
+   * button description below. The control that changes it stays in Settings;
+   * see `test/settingsRows.test.ts` for why it moved there in the first place.
+   */
+  readonly sessionOrder: DuplicateSchedule;
+  /** Opens Settings already expanded to the row that explains and changes the order. */
+  onShowGameplaySettings(): void;
   onFindOpponent(): void;
   onJoinTable(code: string, role: TableRole): void;
   onPlayComputer(): void;
@@ -218,12 +227,14 @@ function FormatNote({
   onDealsChange,
   onFormatChange,
   onMirrorGamesChange,
+  onShowGameplaySettings,
 }: {
   readonly deals: number;
   readonly format: MatchFormat;
   onDealsChange(deals: number): void;
   onFormatChange(format: MatchFormat): void;
   onMirrorGamesChange(games: 1 | 2): void;
+  onShowGameplaySettings(): void;
 }): React.JSX.Element {
   const lean = leanFor(CELLS.indexOf(format === "game" ? "rubber" : format), CELLS.length);
 
@@ -317,6 +328,19 @@ function FormatNote({
         &rsaquo;
       </Step>
       <span>deals</span>
+      {/* A fixed word rather than the order's own name — this row has twice
+          already been the one that overflows or wraps when something
+          variable-length was added to it (see this component's own doc), and
+          the name already appears just below, in the button's own
+          description. This is only the way to the row that explains and
+          changes it. */}
+      <button
+        type="button"
+        className="ml-0.5 shrink-0 underline decoration-white/40 underline-offset-2"
+        onClick={onShowGameplaySettings}
+      >
+        Order
+      </button>
     </div>
   );
 }
@@ -509,8 +533,10 @@ export function Home({
   onJoinTable,
   onSessionDealsChange,
   sessionDeals,
+  sessionOrder,
   onPlayComputer,
   onShowAchievements,
+  onShowGameplaySettings,
   onShowHelp,
   onShowRecord,
   onShowSettings,
@@ -619,6 +645,7 @@ export function Home({
                 setMirrorGames(games);
                 setMirrorLength(games);
               }}
+              onShowGameplaySettings={onShowGameplaySettings}
             />
           </div>
 
@@ -627,7 +654,7 @@ export function Home({
             label="Play the computer"
             description={
               format === "duplicate"
-                ? `On this device. ${sessionDeals} deals: ${boardWord(sessionDeals / 2)}, each played twice from both sides.`
+                ? `On this device. ${sessionDeals} deals: ${boardWord(sessionDeals / 2)} played twice, order: ${ORDER_LABEL[sessionOrder]}.`
                 : format === "mirror"
                   ? "On this device. The same deals from both sides; the total wins."
                   : "On this device. Works offline, and needs nobody else."
@@ -640,7 +667,7 @@ export function Home({
             label="Invite"
             description={
               format === "duplicate"
-                ? `Send a link. ${sessionDeals} deals: ${boardWord(sessionDeals / 2)}, each played twice from both sides.`
+                ? `Send a link. ${sessionDeals} deals: ${boardWord(sessionDeals / 2)} played twice, order: ${ORDER_LABEL[sessionOrder]}.`
                 : format === "mirror"
                   ? "Send a link. The same deals from both sides; the total wins."
                   : "Send a link. Whoever opens it plays what you chose."

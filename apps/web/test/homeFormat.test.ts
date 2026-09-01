@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import type { MatchFormat } from "@hb/engine";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -28,12 +28,14 @@ function show(
       onJoinTable: noop,
       onPlayComputer: noop,
       onShowAchievements: noop,
+      onShowGameplaySettings: noop,
       onShowHelp: noop,
       onShowRecord: noop,
       onSessionDealsChange,
       onShowSettings: noop,
       onSignIn: noop,
       sessionDeals: 10,
+      sessionOrder: "halves",
     }),
   );
 }
@@ -130,7 +132,7 @@ describe("choosing what to play, on Home", () => {
    */
   it("says what a session actually is, since nobody has met one before", () => {
     show("duplicate");
-    expect(screen.getAllByText(/10 deals: 5 boards, each played twice/)).toHaveLength(2);
+    expect(screen.getAllByText(/10 deals: 5 boards played twice/)).toHaveLength(2);
   });
 });
 
@@ -249,7 +251,71 @@ describe("how long a session runs", () => {
   it("says one board rather than one boards at the shortest length", () => {
     cleanup();
     render0("duplicate", 2);
-    expect(screen.getAllByText(/2 deals: 1 board, each played twice/)).toHaveLength(2);
+    expect(screen.getAllByText(/2 deals: 1 board played twice/)).toHaveLength(2);
+  });
+
+  it("names the order chosen in Settings", () => {
+    cleanup();
+    render(
+      createElement(Home, {
+        account: { email: "eric@example.com", hideFromLeaderboard: false, name: "Eric" },
+        checkingAccount: false,
+        format: "duplicate",
+        onFindOpponent: noop,
+        onFormatChange: noop,
+        onJoinTable: noop,
+        onPlayComputer: noop,
+        onSessionDealsChange: noop,
+        onShowAchievements: noop,
+        onShowGameplaySettings: noop,
+        onShowHelp: noop,
+        onShowRecord: noop,
+        onShowSettings: noop,
+        onSignIn: noop,
+        sessionDeals: 8,
+        sessionOrder: "sequence",
+      }),
+    );
+    expect(screen.getAllByText(/order: In order\./)).toHaveLength(2);
+  });
+
+  /**
+   * The order's own name is never tappable here — this row has twice already
+   * been the one that overflows or wraps when something variable-length was
+   * added to it, so the way to the row that explains and changes it is a
+   * fixed word instead.
+   */
+  it("opens Settings to the order row from the fixed word beside the stepper", () => {
+    cleanup();
+    const onShowGameplaySettings = vi.fn();
+    render(
+      createElement(Home, {
+        account: { email: "eric@example.com", hideFromLeaderboard: false, name: "Eric" },
+        checkingAccount: false,
+        format: "duplicate",
+        onFindOpponent: noop,
+        onFormatChange: noop,
+        onJoinTable: noop,
+        onPlayComputer: noop,
+        onSessionDealsChange: noop,
+        onShowAchievements: noop,
+        onShowGameplaySettings,
+        onShowHelp: noop,
+        onShowRecord: noop,
+        onShowSettings: noop,
+        onSignIn: noop,
+        sessionDeals: 8,
+        sessionOrder: "halves",
+      }),
+    );
+    fireEvent.click(screen.getByText("Order"));
+    expect(onShowGameplaySettings).toHaveBeenCalledOnce();
+  });
+
+  it("has no such link for a format with no order to name", () => {
+    cleanup();
+    show("rubber");
+    expect(screen.queryByText("Order")).toBeNull();
   });
 });
 
@@ -266,11 +332,13 @@ function render0(format: MatchFormat, deals: number): void {
       onPlayComputer: noop,
       onSessionDealsChange: noop,
       onShowAchievements: noop,
+      onShowGameplaySettings: noop,
       onShowHelp: noop,
       onShowRecord: noop,
       onShowSettings: noop,
       onSignIn: noop,
       sessionDeals: deals,
+      sessionOrder: "halves",
     }),
   );
 }

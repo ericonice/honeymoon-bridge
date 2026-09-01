@@ -18,6 +18,7 @@ import {
   replayOf,
   replayTotal,
   scheduleFor,
+  scheduleKindOf,
   scoreDuplicateDeal,
   startDuplicate,
   starterFor,
@@ -25,7 +26,6 @@ import {
   vulnerableFor,
 } from "../src/duplicate.js";
 import type { DuplicateSchedule, DuplicateState } from "../src/duplicate.js";
-import { scheduleKindOf } from "../src/match.js";
 import type { Card, Contract, DealState, Level, Pair, PlayerId, Rank, Strain, Suit } from "../src/types.js";
 
 function card(rank: Rank, suit: Suit): Card {
@@ -372,6 +372,26 @@ describe("recovering which order a session was dealt in", () => {
     const schedule = scheduleFor(4, 1, 10, "halves");
     expect(schedule.slice(4).map((entry) => entry.board)).toEqual([0, 1, 2, 3]);
     expect(scheduleKindOf(asSession(schedule))).toBe("sequence");
+  });
+
+  /**
+   * `summarizeDuplicate` is the one caller a screen actually goes through, so
+   * this is the check that it did not forget to ask — a summary whose own
+   * `schedule` field disagreed with `scheduleKindOf` would be a second,
+   * un-synchronised statement of the same fact, which is exactly what
+   * recovering it from the schedule was meant to avoid.
+   */
+  it("carries the recovered kind on the summary a screen actually reads", () => {
+    for (const kind of ["adjacent", "halves", "random", "sequence"] as const) {
+      const session = startDuplicate({
+        boards: 3,
+        firstBoard: 100,
+        schedule: kind,
+        scheduleSeed: 7,
+        starter: 0,
+      });
+      expect(summarizeDuplicate(session).schedule, kind).toBe(scheduleKindOf(session));
+    }
   });
 });
 

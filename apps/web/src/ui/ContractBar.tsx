@@ -8,6 +8,7 @@ import type {
   PlayerId,
   PlayerView,
 } from "@hb/engine";
+import { ORDER_LABEL } from "../game/identity.js";
 import type { Density } from "../game/identity.js";
 import { ContractText } from "./CardText.js";
 
@@ -246,6 +247,7 @@ function SessionFigures({
 
   return (
     <>
+      <span className="whitespace-nowrap">{ORDER_LABEL[summary.schedule]}</span>
       <span className="whitespace-nowrap">
         Total{" "}
         <span className="font-semibold tabular-nums text-white/90">
@@ -401,6 +403,7 @@ function StandingLines({
         {standing.kind === "duplicate" && standing.summary.current?.replay === true
           ? " · replay"
           : ""}
+        {standing.kind === "duplicate" ? ` · ${ORDER_LABEL[standing.summary.schedule]}` : ""}
       </p>
       {standing.kind === "duplicate" ? null : (
         <StandingHeader opponentName={opponentName} />

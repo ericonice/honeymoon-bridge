@@ -1,5 +1,6 @@
 import { firstPlayOf, firstPlayTotal, netTo, replayOf, replayTotal } from "@hb/engine";
 import type { BoardOutcome, DuplicateResult, DuplicateSummary, PlayerView } from "@hb/engine";
+import { ORDER_LABEL } from "../game/identity.js";
 import { ContractText } from "./CardText.js";
 import { resultMark } from "./ScoreRows.js";
 
@@ -60,7 +61,9 @@ export function SessionPad({
 
   return (
     <div className="w-full max-w-sm text-sm">
-      <p className="pb-1 text-xs tracking-wide text-white/45 uppercase">The session</p>
+      <p className="pb-1 text-xs tracking-wide text-white/45 uppercase">
+        The session · {ORDER_LABEL[summary.schedule]}
+      </p>
       {/* Every figure below is yours, in both columns — nothing is reversed and nothing
           needs a caption saying so. A column is which pass through the boards this was,
           not which side of the stock you held, so a cell says who drew first on its own

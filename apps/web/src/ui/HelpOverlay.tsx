@@ -303,12 +303,14 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
             Working out which board you are on is part of it, and the app will not do it for you —
             though it does tell you what the deal came to when you played it before.
           </Rule>
-          <Rule title="Three orders, and they are different games">
+          <Rule title="Four orders, and they are different games">
             <em>Back to back</em> plays a board's two halves one after the other, so the comparison
             is immediate and you remember everything — the clearest way to see what duplicate is.{" "}
-            <em>Halves</em> plays every board once and then brings them round again in a random
-            order, which is what a duplicate evening is. <em>Shuffled</em> mixes the lot. The home
-            screen picks; at a table it takes both of you asking for the same one.
+            <em>In order</em> plays every board once and then replays them in that same order — a
+            real gap to remember across, but never a guess which board is next. <em>Halves</em> plays
+            every board once and then brings them round again in a random order, which is what a
+            duplicate evening is. <em>Shuffled</em> mixes the lot. Settings picks; at a table it takes
+            both of you asking for the same one.
           </Rule>
           <Rule title="One score a deal, plus or minus">
             No line and no part-score: every deal is settled where it is played, and the session is

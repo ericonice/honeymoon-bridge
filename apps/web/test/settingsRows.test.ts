@@ -182,3 +182,22 @@ test("every section starts collapsed", () => {
     expect(screen.queryByText(label), `"${label}" is visible before its section opened`).toBeNull();
   }
 });
+
+/**
+ * A link that promised a particular row — the duplicate order mention on Home
+ * and in a session — has to land on that row already open, not merely on the
+ * screen it happens to live on.
+ */
+test("a requested section opens already expanded, the rest stay closed", () => {
+  render(createElement(SettingsOverlay, { ...settings(false), initialSection: "gameplay" }));
+
+  expect(screen.queryByText("Order of a duplicate session")).not.toBeNull();
+  // Nothing else asked for is open, so its rows stay hidden.
+  expect(screen.queryByText("Game speed")).toBeNull();
+});
+
+test("the gear icon's own plain open asks for nothing, so everything starts closed", () => {
+  render(createElement(SettingsOverlay, settings(false)));
+
+  expect(screen.queryByText("Order of a duplicate session")).toBeNull();
+});

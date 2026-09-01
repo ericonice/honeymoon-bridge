@@ -406,6 +406,42 @@ export function scheduleFor(
   return [...first, ...replayOrder.map((board) => ({ board, replay: true }))];
 }
 
+/**
+ * Which order a session was dealt in, read back off its own schedule.
+ *
+ * Recovered rather than stored, so there is one statement of what a session is
+ * playing and no second field to disagree with it. Adjacent is the shape that can be
+ * recognised — every replay directly follows its own first run — and `random` is
+ * told apart from the other two by whether the first half is all first runs. A
+ * `random` schedule that happens to look like one of those is one that would deal
+ * identically anyway, so reading it as such costs nothing.
+ *
+ * `sequence` and `halves` share that same first-half-then-second-half shape and are
+ * told apart only by whether the replay half repeats the first half's board order
+ * exactly — which is also true of the rare `halves` schedule whose shuffle landed on
+ * the identity permutation (`scheduleFor`'s own guaranteed-valid fallback), read as
+ * `sequence` for the same reason a coincidentally-ordered `random` schedule is read
+ * as whichever fixed one it matches: it would deal identically either way.
+ */
+export function scheduleKindOf(session: DuplicateState): DuplicateSchedule {
+  const { schedule } = session;
+  const adjacent = schedule.every(
+    (entry, index) => !entry.replay || schedule[index - 1]?.board === entry.board,
+  );
+  if (adjacent) {
+    return "adjacent";
+  }
+  const half = schedule.length / 2;
+  const first = schedule.slice(0, half);
+  const second = schedule.slice(half);
+  if (!first.every((entry) => !entry.replay)) {
+    return "random";
+  }
+  return first.every((entry, index) => entry.board === second[index]?.board)
+    ? "sequence"
+    : "halves";
+}
+
 export function startDuplicate(options: StartDuplicateOptions): DuplicateState {
   // A session of no boards has no first deal to put on the table, and a caller
   // reading a stored preference is exactly the sort of thing that could ask for
@@ -593,6 +629,13 @@ export interface DuplicateSummary {
    * `DuplicateResult.points`, which has already collapsed a run to its net.
    */
   readonly points: Pair<number>;
+  /**
+   * Which order this session was dealt in — see `scheduleKindOf`, which this is.
+   * Naming the *kind* is not naming the board, so it says nothing `current`'s
+   * own doc comment does not already allow: a player can be told the session is
+   * "Halves" without being told which board is on the table.
+   */
+  readonly schedule: DuplicateSchedule;
   /** The current deal's duplicate score, once it is complete and was not passed out. */
   readonly score: DuplicateDealScore | null;
   /** Vulnerability as it stood for the deal in progress or just finished. */
@@ -665,6 +708,7 @@ export function summarizeDuplicate(session: DuplicateState): DuplicateSummary {
     dealsPlayed: results.length,
     margin: [toSeatZero, 0 - toSeatZero],
     points,
+    schedule: scheduleKindOf(session),
     score,
     vulnerable,
     // Only once every board is in. A session led at the halfway point has no

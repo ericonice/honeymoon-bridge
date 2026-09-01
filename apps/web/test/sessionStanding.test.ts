@@ -39,6 +39,7 @@ function session(over: Partial<DuplicateSummary> = {}): DuplicateSummary {
     dealsPlayed: 0,
     margin: [0, 0],
     points: [0, 0],
+    schedule: "halves",
     score: null,
     vulnerable: [false, false],
     winner: null,
@@ -103,6 +104,32 @@ describe("the fixed score during a session", () => {
     show({ kind: "duplicate", summary: session() });
     // Two boards, so ten... four deals.
     expect(text()).toContain("Deal 1 of 4");
+  });
+
+  /**
+   * Named so a player has some way to answer "which duplicate is this" mid-session
+   * without leaving the board — Settings is where the order is chosen, not where
+   * anyone would think to look while actually playing one.
+   */
+  it("names the order the session is being played in", () => {
+    show({ kind: "duplicate", summary: session({ schedule: "sequence" }) });
+    expect(text()).toContain("In order");
+  });
+
+  it("names the order in compact density too", () => {
+    render(
+      createElement(ContractBar, {
+        density: "compact",
+        format: "rubber",
+        handsPlayed: 0,
+        onShowScore: null,
+        opponentName: "Computer",
+        phase: "auction",
+        standing: { kind: "duplicate", summary: session({ schedule: "random" }) },
+        view: VIEW,
+      }),
+    );
+    expect(text()).toContain("Shuffled");
   });
 
   /**

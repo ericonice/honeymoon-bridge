@@ -59,14 +59,30 @@ export function ChevronLeftIcon({
   );
 }
 
+/**
+ * A gear, with actual teeth — the eight rectangles are one tooth rotated
+ * around the centre rather than eight hand-placed shapes, which is what kept
+ * them identical. The version this replaced was two circles and eight thin
+ * rays, which reads as a sun or an asterisk rather than a gear; teeth need a
+ * width to read as teeth; a ray, however many of them, is still a ray.
+ */
 export function SettingsIcon({
   className = "h-6 w-6",
 }: { readonly className?: string } = {}): React.JSX.Element {
   return (
     <Glyph className={className}>
-      <circle cx="12" cy="12" r="3.1" />
-      <circle cx="12" cy="12" r="7.2" opacity="0.5" />
-      <path d="M12 2.6v2.2M12 19.2v2.2M21.4 12h-2.2M4.8 12H2.6M18.6 5.4l-1.5 1.6M6.9 17.1l-1.5 1.5M18.6 18.6l-1.5-1.5M6.9 6.9 5.4 5.4" />
+      <circle cx="12" cy="12" r="6.6" />
+      <circle cx="12" cy="12" r="2.4" />
+      {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => (
+        <rect
+          key={angle}
+          x="10.8"
+          y="2.9"
+          width="2.4"
+          height="3"
+          transform={`rotate(${angle} 12 12)`}
+        />
+      ))}
     </Glyph>
   );
 }
