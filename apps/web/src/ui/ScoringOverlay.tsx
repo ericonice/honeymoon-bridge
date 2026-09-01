@@ -17,6 +17,7 @@ import {
   undertrickTable,
 } from "../game/scoringFacts.js";
 import { redTone } from "./CardText.js";
+import { FactsTable } from "./FactsTable.js";
 
 /**
  * How a deal is scored, for somebody who has not played rubber bridge.
@@ -83,58 +84,6 @@ function Note({
   );
 }
 
-/**
- * A small table of figures.
- *
- * Real table markup rather than a grid of spans. These *are* tables — a label and
- * two figures under two headings — so a screen reader should be told as much, and
- * a test then has rows to read rather than a class name to match on, which is how
- * the record screen's row test broke once.
- */
-function Figures({
-  caption,
-  columns,
-  rows,
-}: {
-  readonly caption: string;
-  readonly columns: readonly [string, string, string];
-  readonly rows: readonly { readonly label: React.ReactNode; readonly values: readonly [React.ReactNode, React.ReactNode] }[];
-}): React.JSX.Element {
-  const head = "font-mono text-[0.55rem] tracking-wider text-white/40 uppercase";
-  return (
-    <table className="w-full font-mono text-xs tabular-nums">
-      <caption className="sr-only">{caption}</caption>
-      <thead>
-        <tr className="border-b border-white/15">
-          <th scope="col" className={`${head} py-1 text-left`}>
-            {columns[0]}
-          </th>
-          <th scope="col" className={`${head} py-1 text-right`}>
-            {columns[1]}
-          </th>
-          <th scope="col" className={`${head} py-1 text-right`}>
-            {columns[2]}
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, index) => (
-          <tr key={index}>
-            <th scope="row" className="py-1 text-left font-normal">
-              {row.label}
-            </th>
-            {row.values.map((value, column) => (
-              <td key={column} className="py-1 text-right">
-                {value}
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
 export function ScoringOverlay({ onClose }: { onClose(): void }): React.JSX.Element {
   useSwipeBack(onClose);
 
@@ -184,7 +133,7 @@ export function ScoringOverlay({ onClose }: { onClose(): void }): React.JSX.Elem
         </Note>
 
         <Note title="What a contract is worth">
-          <Figures
+          <FactsTable
             caption="Points per trick over six, by strain"
             columns={["strain", "first", "after"]}
             rows={strains.map((value) => ({
@@ -210,7 +159,7 @@ export function ScoringOverlay({ onClose }: { onClose(): void }): React.JSX.Elem
             Overtricks never go below the line. Take eleven tricks in hearts and what you scored
             depends entirely on what you said you would do:
           </p>
-          <Figures
+          <FactsTable
             caption="Eleven tricks in hearts, scored at two different bids"
             columns={["bid", "below", "above"]}
             rows={[
@@ -248,7 +197,7 @@ export function ScoringOverlay({ onClose }: { onClose(): void }): React.JSX.Elem
             Undoubled, each trick short costs {plainUndertrick(false)}, or {plainUndertrick(true)}{" "}
             vulnerable, paid to the defender. Doubled, it climbs:
           </p>
-          <Figures
+          <FactsTable
             caption="What a doubled contract costs when it fails"
             columns={["short by", "doubled", "+ vuln"]}
             rows={[
@@ -275,7 +224,7 @@ export function ScoringOverlay({ onClose }: { onClose(): void }): React.JSX.Elem
         </Note>
 
         <Note title="Slams pay on top">
-          <Figures
+          <FactsTable
             caption="What reaching a slam adds"
             columns={["level", "bonus", "+ vuln"]}
             rows={slams.map((slam) => ({

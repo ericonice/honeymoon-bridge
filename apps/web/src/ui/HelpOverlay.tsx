@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSwipeBack } from "../game/swipeBack.js";
 import { BackButton } from "./BackButton.js";
+import { BiddingTutorialOverlay } from "./BiddingTutorialOverlay.js";
 import { ScoringOverlay } from "./ScoringOverlay.js";
 import { resetWalkthrough } from "../game/walkthrough.js";
 
@@ -100,6 +101,7 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
   // storage, where the draw screen reads it on its next mount.
   const [walkthroughArmed, setWalkthroughArmed] = useState(false);
   const [showScoring, setShowScoring] = useState(false);
+  const [showBidding, setShowBidding] = useState(false);
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
     app: false,
     auction: false,
@@ -122,6 +124,16 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
       <ScoringOverlay
         onClose={() => {
           setShowScoring(false);
+        }}
+      />
+    );
+  }
+
+  if (showBidding) {
+    return (
+      <BiddingTutorialOverlay
+        onClose={() => {
+          setShowBidding(false);
         }}
       />
     );
@@ -176,6 +188,21 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
             contract there. Two passes to open pass the deal out. Declarer is simply whoever made
             the last bid.
           </Rule>
+          {/* A tap-through screen rather than a rule here, for whoever this note
+              above assumes too much of — see `BiddingTutorialOverlay`'s own doc. */}
+          <button
+            type="button"
+            className="mt-1 w-full rounded-xl border border-white/25 px-4 py-3 text-left"
+            onClick={() => {
+              setShowBidding(true);
+            }}
+          >
+            <span className="block text-base font-medium">Learning to bid</span>
+            <span className="mt-0.5 block text-xs text-white/55">
+              What a bid promises, how the auction runs, and what to actually say — from
+              nothing, not just the differences from four-player bridge.
+            </span>
+          </button>
         </Section>
 
         <Section title="Play" open={open.play} onToggle={() => toggle("play")}>
