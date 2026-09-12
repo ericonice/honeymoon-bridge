@@ -9,6 +9,8 @@ export interface RobotGameProps {
   /** How much room the chrome may take — see `Density`. */
   readonly density: Density;
   readonly devTools: boolean;
+  /** Whether a tap through a hand's own breakdown goes on to show the match pad. */
+  readonly matchDetail: boolean;
   readonly peeking: boolean;
   readonly sound: boolean;
   readonly tapToSelect: boolean;
@@ -22,6 +24,7 @@ export interface RobotGameProps {
 export function RobotGame({
   density,
   devTools,
+  matchDetail,
   onLeave,
   onShowSettings,
   peeking,
@@ -44,6 +47,7 @@ export function RobotGame({
     <GameBoard
       density={density}
       devTools={devTools}
+      matchDetail={matchDetail}
       // Nobody is kept waiting and nobody is told, so the warning is only about
       // what this browser is about to throw away — which `clearRobotMatch` is
       // what actually makes true. Without it, the warning would be a promise

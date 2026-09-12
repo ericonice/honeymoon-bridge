@@ -37,10 +37,12 @@ function session(over: Partial<DuplicateSummary> = {}): DuplicateSummary {
     complete: false,
     current: { board: 0, replay: false },
     dealsPlayed: 0,
+    lastCompleted: null,
     margin: [0, 0],
     points: [0, 0],
     schedule: "halves",
     score: null,
+    scoring: "points",
     vulnerable: [false, false],
     winner: null,
     ...over,
@@ -132,22 +134,7 @@ describe("the fixed score during a session", () => {
     expect(text()).toContain("Shuffled");
   });
 
-  /**
-   * First play and replay read "—" until at least one board has a run of that
-   * kind — the same convention mirror's own not-yet-played half uses — so a
-   * fresh session says nothing has happened rather than claiming a zero.
-   */
-  it("reads first play and replay as dashes before anything is played", () => {
-    show({ kind: "duplicate", summary: session() });
-
-    expect(text()).not.toContain("replay");
-    // The rows are still there, so the strip keeps its height from deal to deal.
-    expect(text()).toContain("First play");
-    expect(text()).toContain("Replay");
-    expect(text()).toContain("—");
-  });
-
-  it("flags a replay and totals what has been made across first plays so far", () => {
+  it("names it a replay in the header line once one is under way", () => {
     show({
       kind: "duplicate",
       summary: session({
@@ -159,8 +146,77 @@ describe("the fixed score during a session", () => {
     });
 
     expect(text()).toContain("replay");
-    expect(text()).toContain("First play");
-    expect(text()).toContain("+170");
+  });
+
+  /**
+   * **Closed is the always-visible reading of what the session's actually-cancelled
+   * boards come to — a figure this strip is now the main place to see, rather than
+   * only in the scorepad a tap away.** It reads "—" until a board has come round
+   * twice, the same convention `firstPlayTotal`/`replayTotal` already use, even
+   * though `Total` may have already moved from a board's lone first run.
+   */
+  it("reads Closed as a dash before any board has come round twice, even once Total has moved", () => {
+    show({
+      kind: "duplicate",
+      summary: session({
+        boards: [board({ played: [run({ points: 420 })] }), board({ board: 1 })],
+        dealsPlayed: 1,
+        margin: [420, -420],
+      }),
+    });
+
+    expect(text()).toContain("+420");
+    // Two boards, neither of them this one's — its own row is what says which.
+    expect(text()).toContain("Closed 0/2");
+    expect(text()).toContain("—");
+  });
+
+  it("sums only the boards that have actually closed, and counts them the same way", () => {
+    show({
+      kind: "duplicate",
+      summary: session({
+        boards: [
+          board({
+            margin: 250,
+            played: [
+              run({ points: 420 }),
+              run({ points: 170, replay: true }),
+            ],
+          }),
+          // Only a first run so far — its 90 has already moved Total to 340, but
+          // it is not Closed's to say until the replay comes in.
+          board({ board: 1, played: [run({ board: 1, points: 90 })] }),
+        ],
+        closed: 1,
+        dealsPlayed: 3,
+        margin: [340, -340],
+      }),
+    });
+
+    expect(text()).toContain("Closed 1/2");
+    expect(text()).toContain("+250");
+  });
+
+  /**
+   * **Under IMPs, Total and Closed always agree — see `closedMarginTotal`'s own
+   * doc — so showing both would be showing the same number twice.** One row
+   * survives, carrying the board count Closed used to and labelled with the
+   * scoring points never needs to name.
+   */
+  it("collapses Total and Closed into one row under IMPs, rather than showing the same number twice", () => {
+    show({
+      kind: "duplicate",
+      summary: session({
+        boards: [board({ margin: 250, played: [run({ points: 420 }), run({ points: 170, replay: true })] })],
+        closed: 1,
+        margin: [250, -250],
+        scoring: "imps",
+      }),
+    });
+
+    expect(text()).toContain("IMPs · 1/1");
+    // Only the one row — not a "Closed" label repeating the same figure.
+    expect(text()).not.toContain("Closed 1/1");
   });
 
   it("does not name which board it is", () => {

@@ -8,6 +8,7 @@ import {
 } from "./duplicate.js";
 import type {
   DuplicateSchedule,
+  DuplicateScoring,
   DuplicateState,
   DuplicateSummary,
   MatchFormat,
@@ -224,13 +225,15 @@ export interface StartMatchOptions {
    */
   readonly halfFormat?: RubberFormat;
   readonly format: MatchFormat;
+  /** How a duplicate session's margin and winner are read off its boards. Ignored by a rubber. */
+  readonly scoring?: DuplicateScoring;
   /** The rubber's first deal, or the session's schedule. Both are the caller's to own. */
   readonly seed: number;
   readonly starter: PlayerId;
 }
 
 export function startMatch(options: StartMatchOptions): MatchState {
-  const { boards, firstBoard, format, halfFormat, schedule, seed, starter } = options;
+  const { boards, firstBoard, format, halfFormat, schedule, scoring, seed, starter } = options;
   if (format === "duplicate") {
     return {
       kind: "duplicate",
@@ -239,6 +242,7 @@ export function startMatch(options: StartMatchOptions): MatchState {
       session: startDuplicate({
         ...(boards === undefined ? {} : { boards }),
         ...(schedule === undefined ? {} : { schedule }),
+        ...(scoring === undefined ? {} : { scoring }),
         firstBoard,
         scheduleSeed: seed,
         starter,
@@ -336,10 +340,12 @@ export function nextIn(match: MatchState, seed: number): MatchState {
         // The same length *and order* as the session just finished, for the same
         // reason a new rubber is the same kind of rubber: how a sitting is played is
         // chosen when players sit down, not re-read from a setting that could have
-        // moved under way. The order is recovered from the schedule rather than
-        // stored twice — see `scheduleKindOf`.
+        // moved under way. Read off what was actually requested rather than
+        // re-derived from the finished session's shape — see `scheduleKind`'s own
+        // doc for why that guess is not safe to feed back into a new session.
         boards: match.session.boards.length,
-        schedule: scheduleKindOf(match.session),
+        schedule: match.session.scheduleKind ?? scheduleKindOf(match.session),
+        scoring: match.session.scoring ?? "points",
         firstBoard: seed % 1_000_000,
         format: "duplicate",
         seed,

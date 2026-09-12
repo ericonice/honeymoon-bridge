@@ -280,12 +280,10 @@ describe("how long a session runs", () => {
   });
 
   /**
-   * The order's own name is never tappable here — this row has twice already
-   * been the one that overflows or wraps when something variable-length was
-   * added to it, so the way to the row that explains and changes it is a
-   * fixed word instead.
+   * The link now names the order itself rather than a fixed word — it is
+   * still the only tappable way to the row that explains and changes it.
    */
-  it("opens Settings to the order row from the fixed word beside the stepper", () => {
+  it("opens Settings to the order row from its own name beside the stepper", () => {
     cleanup();
     const onShowGameplaySettings = vi.fn();
     render(
@@ -308,14 +306,14 @@ describe("how long a session runs", () => {
         sessionOrder: "halves",
       }),
     );
-    fireEvent.click(screen.getByText("Order"));
+    fireEvent.click(screen.getByText("Halves"));
     expect(onShowGameplaySettings).toHaveBeenCalledOnce();
   });
 
   it("has no such link for a format with no order to name", () => {
     cleanup();
     show("rubber");
-    expect(screen.queryByText("Order")).toBeNull();
+    expect(screen.queryByText("Halves")).toBeNull();
   });
 });
 

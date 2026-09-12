@@ -1,5 +1,5 @@
 import { boardsForDeals } from "@hb/engine";
-import type { DuplicateSchedule, MatchFormat, RubberFormat } from "@hb/engine";
+import type { DuplicateSchedule, DuplicateScoring, MatchFormat, RubberFormat } from "@hb/engine";
 import type { TableRole } from "@hb/protocol";
 
 /** What one seat asked for when it sat down. */
@@ -13,6 +13,8 @@ export interface Asked {
   readonly order: DuplicateSchedule;
   /** Having minted the code or been handed one, or neither — see `hostAsk`. */
   readonly role: TableRole | null;
+  /** How they want a session scored. Ignored unless both asked for the same. */
+  readonly scoring: DuplicateScoring;
 }
 
 /** What the table will actually play. */
@@ -24,6 +26,8 @@ export interface Agreed {
   readonly halfFormat: RubberFormat;
   /** How the session is ordered. Meaningless for any other format. */
   readonly order: DuplicateSchedule;
+  /** How the session is scored. Meaningless for any other format. */
+  readonly scoring: DuplicateScoring;
 }
 
 
@@ -157,6 +161,7 @@ export function formatFor(first: Asked, second: Asked): Agreed {
       format: decided.format,
       halfFormat: decided.halfFormat,
       order: decided.order,
+      scoring: decided.scoring,
     };
   }
 
@@ -168,7 +173,7 @@ export function formatFor(first: Asked, second: Asked): Agreed {
     first.format === "game" || second.format === "game" ? "game" : "rubber";
 
   if (isRubberish(format)) {
-    return { boards: 0, format: shorterRubber, halfFormat, order: "halves" };
+    return { boards: 0, format: shorterRubber, halfFormat, order: "halves", scoring: "points" };
   }
 
   if (format === "duplicate") {
@@ -185,8 +190,14 @@ export function formatFor(first: Asked, second: Asked): Agreed {
       // is what a duplicate evening is and is the default nobody has to have
       // asked for.
       order: first.order === second.order ? first.order : "halves",
+      // Scoring takes agreement for the same reason the order does: points and
+      // IMPs are two different readings of the same boards rather than a longer
+      // and a shorter version of one, so there is nothing for "shorter wins" to
+      // decide between them. A disagreement falls back to points, the format's
+      // own long-standing default.
+      scoring: first.scoring === second.scoring ? first.scoring : "points",
     };
   }
 
-  return { boards: 0, format, halfFormat, order: "halves" };
+  return { boards: 0, format, halfFormat, order: "halves", scoring: "points" };
 }

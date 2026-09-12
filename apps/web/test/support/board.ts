@@ -1,5 +1,5 @@
 import { applyTableAction, nextDeal, startTable } from "@hb/engine";
-import type { DealAction, PlayerId, RubberState, TableState, Unlock } from "@hb/engine";
+import type { DealAction, DealRecord, PlayerId, RubberState, TableState, Unlock } from "@hb/engine";
 import { snapshotFor } from "@hb/protocol";
 import { act, render } from "@testing-library/react";
 import { createElement, useEffect, useRef, useState } from "react";
@@ -76,12 +76,14 @@ export const board: Board = {
 };
 
 function Harness({
+  matchDetail,
   seat,
   sound,
   table,
   tapToSelect,
   trickCount,
 }: {
+  readonly matchDetail: boolean;
   readonly seat: PlayerId;
   readonly sound: boolean;
   readonly table: TableState;
@@ -164,6 +166,7 @@ function Harness({
     density: "normal",
     devTools: false,
     exit: null,
+    matchDetail,
     onShowSettings: () => {},
     peeking: false,
     ratings: { mine: null, opponent: null },
@@ -176,6 +179,10 @@ function Harness({
 }
 
 export interface RenderBoardOptions {
+  /** On by default, as it ships. Pass false for a test about the reveal without it. */
+  readonly matchDetail?: boolean;
+  /** Earlier deals already on the scorepad. Defaults to none. */
+  readonly played?: readonly DealRecord[];
   /** The rubber the deal is played into. Defaults to a fresh one. */
   readonly rubberBefore?: RubberState;
   readonly seat: PlayerId;
@@ -188,6 +195,8 @@ export interface RenderBoardOptions {
 }
 
 export function renderBoard({
+  matchDetail = true,
+  played,
   rubberBefore,
   seat,
   seed,
@@ -198,9 +207,14 @@ export function renderBoard({
   const table = startTable({ seed, starter: 0 });
   render(
     createElement(Harness, {
+      matchDetail,
       seat,
       sound,
-      table: rubberBefore === undefined ? table : { ...table, rubberBefore },
+      table: {
+        ...table,
+        ...(rubberBefore === undefined ? {} : { rubberBefore }),
+        ...(played === undefined ? {} : { played }),
+      },
       tapToSelect,
       trickCount,
     }),

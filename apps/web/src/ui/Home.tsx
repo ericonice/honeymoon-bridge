@@ -228,6 +228,7 @@ function FormatNote({
   onFormatChange,
   onMirrorGamesChange,
   onShowGameplaySettings,
+  sessionOrder,
 }: {
   readonly deals: number;
   readonly format: MatchFormat;
@@ -235,6 +236,7 @@ function FormatNote({
   onFormatChange(format: MatchFormat): void;
   onMirrorGamesChange(games: 1 | 2): void;
   onShowGameplaySettings(): void;
+  readonly sessionOrder: DuplicateSchedule;
 }): React.JSX.Element {
   const lean = leanFor(CELLS.indexOf(format === "game" ? "rubber" : format), CELLS.length);
 
@@ -328,18 +330,19 @@ function FormatNote({
         &rsaquo;
       </Step>
       <span>deals</span>
-      {/* A fixed word rather than the order's own name — this row has twice
-          already been the one that overflows or wraps when something
-          variable-length was added to it (see this component's own doc), and
-          the name already appears just below, in the button's own
-          description. This is only the way to the row that explains and
-          changes it. */}
+      {/* The order's own name, not a fixed word — this row has twice already
+          been the one that overflows or wraps when something variable-length
+          was added to it, so `whitespace-nowrap` keeps it a single line and
+          `shrink-0` keeps the stepper from squeezing it to get there; on a
+          narrow phone the row overflows sideways rather than breaking its
+          pinned height. This is still the only way to the row that explains
+          and changes it, which is what makes naming it here worth the risk. */}
       <button
         type="button"
-        className="ml-0.5 shrink-0 underline decoration-white/40 underline-offset-2"
+        className="ml-0.5 shrink-0 overflow-hidden text-ellipsis whitespace-nowrap underline decoration-white/40 underline-offset-2"
         onClick={onShowGameplaySettings}
       >
-        Order
+        {ORDER_LABEL[sessionOrder]}
       </button>
     </div>
   );
@@ -646,6 +649,7 @@ export function Home({
                 setMirrorLength(games);
               }}
               onShowGameplaySettings={onShowGameplaySettings}
+              sessionOrder={sessionOrder}
             />
           </div>
 

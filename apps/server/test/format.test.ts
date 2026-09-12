@@ -8,12 +8,14 @@ const asked = (
   order: Asked["order"] = "halves",
   halfFormat: Asked["halfFormat"] = "game",
   role: Asked["role"] = null,
+  scoring: Asked["scoring"] = "points",
 ): Asked => ({
   deals,
   format,
   halfFormat,
   order,
   role,
+  scoring,
 });
 
 describe("agreeing what the sitting plays", () => {
@@ -96,6 +98,47 @@ describe("agreeing how a session is ordered", () => {
     const agreed = formatFor(asked("duplicate", 4, "adjacent"), asked("duplicate", 10, "adjacent"));
     expect(agreed.boards).toBe(2);
     expect(agreed.order).toBe("adjacent");
+  });
+});
+
+/**
+ * The scoring takes agreement for the same reason the order does: points and IMPs
+ * are two different readings of the same boards rather than a longer and a shorter
+ * version of one, so there is nothing for "shorter wins" to decide between them. A
+ * disagreement falls back to points, the format's own long-standing default.
+ */
+describe("agreeing how a session is scored", () => {
+  it("plays the scoring both asked for", () => {
+    expect(
+      formatFor(
+        asked("duplicate", 10, "halves", "game", null, "imps"),
+        asked("duplicate", 10, "halves", "game", null, "imps"),
+      ).scoring,
+    ).toBe("imps");
+  });
+
+  it("falls back to points when they disagree", () => {
+    expect(
+      formatFor(
+        asked("duplicate", 10, "halves", "game", null, "imps"),
+        asked("duplicate", 10, "halves", "game", null, "points"),
+      ).scoring,
+    ).toBe("points");
+  });
+
+  it("agrees the scoring and the order independently", () => {
+    const agreed = formatFor(
+      asked("duplicate", 10, "adjacent", "game", null, "imps"),
+      asked("duplicate", 10, "random", "game", null, "imps"),
+    );
+    expect(agreed.scoring).toBe("imps");
+    expect(agreed.order).toBe("halves");
+  });
+
+  it("plays points for every other format, regardless of what was asked", () => {
+    expect(formatFor(asked("rubber", 10, "halves", "game", null, "imps"), asked("rubber")).scoring).toBe(
+      "points",
+    );
   });
 });
 
@@ -236,6 +279,14 @@ describe("letting the host decide, at an invite", () => {
       asked("duplicate", 10, "random", "game", "host"),
     );
     expect(agreed.order).toBe("random");
+  });
+
+  it("plays the host's session scoring without needing the guest to agree", () => {
+    const agreed = formatFor(
+      asked("duplicate", 10, "halves", "game", "guest", "points"),
+      asked("duplicate", 10, "halves", "game", "host", "imps"),
+    );
+    expect(agreed.scoring).toBe("imps");
   });
 });
 

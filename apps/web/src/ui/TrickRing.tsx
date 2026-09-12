@@ -40,7 +40,21 @@ import type { TrickOutlook } from "@hb/engine";
  * without ambiguity: a green disc cannot be misread as progress, where a
  * nearly-complete green ring could be. **Only one of the pair can ever wear it**,
  * because the two targets sum to one more than the tricks in a deal.
+ *
+ * **Under trial: lit segments shade from amber toward green as they fill**, in
+ * place of the single flat colour the paragraphs above argue for. Asked for
+ * directly, to see it rather than to decide it — the argument above still
+ * stands and this is not yet its reversal. If it does not earn a place kept,
+ * `colorAt` goes and the lit segments go back to a flat `stroke-amber-400`.
  */
+const GRADIENT_START = { b: 0x24, g: 0xbf, r: 0xfb }; // amber-400
+const GRADIENT_END = { b: 0x99, g: 0xd3, r: 0x34 }; // emerald-400
+
+/** A colour partway from amber to green, `t` from 0 (first trick) to 1 (last). */
+function colorAt(t: number): string {
+  const mix = (from: number, to: number): number => Math.round(from + (to - from) * t);
+  return `rgb(${mix(GRADIENT_START.r, GRADIENT_END.r)}, ${mix(GRADIENT_START.g, GRADIENT_END.g)}, ${mix(GRADIENT_START.b, GRADIENT_END.b)})`;
+}
 export interface TrickRingProps {
   readonly outlook: TrickOutlook;
   /** Edge length in pixels. Scales the whole drawing; nothing here is fixed. */
@@ -91,15 +105,22 @@ export function TrickRing({ outlook, size = 24 }: TrickRingProps): React.JSX.Ele
       viewBox={`0 0 ${size} ${size}`}
       width={size}
     >
-      {Array.from({ length: outlook.target }, (_, index) => (
-        <path
-          key={index}
-          className={index < lit ? "stroke-amber-400" : "stroke-white/20"}
-          d={arc(centre, radius, index * slot + gap / 2, (index + 1) * slot - gap / 2)}
-          strokeLinecap="butt"
-          strokeWidth={width}
-        />
-      ))}
+      {Array.from({ length: outlook.target }, (_, index) => {
+        const isLit = index < lit;
+        return (
+          <path
+            key={index}
+            // The class stays even while the trial overrides its colour inline —
+            // it is still what identifies a lit segment as one, to this file and
+            // to `test/trickRing.test.ts`, whichever colour it actually paints.
+            className={isLit ? "stroke-amber-400" : "stroke-white/20"}
+            style={isLit ? { stroke: colorAt(index / Math.max(1, outlook.target - 1)) } : undefined}
+            d={arc(centre, radius, index * slot + gap / 2, (index + 1) * slot - gap / 2)}
+            strokeLinecap="butt"
+            strokeWidth={width}
+          />
+        );
+      })}
 
       {decided ? (
         <>

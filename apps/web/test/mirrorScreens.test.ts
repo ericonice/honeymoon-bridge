@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { newRubber } from "@hb/engine";
 import type { MatchFormat, MatchStanding, Pair, PlayerId, PlayerView } from "@hb/engine";
@@ -216,6 +216,7 @@ describe("the final score of a two-half match", () => {
         format: previousPoints === null ? "rubber" : "mirror",
         halfComplete: false,
         matchComplete: true,
+        matchDetail: true,
         matchWinner: ME,
         onDone: () => {},
         onNextDeal: () => {},
@@ -280,6 +281,7 @@ describe("which finished matches show a rating change", () => {
         format: over.format,
         halfComplete: false,
         matchComplete: true,
+        matchDetail: true,
         matchWinner: ME,
         onDone: () => {},
         onNextDeal: () => {},
@@ -327,6 +329,7 @@ describe("the screen between the two halves", () => {
         format: "mirror",
         halfComplete: true,
         matchComplete: false,
+        matchDetail: true,
         matchWinner: null,
         onDone: () => {},
         onNextDeal: () => {},
@@ -362,6 +365,10 @@ describe("the screen between the two halves", () => {
         waitingToContinue: false,
       }),
     );
+    // The hand's own breakdown shows first — see `DealComplete`'s own doc for
+    // why this screen now shows it the same two-stage way `PlayPhase`'s reveal
+    // does — and a tap through it is what reaches the half-time panel.
+    fireEvent.click(screen.getByText("Tap to continue"));
     return document.body.textContent ?? "";
   };
 

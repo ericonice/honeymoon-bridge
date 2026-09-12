@@ -32,6 +32,7 @@ import { reportHandLog } from "./handLog.js";
 import {
   boldness,
   difficulty,
+  duplicateScoring,
   preferredRelease,
   disguiseEnabled,
   pace,
@@ -194,6 +195,7 @@ export function startingPoint(): StartingPoint {
     match: startMatch({
       boards: boardsForDeals(sessionDeals()),
       schedule: sessionOrder(),
+      scoring: duplicateScoring(),
       // Where a session's board numbers begin. Random for now, which is the
       // honest version until a catalogue exists: nobody is being scored against
       // a field yet, so what matters is only that a session's boards are

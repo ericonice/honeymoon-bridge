@@ -11,6 +11,7 @@ import {
 } from "@hb/engine";
 import type {
   DuplicateSchedule,
+  DuplicateScoring,
   MatchFormat,
   MatchState,
   MatchSummary,
@@ -58,6 +59,8 @@ interface SeatRecord {
   readonly halfFormat: RubberFormat;
   /** How they want a session ordered. Only consulted when both asked for the same. */
   readonly order: DuplicateSchedule;
+  /** How they want a session scored. Only consulted when both asked for the same. */
+  readonly scoring: DuplicateScoring;
   /**
    * Having minted this table's code, having been handed one, or neither —
    * see `TableRole` and `hostAsk`. Null for a queue match and for a client
@@ -157,7 +160,7 @@ function startingMatch(seats: readonly [SeatRecord | null, SeatRecord | null]): 
   const agreed = formatFor(first, second);
   return startMatch({
     ...(agreed.format === "duplicate"
-      ? { boards: agreed.boards, schedule: agreed.order }
+      ? { boards: agreed.boards, schedule: agreed.order, scoring: agreed.scoring }
       : {}),
     firstBoard: dealSeed(),
     format: agreed.format,
@@ -363,6 +366,9 @@ export class Table extends DurableObject<Env> {
       // A client too old to have an opinion reads as the default, which is what it
       // would have been playing.
       order: message.sessionOrder ?? "halves",
+      // Same fallback, same reason: a client too old to ask reads as a vote for
+      // the format's own long-standing default.
+      scoring: message.scoring ?? "points",
       // Reread on every reconnect rather than pinned from the first join: the
       // role only matters once, at `startingMatch`, so whichever value is on
       // hand when both seats first fill is the one that counts and nothing

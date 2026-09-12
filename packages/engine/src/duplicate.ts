@@ -177,6 +177,32 @@ export interface DuplicateState {
   readonly deal: DealState;
   readonly results: readonly DuplicateResult[];
   readonly schedule: readonly DuplicateDeal[];
+  /**
+   * What was actually asked for when this session started — set once, here,
+   * and never recomputed.
+   *
+   * Optional only for a session already in storage from before this field
+   * existed; `scheduleKindOf` is the fallback for exactly that case, and nothing
+   * new should ever need it. A schedule's *shape* cannot stand in for this: a
+   * genuine shuffle lands looking like `halves` (every first run before every
+   * replay) close to a quarter of the time, purely by chance, and that reading
+   * used to feed straight back into `nextIn` when the session finished — so a
+   * `random` session that happened to shuffle into that shape would silently
+   * stop being random from its very next continuation onward, forever, since
+   * nothing distinguished "genuinely halves" from "random that looked like it".
+   * Recording the request once removes the guess entirely rather than
+   * narrowing it.
+   */
+  readonly scheduleKind?: DuplicateSchedule;
+  /**
+   * What was asked for when this session started — set once, here, and never
+   * recomputed, the same reason `scheduleKind` is. Optional for the same
+   * reason too: a session in storage from before this field existed has
+   * nothing to fall back on but "points", since IMPs did not exist as a
+   * choice yet — unlike a schedule's shape, there is no reading of old data
+   * that could mean anything else.
+   */
+  readonly scoring?: DuplicateScoring;
 }
 
 export interface StartDuplicateOptions {
@@ -198,6 +224,8 @@ export interface StartDuplicateOptions {
   readonly scheduleSeed: number;
   /** How the deals are ordered. Defaults to `halves`. */
   readonly schedule?: DuplicateSchedule;
+  /** How the margin and winner are read off the boards. Defaults to `points`. */
+  readonly scoring?: DuplicateScoring;
   /** Who draws first on the session's first board. It alternates from there. */
   readonly starter: PlayerId;
 }
@@ -341,6 +369,18 @@ export function duplicateFrom(
 export type DuplicateSchedule = "adjacent" | "halves" | "random" | "sequence";
 
 /**
+ * How a session's margin and winner are read off its boards.
+ *
+ * Points sums each board's own margin, which is what makes it move on every
+ * deal rather than waiting for a board to close — see `DuplicateSummary.margin`'s
+ * own doc. IMPs converts each **closed** board's margin through `impsFor` before
+ * summing, which is the whole reason it cannot move any sooner than points'
+ * "closed" reading does: a lone first run has no second run to compare it
+ * against yet, and IMPs has nothing else to convert.
+ */
+export type DuplicateScoring = "imps" | "points";
+
+/**
  * The order a session's deals are played in.
  *
  * `minGap` applies to `halves` alone. Under `adjacent` a board comes back at once by
@@ -407,21 +447,28 @@ export function scheduleFor(
 }
 
 /**
- * Which order a session was dealt in, read back off its own schedule.
+ * Which order a session was dealt in, guessed from the shape of its schedule.
  *
- * Recovered rather than stored, so there is one statement of what a session is
- * playing and no second field to disagree with it. Adjacent is the shape that can be
- * recognised — every replay directly follows its own first run — and `random` is
- * told apart from the other two by whether the first half is all first runs. A
- * `random` schedule that happens to look like one of those is one that would deal
- * identically anyway, so reading it as such costs nothing.
- *
- * `sequence` and `halves` share that same first-half-then-second-half shape and are
- * told apart only by whether the replay half repeats the first half's board order
- * exactly — which is also true of the rare `halves` schedule whose shuffle landed on
- * the identity permutation (`scheduleFor`'s own guaranteed-valid fallback), read as
- * `sequence` for the same reason a coincidentally-ordered `random` schedule is read
- * as whichever fixed one it matches: it would deal identically either way.
+ * **A fallback for a session already in storage from before `scheduleKind` was
+ * recorded, and nothing else should call this.** It used to be the only
+ * answer, on the reasoning that a schedule whose shape is ambiguous "would
+ * deal identically either way" — true of the session it is asked about, and
+ * false of the one asked next: `nextIn` fed this straight back in to decide
+ * what the *next* session should be, so a `random` session that happened to
+ * shuffle into a shape this cannot tell apart from `halves` or `sequence`
+ * silently stopped being random from its next continuation on, every time,
+ * with no way back short of leaving and choosing `random` again from
+ * scratch. Adjacent is the shape that can be recognised exactly — every
+ * replay directly follows its own first run. Nothing else can be: `random`
+ * lands looking like the other two whenever the first half happens to hold
+ * one first run of each board, which a genuine shuffle does close to a
+ * quarter of the time, and `sequence` and `halves` share that same
+ * first-half-then-second-half shape and are told apart only by whether the
+ * replay half repeats the first half's board order exactly — which a
+ * `halves` schedule does too, on the rare shuffle that lands on the identity
+ * permutation. Guessing wrong in either direction reads as a different
+ * format than the one asked for, which is exactly the bug `scheduleKind`
+ * exists to remove for anything new.
  */
 export function scheduleKindOf(session: DuplicateState): DuplicateSchedule {
   const { schedule } = session;
@@ -455,11 +502,12 @@ export function startDuplicate(options: StartDuplicateOptions): DuplicateState {
     // read as broken.
     starter: (index % 2 === 0 ? options.starter : opponentOf(options.starter)) as PlayerId,
   }));
+  const scheduleKind = options.schedule ?? "halves";
   const schedule = scheduleFor(
     count,
     options.scheduleSeed,
     options.minGap ?? minGapFor(count),
-    options.schedule ?? "halves",
+    scheduleKind,
   );
   const opening = schedule[0]!;
   const board = boards[opening.board]!;
@@ -470,6 +518,8 @@ export function startDuplicate(options: StartDuplicateOptions): DuplicateState {
     deal: startDeal({ seed: board.seed, starter: starterFor(board, opening.replay) }),
     results: [],
     schedule,
+    scheduleKind,
+    scoring: options.scoring ?? "points",
   };
 }
 
@@ -608,17 +658,39 @@ export interface DuplicateSummary {
   readonly current: DuplicateDeal | null;
   /** How many boards have both runs in. */
   readonly closed: number;
+  /**
+   * The board and run that just finished, or null before the first one has.
+   *
+   * Naming the board here is not the leak `current`'s own doc warns against:
+   * a completed deal has already had both hands revealed to this player, so
+   * there is nothing left to work out about it. What it is for is a scorepad
+   * that wants to point at the row it just filled in, rather than making a
+   * player hunt for it.
+   */
+  readonly lastCompleted: DuplicateDeal | null;
   /** True once every deal of the session has been played. */
   readonly complete: boolean;
   /** Deals finished, the one just completed included. Out of `schedule.length`. */
   readonly dealsPlayed: number;
   /**
-   * Each seat's running total: every deal played, not every board closed.
+   * Each seat's running total, in whatever `scoring` this session is playing —
+   * every deal played under points, only closed boards under IMPs, since a
+   * lone first run has nothing yet to convert.
    *
-   * The two agree once every board is shut, since a board's margin is the sum of its
-   * two runs. Summing the deals is what makes the score move as a session is played.
+   * Under points the two readings agree once every board is shut, since a
+   * board's margin is the sum of its two runs, and summing the deals is what
+   * makes the score move as a session is played. Under IMPs there is only the
+   * one reading: `impsFor` needs a board's two runs to have anything to
+   * convert, so this cannot move any sooner than `closedMarginTotal` does.
    */
   readonly margin: Pair<number>;
+  /**
+   * How this session's margin and winner are read off its boards — see
+   * `DuplicateScoring`'s own doc. Carried the same way `schedule` is: what was
+   * actually asked for, not re-derived, since there is nothing about a
+   * finished session's shape that could tell points and IMPs apart.
+   */
+  readonly scoring: DuplicateScoring;
   /**
    * Each seat's real accumulated score — honors, overtricks and undertrick
    * penalties all included, exactly as `scoreDeal` awards them, not the signed
@@ -674,7 +746,9 @@ export function summarizeDuplicate(session: DuplicateState): DuplicateSummary {
     };
   });
 
-  // **Every deal played, not every board closed.**
+  const scoring = session.scoring ?? "points";
+
+  // **Every deal played, not every board closed — under points.**
   //
   // These come to the same total in the end — a board's margin is the sum of its
   // two runs read from one seat, so summing the runs and summing the boards agree
@@ -686,11 +760,19 @@ export function summarizeDuplicate(session: DuplicateState): DuplicateSummary {
   // It is also the honest reading of what a session *is*: one signed score a deal
   // and the total is their sum. The board pairing is how a deal gets its meaning,
   // not an extra step the arithmetic has to wait for.
-  const toSeatZero = boards.reduce(
-    (total, outcome) =>
-      total + outcome.played.reduce((sum, run) => sum + netTo(outcome, run, 0), 0),
-    0,
-  );
+  //
+  // **Under IMPs there is no equivalent running reading, so this sums closed
+  // boards only** — see `closedMargin`, shared with `closedMarginTotal` for
+  // exactly that reason: the two must never disagree about what a closed
+  // board is worth.
+  const toSeatZero =
+    scoring === "imps"
+      ? closedMargin(boards, scoring, 0)
+      : boards.reduce(
+          (total, outcome) =>
+            total + outcome.played.reduce((sum, run) => sum + netTo(outcome, run, 0), 0),
+          0,
+        );
   // Folded over every run directly rather than through `boards`, since a board
   // pairing is what a *margin* needs — two runs to subtract — and a real score
   // has nothing to pair against: each run stands on its own.
@@ -706,10 +788,12 @@ export function summarizeDuplicate(session: DuplicateState): DuplicateSummary {
     closed: boards.filter((outcome) => outcome.margin !== null).length,
     complete,
     dealsPlayed: results.length,
+    lastCompleted: results.length === 0 ? null : (session.schedule[results.length - 1] ?? null),
     margin: [toSeatZero, 0 - toSeatZero],
     points,
-    schedule: scheduleKindOf(session),
+    schedule: session.scheduleKind ?? scheduleKindOf(session),
     score,
+    scoring,
     vulnerable,
     // Only once every board is in. A session led at the halfway point has no
     // closed boards at all, so an interim winner would be a claim about nothing.
@@ -742,6 +826,45 @@ export function firstPlayTotal(summary: DuplicateSummary, seat: PlayerId): numbe
 /** This seat's net across every board's replay so far, or null before any exist. */
 export function replayTotal(summary: DuplicateSummary, seat: PlayerId): number | null {
   return subtotalBy(summary, seat, replayOf);
+}
+
+/**
+ * A seat's closed boards, converted through whatever `scoring` asks for and
+ * summed — shared between `summarizeDuplicate`'s own IMPs reading and
+ * `closedMarginTotal`, so the two can never disagree about what a closed
+ * board is worth. An open board (`margin === null`) contributes nothing,
+ * which is what makes this the same computation either way: points has
+ * nothing to convert, IMPs has nothing yet to compare.
+ */
+function closedMargin(
+  boards: readonly BoardOutcome[],
+  scoring: DuplicateScoring,
+  seat: PlayerId,
+): number {
+  return boards.reduce((total, board) => {
+    if (board.margin === null) {
+      return total;
+    }
+    const raw = marginTo(board, seat);
+    return total + (scoring === "imps" ? impsFor(raw) : raw);
+  }, 0);
+}
+
+/**
+ * This seat's net summed across only the boards that have closed — both runs
+ * played — or null before any have. In whatever `scoring` the session is
+ * playing, the same as `DuplicateSummary.margin` is.
+ *
+ * Distinct from `margin` under points, which runs on every deal played so the
+ * score moves as the session goes rather than sitting at nil until a board
+ * comes round again — this is the other reading: what the boards that have
+ * actually cancelled their own luck say, ignoring whichever board is only
+ * half played. Under IMPs the two are never distinct: `margin` already sums
+ * closed boards only, since a lone first run has nothing yet to convert, so
+ * this and `margin` agree exactly and at every point in the session.
+ */
+export function closedMarginTotal(summary: DuplicateSummary, seat: PlayerId): number | null {
+  return summary.closed === 0 ? null : closedMargin(summary.boards, summary.scoring, seat);
 }
 
 /**
@@ -786,29 +909,35 @@ export function nextDuplicateDeal(session: DuplicateState): DuplicateState {
     deal: startDeal({ seed: board.seed, starter: starterFor(board, entry.replay) }),
     results,
     schedule: session.schedule,
+    ...(session.scheduleKind === undefined ? {} : { scheduleKind: session.scheduleKind }),
+    ...(session.scoring === undefined ? {} : { scoring: session.scoring }),
   };
 }
 
 /**
  * International Match Points, from a point difference.
  *
- * **Unused, deliberately.** A session is scored in points: everybody understands
- * them, every other screen speaks them, and `bidValue.ts` already prices in them.
- * IMPs was the first proposal, on the grounds that a concave scale stops one
- * doubled disaster deciding a session — and what weakened it is that duplication
- * has already cancelled the deal, so a duplicate margin is far better behaved
- * than a rubber margin to begin with.
+ * **A setting now — `DuplicateScoring` — and not the argument-by-measurement
+ * exercise this was written for.** The case for points stands: everybody
+ * understands them, every other screen speaks them, and duplication has
+ * already cancelled the deal, so a duplicate margin is far better behaved
+ * than a rubber margin to begin with. The case *for offering the choice* is
+ * different and narrower — a session with one or two boards that reach a
+ * slam or a doubled game can have those boards decide it on points alone,
+ * with the rest of the session barely moving the total; IMPs' whole job is
+ * to stop one board outweighing the others like that.
  *
- * It is written anyway because it is the only way to settle that by measurement
- * rather than by argument: a session records its board seeds, its schedule seed
- * and both runs' scores, so any played session can be re-scored the other way
- * afterwards and the two answers compared. If it rarely changes who won, IMPs is
- * an explanation nobody needed.
- *
- * Note it cannot become a *setting*: a session can be won on points and lost on
- * IMPs, so the two are different formats — two rating pools, and two things for
- * the bidder to maximise, since a concave objective sacrifices and doubles less
- * than a linear one.
+ * The earlier objection to a setting was that a session could be won on
+ * points and lost on IMPs, costing two rating pools and two things for the
+ * bidder to maximise. The first cost does not bind: duplicate sessions are
+ * not rated at all — see `ratings.ts`'s own reasoning, which has nothing to
+ * do with the scale. **The second is real and left open rather than fixed**:
+ * `bidValue.ts`'s duplicate objective prices every call in points regardless
+ * of which scale the session settles in, so a bot bidding under IMPs is not
+ * bidding for what actually decides the match it is playing. Chosen once, at
+ * the session's own start, the same way `DuplicateSchedule` is — a session
+ * still records both runs' raw scores regardless, so nothing about *how it
+ * was played* depends on the choice, only how the boards are read afterwards.
  */
 const IMP_STEPS: readonly number[] = [
   20, 50, 90, 130, 170, 220, 270, 320, 370, 430, 500, 600, 750, 900, 1100, 1300, 1500, 1750, 2000,

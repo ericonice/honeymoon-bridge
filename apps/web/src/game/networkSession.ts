@@ -5,6 +5,7 @@ import type { ClientMessage, ServerMessage, SessionSnapshot, TableInfo, TableRol
 import { useCallback, useEffect, useRef, useState } from "react";
 import { storedSession } from "./account.js";
 import {
+  duplicateScoring,
   mirrorHalfFormat,
   playerToken,
   preferredFormat,
@@ -198,6 +199,10 @@ export function useNetworkSession(code: string, role: TableRole | null): Network
             // reason duplicate itself takes both: an order nobody asked for is a
             // different game handed over unasked.
             sessionOrder: sessionOrder(),
+            // Consulted only when the other seat asked for the same scoring, the
+            // same reason the order is: a scale nobody asked for changes what it
+            // takes to win a session neither seat agreed to play that way.
+            scoring: duplicateScoring(),
             // Consulted only when both seats asked for a mirror, and then the shorter
             // wins — the half length is a matter of how long, where the format itself
             // is a matter of which game.

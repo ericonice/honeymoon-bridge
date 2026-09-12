@@ -63,8 +63,12 @@ function playToTheEnd(seat: PlayerId, seed: number): boolean {
     settle(4000);
   }
 
-  // The last trick sweeps away, both hands are revealed, and a tap on the table
-  // is what takes the board on to the final score — see `PlayPhase.handleTap`.
+  // The last trick sweeps away, both hands are revealed, and a tap on the
+  // table is what takes the board on to the final score — see
+  // `PlayPhase.handleTap`. Only one tap: this deal also finishes the match,
+  // so the reveal never stages the match pad of its own — `DealComplete`
+  // shows the standing next regardless, and showing it here too first would
+  // just be the same figure twice.
   const table = document.querySelector<HTMLElement>("main div");
   act(() => {
     table?.click();

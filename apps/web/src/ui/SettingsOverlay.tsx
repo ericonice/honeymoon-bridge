@@ -1,4 +1,4 @@
-import type { DuplicateSchedule, Unlock } from "@hb/engine";
+import type { DuplicateSchedule, DuplicateScoring, Unlock } from "@hb/engine";
 import { useEffect, useState } from "react";
 import {
   DIFFICULTIES,
@@ -9,7 +9,13 @@ import type { Difficulty } from "../bot/difficulty.js";
 import { BOT_RELEASES, LATEST_RELEASE } from "../bot/release.js";
 import type { Account } from "../game/account.js";
 import { runBidTiming } from "../game/bidCost.js";
-import { ORDER_LABEL, SESSION_ORDERS, preferredRelease } from "../game/identity.js";
+import {
+  DUPLICATE_SCORINGS,
+  ORDER_LABEL,
+  SCORING_LABEL,
+  SESSION_ORDERS,
+  preferredRelease,
+} from "../game/identity.js";
 import { botAnchor } from "../game/records.js";
 import type { CardColor } from "../game/cardColor.js";
 import type { Boldness, Density, Pace } from "../game/identity.js";
@@ -95,6 +101,8 @@ export interface SettingsOverlayProps {
   readonly difficulty: Difficulty;
   /** How a duplicate session orders its deals. */
   readonly sessionOrder: DuplicateSchedule;
+  /** How a duplicate session's margin and winner are read off its boards. */
+  readonly scoring: DuplicateScoring;
   readonly opponent: number;
   readonly density: Density;
   readonly pace: Pace;
@@ -102,12 +110,16 @@ export interface SettingsOverlayProps {
   readonly tapToSelect: boolean;
   /** Whether the play screen draws each side's trick countdown. */
   readonly trickCount: boolean;
+  /** Whether a tap through a hand's own breakdown goes on to show the match pad. */
+  readonly matchDetail: boolean;
   onBoldnessChange(next: Boldness): void;
   onDifficultyChange(next: Difficulty): void;
   onSessionOrderChange(next: DuplicateSchedule): void;
+  onScoringChange(next: DuplicateScoring): void;
   onOpponentChange(next: number): void;
   onCardColorChange(next: CardColor): void;
   onDensityChange(next: Density): void;
+  onMatchDetailChange(enabled: boolean): void;
   onPaceChange(next: Pace): void;
   onSoundChange(enabled: boolean): void;
   onTapToSelectChange(enabled: boolean): void;
@@ -293,12 +305,14 @@ export function SettingsOverlay({
   onDifficultyChange,
   onLeaderboardVisibilityChange,
   onSessionOrderChange,
+  onScoringChange,
   onOpponentChange,
   onCardColorChange,
   onClose,
   onDevToolsChange,
   onDensityChange,
   onDisguiseChange,
+  onMatchDetailChange,
   onPaceChange,
   onPeekingChange,
   onShowSignIn,
@@ -307,9 +321,11 @@ export function SettingsOverlay({
   onTapToSelectChange,
   onTrickCountChange,
   onThemeChange,
+  matchDetail,
   pace,
   peeking,
   playtester,
+  scoring,
   sessionOrder,
   sound,
   tapToSelect,
@@ -395,8 +411,9 @@ export function SettingsOverlay({
             session, unlike anything in this group, and it had to grow a third
             option that nobody would have found behind a gear. Moved rather than
             copied: a preference in two places is one that can disagree with
-            itself. Its own length and duplicate's order stayed here, since those
-            are chosen once and left the way everything else in this group is. */}
+            itself. Its own length, duplicate's order and now its scoring stayed
+            here, since those are chosen once and left the way everything else in
+            this group is. */}
         <SettingsSection
           onToggle={() => {
             toggle("gameplay");
@@ -421,6 +438,13 @@ export function SettingsOverlay({
             onChange={onSessionOrderChange}
             options={SESSION_ORDERS.map((one) => ({ label: ORDER_LABEL[one], value: one }))}
           />
+          <Choice
+            label="How a duplicate session is scored"
+            description="Points totals what every board actually came to — a slam or a doubled game can be worth more than the rest of the session put together, so a board like that can decide it on its own. IMPs converts each board's own margin through a table that flattens large swings before adding them up, the way tournament bridge scores a match, so one big board counts for more than an ordinary one but not enough to swing the whole session by itself."
+            value={scoring}
+            onChange={onScoringChange}
+            options={DUPLICATE_SCORINGS.map((one) => ({ label: SCORING_LABEL[one], value: one }))}
+          />
         </SettingsSection>
 
         {/* Layout: the app is a fixed frame with nothing scrollable in it, so a
@@ -437,7 +461,12 @@ export function SettingsOverlay({
             the testing panel by mistake — where nobody who is not a playtester
             could reach it, which is everybody the setting exists for. It joins
             Layout and Card back here because all three are about what the board
-            itself shows, not how the game plays. */}
+            itself shows, not how the game plays.
+
+            Show the match score after each hand is the same kind of row: whether
+            a tap through a finished hand's own breakdown goes on to show the
+            match pad is a matter of taste rather than an open question, and
+            nothing about it changes how the game plays either. */}
         <SettingsSection
           onToggle={() => {
             toggle("display");
@@ -460,6 +489,12 @@ export function SettingsOverlay({
             description="A small ring beside each played card: one segment per trick that side has to take — ten to make 4♠, four to set it — filling as they take them. It turns orange when one more lost trick would put them on the edge, and closes when the deal is decided, which is often several tricks before the last card. Off if you would rather keep the count yourself."
             on={trickCount}
             onChange={onTrickCountChange}
+          />
+          <Toggle
+            label="Show the match score after each hand"
+            description="Once you have seen a finished hand's own score, a further tap shows the match or session standing before going on to the next deal — the same figure the Score button opens the rest of the time. Off skips straight to the next deal; the Score button still opens the standing whenever you want it."
+            on={matchDetail}
+            onChange={onMatchDetailChange}
           />
           {/* Only under the theme it was curated for — felt's blue-on-green never
               had the contrast problem these are picked to solve, so there is

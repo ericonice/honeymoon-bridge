@@ -1,4 +1,4 @@
-import type { DuplicateSchedule, MatchFormat } from "@hb/engine";
+import type { DuplicateSchedule, DuplicateScoring, MatchFormat } from "@hb/engine";
 import { DIFFICULTIES } from "../bot/difficulty.js";
 import type { Difficulty } from "../bot/difficulty.js";
 import { LATEST_RELEASE, releaseFor } from "../bot/release.js";
@@ -11,6 +11,7 @@ const RUBBER_GAMES_KEY = "hb.rubberGames";
 const MIRROR_GAMES_KEY = "hb.mirrorGames";
 const SESSION_DEALS_KEY = "hb.sessionDeals";
 const SESSION_ORDER_KEY = "hb.sessionOrder";
+const SCORING_KEY = "hb.scoring";
 const OPPONENT_KEY = "hb.opponent";
 const DIFFICULTY_KEY = "hb.difficulty";
 const DISGUISE_KEY = "hb.disguise";
@@ -21,6 +22,7 @@ const PEEK_KEY = "hb.peek";
 const SOUND_KEY = "hb.sound";
 const TAP_TO_SELECT_KEY = "hb.tapToSelect";
 const TRICK_COUNT_KEY = "hb.trickCount";
+const MATCH_DETAIL_KEY = "hb.matchDetail";
 const NICKNAME_KEY = "hb.nickname";
 const TOKEN_KEY = "hb.token";
 
@@ -255,6 +257,34 @@ export function sessionOrder(): DuplicateSchedule {
 
 export function setSessionOrder(order: DuplicateSchedule): void {
   writeStored(SESSION_ORDER_KEY, order);
+}
+
+/**
+ * How a duplicate session's margin and winner are read off its boards —
+ * see `DuplicateScoring`'s own doc for what the two actually compute.
+ *
+ * Points is the default for the reason it always was: everybody understands
+ * it, and every other screen already speaks it. IMPs is offered because a
+ * session with one or two boards that reach a slam or a doubled game can
+ * have those boards decide it on points alone, with the rest of the session
+ * barely moving the total — which is exactly what IMPs' concave scale exists
+ * to stop.
+ */
+export const DUPLICATE_SCORINGS: readonly DuplicateScoring[] = ["points", "imps"];
+
+/** What each scoring is called wherever one is offered. */
+export const SCORING_LABEL: Record<DuplicateScoring, string> = {
+  imps: "IMPs",
+  points: "Points",
+};
+
+export function duplicateScoring(): DuplicateScoring {
+  const stored = readStored(SCORING_KEY);
+  return DUPLICATE_SCORINGS.find((one) => one === stored) ?? "points";
+}
+
+export function setDuplicateScoring(scoring: DuplicateScoring): void {
+  writeStored(SCORING_KEY, scoring);
 }
 
 /**
@@ -499,6 +529,24 @@ export function trickCountEnabled(): boolean {
 
 export function setTrickCountEnabled(enabled: boolean): void {
   writeStored(TRICK_COUNT_KEY, enabled ? "on" : "off");
+}
+
+/**
+ * Whether a tap through the just-played hand's own breakdown goes on to show
+ * the match or session pad, or straight into the next deal.
+ *
+ * On by default: it is the same figure the "Score" button opens the rest of
+ * the time, and putting it where a tap already lands costs nothing extra to
+ * read. Off is for anyone who would rather that tap be one motion — the
+ * pad stays reachable through "Score" either way, so nothing is lost, only
+ * skipped by default.
+ */
+export function matchDetailEnabled(): boolean {
+  return readStored(MATCH_DETAIL_KEY) !== "off";
+}
+
+export function setMatchDetailEnabled(enabled: boolean): void {
+  writeStored(MATCH_DETAIL_KEY, enabled ? "on" : "off");
 }
 
 export function pace(): Pace {

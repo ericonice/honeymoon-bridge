@@ -152,6 +152,30 @@ describe("a match, whichever kind is being played", () => {
     }
   });
 
+  /**
+   * The bug this was written for: `nextIn` used to decide the next session's
+   * order by re-guessing the finished one's from its shape, and a genuine
+   * shuffle lands in a shape indistinguishable from `halves` close to two in
+   * five sessions this size — so a player who chose Shuffled would find it
+   * silently and permanently replaced by Halves from the very next
+   * continuation on, with no way back short of leaving and choosing it again.
+   * Chained several times rather than once, since the bug does not need to
+   * fire on the first continuation to be real — it only has to fire once,
+   * ever, to lose the setting for good.
+   */
+  it("keeps a chosen order through as many continuations as it is asked to play", () => {
+    let match = startMatch({ ...OPTIONS, boards: 3, format: "duplicate", schedule: "random" });
+
+    for (let session = 0; session < 6; session++) {
+      const summary = summarizeMatch(match);
+      expect(summary.standing.kind, `session ${session}`).toBe("duplicate");
+      if (summary.standing.kind === "duplicate") {
+        expect(summary.standing.summary.schedule, `session ${session}`).toBe("random");
+      }
+      match = nextIn(playMatch(match, 40), 2000 + session);
+    }
+  });
+
   it("pays a per-deal bonus in a session and never in a rubber", () => {
     const session = summarizeMatch(playDeal(startMatch({ ...OPTIONS, format: "duplicate" })));
     const rubber = summarizeMatch(playDeal(startMatch({ ...OPTIONS, format: "rubber" })));

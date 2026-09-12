@@ -17,6 +17,8 @@ export interface TableGameProps {
   /** How much room the chrome may take — see `Density`. */
   readonly density: Density;
   readonly devTools: boolean;
+  /** Whether a tap through a hand's own breakdown goes on to show the match pad. */
+  readonly matchDetail: boolean;
   readonly peeking: boolean;
   /** Having minted this code or been handed one, or neither — see `TableRole`. */
   readonly role: TableRole | null;
@@ -206,6 +208,7 @@ export function TableGame({
   code,
   density,
   devTools,
+  matchDetail,
   onLeave,
   onShowSettings,
   peeking,
@@ -272,6 +275,7 @@ export function TableGame({
       <GameBoard
         density={density}
         devTools={devTools}
+        matchDetail={matchDetail}
         exit={{
           leave: quit,
           title: "Leave the table?",

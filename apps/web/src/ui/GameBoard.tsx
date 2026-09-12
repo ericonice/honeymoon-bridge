@@ -46,6 +46,8 @@ export interface GameBoardProps {
   readonly devTools: boolean;
   /** Null when this match has no exit of its own to offer. */
   readonly exit: GameExit | null;
+  /** See `PlayPhase`'s own prop of the same name. */
+  readonly matchDetail: boolean;
   readonly peeking: boolean;
   /** See `PlayPhase`'s own prop of the same name. */
   readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
@@ -83,9 +85,11 @@ function playableCards(view: PlayerView, shownPhase: DealPhase): Card[] | null {
 
 function CurrentPhase({
   handOriginRef,
+  matchDetail,
   onDismissTrick,
   onDone,
   onHandsSettled,
+  onShowingStandingChange,
   onStartPlay,
   peeking,
   phase,
@@ -96,10 +100,14 @@ function CurrentPhase({
   walkthrough,
 }: {
   readonly handOriginRef: React.RefObject<DOMRect | null>;
+  /** See `GameBoardProps`. */
+  readonly matchDetail: boolean;
   onDismissTrick(): void;
   readonly onDone: (() => void) | null;
   /** See `PlayPhase`'s own prop of the same name. */
   onHandsSettled(): void;
+  /** See `PlayPhase`'s own prop of the same name. */
+  onShowingStandingChange(showing: boolean): void;
   /** Non-null only while the closed auction — or the deal's last trick — is waiting to be dismissed. */
   readonly onStartPlay: (() => void) | null;
   readonly peeking: boolean;
@@ -155,6 +163,8 @@ function CurrentPhase({
       return (
         <PlayPhase
           dealBonus={session.dealBonus}
+          format={session.format}
+          matchDetail={matchDetail}
           ratings={ratings}
           thinking={session.thinking}
           dealScore={score}
@@ -181,12 +191,14 @@ function CurrentPhase({
           opponentWaitingToContinue={session.opponentWaitingToContinue}
           release={onStartPlay}
           revealedHands={revealedHands}
+          standing={standing}
           trickCount={trickCount}
           view={view}
           vulnerable={vulnerable}
           waitingToContinue={session.waitingToContinue}
           onDismissTrick={onDismissTrick}
           onHandsSettled={onHandsSettled}
+          onShowingStandingChange={onShowingStandingChange}
         />
       );
     }
@@ -196,6 +208,7 @@ function CurrentPhase({
           dealBonus={session.dealBonus}
           format={session.format}
           halfComplete={session.halfComplete}
+          matchDetail={matchDetail}
           matchWinner={session.winner}
           matchComplete={session.matchComplete}
           opponentName={session.opponentName}
@@ -476,6 +489,7 @@ export function GameBoard({
   density,
   devTools,
   exit,
+  matchDetail,
   onShowSettings,
   peeking,
   ratings,
@@ -490,10 +504,25 @@ export function GameBoard({
   const [showingLastTrick, setShowingLastTrick] = useState(false);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [confirmingClaim, setConfirmingClaim] = useState(false);
+  // Mirrors `PlayPhase`'s own local `showingStanding` — see its doc comment —
+  // so the footer below can stop showing this seat's own thirteen revealed
+  // cards for the same beat `PlayPhase` stops showing the opponent's. The
+  // match pad is cramped between two hands neither is still about; freeing
+  // both is what actually gives it the room the screen has to spare.
+  const [showingStanding, setShowingStanding] = useState(false);
   const { view } = session;
   const { phase, release } = useShownPhase(session, peeking);
   const claimResult = useClaimResult(view);
   const handsSettled = useHandsSettled(view);
+  // `PlayPhase` unmounts the instant the shown phase leaves "play" — into
+  // `DealComplete` on a match or half finishing, or straight into the next
+  // deal's draw or auction — and an unmount fires none of its own effects, so
+  // nothing else would ever clear this back to false.
+  useEffect(() => {
+    if (phase !== "play") {
+      setShowingStanding(false);
+    }
+  }, [phase]);
   // Null until the engine's own phase — not the shown one — is complete, so
   // this is already showing throughout the last-trick hold, the same beat
   // `PlayPhase` is still on screen for. Also null for a claimed finish: see
@@ -504,6 +533,14 @@ export function GameBoard({
   // claim button, a bidding recap, both hands' cards laid bare — none of it
   // is still this deal's to offer once there is no more deal left to act on.
   const showingRevealedHands = revealedHands !== null && handsSettled.settled;
+  // The footer's own reading of `showingRevealedHands`: this seat's revealed
+  // thirteen are worth the room right up until a tap asks to see the match
+  // pad instead, at which point they are competing with it for the same
+  // screen rather than explaining anything still on it. `PlayToolbar` and
+  // `OpponentPeek` keep reading `showingRevealedHands` unchanged — a deal
+  // that is over is over for them regardless of which half of the reveal is
+  // currently showing.
+  const footerShowsCards = showingRevealedHands && !showingStanding;
   const playable = playableCards(view, phase);
   // The *shown* phase, not the engine's: `DealComplete` is what carries the
   // "You win the rubber" headline, and it is not on screen until the hold over
@@ -616,6 +653,7 @@ export function GameBoard({
             answer rather than a way out of something unfinished. */}
         <CurrentPhase
           handOriginRef={handOriginRef}
+          matchDetail={matchDetail}
           peeking={peeking}
           phase={phase}
           ratings={ratings}
@@ -626,6 +664,7 @@ export function GameBoard({
           onDismissTrick={session.dismissTrick}
           onDone={settled && exit !== null ? exit.leave : null}
           onHandsSettled={handsSettled.markSettled}
+          onShowingStandingChange={setShowingStanding}
           onStartPlay={release}
         />
       </main>
@@ -653,8 +692,8 @@ export function GameBoard({
           that it falls through to the ordinary blank placeholder below,
           which is already exactly right: the hand is empty either way. */}
       {phase === "complete" ? null : (
-        <footer className="border-t border-white/10 pt-1">
-          {showingRevealedHands ? (
+        <footer className="hand-footer border-t border-white/10 pt-1">
+          {footerShowsCards ? (
             <Hand
               cards={revealedHands[view.me]}
               highlight={null}

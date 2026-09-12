@@ -9,9 +9,11 @@ import { readDevTools, writeDevTools } from "./game/devTools.js";
 import {
   boldness,
   difficulty,
+  duplicateScoring,
   preferredRelease,
   density as storedDensity,
   disguiseEnabled,
+  matchDetailEnabled,
   pace,
   peeking as storedPeeking,
   preferredFormat,
@@ -19,9 +21,11 @@ import {
   sessionOrder,
   setBoldness,
   setDifficulty,
+  setDuplicateScoring,
   setPreferredRelease,
   setDensity,
   setDisguiseEnabled,
+  setMatchDetailEnabled,
   setPace,
   setPeeking as storePeeking,
   setPreferredFormat,
@@ -150,6 +154,10 @@ export function App(): React.JSX.Element {
   // How a session orders its deals, on the same terms as the length: a preference for
   // the next match, since a session carries its own schedule.
   const [order, setOrder] = useState(sessionOrder);
+  // How a session's margin and winner are read off its boards, on the same terms:
+  // a preference for the next match, carried by the session it starts rather than
+  // re-read from a setting that could move mid-session.
+  const [scoring, setScoring] = useState(duplicateScoring);
   const [disguise, setDisguise] = useState(disguiseEnabled);
   // Testing settings, kept in state only so the rows re-render when tapped; the
   // stored value is what anything actually reads.
@@ -160,6 +168,7 @@ export function App(): React.JSX.Element {
   const [sound, setSound] = useState(soundEnabled);
   const [tapToSelect, setTapToSelect] = useState(tapToSelectEnabled);
   const [trickCount, setTrickCount] = useState(trickCountEnabled);
+  const [matchDetail, setMatchDetail] = useState(matchDetailEnabled);
   // Read once at mount, like every other setting here. Its *default* comes from
   // the viewport rather than storage — see `density` — so an untouched install
   // follows the device it launched on and a deliberate choice sticks.
@@ -360,6 +369,7 @@ export function App(): React.JSX.Element {
         return (
           <RobotGame
             devTools={devTools}
+            matchDetail={matchDetail}
             peeking={peeking}
             sound={sound}
             density={layout}
@@ -403,6 +413,7 @@ export function App(): React.JSX.Element {
           <TableGame
             code={screen.code}
             devTools={devTools}
+            matchDetail={matchDetail}
             peeking={peeking}
             role={screen.role}
             sound={sound}
@@ -455,6 +466,11 @@ export function App(): React.JSX.Element {
               setSessionOrder(next);
               setOrder(next);
             }}
+            scoring={scoring}
+            onScoringChange={(next) => {
+              setDuplicateScoring(next);
+              setScoring(next);
+            }}
             boldness={bold}
             opponent={opponent}
             difficulty={hardness}
@@ -466,6 +482,7 @@ export function App(): React.JSX.Element {
             disguise={disguise}
             sound={sound}
             density={layout}
+            matchDetail={matchDetail}
             tapToSelect={tapToSelect}
             trickCount={trickCount}
             theme={theme}
@@ -528,6 +545,10 @@ export function App(): React.JSX.Element {
             onTrickCountChange={(enabled) => {
               setTrickCountEnabled(enabled);
               setTrickCount(enabled);
+            }}
+            onMatchDetailChange={(enabled) => {
+              setMatchDetailEnabled(enabled);
+              setMatchDetail(enabled);
             }}
             onThemeChange={(next) => {
               writeTheme(next);

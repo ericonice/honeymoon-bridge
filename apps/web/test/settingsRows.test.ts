@@ -41,6 +41,8 @@ function settings(playtester: boolean): SettingsOverlayProps {
     difficulty: "championship",
   sessionOrder: "halves",
   onSessionOrderChange: () => {},
+    scoring: "points",
+    onScoringChange: noop,
     opponent: 3,
     onAccountSaved: noop,
     onAccountDeleted: noop,
@@ -52,6 +54,7 @@ function settings(playtester: boolean): SettingsOverlayProps {
     onDifficultyChange: noop,
     onDisguiseChange: noop,
     onLeaderboardVisibilityChange: noop,
+    onMatchDetailChange: noop,
     onOpponentChange: noop,
     onPaceChange: noop,
     onPeekingChange: noop,
@@ -61,6 +64,7 @@ function settings(playtester: boolean): SettingsOverlayProps {
     onTapToSelectChange: noop,
     onThemeChange: noop,
     onTrickCountChange: noop,
+    matchDetail: true,
     pace: "fast",
     peeking: false,
     playtester,
@@ -88,6 +92,7 @@ const ORDINARY = [
   "Layout",
   "Game speed",
   "Count the tricks each side needs",
+  "Show the match score after each hand",
   "Sound",
   // How hard it plays is the setting that replaced four, and the one everybody
   // needs. Which *release* they play is a measurement tool and lives behind the
@@ -97,6 +102,7 @@ const ORDINARY = [
   // the trick count is: it is a matter of taste about a format somebody may not be
   // playing this minute, and a preference nobody can find is not a preference.
   "Order of a duplicate session",
+  "How a duplicate session is scored",
 ];
 
 test("every ordinary preference is reachable without the playtester flag", () => {

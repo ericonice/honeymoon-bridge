@@ -1,4 +1,4 @@
-import { GAME_THRESHOLD, firstPlayTotal, replayTotal, totalScore } from "@hb/engine";
+import { GAME_THRESHOLD, closedMarginTotal, totalScore } from "@hb/engine";
 import type {
   MatchFormat,
   DealPhase,
@@ -185,20 +185,33 @@ function signed(value: number): string {
 }
 
 /**
- * A session's standing: the total, and the two passes it is built from.
+ * A session's standing: the running total, and what the boards that have
+ * actually closed come to.
  *
  * Used to be one signed score plus "what this deal came to before" — right for a
- * session with no two-sided rubber under it, but it said nothing about how the two
- * *passes* through the boards compare, which is exactly the question mirror's own
- * strip answers for its two halves. First play and replay are that same question
- * asked of a duplicate session: not two sides of one score, since a session's total
- * is already a single number rather than a pair, but two subtotals of the runs seen
- * so far — one per pass — that sum to it. Replay reads "—" until at least one board's
- * second run exists, the same convention mirror's own not-yet-played half uses.
+ * session with no two-sided rubber under it, but not why it was worth showing
+ * that on its own. First play and replay subtotals sat here for a while, one
+ * per pass through the boards — a real comparison, but a narrower one than
+ * either of these, and it cost the two feet that answer the question a player
+ * actually has mid-session: how much of this score is decided.
+ *
+ * **Closed is that answer, and it is not a repeat of Total — under points.** Total
+ * runs on every deal played, so it moves before a board has actually cancelled its
+ * own luck — see `DuplicateSummary.margin`'s own doc for why it does not wait.
+ * Closed sums only the boards whose second run is in. The two agree once every
+ * board is shut, and differ exactly while one is still half played, which is the
+ * gap this row exists to say something about.
+ *
+ * **Under IMPs the two never differ, so there is only one row.** `impsFor` needs
+ * both of a board's runs to have anything to convert, so `margin` already sums
+ * closed boards only — the same figure `closedMarginTotal` computes, at every
+ * point in the session rather than only once it is over. Showing both would be
+ * showing one number twice; the row that survives carries the board count Closed
+ * used to, since that half of the question is still worth answering.
  *
  * "Played before" — the deal in hand's own earlier score — is gone rather than kept
  * alongside these: it answered a narrower question, this one board rather than the
- * session, and three rows was already the budget a duplicate standing has here.
+ * session.
  */
 function SessionRows({
   summary,
@@ -207,8 +220,20 @@ function SessionRows({
   readonly summary: DuplicateSummary;
   readonly view: PlayerView;
 }): React.JSX.Element {
-  const first = firstPlayTotal(summary, view.me);
-  const replay = replayTotal(summary, view.me);
+  const closed = closedMarginTotal(summary, view.me);
+
+  if (summary.scoring === "imps") {
+    return (
+      <p className="flex items-baseline justify-between gap-2 text-white/40">
+        <span>
+          IMPs · {summary.closed}/{summary.boards.length}
+        </span>
+        <span className="font-semibold tabular-nums text-white/90">
+          {closed === null ? "—" : signed(closed)}
+        </span>
+      </p>
+    );
+  }
 
   return (
     <>
@@ -219,22 +244,18 @@ function SessionRows({
         </span>
       </p>
       <p className="flex items-baseline justify-between gap-2 text-white/40">
-        <span>First play</span>
-        <span className="tabular-nums text-white/60">
-          {first === null ? "—" : signed(first)}
+        <span>
+          Closed {summary.closed}/{summary.boards.length}
         </span>
-      </p>
-      <p className="flex items-baseline justify-between gap-2 text-white/40">
-        <span>Replay</span>
         <span className="tabular-nums text-white/60">
-          {replay === null ? "—" : signed(replay)}
+          {closed === null ? "—" : signed(closed)}
         </span>
       </p>
     </>
   );
 }
 
-/** The same three figures on one wrapping line, for a phone with no room for rows. */
+/** The same figure(s) on one wrapping line, for a phone with no room for rows. */
 function SessionFigures({
   summary,
   view,
@@ -242,8 +263,21 @@ function SessionFigures({
   readonly summary: DuplicateSummary;
   readonly view: PlayerView;
 }): React.JSX.Element {
-  const first = firstPlayTotal(summary, view.me);
-  const replay = replayTotal(summary, view.me);
+  const closed = closedMarginTotal(summary, view.me);
+
+  if (summary.scoring === "imps") {
+    return (
+      <>
+        <span className="whitespace-nowrap">{ORDER_LABEL[summary.schedule]}</span>
+        <span className="whitespace-nowrap">
+          IMPs · {summary.closed}/{summary.boards.length}{" "}
+          <span className="font-semibold tabular-nums text-white/90">
+            {closed === null ? "—" : signed(closed)}
+          </span>
+        </span>
+      </>
+    );
+  }
 
   return (
     <>
@@ -255,15 +289,9 @@ function SessionFigures({
         </span>
       </span>
       <span className="whitespace-nowrap">
-        First play{" "}
+        Closed {summary.closed}/{summary.boards.length}{" "}
         <span className="tabular-nums text-white/60">
-          {first === null ? "—" : signed(first)}
-        </span>
-      </span>
-      <span className="whitespace-nowrap">
-        Replay{" "}
-        <span className="tabular-nums text-white/60">
-          {replay === null ? "—" : signed(replay)}
+          {closed === null ? "—" : signed(closed)}
         </span>
       </span>
     </>

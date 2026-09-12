@@ -29,6 +29,17 @@ export const HAND_HEIGHT = 80 + 36 + 4;
 export const MIN_STEP = 18;
 
 /**
+ * The floor when every card in the hand is equally legal — leading a trick —
+ * rather than `MIN_STEP`. Leading is the one case where no card gets
+ * `LEGAL_STEP`'s wider treatment the way a restricted follow-suit hand's
+ * legal cards do, so nothing else here is pulling any card's target wider;
+ * precision has to come from the spacing itself. Wide enough to force a full
+ * hand to overflow and scroll rather than shrink further — a real cost,
+ * taken on purpose, for exactly the plays that were hardest to aim.
+ */
+const LEAD_MIN_STEP = 28;
+
+/**
  * What an emphasized card aims for: iOS's minimum comfortable tap target.
  * Asking for the full card width instead would only be scaled back down, and
  * would take the width out of the tight cards it is supposed to be borrowing
@@ -137,6 +148,7 @@ function stepsFor(
   cards: readonly Card[],
   emphasize: ((card: Card) => boolean) | null,
   available: number,
+  minStep: number,
 ): number[] {
   if (cards.length <= 1) {
     return [];
@@ -153,7 +165,7 @@ function stepsFor(
       available,
       cardWidth: CARD_WIDTH,
       count: cards.length,
-      minStep: MIN_STEP,
+      minStep,
     });
     return cards.slice(1).map(() => step);
   }
@@ -250,7 +262,18 @@ export function Hand({
   // layout never depends on what is currently pressed.
   const emphasize = restrictedByRule ? isLegal : null;
 
-  const steps = stepsFor(cards, emphasize, available - FRAME_PADDING);
+  // Leading a trick is the one interactive case with every card equally
+  // legal — `revealedHands` and the last-trick reveal also reach this branch
+  // with `playable` null, and neither of those needs a wider target, since
+  // nothing there is tappable at all.
+  const leading = playable !== null && !restrictedByRule;
+
+  const steps = stepsFor(
+    cards,
+    emphasize,
+    available - FRAME_PADDING,
+    leading ? LEAD_MIN_STEP : MIN_STEP,
+  );
 
   const lefts: number[] = [0];
   for (const step of steps) {

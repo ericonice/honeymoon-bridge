@@ -7,6 +7,7 @@ import type {
   PlayerId,
   PlayerView,
 } from "@hb/engine";
+import { useState } from "react";
 import { matchNoun } from "../game/labels.js";
 import { ratingChange } from "../game/records.js";
 import { Columns, DealResultHeadline, Row } from "./ScoreRows.js";
@@ -16,6 +17,8 @@ import { SessionPad } from "./SessionPad.js";
 export interface DealCompleteProps {
   /** What a duplicate deal paid beyond its tricks. Zero in a rubber. */
   readonly dealBonus: number;
+  /** See `PlayPhase`'s own prop of the same name. */
+  readonly matchDetail: boolean;
   readonly opponentName: string;
   /** True once the other player has asked to move on and you have not. */
   readonly opponentWaitingToContinue: boolean;
@@ -84,6 +87,7 @@ export function DealComplete({
   format,
   halfComplete,
   matchComplete,
+  matchDetail,
   matchWinner,
   onDone,
   onNextDeal,
@@ -98,6 +102,16 @@ export function DealComplete({
   vulnerable,
   waitingToContinue,
 }: DealCompleteProps): React.JSX.Element {
+  // Only meaningful on the ordinary finished-deal path below: false for the
+  // hand's own breakdown, true once a tap has asked to see the match instead
+  // — the same two stages `PlayPhase`'s own reveal shows for every deal that
+  // does not reach this screen at all. This path is the one deals that skip
+  // that reveal still take — see `DealResultHeadline`'s own doc comment below
+  // — and showing both stages at once here was the inconsistency: which of
+  // the two ways a deal happened to finish decided whether "detailed
+  // scoring" meant one screen or two.
+  const [showingStanding, setShowingStanding] = useState(false);
+
   // The two pads are the one place the formats genuinely differ, and this screen
   // shows one on all four of its paths — so it is resolved once here rather than
   // branched at each of them.
@@ -342,20 +356,53 @@ export function DealComplete({
     );
   }
 
+  // Reached only by a claimed finish — a natural one shows this same headline
+  // during the hands reveal and goes straight to the next hand from there,
+  // never reaching this screen at all. A claim never has a reveal to have
+  // shown it in, so this is still this path's to show, and it shows it the
+  // same way that reveal does: the hand's own breakdown first, a further tap
+  // for what it moved in the match — when `matchDetail` is on. Off, there is
+  // no second tap to have: the pad is left out below rather than staged
+  // behind one, and the headline sits with the button instead.
+  if (matchDetail && !showingStanding) {
+    return (
+      <div
+        className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4"
+        onClick={() => {
+          if (waitingToContinue) {
+            return;
+          }
+          setShowingStanding(true);
+        }}
+      >
+        <DealResultHeadline
+          bonus={dealBonus}
+          opponentName={opponentName}
+          score={score}
+          view={view}
+          vulnerable={vulnerable}
+        />
+        <p className="text-center text-sm text-white/50">
+          {waitingToContinue ? `Waiting for ${opponentName}…` : "Tap to continue"}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4">
-      {/* Reached only by a claimed finish — a natural one shows this same
-          headline during the hands reveal and goes straight to the next
-          deal from there, never reaching this screen at all. A claim never
-          has a reveal to have shown it in, so this is still this path's to
-          show. */}
-      <DealResultHeadline
-        bonus={dealBonus}
-        opponentName={opponentName}
-        score={score}
-        view={view}
-        vulnerable={vulnerable}
-      />
+      {/* Only reached directly, with `matchDetail` off — the headline already
+          had its own tap-through screen otherwise, and repeating it here
+          would say the same thing twice. */}
+      {matchDetail ? null : (
+        <DealResultHeadline
+          bonus={dealBonus}
+          opponentName={opponentName}
+          score={score}
+          view={view}
+          vulnerable={vulnerable}
+        />
+      )}
 
       {/* Half time. Said plainly, and deliberately *not* as a verdict: winning the
           first game of a pair decides nothing, and a screen announcing it would teach
@@ -375,7 +422,7 @@ export function DealComplete({
         </div>
       ) : null}
 
-      {pad}
+      {matchDetail ? pad : null}
 
       {button}
     </div>

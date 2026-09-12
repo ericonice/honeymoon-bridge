@@ -4,6 +4,7 @@ import { applyAction, legalActions, startDeal } from "../src/deal.js";
 import {
   BOARDS_PER_SESSION,
   boardsForDeals,
+  closedMarginTotal,
   dealsFor,
   drewFirstOn,
   firstPlayOf,
@@ -25,7 +26,7 @@ import {
   summarizeDuplicate,
   vulnerableFor,
 } from "../src/duplicate.js";
-import type { DuplicateSchedule, DuplicateState } from "../src/duplicate.js";
+import type { BoardOutcome, DuplicateSchedule, DuplicateScoring, DuplicateState, DuplicateSummary } from "../src/duplicate.js";
 import type { Card, Contract, DealState, Level, Pair, PlayerId, Rank, Strain, Suit } from "../src/types.js";
 
 function card(rank: Rank, suit: Suit): Card {
@@ -375,13 +376,11 @@ describe("recovering which order a session was dealt in", () => {
   });
 
   /**
-   * `summarizeDuplicate` is the one caller a screen actually goes through, so
-   * this is the check that it did not forget to ask — a summary whose own
-   * `schedule` field disagreed with `scheduleKindOf` would be a second,
-   * un-synchronised statement of the same fact, which is exactly what
-   * recovering it from the schedule was meant to avoid.
+   * `summarizeDuplicate` reads `scheduleKind` — what was actually asked for —
+   * rather than `scheduleKindOf`'s guess from the shape. Checked on every
+   * kind at an ordinary seed first, where the two happen to agree.
    */
-  it("carries the recovered kind on the summary a screen actually reads", () => {
+  it("carries what was actually asked for on the summary a screen actually reads", () => {
     for (const kind of ["adjacent", "halves", "random", "sequence"] as const) {
       const session = startDuplicate({
         boards: 3,
@@ -390,8 +389,40 @@ describe("recovering which order a session was dealt in", () => {
         scheduleSeed: 7,
         starter: 0,
       });
-      expect(summarizeDuplicate(session).schedule, kind).toBe(scheduleKindOf(session));
+      expect(summarizeDuplicate(session).schedule, kind).toBe(kind);
     }
+  });
+
+  /**
+   * The case that actually mattered: a `random` schedule whose shuffle happens
+   * to land in a shape `scheduleKindOf` cannot tell apart from `halves` — close
+   * to two in five sessions this size, not a rare accident. The old behaviour
+   * read the summary's `schedule` off that guess, so a player who chose
+   * Shuffled would see "Halves" on screen, and `nextIn` fed the same wrong
+   * guess into every session after it. Found by search rather than a fixed
+   * seed, and asserted to exist at all first — a loop that never hit the
+   * coincidence would make the regression check below pass vacuously.
+   */
+  it("still reads as random when the shuffle happens to look like halves", () => {
+    const boards = 3;
+    const minGap = minGapFor(boards);
+    const misleading = Array.from({ length: 50 }, (_unused, index) => index + 1).find((seed) => {
+      const shape = scheduleFor(boards, seed, minGap, "random");
+      return scheduleKindOf(asSession(shape)) !== "random";
+    });
+    expect(misleading, "no coincidentally-halves-shaped seed found in range").not.toBeUndefined();
+
+    const session = startDuplicate({
+      boards,
+      firstBoard: 100,
+      schedule: "random",
+      scheduleSeed: misleading!,
+      starter: 0,
+    });
+    // The premise: the shape genuinely misleads the fallback.
+    expect(scheduleKindOf(session)).not.toBe("random");
+    // The fix: the summary is not fooled by it.
+    expect(summarizeDuplicate(session).schedule).toBe("random");
   });
 });
 
@@ -627,6 +658,146 @@ describe("a session", () => {
     expect(sawRunningScore).toBe(true);
     // And it still cancels: identical players, so every board is flat.
     expect(done.margin).toEqual([0, 0]);
+  });
+
+  /**
+   * **`closedMarginTotal` is the other reading, and it has nothing to say about a
+   * board still waiting on its replay — unlike `margin`, which moves the instant a
+   * run is played.** The same policy from both seats mirrors a board's two runs
+   * exactly, so any board that has actually closed nets to nothing here too; the
+   * point is what that means while one is still open, which the running total
+   * cannot say on its own.
+   */
+  it("has nothing to say about a board still waiting on its replay, unlike the running margin", () => {
+    let session = startDuplicate({ ...options, boards: 3 });
+    let sawDifference = false;
+
+    for (let deal = 0; deal < 6; deal++) {
+      while (session.deal.phase !== "complete") {
+        const seat = session.deal.toAct;
+        const legal = legalActions(session.deal, seat).filter((one) => one.type !== "claim");
+        const bid = legal.find((one) => one.type === "call" && one.call.type === "bid");
+        session = applyDuplicateAction(session, seat, bid ?? legal[0]!);
+      }
+      const after = summarizeDuplicate(session);
+      const closed = closedMarginTotal(after, 0);
+
+      expect(closed === null || closed === 0).toBe(true);
+      if (after.margin[0] !== 0) {
+        sawDifference = true;
+      }
+
+      if (!after.complete) {
+        session = nextDuplicateDeal(session);
+      }
+    }
+
+    // The running margin really did move while this figure stayed at nothing —
+    // otherwise the assertion above would be true of an empty session too.
+    expect(sawDifference).toBe(true);
+  });
+
+  describe("scoring a session in IMPs rather than points", () => {
+    function boardOutcome(margin: number | null): BoardOutcome {
+      return { board: 0, margin, played: [], starter: 0 as PlayerId };
+    }
+
+    function summaryOf(boards: readonly BoardOutcome[], scoring: DuplicateScoring): DuplicateSummary {
+      return {
+        boards,
+        closed: boards.filter((board) => board.margin !== null).length,
+        complete: false,
+        current: null,
+        dealsPlayed: 0,
+        lastCompleted: null,
+        margin: [0, 0],
+        points: [0, 0],
+        schedule: "halves",
+        score: null,
+        scoring,
+        vulnerable: [false, false],
+        winner: null,
+      };
+    }
+
+    it("defaults a session to points, unasked", () => {
+      const session = startDuplicate(options);
+      expect(session.scoring).toBe("points");
+      expect(summarizeDuplicate(session).scoring).toBe("points");
+    });
+
+    it("carries the requested scoring forward across a deal", () => {
+      let session = startDuplicate({ ...options, boards: 2, scoring: "imps" });
+      while (session.deal.phase !== "complete") {
+        const seat = session.deal.toAct;
+        session = applyDuplicateAction(
+          session,
+          seat,
+          legalActions(session.deal, seat).filter((one) => one.type !== "claim")[0]!,
+        );
+      }
+      session = nextDuplicateDeal(session);
+      expect(session.scoring).toBe("imps");
+      expect(summarizeDuplicate(session).scoring).toBe("imps");
+    });
+
+    /**
+     * **The entire point of IMPs is that it converts board by board, not the
+     * final point total once.** A single conversion of the summed points
+     * (`impsFor(1900)`, 18) and the sum of each board's own conversion
+     * (`impsFor(1500) + impsFor(100)×4`, 29) are not just different numbers —
+     * they disagree about which is bigger, so a fixture that happened to
+     * average out could not tell the two computations apart. This one can.
+     */
+    it("sums each closed board's own IMPs rather than converting the final total once", () => {
+      const boards = [
+        boardOutcome(1500),
+        boardOutcome(100),
+        boardOutcome(100),
+        boardOutcome(100),
+        boardOutcome(100),
+        // Still open — an IMP score has nothing to say about it yet.
+        boardOutcome(null),
+      ];
+      const summary = summaryOf(boards, "imps");
+
+      const perBoard = impsFor(1500) + impsFor(100) * 4;
+      expect(closedMarginTotal(summary, 0)).toBe(perBoard);
+
+      const totalPoints = 1500 + 100 * 4;
+      expect(closedMarginTotal(summary, 0)).not.toBe(impsFor(totalPoints));
+    });
+
+    it("leaves points scoring exactly as it already was", () => {
+      const summary = summaryOf([boardOutcome(1500), boardOutcome(100)], "points");
+      expect(closedMarginTotal(summary, 0)).toBe(1600);
+    });
+
+    /**
+     * Under points, `margin` and `closedMarginTotal` genuinely differ while a
+     * board is still open — see the test above this describe block. Under
+     * IMPs they cannot: `impsFor` has nothing to convert until a board's
+     * second run is in, so `margin` is already the closed-boards-only
+     * reading, at every point in the session rather than only at the end.
+     */
+    it("keeps margin and closedMarginTotal in agreement throughout, unlike points", () => {
+      let session = startDuplicate({ ...options, boards: 3, scoring: "imps" });
+
+      for (let deal = 0; deal < 6; deal++) {
+        while (session.deal.phase !== "complete") {
+          const seat = session.deal.toAct;
+          const legal = legalActions(session.deal, seat).filter((one) => one.type !== "claim");
+          const bid = legal.find((one) => one.type === "call" && one.call.type === "bid");
+          session = applyDuplicateAction(session, seat, bid ?? legal[0]!);
+        }
+        const after = summarizeDuplicate(session);
+        expect(after.margin[0]).toBe(closedMarginTotal(after, 0) ?? 0);
+
+        if (!after.complete) {
+          session = nextDuplicateDeal(session);
+        }
+      }
+    });
   });
 
   it("names no winner until every board is in", () => {

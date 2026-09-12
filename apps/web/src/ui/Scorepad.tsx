@@ -359,16 +359,20 @@ function TwoGames({
         <span
           aria-hidden="true"
           className="pointer-events-none absolute inset-y-0 w-px bg-white/10"
-          // The row is a 1rem index, a 0.5rem gap, then two equal columns with another
-          // 0.5rem gap between them — so the columns meet half a gap past the first
-          // one's right edge. Spelled out rather than eyeballed, because a rule that is
-          // nearly between two columns reads as belonging to one of them.
-          style={{ left: "calc(1.5rem + (100% - 2rem) / 2 + 0.25rem)" }}
+          // The index and the gap to the two-column pair are 1.5rem together; the
+          // divider sits at the middle of that pair's own width, whatever gap sits
+          // inside it — the two columns are equal width, so widening or narrowing
+          // the gap between them pushes both outward by the same amount and the
+          // middle never moves. Spelled out rather than eyeballed, because a rule
+          // that is nearly between two columns reads as belonging to one of them.
+          style={{ left: "calc(1.5rem + (100% - 1.5rem) / 2)" }}
         />
         <div className="flex items-baseline gap-2 pb-1 text-xs text-white/45">
           <span className="w-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1">First half</span>
-          <span className="min-w-0 flex-1">Second half</span>
+          <span className="flex min-w-0 flex-1 gap-4">
+            <span className="min-w-0 flex-1">First half</span>
+            <span className="min-w-0 flex-1">Second half</span>
+          </span>
         </div>
 
       {rows === 0 ? (
@@ -386,8 +390,10 @@ function TwoGames({
                 <span className="w-4 shrink-0 text-xs text-white/35 tabular-nums">
                   {index + 1}
                 </span>
-                <GameCell record={first.deals[index]} view={view} />
-                <GameCell record={second.deals[index]} view={view} />
+                <span className="flex min-w-0 flex-1 gap-4">
+                  <GameCell record={first.deals[index]} view={view} />
+                  <GameCell record={second.deals[index]} view={view} />
+                </span>
               </div>
               {/* Under the deal it belongs to, with the figure in the column that paid
                   it, and only on the deals that did — about one in five. Named rather
@@ -398,11 +404,13 @@ function TwoGames({
               {paid[0] === null && paid[1] === null ? null : (
                 <div className="flex items-baseline gap-2 pb-0.5 text-xs text-white/40">
                   <span className="w-4 shrink-0" aria-hidden="true" />
-                  <span className="min-w-0 flex-1 text-right tabular-nums">
-                    {paid[0] === null ? "" : `honors ${signed(paid[0])}`}
-                  </span>
-                  <span className="min-w-0 flex-1 text-right tabular-nums">
-                    {paid[1] === null ? "" : `honors ${signed(paid[1])}`}
+                  <span className="flex min-w-0 flex-1 gap-4">
+                    <span className="min-w-0 flex-1 text-right tabular-nums">
+                      {paid[0] === null ? "" : `honors ${signed(paid[0])}`}
+                    </span>
+                    <span className="min-w-0 flex-1 text-right tabular-nums">
+                      {paid[1] === null ? "" : `honors ${signed(paid[1])}`}
+                    </span>
                   </span>
                 </div>
               )}
@@ -415,18 +423,20 @@ function TwoGames({
               {wonAt(first, index) || wonAt(second, index) ? (
                 <div className="flex items-center gap-2 pb-0.5 text-xs">
                   <span className="w-4 shrink-0" aria-hidden="true" />
-                  {[first, second].map((column, side) => (
-                    <span key={side} className="flex min-w-0 flex-1 items-center gap-1.5">
-                      {wonAt(column, index) ? (
-                        <>
-                          <span className="h-px flex-1 bg-amber-300/40" />
-                          <span className="shrink-0 tabular-nums text-amber-200/70">
-                            game {signed(bonus(column))}
-                          </span>
-                        </>
-                      ) : null}
-                    </span>
-                  ))}
+                  <span className="flex min-w-0 flex-1 gap-4">
+                    {[first, second].map((column, side) => (
+                      <span key={side} className="flex min-w-0 flex-1 items-center gap-1.5">
+                        {wonAt(column, index) ? (
+                          <>
+                            <span className="h-px flex-1 bg-amber-300/40" />
+                            <span className="shrink-0 tabular-nums text-amber-200/70">
+                              game {signed(bonus(column))}
+                            </span>
+                          </>
+                        ) : null}
+                      </span>
+                    ))}
+                  </span>
                 </div>
               ) : null}
             </div>
@@ -439,8 +449,10 @@ function TwoGames({
           thing than the numbers it totals. */}
       <div className="flex items-baseline gap-2 border-t border-white/15 pt-1 font-semibold">
         <span className="w-4 shrink-0" aria-hidden="true" />
-        <span className="min-w-0 flex-1 text-right tabular-nums">{foot(first)}</span>
-        <span className="min-w-0 flex-1 text-right tabular-nums">{foot(second)}</span>
+        <span className="flex min-w-0 flex-1 gap-4">
+          <span className="min-w-0 flex-1 text-right tabular-nums">{foot(first)}</span>
+          <span className="min-w-0 flex-1 text-right tabular-nums">{foot(second)}</span>
+        </span>
       </div>
 
       </div>

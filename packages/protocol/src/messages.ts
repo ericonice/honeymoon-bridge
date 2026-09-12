@@ -1,6 +1,7 @@
 import type {
   DealAction,
   DuplicateSchedule,
+  DuplicateScoring,
   MatchFormat,
   Pair,
   PlayerId,
@@ -127,6 +128,14 @@ export type ClientMessage =
        * order — see `formatFor`. Absent from a client too old to have an opinion.
        */
       readonly sessionOrder?: DuplicateSchedule;
+      /**
+       * How this player wants a session's margin and winner read off its boards.
+       *
+       * Consulted only when both seats asked for duplicate *and* asked for the same
+       * scoring — see `formatFor`. Absent from a client too old to have an opinion,
+       * which reads as no preference rather than as a vote for points.
+       */
+      readonly scoring?: DuplicateScoring;
       /**
        * What each half of a two-game match runs to: one game, or a rubber.
        *

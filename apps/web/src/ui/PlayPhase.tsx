@@ -3,6 +3,8 @@ import type {
   Card,
   CompletedTrick,
   DealScore,
+  MatchFormat,
+  MatchStanding,
   Pair,
   PlayedCard,
   PlayerId,
@@ -17,8 +19,10 @@ import { CardBack, CardFace, CardSlot } from "./CardFace.js";
 import { CardFlight, centerIn, centerInFromRect } from "./CardFlight.js";
 import type { Flight } from "./CardFlight.js";
 import { CARD_WIDTHS, Hand, MINI_MIN_STEP, spreadStep, useRowRoom } from "./Hand.js";
+import { Scorepad } from "./Scorepad.js";
 import { DealResultHeadline } from "./ScoreRows.js";
 import { SeatLabel } from "./SeatLabel.js";
+import { SessionPad } from "./SessionPad.js";
 import { TrickRing, trickRingLabel } from "./TrickRing.js";
 
 export interface PlayPhaseProps {
@@ -30,6 +34,18 @@ export interface PlayPhaseProps {
   readonly dealScore: DealScore | null;
   /** What a duplicate deal paid beyond its tricks. Zero in a rubber. */
   readonly dealBonus: number;
+  /** What is being played — see `Scorepad`'s own prop of the same name. */
+  readonly format: MatchFormat;
+  /**
+   * Whether a tap through this hand's own breakdown goes on to show
+   * `standing` at all — see `Settings`' "Show the match score after each
+   * hand". Off collapses the two taps into one: a tap on the headline goes
+   * straight to whatever `onContinue`/`release` would otherwise be the
+   * second tap's to fire, and `showingStanding` never turns true. The pad
+   * stays reachable through the "Score" button either way — this only
+   * decides whether the reveal offers it too.
+   */
+  readonly matchDetail: boolean;
   /**
    * Where the card most recently played by this seat left from, captured by
    * whoever handled the tap — the hand has already lost the DOM node for it
@@ -105,6 +121,24 @@ export interface PlayPhaseProps {
    * two reveals that started at different times would not read as one.
    */
   onHandsSettled?(): void;
+  /**
+   * Fires whenever this reveal's own two stages change — see `standing`'s own
+   * doc comment. `GameBoard` uses it to stop showing this seat's own revealed
+   * hand in the footer for the same beat this component stops showing the
+   * opponent's: once a tap has asked to see the match instead of the hand,
+   * neither hand is still what the screen is about, and both were competing
+   * with the pad for the same room.
+   */
+  onShowingStandingChange?(showing: boolean): void;
+  /**
+   * The match or session so far — shown once a further tap asks to see it, in
+   * place of `DealResultHeadline`, which is the same figure the "Score"
+   * button opens in an overlay the rest of the time. Kept off the first tap
+   * on purpose: what just happened to this hand and what it moved in the
+   * match are two different questions, and a player who only wants the first
+   * should not have to read past the second to get to "Tap to continue".
+   */
+  readonly standing: MatchStanding;
   /** Whether to draw the opponent's trick countdown — see `TrickRing`. */
   readonly trickCount: boolean;
   readonly view: PlayerView;
@@ -167,7 +201,7 @@ function Slot({
     <div ref={slotRef} className="relative h-24 w-16">
       <CardSlot size="table" />
       {ring === null ? null : (
-        <div className="absolute top-1/2 -right-8 -translate-y-1/2">{ring}</div>
+        <div className="absolute top-1/2 -right-10 -translate-y-1/2">{ring}</div>
       )}
       {played === undefined ? null : (
         <motion.div
@@ -328,17 +362,21 @@ function claimStatus(view: PlayerView): string | null {
 export function PlayPhase({
   dealBonus,
   dealScore,
+  format,
   handOriginRef,
   lastTrick,
+  matchDetail,
   onContinue,
   onDismissTrick,
   onHandsSettled,
+  onShowingStandingChange,
   opponentName,
   ratings,
   thinking,
   opponentWaitingToContinue,
   release,
   revealedHands,
+  standing,
   trickCount,
   view,
   vulnerable,
@@ -365,6 +403,12 @@ export function PlayPhase({
   // own sweep has finished clearing it away, so a further tap knows there is
   // nothing left to sweep and reads as leaving the reveal instead.
   const [swept, setSwept] = useState(false);
+  // Only meaningful once the reveal itself is showing: false for the hand's
+  // own breakdown, which is what a tap first arrives on, true once a further
+  // tap has asked to see the match instead. Two things to say, in the order a
+  // player wants them — what just happened, then what it moved — rather than
+  // both landing on the one tap that used to mean "I have seen enough".
+  const [showingStanding, setShowingStanding] = useState(false);
   const sweepTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Whatever this screen mounted showing — mid-deal on a reconnect, same as a
   // fresh one — is not a card that just landed, so the first run only records
@@ -401,7 +445,7 @@ export function PlayPhase({
     }
     return (
       <>
-        <TrickRing outlook={outlook} />
+        <TrickRing outlook={outlook} size={32} />
         <span className="sr-only">
           {trickRingLabel({
             declaring: declaringIn(view, seat),
@@ -443,6 +487,8 @@ export function PlayPhase({
     // theirs — never something still waiting on a tap of its own.
     setSweeping(false);
     setSwept(false);
+    setShowingStanding(false);
+    onShowingStandingChange?.(false);
 
     const mounting = mountedAt.current === null;
     mountedAt.current = playedCount;
@@ -546,12 +592,25 @@ export function PlayPhase({
   // that is. Before this trick has swept, that is `startSweep`'s to decide,
   // same as ever. Once it has — only reachable while hands are being
   // revealed, since every other trick's sweep already left by this point —
-  // it is this seat saying it has seen enough of both hands, which
-  // `onContinue` takes straight into the next one wherever that is on offer.
-  // Already having said so once is not a second tap's to say again.
+  // the reveal has two things to say when `matchDetail` is on, and a tap
+  // moves from the first to the second: the hand's own breakdown, then what
+  // it moved in the match. With it off there is only the first, so this same
+  // tap is already the one saying this seat has seen enough, which
+  // `onContinue` takes straight into the next deal wherever that is on offer.
+  //
+  // **Never staged at all when this deal also finishes the rubber or a
+  // half.** `onContinue` is null exactly then, and the next screen —
+  // `DealComplete` — shows the standing on its own, unconditionally: showing
+  // it here too first would be the same figure twice, once as a stage of
+  // this reveal and once as the thing that screen is for.
   function handleTap(): void {
     if (revealedHands !== null && swept) {
       if (waitingToContinue) {
+        return;
+      }
+      if (matchDetail && onContinue !== null && !showingStanding) {
+        setShowingStanding(true);
+        onShowingStandingChange?.(true);
         return;
       }
       if (onContinue !== null) {
@@ -587,10 +646,31 @@ export function PlayPhase({
     };
   }, []);
 
+  // The same pad `DealComplete` and the "Score" overlay already build — see
+  // their own copy of this branch. Computed unconditionally, since it is
+  // cheap and only ever rendered once the reveal is actually showing.
+  const pad =
+    standing.kind === "duplicate" ? (
+      <SessionPad summary={standing.summary} view={view} />
+    ) : (
+      <Scorepad
+        format={format}
+        history={standing.history}
+        opponentName={opponentName}
+        previous={standing.previous}
+        previousPoints={standing.previousPoints}
+        rubber={standing.rubber}
+        view={view}
+      />
+    );
+
   return (
     <div
       ref={containerRef}
-      className="relative flex flex-1 flex-col items-center justify-center gap-3"
+      // `overflow-y-auto` matches `DealComplete`'s own root: harmless while the
+      // trick table fits on its own, and what lets the pad below the reveal
+      // scroll rather than clip once a rubber has run long enough to need it.
+      className="relative flex flex-1 flex-col items-center justify-center gap-3 overflow-y-auto"
       onClick={handleTap}
     >
       {/* Their side, in the order yours is in — read from the middle of the table
@@ -601,26 +681,34 @@ export function PlayPhase({
 
           Their hand is therefore the outermost thing on their side, exactly as
           yours is on yours — see `GameBoard`'s footer, which draws this same
-          hairline immediately above your own thirteen. */}
-      <OpponentHand
-        count={view.handSizes[view.opponent]}
-        revealed={swept ? (revealedHands?.[view.opponent] ?? null) : null}
-        rowRef={opponentHandRef}
-      />
+          hairline immediately above your own thirteen.
 
-      {/* Its own element rather than a border on a box wrapping the hand, which
-          is what it was: a border there sits inside that box's padding and lands
-          on the cards when the box is only as tall as they are. A 1px row in the
-          flow cannot touch anything, and this column's `gap-3` keeps it clear. */}
-      <div className="h-px w-full bg-white/10" />
+          Withheld once a tap has asked to see the match instead: neither hand
+          is still what the screen is about, and both were only narrowing the
+          room the pad had to show it in. */}
+      {showingStanding ? null : (
+        <>
+          <OpponentHand
+            count={view.handSizes[view.opponent]}
+            revealed={swept ? (revealedHands?.[view.opponent] ?? null) : null}
+            rowRef={opponentHandRef}
+          />
 
-      <SeatLabel
-        active={live && !yourTurn}
-        name={opponentName}
-        rating={ratings.opponent}
-        thinking={thinking}
-        vulnerable={vulnerable[view.opponent]}
-      />
+          {/* Its own element rather than a border on a box wrapping the hand, which
+              is what it was: a border there sits inside that box's padding and lands
+              on the cards when the box is only as tall as they are. A 1px row in the
+              flow cannot touch anything, and this column's `gap-3` keeps it clear. */}
+          <div className="h-px w-full bg-white/10" />
+
+          <SeatLabel
+            active={live && !yourTurn}
+            name={opponentName}
+            rating={ratings.opponent}
+            thinking={thinking}
+            vulnerable={vulnerable[view.opponent]}
+          />
+        </>
+      )}
       {/* The trick slots are only worth looking at while there is something
           in them or about to be — once hands are revealed there is nothing
           left to hold a slot open for, so they simply stop rendering rather
@@ -647,8 +735,24 @@ export function PlayPhase({
           line this band was holding. So the trick sits undisturbed for its own
           stage time, and then the hands turning face up, the slots clearing and
           this headline all happen together — which is what they were always
-          meant to read as. */}
-      <div className="flex min-h-10 flex-col items-center justify-center gap-2">
+          meant to read as.
+
+          **`w-full` is load-bearing, not decorative.** Without it this band has
+          no definite width of its own — it is centered in the column above it
+          rather than stretched — and a child's own `w-full` inside an
+          indefinite-width parent resolves as `auto` per the CSS percentage
+          rules, not as "fill the screen". That is what was actually narrowing
+          the pad: it was shrinking to its own content's natural width, not to
+          some competing `max-w-sm` elsewhere. `DealResultHeadline`'s fixed
+          column widths hid the same bug here for months.
+
+          **`px-5` matches `DealComplete`'s own root**, which carries the same
+          padding on everything it shows — headline, half-time panel, pad and
+          button alike — rather than this screen having its own, narrower
+          recipe. This band is the only part of `PlayPhase` that needs it: the
+          opponent's hand and the trick slots want the full width they have
+          always had, and are siblings of this div rather than inside it. */}
+      <div className="flex w-full min-h-10 flex-col items-center justify-center gap-2 px-5">
         {!swept || revealedHands === null || dealScore === null ? (
           claimStatus(view) !== null ? (
             <p className="text-center text-sm text-amber-200/70">{claimStatus(view)}</p>
@@ -657,13 +761,17 @@ export function PlayPhase({
           ) : null
         ) : (
           <>
-            <DealResultHeadline
-              bonus={dealBonus}
-              opponentName={opponentName}
-              score={dealScore}
-              view={view}
-              vulnerable={vulnerable}
-            />
+            {showingStanding ? (
+              pad
+            ) : (
+              <DealResultHeadline
+                bonus={dealBonus}
+                opponentName={opponentName}
+                score={dealScore}
+                view={view}
+                vulnerable={vulnerable}
+              />
+            )}
             <p className="text-center text-sm text-white/50">
               {waitingToContinue ? `Waiting for ${opponentName}…` : "Tap to continue"}
             </p>
