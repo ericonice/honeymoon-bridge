@@ -3,6 +3,7 @@ export * from "./auction.js";
 export * from "./cards.js";
 export * from "./deal.js";
 export * from "./duplicate.js";
+export * from "./field.js";
 export * from "./match.js";
 export * from "./rng.js";
 export * from "./returnMatch.js";

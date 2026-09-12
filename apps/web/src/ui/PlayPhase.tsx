@@ -18,6 +18,7 @@ import { paced, TRICK_TIMING } from "../game/timing.js";
 import { CardBack, CardFace, CardSlot } from "./CardFace.js";
 import { CardFlight, centerIn, centerInFromRect } from "./CardFlight.js";
 import type { Flight } from "./CardFlight.js";
+import { FieldPad } from "./FieldPad.js";
 import { CARD_WIDTHS, Hand, MINI_MIN_STEP, spreadStep, useRowRoom } from "./Hand.js";
 import { Scorepad } from "./Scorepad.js";
 import { DealResultHeadline } from "./ScoreRows.js";
@@ -650,7 +651,9 @@ export function PlayPhase({
   // their own copy of this branch. Computed unconditionally, since it is
   // cheap and only ever rendered once the reveal is actually showing.
   const pad =
-    standing.kind === "duplicate" ? (
+    standing.kind === "field" ? (
+      <FieldPad me={view.me} summary={standing.summary} />
+    ) : standing.kind === "duplicate" ? (
       <SessionPad summary={standing.summary} view={view} />
     ) : (
       <Scorepad

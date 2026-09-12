@@ -13,6 +13,8 @@ import type {
   DuplicateSummary,
   MatchFormat,
 } from "./duplicate.js";
+import { applyFieldAction, nextFieldDeal, startField, summarizeField } from "./field.js";
+import type { FieldBoard, FieldState, FieldSummary } from "./field.js";
 import { newRubber, totalScore, vulnerability } from "./rubber.js";
 import type { RubberFormat, RubberState } from "./rubber.js";
 import type { DealScore } from "./scoring.js";
@@ -90,6 +92,7 @@ export interface PairStanding {
  */
 export type MatchState =
   | { readonly kind: "duplicate"; readonly session: DuplicateState }
+  | { readonly kind: "field"; readonly session: FieldState }
   | MirrorMatch
   | RubberMatch;
 
@@ -130,6 +133,7 @@ export function halfOf(match: MirrorMatch): 1 | 2 {
 /** The standing, in whichever shape it is being kept. What the score strip and the pad read. */
 export type MatchStanding =
   | { readonly kind: "duplicate"; readonly summary: DuplicateSummary }
+  | { readonly kind: "field"; readonly summary: FieldSummary }
   | {
       readonly history: readonly DealRecord[];
       readonly kind: "rubber";
@@ -224,7 +228,21 @@ export interface StartMatchOptions {
    * the format.
    */
   readonly halfFormat?: RubberFormat;
+  /**
+   * The boards a field session is to be played on. Ignored by every other format.
+   *
+   * Supplied rather than dealt, and that is the format: a board is one the corpus
+   * already holds results for, so the engine has nothing to invent and no seed of its
+   * own to mint. A field session with none is an error rather than an empty match —
+   * see `startField`.
+   */
+  readonly fieldBoards?: readonly FieldBoard[];
   readonly format: MatchFormat;
+  /**
+   * The seat whose score a field session compares. Ignored by every other format,
+   * where both seats are somebody.
+   */
+  readonly me?: PlayerId;
   /** How a duplicate session's margin and winner are read off its boards. Ignored by a rubber. */
   readonly scoring?: DuplicateScoring;
   /** The rubber's first deal, or the session's schedule. Both are the caller's to own. */
@@ -233,7 +251,21 @@ export interface StartMatchOptions {
 }
 
 export function startMatch(options: StartMatchOptions): MatchState {
-  const { boards, firstBoard, format, halfFormat, schedule, scoring, seed, starter } = options;
+  const { boards, fieldBoards, firstBoard, format, halfFormat, me, schedule, scoring, seed, starter } =
+    options;
+  if (format === "field") {
+    return {
+      kind: "field",
+      // Neither the seed nor the starter reaches this: a field board carries its own
+      // stock and its own side of it, because both have to match what the recorded
+      // results were played at. There is nothing here for the caller to choose.
+      session: startField({
+        ...(scoring === undefined ? {} : { scoring }),
+        boards: fieldBoards ?? [],
+        me: me ?? 0,
+      }),
+    };
+  }
   if (format === "duplicate") {
     return {
       kind: "duplicate",
@@ -305,10 +337,15 @@ export function returnMatch(match: MatchState): MatchState {
 }
 
 export function dealOf(match: MatchState): DealState {
-  return match.kind === "duplicate" ? match.session.deal : match.table.deal;
+  return match.kind === "duplicate" || match.kind === "field"
+    ? match.session.deal
+    : match.table.deal;
 }
 
 export function actOn(match: MatchState, player: PlayerId, action: DealAction): MatchState {
+  if (match.kind === "field") {
+    return { kind: "field", session: applyFieldAction(match.session, player, action) };
+  }
   if (match.kind === "duplicate") {
     return { kind: "duplicate", session: applyDuplicateAction(match.session, player, action) };
   }
@@ -334,6 +371,13 @@ export function actOn(match: MatchState, player: PlayerId, action: DealAction): 
  * were all chosen when it started. That is the point of a board being a number.
  */
 export function nextIn(match: MatchState, seed: number): MatchState {
+  if (match.kind === "field") {
+    // No successor of its own: a finished session cannot deal itself another set,
+    // because boards come from the corpus and picking them is a decision about what
+    // this player has already met. `nextFieldDeal` on a finished session is a no-op,
+    // and the host starts the next one when it has boards to start it with.
+    return { kind: "field", session: nextFieldDeal(match.session) };
+  }
   if (match.kind === "duplicate") {
     if (summarizeDuplicate(match.session).complete) {
       return startMatch({
@@ -405,6 +449,9 @@ function mirroredTable(table: TableState): TableState {
 }
 
 export function summarizeMatch(match: MatchState): MatchSummary {
+  if (match.kind === "field") {
+    return summarizeFieldMatch(match.session);
+  }
   if (match.kind === "duplicate") {
     const summary = summarizeDuplicate(match.session);
     return {
@@ -452,6 +499,45 @@ export function summarizeMatch(match: MatchState): MatchSummary {
     },
     vulnerable: summary.vulnerable,
     winner: summary.rubber.winner,
+  };
+}
+
+/**
+ * A field session, whose verdict is one signed total against what was recorded.
+ *
+ * **`points` is the margin and its negative**, which is the same shape duplicate uses
+ * and means the same thing: a board is worth one signed figure rather than two running
+ * totals, because there is only one comparison being made. The seat opposite is the
+ * opposition rather than an opponent with a score of its own — it is the same computer
+ * that set the reference, which is the whole rule the format rests on.
+ *
+ * `winner` reads that margin, and level is a real answer: a session settled in IMPs
+ * lands on nothing at all far more readily than a rubber does, and reading a draw as a
+ * loss is a bug this project has already had to fix once.
+ */
+function summarizeFieldMatch(session: FieldState): MatchSummary {
+  const summary = summarizeField(session);
+  const points: Pair<number> = [0, 0];
+  points[session.me] = summary.margin;
+  points[opponentOf(session.me)] = -summary.margin;
+
+  return {
+    bonus: summary.score?.bonus ?? 0,
+    complete: summary.complete,
+    halfComplete: false,
+    dealsPlayed: summary.boardsPlayed,
+    format: "field",
+    points,
+    repeated: false,
+    score: summary.score?.deal ?? null,
+    standing: { kind: "field", summary },
+    // A board has no rubber to have been bid at, exactly as a session's does not —
+    // what a field call is priced against is vulnerability and nothing else, and
+    // `objectiveFor` is what makes sure the bidder is told so.
+    botStanding: { rubber: newRubber("rubber"), vulnerable: summary.vulnerable },
+    vulnerable: summary.vulnerable,
+    winner:
+      !summary.complete || summary.margin === 0 ? null : summary.margin > 0 ? session.me : opponentOf(session.me),
   };
 }
 

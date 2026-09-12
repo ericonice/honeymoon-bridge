@@ -25,7 +25,7 @@ import {
  * that is not in this array, which is what makes the round trip below exhaustive
  * rather than merely broad.
  */
-const FORMATS = ["duplicate", "game", "mirror", "rubber"] as const;
+const FORMATS = ["duplicate", "field", "game", "mirror", "rubber"] as const;
 
 type Listed = (typeof FORMATS)[number];
 const everyFormatIsListed: MatchFormat extends Listed ? true : never = true;
@@ -69,11 +69,26 @@ describe("what format comes back out of storage", () => {
  * rather than as a rubber.
  */
 describe("what the queue is asked to look for", () => {
-  it("reads back every format that was written", () => {
-    for (const format of FORMATS) {
+  it("reads back every format two people can agree to play", () => {
+    for (const format of FORMATS.filter((one) => one !== "field")) {
       setQueueFormat(format);
       expect(queueFormat()).toBe(format);
     }
+  });
+
+  /**
+   * The one format the queue must refuse, and refusing it has to be *tested*
+   * rather than trusted to the list above — a filter is exactly the shape of
+   * thing that silently stops excluding anything.
+   *
+   * A field session is solo by construction (§1.8a), so there is nobody for a
+   * queue to pair its asker with. Reading it as "anyone" is what leaves them
+   * pairable instead of waiting for a stranger who can never arrive.
+   */
+  it("reads a field session as anyone, since nobody can be matched for one", () => {
+    localStorage.setItem("hb.queueFormat", "field");
+
+    expect(queueFormat()).toBeNull();
   });
 
   it("reads back null for anyone", () => {

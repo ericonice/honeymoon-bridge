@@ -3,6 +3,7 @@ import type {
   MatchFormat,
   DealPhase,
   DuplicateSummary,
+  FieldSummary,
   MatchStanding,
   Pair,
   PlayerId,
@@ -213,6 +214,53 @@ function signed(value: number): string {
  * alongside these: it answered a narrower question, this one board rather than the
  * session.
  */
+/**
+ * A field session's standing: one total, and how much of it has come back.
+ *
+ * Two figures rather than a session's three, because there is no second run to be
+ * waiting on and no order to name. What there *is* instead is a board played whose
+ * history has not arrived — §1.8a fetches it only after the deal — so the count says
+ * how many of the boards behind you have actually been compared. A total over four of
+ * six boards is not the same claim as a total over six, and a strip that showed only
+ * the total would be making the stronger one.
+ */
+function FieldRows({ summary }: { readonly summary: FieldSummary }): React.JSX.Element {
+  return (
+    <>
+      <p className="flex items-baseline justify-between gap-2 text-white/40">
+        <span>{summary.scoring === "imps" ? "IMPs" : "Total"}</span>
+        <span className="font-semibold tabular-nums text-white/90">
+          {signed(summary.margin)}
+        </span>
+      </p>
+      <p className="flex items-baseline justify-between gap-2 text-white/40">
+        <span>Compared</span>
+        <span className="tabular-nums text-white/60">
+          {summary.boardsCompared}/{summary.boardsPlayed}
+        </span>
+      </p>
+    </>
+  );
+}
+
+/** The same two figures on one wrapping line, for the compact strip. */
+function FieldFigures({ summary }: { readonly summary: FieldSummary }): React.JSX.Element {
+  return (
+    <>
+      <span className="whitespace-nowrap">
+        {summary.scoring === "imps" ? "IMPs" : "Total"}{" "}
+        <span className="font-semibold tabular-nums text-white/90">{signed(summary.margin)}</span>
+      </span>
+      <span className="whitespace-nowrap">
+        Compared{" "}
+        <span className="tabular-nums text-white/60">
+          {summary.boardsCompared}/{summary.boardsPlayed}
+        </span>
+      </span>
+    </>
+  );
+}
+
 function SessionRows({
   summary,
   view,
@@ -379,7 +427,9 @@ function StandingLines({
     return (
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 text-xs text-white/45">
         <span className="whitespace-nowrap">Hand {handNumber}</span>
-        {standing.kind === "duplicate" ? (
+        {standing.kind === "field" ? (
+          <FieldFigures summary={standing.summary} />
+        ) : standing.kind === "duplicate" ? (
           <SessionFigures summary={standing.summary} view={view} />
         ) : (
           <>
@@ -433,10 +483,12 @@ function StandingLines({
           : ""}
         {standing.kind === "duplicate" ? ` · ${ORDER_LABEL[standing.summary.schedule]}` : ""}
       </p>
-      {standing.kind === "duplicate" ? null : (
+      {standing.kind === "duplicate" || standing.kind === "field" ? null : (
         <StandingHeader opponentName={opponentName} />
       )}
-      {standing.kind === "duplicate" ? (
+      {standing.kind === "field" ? (
+        <FieldRows summary={standing.summary} />
+      ) : standing.kind === "duplicate" ? (
         <SessionRows summary={standing.summary} view={view} />
       ) : (
         <>

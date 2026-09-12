@@ -119,7 +119,7 @@ function Secondary({
  * re-modelling of them. That matters because `ratings.ts` pools the formats and a
  * match recorded under a new name would quietly leave the pool.
  */
-const CELLS = ["rubber", "mirror", "duplicate"] as const;
+const CELLS = ["rubber", "mirror", "duplicate", "field"] as const;
 
 function Format({
   format,
@@ -128,9 +128,18 @@ function Format({
   readonly format: MatchFormat;
   onChange(format: MatchFormat): void;
 }): React.JSX.Element {
-  const labels = { duplicate: "Duplicate", mirror: "Mirror", rubber: "Rubber" } as const;
+  // Short because they have to be: four cells in a phone's column leave about seventy
+  // pixels each, which is roughly seven characters — see §3.6a. "Duplicate" no longer
+  // fits, and the word is carried by the line beneath the pair instead.
+  const labels = {
+    duplicate: "Replay",
+    field: "Field",
+    mirror: "Mirror",
+    rubber: "Rubber",
+  } as const;
   // A single game is the rubber cell at a length of one, so both live under it.
-  const chosen = format === "duplicate" || format === "mirror" ? format : "rubber";
+  const chosen =
+    format === "duplicate" || format === "field" || format === "mirror" ? format : "rubber";
 
   return (
     <div className="flex gap-1 rounded-xl bg-white/5 p-1">

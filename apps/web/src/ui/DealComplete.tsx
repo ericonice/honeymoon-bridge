@@ -12,6 +12,7 @@ import { matchNoun } from "../game/labels.js";
 import { ratingChange } from "../game/records.js";
 import { Columns, DealResultHeadline, Row } from "./ScoreRows.js";
 import { Scorepad } from "./Scorepad.js";
+import { FieldPad } from "./FieldPad.js";
 import { SessionPad } from "./SessionPad.js";
 
 export interface DealCompleteProps {
@@ -112,11 +113,13 @@ export function DealComplete({
   // scoring" meant one screen or two.
   const [showingStanding, setShowingStanding] = useState(false);
 
-  // The two pads are the one place the formats genuinely differ, and this screen
+  // The pads are the one place the formats genuinely differ, and this screen
   // shows one on all four of its paths — so it is resolved once here rather than
   // branched at each of them.
   const pad =
-    standing.kind === "duplicate" ? (
+    standing.kind === "field" ? (
+      <FieldPad me={view.me} summary={standing.summary} />
+    ) : standing.kind === "duplicate" ? (
       <SessionPad summary={standing.summary} view={view} />
     ) : (
       <Scorepad
@@ -275,7 +278,11 @@ export function DealComplete({
               is noise. The margin that means something there is the score. A
               session says how many boards it took, since that is not fixed by the
               format the way a rubber's two games are. */}
-          {standing.kind === "duplicate" ? (
+          {standing.kind === "field" ? (
+            <p className="mt-1 text-sm text-white/60">
+              {standing.summary.boardsPlayed} boards, {standing.summary.boardsCompared} compared
+            </p>
+          ) : standing.kind === "duplicate" ? (
             <p className="mt-1 text-sm text-white/60">
               {standing.summary.boards.length} boards, {standing.summary.dealsPlayed} deals
             </p>
@@ -286,7 +293,7 @@ export function DealComplete({
             </p>
           ) : null}
         </div>
-        {standing.kind === "duplicate" ? null : (
+        {standing.kind === "duplicate" || standing.kind === "field" ? null : (
           <div className="w-full max-w-sm text-sm">
             <Columns opponentName={opponentName} />
             {/* **A mirror ends on the same three rows the strip carried all match.**

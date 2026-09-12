@@ -44,7 +44,11 @@ export function formatPlural(format: MatchFormat): string {
 }
 
 const FORMAT_NAMES: Record<MatchFormat, { readonly many: string; readonly one: string }> = {
-  duplicate: { many: "duplicate sessions", one: "Duplicate" },
+  duplicate: { many: "replay sessions", one: "Replay" },
+  // Named for what it is measured against rather than for the mechanic, because the
+  // mechanic is the one it shares with Replay — see §3.6a, where the two sit as a
+  // pair on the row and the word "duplicate" is carried by the line beneath them.
+  field: { many: "field sessions", one: "Field" },
   game: { many: "single games", one: "Single game" },
   mirror: { many: "mirror matches", one: "Mirror" },
   rubber: { many: "rubbers", one: "Rubber" },

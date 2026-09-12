@@ -63,12 +63,27 @@ describe("choosing what to play, on Home", () => {
    * say. Sitting it beside Duplicate made the row mix categories, and how long a
    * rubber runs belongs on the line underneath where duplicate's length already is.
    */
-  it("offers the two games that genuinely differ", () => {
+  it("offers the games that genuinely differ", () => {
     show("rubber");
 
     expect(action("Rubber")).toBeTruthy();
-    expect(action("Duplicate")).toBeTruthy();
+    expect(action("Replay")).toBeTruthy();
+    expect(action("Field")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "One game" })).toBeNull();
+  });
+
+  /**
+   * The two duplicate formats are separate choices rather than one cell with a
+   * setting under it — §3.6a — so each is one tap and each reports itself. What
+   * makes them a pair is drawn rather than nested, which a test cannot see; what
+   * it can check is that neither has become the other's sub-option.
+   */
+  it("makes each duplicate format its own choice", () => {
+    const changed = vi.fn();
+    show("rubber", changed);
+
+    action("Field").click();
+    expect(changed).toHaveBeenCalledWith("field");
   });
 
   /** A single game is the rubber cell at a length of one, and the cell says so. */
@@ -76,13 +91,14 @@ describe("choosing what to play, on Home", () => {
     show("game");
 
     expect(action("Rubber").getAttribute("aria-pressed")).toBe("true");
-    expect(action("Duplicate").getAttribute("aria-pressed")).toBe("false");
+    expect(action("Replay").getAttribute("aria-pressed")).toBe("false");
+    expect(action("Field").getAttribute("aria-pressed")).toBe("false");
   });
 
   it("marks the chosen one, so the row says what it is going to do", () => {
     show("duplicate");
 
-    expect(action("Duplicate").getAttribute("aria-pressed")).toBe("true");
+    expect(action("Replay").getAttribute("aria-pressed")).toBe("true");
     expect(action("Rubber").getAttribute("aria-pressed")).toBe("false");
   });
 
@@ -95,7 +111,7 @@ describe("choosing what to play, on Home", () => {
     const changed = vi.fn();
     show("rubber", changed);
 
-    action("Duplicate").click();
+    action("Replay").click();
     expect(changed).toHaveBeenCalledWith("duplicate");
   });
 
@@ -208,7 +224,8 @@ describe("how long a session runs", () => {
 
     cleanup();
     show("duplicate");
-    expect(line("A session of").className).toContain("text-right");
+    // Third of four now that Field has joined the row, so it points at neither edge.
+    expect(line("A session of").className).toContain("text-center");
   });
 
   it("steps by two, since an odd count would leave a board played once", () => {
@@ -489,7 +506,7 @@ describe("what Find says it is looking for", () => {
     setQueueFormat("duplicate");
     show("rubber");
 
-    expect(action("Find").textContent).toContain("only duplicate");
+    expect(action("Find").textContent).toContain("only replay");
     expect(action("Find").textContent).not.toContain("whoever is free");
   });
 

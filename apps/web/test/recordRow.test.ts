@@ -256,7 +256,7 @@ test("a third format lands on the list rather than falling off it", () => {
     "Computer 1200 cpu +1,071 16–9 · 175 hands",
     "rubbers +641 13–7 · 146 hands",
     "mirror matches +90 2–1 · 9 hands",
-    "duplicate sessions +340 1–1 · 20 hands",
+    "replay sessions +340 1–1 · 20 hands",
   ]);
 });
 
@@ -604,7 +604,7 @@ test("a recent match says which format it was", () => {
   openRecentMatches();
 
   const text = rowText();
-  for (const named of ["Mirror · 8 deals", "Duplicate · 8 deals", "Single game · 8 deals", "Rubber · 8 deals"]) {
+  for (const named of ["Mirror · 8 deals", "Replay · 8 deals", "Single game · 8 deals", "Rubber · 8 deals"]) {
     expect(text, `no row reads "${named}"`).toContain(named);
   }
 });

@@ -1,4 +1,5 @@
 import type { MatchFormat, MatchStanding, Pair, PlayerView } from "@hb/engine";
+import { FieldPad } from "./FieldPad.js";
 import { Overlay } from "./Overlay.js";
 import { Scorepad } from "./Scorepad.js";
 import { SessionPad } from "./SessionPad.js";
@@ -52,7 +53,9 @@ export function ScoreOverlay({
 }: ScoreOverlayProps): React.JSX.Element {
   return (
     <Overlay title="Score" onClose={onClose}>
-      {standing.kind === "duplicate" ? (
+      {standing.kind === "field" ? (
+        <FieldPad me={view.me} summary={standing.summary} />
+      ) : standing.kind === "duplicate" ? (
         <SessionPad summary={standing.summary} view={view} />
       ) : (
         <Scorepad

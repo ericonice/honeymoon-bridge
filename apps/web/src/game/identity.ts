@@ -81,7 +81,7 @@ export function preferredFormat(): MatchFormat {
   // returned `"rubber"`, and the match played was a rubber that would not end at a
   // hundred below the line because a rubber takes two games. The row said Mirror and
   // the game was not one.
-  if (stored === "game" || stored === "duplicate" || stored === "mirror") {
+  if (stored === "game" || stored === "duplicate" || stored === "field" || stored === "mirror") {
     return stored;
   }
   return "rubber";
@@ -114,6 +114,10 @@ export function setPreferredFormat(format: MatchFormat): void {
  */
 export function queueFormat(): MatchFormat | null {
   const stored = readStored(QUEUE_FORMAT_KEY);
+  // **`"field"` is missing on purpose and must stay missing.** A field session is
+  // solo by construction — §1.8a — so it never enters the table negotiation at all,
+  // and a seat that somehow stored it here reads as no preference rather than as a
+  // format the queue would then have to fail to honour.
   return stored === "game" || stored === "duplicate" || stored === "mirror" || stored === "rubber"
     ? stored
     : null;
