@@ -65,11 +65,16 @@ export function RobotGame(props: RobotGameProps): React.JSX.Element {
     // **Said rather than swapped for a rubber.** The row says Field; starting
     // something else would be the bug that shipped Mirror broken, where the choice
     // and the game disagreed with nothing erroring anywhere.
+    //
+    // Being signed out is no longer one of the ways to arrive here — `gateFor` sends
+    // that case to the sign-in wall, because the app knew what was wrong and this
+    // screen could only say that something was.
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
         <p className="text-white/70">
-          No boards to play. A field session needs boards from the server, and this
-          device could not reach any — you may be signed out or offline.
+          No boards to play. A field session is played on boards the server already
+          holds results for, and there are none to be had — either every one has been
+          played on this account, or the server cannot be reached.
         </p>
         <button
           type="button"
