@@ -183,10 +183,7 @@ describe("how long a session runs", () => {
 
     cleanup();
     show("duplicate");
-    // The family leads the line now — the row's two duplicate cells are grouped by a
-    // gutter, and this is where the word that names the group lives.
-    expect(screen.getByText("a session of")).toBeTruthy();
-    expect(screen.getAllByText("Duplicate ·").length).toBeGreaterThan(0);
+    expect(screen.getByText("A session of")).toBeTruthy();
   });
 
   /**
@@ -219,30 +216,6 @@ describe("how long a session runs", () => {
 
     expect(screen.getByRole("group", { name: "Games" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "Duplicate" })).toBeTruthy();
-  });
-
-  /**
-   * **The row is two families and the line says which you are in.**
-   *
-   * Rubber and Mirror settle above and below a line with a race to a game; Replay and
-   * Field settle each board where it is played. The row draws that as a wider gutter
-   * between the pairs — proximity, which a test cannot see and should not try to, for
-   * the reason the record screen learnt not to select on a padding class. What it can
-   * check is the half that carries meaning: the word naming the family, which is also
-   * the only place "Duplicate" survives now that four cells leave no room for it.
-   */
-  it("names the duplicate family, and only for the two formats in it", () => {
-    for (const format of ["duplicate", "field"] as const) {
-      cleanup();
-      show(format);
-      expect(screen.getAllByText("Duplicate ·").length).toBeGreaterThan(0);
-    }
-
-    for (const format of ["rubber", "game", "mirror"] as const) {
-      cleanup();
-      show(format);
-      expect(screen.queryByText("Duplicate ·")).toBeNull();
-    }
   });
 
   /**
@@ -284,7 +257,7 @@ describe("how long a session runs", () => {
     cleanup();
     show("duplicate");
     // Third of four now that Field has joined the row, so it points at neither edge.
-    expect(line("a session of").className).toContain("text-center");
+    expect(line("A session of").className).toContain("text-center");
   });
 
   it("steps by two, since an odd count would leave a board played once", () => {

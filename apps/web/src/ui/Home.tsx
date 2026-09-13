@@ -345,12 +345,7 @@ function FormatNote({
     // it rather than the number meaning two different things.
     return (
       <div className={`${NOTE_HEIGHT} ${lean} gap-1 px-1 text-xs text-white/45`}>
-        {/* The family, said where the explaining already happens. The gutter above
-            says there are two groups; this says which one you are in — and it is the
-            only place the word "Duplicate" survives, since the cells have no room for
-            nine characters at four across. */}
-        <span className="text-white/35">Duplicate ·</span>
-        <span>ranked over</span>
+        <span>Ranked over</span>
         <Step
           label="Fewer boards"
           disabled={deals <= MIN_SESSION_DEALS}
@@ -410,8 +405,7 @@ function FormatNote({
 
   return (
     <div className={`${NOTE_HEIGHT} ${lean} gap-1 px-1 text-xs text-white/45`}>
-      <span className="text-white/35">Duplicate ·</span>
-      <span>a session of</span>
+      <span>A session of</span>
       <Step
         label="Shorter session"
         disabled={deals <= MIN_SESSION_DEALS}
