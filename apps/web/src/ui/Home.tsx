@@ -122,21 +122,27 @@ function Secondary({
 const CELLS = ["rubber", "mirror", "duplicate", "field"] as const;
 
 /**
- * Where the row divides, and what the division is.
+ * The row is two families, and each gets its own container.
  *
  * **The split is by how a deal is scored**, which is the honest reason for it rather
  * than the two duplicate formats merely having neighbouring names. Rubber and Mirror
  * settle above and below a line with a race to a game; Replay and Field settle each
- * board where it is played. Two and two.
+ * board where it is played.
  *
- * Drawn as a **wider gutter and nothing else** — proximity, which costs four pixels of
- * a row that has none to spare and adds no mark to learn. A caption over the pair was
- * the alternative and costs a line of height on the one screen that must not scroll,
- * to say what the gutter and the line beneath already say between them. If the gutter
- * turns out to read as nothing on a real phone, a hairline here is the next step up
- * and still costs no height.
+ * **A wider gutter was tried first and read as nothing** on a real phone — four
+ * pixels between cells that already sit four apart is a difference the eye does not
+ * find. Two grounds is the same idea at a strength that works: each pair is visibly a
+ * thing, and the boundary needs no mark of its own. It still costs **no height**,
+ * which is the constraint that ruled out the obvious answer of a caption over each
+ * pair — this is the one screen that must not scroll.
+ *
+ * The cost is about twelve pixels of width in extra padding, which the labels absorb
+ * because they were already chosen short enough for four cells.
  */
-const AFTER_RUBBER_SCORING = "mirror";
+const FAMILIES = [
+  ["rubber", "mirror"],
+  ["duplicate", "field"],
+] as const;
 
 function Format({
   format,
@@ -159,24 +165,28 @@ function Format({
     format === "duplicate" || format === "field" || format === "mirror" ? format : "rubber";
 
   return (
-    <div className="flex gap-1 rounded-xl bg-white/5 p-1">
-      {CELLS.map((cell) => (
-        <button
-          key={cell}
-          type="button"
-          aria-pressed={chosen === cell}
-          className={`flex-1 rounded-lg px-2 py-2 text-sm font-medium ${
-            cell === AFTER_RUBBER_SCORING ? "mr-2" : ""
-          } ${chosen === cell ? "bg-white/15 text-white" : "text-white/55"}`}
-          onClick={() => {
-            // Coming back to Rubber restores the length last chosen for it, rather
-            // than defaulting to two — which is what a trip through Duplicate used to
-            // do, silently promoting a single game to a full rubber.
-            onChange(cell === "rubber" ? rubberFormatFor(rubberGames()) : cell);
-          }}
-        >
-          {labels[cell]}
-        </button>
+    <div className="flex gap-2">
+      {FAMILIES.map((family) => (
+        <div key={family[0]} className="flex flex-1 gap-1 rounded-xl bg-white/5 p-1">
+          {family.map((cell) => (
+            <button
+              key={cell}
+              type="button"
+              aria-pressed={chosen === cell}
+              className={`flex-1 rounded-lg px-1.5 py-2 text-sm font-medium ${
+                chosen === cell ? "bg-white/15 text-white" : "text-white/55"
+              }`}
+              onClick={() => {
+                // Coming back to Rubber restores the length last chosen for it, rather
+                // than defaulting to two — which is what a trip through Duplicate used
+                // to do, silently promoting a single game to a full rubber.
+                onChange(cell === "rubber" ? rubberFormatFor(rubberGames()) : cell);
+              }}
+            >
+              {labels[cell]}
+            </button>
+          ))}
+        </div>
       ))}
     </div>
   );

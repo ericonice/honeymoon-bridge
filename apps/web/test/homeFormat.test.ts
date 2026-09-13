@@ -190,6 +190,25 @@ describe("how long a session runs", () => {
   });
 
   /**
+   * **The two families are separate groups, not four cells in a line.**
+   *
+   * Asserted as *which buttons share a parent* rather than by reading a class, for
+   * the reason the record screen learnt not to select on padding: the grouping is the
+   * property, and the ground it is drawn with is not. A wider gutter was the first
+   * attempt and read as nothing on a phone — this is the version that survives being
+   * looked at, and a test that could not tell the two apart would be no use.
+   */
+  it("puts the rubber-scored formats and the duplicate ones in separate groups", () => {
+    show("rubber");
+    const groupOf = (name: string): Element | null =>
+      screen.getByRole("button", { name }).parentElement;
+
+    expect(groupOf("Rubber")).toBe(groupOf("Mirror"));
+    expect(groupOf("Replay")).toBe(groupOf("Field"));
+    expect(groupOf("Rubber")).not.toBe(groupOf("Replay"));
+  });
+
+  /**
    * **The row is two families and the line says which you are in.**
    *
    * Rubber and Mirror settle above and below a line with a race to a game; Replay and
