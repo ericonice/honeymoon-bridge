@@ -314,13 +314,13 @@ function generate(seeds: number, runs: number): void {
     progress(index + 1);
   }
   console.log(
-    `\n  wrote field-boards.sql (${boards.length} boards) and ` +
-      `field-results.sql (${results.length} results)\n` +
+    `\n  wrote ${outputPrefix()}-boards.sql (${boards.length} boards) and ` +
+      `${outputPrefix()}-results.sql (${results.length} results)\n` +
       `\n  Apply them **separately and in this order** — a single file mixing the two\n` +
       `  fails on a foreign key, because \`wrangler d1 execute --file\` does not\n` +
       `  reliably apply statements in the order they are written:\n` +
-      `\n    npx wrangler d1 execute honeymoon-bridge --local --file=field-boards.sql` +
-      `\n    npx wrangler d1 execute honeymoon-bridge --local --file=field-results.sql\n`,
+      `\n    npx wrangler d1 execute honeymoon-bridge --local --file=${outputPrefix()}-boards.sql` +
+      `\n    npx wrangler d1 execute honeymoon-bridge --local --file=${outputPrefix()}-results.sql\n`,
   );
 }
 
@@ -371,12 +371,27 @@ function rowFor(boardId: string, run: Run, starter: 0 | 1, at: number, playedAt:
   );
 }
 
+/**
+ * `out=<name>` writes to `field-<name>-boards.sql` and `field-<name>-results.sql`.
+ *
+ * Because the only way to build a corpus of any size is to run several of these at
+ * once — a seed is about a minute and the search is single-threaded, so one process
+ * is a core's worth of a machine that has ten. Workers take disjoint `base` values so
+ * their seeds cannot collide, and each needs somewhere of its own to write or the
+ * last one to finish silently wins.
+ */
+function outputPrefix(): string {
+  const arg = process.argv.find((one) => one.startsWith("out="));
+  return arg === undefined ? "field" : `field-${arg.slice("out=".length)}`;
+}
+
 function write(boards: readonly string[], results: readonly string[]): void {
+  const prefix = outputPrefix();
   writeFileSync(
-    "field-boards.sql",
+    `${prefix}-boards.sql`,
     `${insertFor(BOARD_COLUMNS, "field_boards", boards)}\n${NUMBER_BOARDS}`,
   );
-  writeFileSync("field-results.sql", insertFor(RESULT_COLUMNS, "field_results", results));
+  writeFileSync(`${prefix}-results.sql`, insertFor(RESULT_COLUMNS, "field_results", results));
 }
 
 function insertFor(columns: string, table: string, rows: readonly string[]): string {
