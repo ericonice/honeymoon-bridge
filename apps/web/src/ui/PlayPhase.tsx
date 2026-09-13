@@ -652,7 +652,7 @@ export function PlayPhase({
   // cheap and only ever rendered once the reveal is actually showing.
   const pad =
     standing.kind === "field" ? (
-      <FieldPad me={view.me} summary={standing.summary} />
+      <FieldPad latest me={view.me} summary={standing.summary} />
     ) : standing.kind === "duplicate" ? (
       <SessionPad summary={standing.summary} view={view} />
     ) : (

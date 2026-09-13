@@ -17,23 +17,43 @@ import { ContractText } from "./CardText.js";
  * does vary is who held the cards, and that is what each row names.
  */
 export function FieldPad({
+  latest = false,
   me,
   summary,
 }: {
+  /**
+   * Only the board just played, for the screen between deals.
+   *
+   * A reveal is about the hand that just finished, and redrawing every earlier board
+   * under it buries that in a scroll — by the fourth board the thing you are looking
+   * for is four travellers down. The session's own figures are on the strip directly
+   * above it, so the foot would be saying them twice as well.
+   *
+   * The whole session is what the Score button opens, which is where a reader is
+   * asking about the session rather than about a deal.
+   */
+  readonly latest?: boolean;
   readonly me: PlayerId;
   readonly summary: FieldSummary;
 }): React.JSX.Element {
+  const shown = latest ? summary.results.slice(-1) : summary.results;
+  const from = summary.results.length - shown.length;
+
   return (
     <div className="flex flex-col gap-4 text-sm">
+      {/* Kept in both, because this is the one sentence the screen cannot do without:
+          the other results faced the same offers and built their own hands, so a
+          traveller read as one hand bid several ways is the wrong reading. Shorter
+          where it is repeated every deal. */}
       <p className="text-xs text-white/45">
-        Each board once, ranked against everybody who has held these cards. The other
-        results faced the same offers and kept their own cards, so none of them is your
-        hand bid twice.
+        {latest
+          ? "Everybody here faced the same offers and kept their own cards."
+          : "Each board once, ranked against everybody who has held these cards. The other results faced the same offers and kept their own cards, so none of them is your hand bid twice."}
       </p>
-      {summary.results.map((result, at) => (
-        <Board key={result.board.id} at={at} me={me} result={result} />
+      {shown.map((result, at) => (
+        <Board key={result.board.id} at={from + at} me={me} result={result} />
       ))}
-      <Foot summary={summary} />
+      {latest ? null : <Foot summary={summary} />}
     </div>
   );
 }

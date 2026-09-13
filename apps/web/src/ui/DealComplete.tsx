@@ -118,7 +118,7 @@ export function DealComplete({
   // branched at each of them.
   const pad =
     standing.kind === "field" ? (
-      <FieldPad me={view.me} summary={standing.summary} />
+      <FieldPad latest me={view.me} summary={standing.summary} />
     ) : standing.kind === "duplicate" ? (
       <SessionPad summary={standing.summary} view={view} />
     ) : (
