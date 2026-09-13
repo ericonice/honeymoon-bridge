@@ -118,7 +118,7 @@ describe("the strip's deal row", () => {
       cleanup();
       render(
         createElement(ContractBar, {
-          density: "full" as const,
+          density: "normal" as const,
           format: standing.kind === "field" ? ("field" as const) : ("rubber" as const),
           handsPlayed: 1,
           onShowScore: null,
@@ -142,7 +142,7 @@ describe("the strip's deal row", () => {
   it("says nothing about a contract during the auction", () => {
     render(
       createElement(ContractBar, {
-        density: "full" as const,
+        density: "normal" as const,
         format: "rubber" as const,
         handsPlayed: 1,
         onShowScore: null,
