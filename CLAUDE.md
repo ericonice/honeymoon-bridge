@@ -2882,6 +2882,39 @@ auction.
 
 ### Open threads
 
+- **The bot maximises points in a format scored on placement, and that is the same mispricing this
+  file has already recorded twice.** `objectiveFor` gives Field the `"duplicate"` objective, on the
+  argument that a field board *is* a duplicate board — no rubber, prescribed vulnerability, the deal
+  settled where it is played. That is right about how the **deal** is scored and wrong about how the
+  **format** is: §1.8a settles a board in *matchpoints*, and duplicate settles it in points.
+
+  In bridge those are different games and the difference is not a nuance. Under matchpoints what a
+  result is worth is its **rank**, not its size: an overtrick that lifts you past one more entry is
+  worth exactly what a slam bonus is, and going down 100 to beat a part-score the field is making is a
+  top rather than a loss. Expected points and expected rank agree often enough to hide the gap and
+  diverge precisely on **risk** — points favour the best average, matchpoints favour the likeliest
+  outcome. A bidder pricing in points will take a line that is worth more on average and places worse.
+
+  The proper objective converts the bidder's own sampled outcome distribution into **expected
+  matchpoints against a plausible field** rather than into points. Two things make that tractable:
+  `searchTricks` already produces a *distribution* rather than a point estimate — which is the thing
+  that made searching worth 65% of rubbers, since "the whole distribution wins" and handing the bidder
+  only its centre came out level — and the corpus is a real field to price against.
+
+  **Three warnings, and the first is the one that would ruin it.** The bot must never be handed the
+  board's actual traveller: the player is not given it until the deal is over (§1.8a enforces that
+  server-side), and a bidder that had it would be playing a different game from the person it is being
+  compared with. It has to price against a *modelled* field, not the real one. Second, the same
+  circularity that bit the equity table twice applies — a field fitted from the points bidder's own
+  results is an opponent model of that bidder. And third, `bench/rubber.ts` has no field mode, so
+  nothing can currently play one objective against the other; building that instrument comes before
+  building the objective, on this file's own repeated evidence that the instrument is what is usually
+  wrong.
+
+  Worth stating what is *not* suspect: the deal-level pricing is sound. A field deal really is scored
+  by `scoreDuplicateDeal` with vulnerability prescribed and no standing, so the objective is correct
+  about everything except the currency the result is finally read in.
+
 - **The ladder was spaced on its one inert lever, and measuring one lever at a time is what fixed
   it.** The first ladder guessed four rungs varying recall 3/6/10/13, samples 6/15/30/60 and bid search
   0/40/120/250ms together. Three of the four turned out to be **the same opponent**: Tournament against
