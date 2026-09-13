@@ -16,3 +16,6 @@ dev-dist/
 
 # Cloudflare
 .wrangler/
+
+# Generated field corpora — see bench/field.ts. Written to be applied and discarded.
+apps/web/field-*.sql

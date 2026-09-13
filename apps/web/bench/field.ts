@@ -6,6 +6,7 @@ import { levelFor } from "../src/bot/difficulty.js";
 import { LATEST_RELEASE } from "../src/bot/release.js";
 import { botTuningFor } from "../src/game/botTuning.js";
 import { botActionFor } from "../src/game/botTurn.js";
+import { writeFileSync } from "node:fs";
 import { createProgress } from "./progress.js";
 
 /**
@@ -90,11 +91,12 @@ function generatorTuning(): ReturnType<typeof botTuningFor> {
  *
  * A field board is played once, so there is no replay to resolve against — the
  * first-draw stream is seat 0 and the cycle is read against it. Stored with the
- * board in the real corpus rather than derived at the point of play, so nothing
- * can drift it; derived here only because the probe is minting its own boards.
+ * board in the corpus rather than derived at the point of play, so nothing can drift
+ * it; keyed off the **seed** rather than off a position in a batch, so regenerating
+ * a board gives it the same terms it had before.
  */
-function vulnerableFor(index: number): Pair<boolean> {
-  const phase = index % 4;
+function vulnerableFor(seed: number): Pair<boolean> {
+  const phase = seed % 4;
   return [phase === 1 || phase === 3, phase === 2 || phase === 3];
 }
 
@@ -209,7 +211,7 @@ function run(boards: number, runs: number): void {
 
   for (let index = 0; index < boards; index += 1) {
     const seed = (base + index * 7919) >>> 0;
-    const vulnerable = vulnerableFor(index);
+    const vulnerable = vulnerableFor(seed);
     const played = Array.from({ length: runs }, (_, at) => playBoard(seed, at, vulnerable));
 
     // Both seats, because a board is two entries and either can move on its own —
@@ -252,4 +254,104 @@ function run(boards: number, runs: number): void {
   );
 }
 
-run(numberArg(0, 10), numberArg(1, 4));
+/**
+ * Writes a corpus rather than a read-out — §1.8a's boards and the field each opens
+ * with.
+ *
+ * **One deal fills both of a stock's boards.** A board is a seed *and one side of
+ * it*, and a single run scores both seats at once: whoever held the first-draw
+ * stream and whoever held the second. So the run played with `starter: 0` gives the
+ * starter-0 board seat 0's score and the starter-1 board seat 1's — no second deal,
+ * and the two entries are the same deal seen from its two ends.
+ *
+ * **The second board's entry has to be turned round, and this is the trap.** A person
+ * playing the starter-1 board sits in seat 0 and draws *second*, which is the seat
+ * the generated deal called 1. So that entry's declarer, tricks and score are the
+ * generated deal's read with the seats exchanged; stored as they came they would name
+ * the wrong declarer and credit the wrong side on every second-stream board in the
+ * corpus.
+ */
+function generate(seeds: number, runs: number): void {
+  const base = baseArg();
+  const progress = createProgress(seeds, "seeds");
+  const level = levelFor("championship");
+  const boards: string[] = [];
+  const results: string[] = [];
+  const now = Date.now();
+
+  console.log(
+    `${seeds} seeds × ${runs} runs → ${seeds * 2} boards, ` +
+      `${LATEST_RELEASE.name} at Championship, base=${base}\n`,
+  );
+
+  for (let index = 0; index < seeds; index += 1) {
+    const seed = (base + index * 7919) >>> 0;
+    const vulnerable = vulnerableFor(seed);
+    for (const starter of [0, 1] as const) {
+      boards.push(
+        `('f${seed}-${starter}', ${seed}, ${starter}, ${vulnerable[0] ? 1 : 0}, ` +
+          `${vulnerable[1] ? 1 : 0}, ${LATEST_RELEASE.version}, 'championship', ${now})`,
+      );
+    }
+    for (let at = 0; at < runs; at += 1) {
+      const run = playBoard(seed, at, vulnerable);
+      results.push(rowFor(`f${seed}-0`, run, 0, at, now + at));
+      results.push(rowFor(`f${seed}-1`, run, 1, at, now + at));
+    }
+    progress(index + 1);
+  }
+
+  writeFileSync("field-boards.sql", insertFor(BOARD_COLUMNS, "field_boards", boards));
+  writeFileSync("field-results.sql", insertFor(RESULT_COLUMNS, "field_results", results));
+  console.log(
+    `\n  wrote field-boards.sql (${boards.length} boards) and ` +
+      `field-results.sql (${results.length} results)\n` +
+      `\n  Apply them **separately and in this order** — a single file mixing the two\n` +
+      `  fails on a foreign key, because \`wrangler d1 execute --file\` does not\n` +
+      `  reliably apply statements in the order they are written:\n` +
+      `\n    npx wrangler d1 execute honeymoon-bridge --local --file=field-boards.sql` +
+      `\n    npx wrangler d1 execute honeymoon-bridge --local --file=field-results.sql\n`,
+  );
+}
+
+const BOARD_COLUMNS =
+  "id, seed, starter, vulnerable_0, vulnerable_1, bot_version, difficulty, created_at";
+const RESULT_COLUMNS =
+  "id, board_id, played_at, account_id, opponent_account_id, generated, points, " +
+  "declarer, contract_level, contract_strain, contract_doubling, tricks_0, tricks_1";
+
+/**
+ * One result row, read from the side of the stock this board is.
+ *
+ * The id is derived from the board and the run index rather than from the clock, so
+ * regenerating a seed collides on the primary key instead of quietly adding a second
+ * copy of every entry. `playedAt` still comes from the clock and still orders the
+ * runs, which is what the retirement rule reads.
+ */
+function rowFor(boardId: string, run: Run, starter: 0 | 1, at: number, playedAt: number): string {
+  // The starter-1 board is played from the seat the generated deal called 1, so
+  // everything seat-indexed is read the other way round for it.
+  const mine = starter === 1 ? 1 : 0;
+  const theirs = starter === 1 ? 0 : 1;
+  const contract = run.contract;
+  const declarer = contract === null ? "NULL" : contract.declarer === mine ? 0 : 1;
+  const level = contract === null ? "NULL" : contract.level;
+  const strain = contract === null ? "NULL" : `'${contract.strain}'`;
+  const doubling = contract === null ? "NULL" : `'${contract.doubling}'`;
+  return (
+    `('${boardId}-r${at}', '${boardId}', ${playedAt}, NULL, NULL, 1, ${run.points[mine]}, ` +
+    `${declarer}, ${level}, ${strain}, ${doubling}, ${run.tricks[mine]}, ${run.tricks[theirs]})`
+  );
+}
+
+function insertFor(columns: string, table: string, rows: readonly string[]): string {
+  // One statement, so nothing inside a file can race anything else inside it.
+  return `INSERT INTO ${table} (${columns}) VALUES\n${rows.join(",\n")};\n`;
+}
+
+if (process.argv.includes("generate")) {
+  // The flag occupies the first positional slot, so the counts sit one along.
+  generate(numberArg(1, 10), numberArg(2, 8));
+} else {
+  run(numberArg(0, 10), numberArg(1, 4));
+}
