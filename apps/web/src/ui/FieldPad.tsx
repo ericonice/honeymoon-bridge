@@ -1,21 +1,20 @@
-import { fieldMarginOf } from "@hb/engine";
-import type { FieldResult, FieldSummary, PlayerId } from "@hb/engine";
+import { boardPercentageOf, humanPercentageOf } from "@hb/engine";
+import type { FieldEntry, FieldResult, FieldSummary, PlayerId } from "@hb/engine";
 import { ContractText } from "./CardText.js";
 
 /**
- * The scorepad of a field session: a row a board, you against what was recorded.
+ * The scorepad of a field session: a board at a time, you among everybody else.
  *
- * One row rather than `SessionPad`'s paired columns, because a board here *is* one
- * deal — it is met once, and the figure it is compared against was played by somebody
- * else on another evening. So the two cells to read across are yours and theirs, and
- * the margin is the third rather than an addition the reader is asked to do: the sum
- * trick that lets a session pad omit a per-row total works only because both of its
- * figures are the same player's.
+ * Not a table of boards. §1.8a ranks you against the results recorded on each board,
+ * so what a reader needs per board is the **traveller** — every result on it, yours
+ * among them — and a grid with one row a board could only ever show the figure, not
+ * what made it. A session of eight boards is eight small travellers, which is exactly
+ * how a duplicate player reads a session.
  *
- * **A blank reference is a board played and not yet compared, not a board worth
- * nothing.** §1.8a fetches a board's history only after the deal, deliberately, and it
- * may never arrive. Drawing that as a zero would be the same lie the session pad's own
- * dash once told, so the margin column stays empty and the score column does not.
+ * **The opposition is said once per board rather than tagged per row.** Every entry
+ * on a board faced the same thing in solo play, so a per-row tag would imply it
+ * varies and invite the reader to work out which rows are the comparable ones. What
+ * does vary is who held the cards, and that is what each row names.
  */
 export function FieldPad({
   me,
@@ -25,89 +24,156 @@ export function FieldPad({
   readonly summary: FieldSummary;
 }): React.JSX.Element {
   return (
-    <table className="w-full text-sm">
-      <caption className="pb-2 text-left text-xs text-white/45">
-        Each board once, against what the same cards have been worth before. The recorded
-        hand faced the same offers and kept its own cards, so it is not your hand bid
-        twice.
-      </caption>
-      <thead>
-        <tr className="text-xs text-white/40">
-          <th className="py-1 pr-2 text-left font-normal">Board</th>
-          <th className="py-1 pr-2 text-left font-normal">You</th>
-          <th className="py-1 pr-2 text-left font-normal">Recorded</th>
-          <th className="py-1 text-right font-normal">
-            {summary.scoring === "imps" ? "IMPs" : "Margin"}
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {summary.results.map((result, at) => (
-          <Row key={result.board.id} at={at} me={me} result={result} summary={summary} />
-        ))}
-      </tbody>
-      <tfoot>
-        <tr className="border-t border-white/15 text-sm">
-          <td className="py-2 pr-2 text-xs text-white/45" colSpan={3}>
-            {summary.boardsCompared} of {summary.boardsPlayed} compared
-          </td>
-          <td className="py-2 text-right font-semibold tabular-nums">
-            {signed(summary.margin)}
-          </td>
-        </tr>
-      </tfoot>
-    </table>
+    <div className="flex flex-col gap-4 text-sm">
+      <p className="text-xs text-white/45">
+        Each board once, ranked against everybody who has held these cards. The other
+        results faced the same offers and kept their own cards, so none of them is your
+        hand bid twice.
+      </p>
+      {summary.results.map((result, at) => (
+        <Board key={result.board.id} at={at} me={me} result={result} />
+      ))}
+      <Foot summary={summary} />
+    </div>
   );
 }
 
-function Row({
+function Board({
   at,
   me,
   result,
-  summary,
 }: {
   readonly at: number;
   readonly me: PlayerId;
   readonly result: FieldResult;
-  readonly summary: FieldSummary;
 }): React.JSX.Element {
-  const margin = fieldMarginOf(result, me, summary.scoring);
+  const placed = boardPercentageOf(result, me);
   return (
-    <tr className="border-t border-white/10 align-top">
-      <td className="py-2 pr-2 text-xs tabular-nums text-white/45">{at + 1}</td>
-      <td className="py-2 pr-2">
-        <Played contract={result.contract} points={result.points[me]} />
-      </td>
-      <td className="py-2 pr-2">
-        {result.reference === null ? (
-          <span className="text-xs text-white/35">not back yet</span>
+    <table className="w-full">
+      <caption className="flex items-baseline justify-between pb-1 text-xs text-white/45">
+        <span>Board {at + 1}</span>
+        <span className="font-semibold tabular-nums text-white/80">
+          {placed === null ? "" : `${Math.round(placed)}%`}
+        </span>
+      </caption>
+      <tbody>
+        <Row
+          mine
+          contract={result.contract}
+          points={result.points[me]}
+          who="you"
+          tricks={result.tricks}
+        />
+        {/* Null and empty are different answers and are drawn differently: one is a
+            field that has not come back, the other a board nobody else has played. */}
+        {result.field === null ? (
+          <tr>
+            <td className="py-1 text-xs text-white/35" colSpan={3}>
+              waiting for the other results
+            </td>
+          </tr>
+        ) : result.field.length === 0 ? (
+          <tr>
+            <td className="py-1 text-xs text-white/35" colSpan={3}>
+              nobody else has played this board yet
+            </td>
+          </tr>
         ) : (
-          <Played contract={result.reference.contract} points={result.reference.points} />
+          result.field.map((entry, index) => <Entry key={index} entry={entry} />)
         )}
+      </tbody>
+    </table>
+  );
+}
+
+function Entry({ entry }: { readonly entry: FieldEntry }): React.JSX.Element {
+  return (
+    <Row
+      contract={entry.contract}
+      note={entry.kind === "table" ? "played a person" : null}
+      points={entry.points}
+      tricks={entry.tricks}
+      who={entry.who}
+    />
+  );
+}
+
+function Row({
+  contract,
+  mine = false,
+  note = null,
+  points,
+  tricks,
+  who,
+}: {
+  readonly contract: FieldResult["contract"];
+  readonly mine?: boolean;
+  readonly note?: string | null;
+  readonly points: number;
+  readonly tricks: readonly number[] | null;
+  readonly who: string;
+}): React.JSX.Element {
+  return (
+    <tr className={`border-t border-white/10 ${mine ? "text-white" : "text-white/70"}`}>
+      <td className={`w-20 truncate py-1.5 pr-2 text-xs ${mine ? "font-semibold" : ""}`}>
+        {who}
       </td>
-      <td className="py-2 text-right font-semibold tabular-nums">
-        {margin === null ? "" : signed(margin)}
+      <td className="py-1.5 pr-2">
+        <span className="flex items-baseline gap-1.5">
+          {contract === null ? (
+            <span className="text-xs text-white/45">passed out</span>
+          ) : (
+            <>
+              <ContractText contract={contract} on="dark" />
+              <span className="text-xs text-white/45">{resultOf(contract, tricks)}</span>
+            </>
+          )}
+          {note === null ? null : <span className="text-[0.65rem] text-white/35">{note}</span>}
+        </span>
       </td>
+      <td className="py-1.5 text-right tabular-nums">{signed(points)}</td>
     </tr>
   );
 }
 
-function Played({
-  contract,
-  points,
-}: {
-  readonly contract: FieldResult["contract"];
-  readonly points: number;
-}): React.JSX.Element {
+/**
+ * How the contract went, in bridge's notation.
+ *
+ * Blank when the tricks were not recorded rather than guessed at — an entry from an
+ * older server may carry a score and a contract and nothing else, and "=" would be a
+ * claim about a deal nobody has the record of.
+ */
+function resultOf(contract: NonNullable<FieldResult["contract"]>, tricks: readonly number[] | null): string {
+  if (tricks === null) {
+    return "";
+  }
+  const made = tricks[contract.declarer] ?? 0;
+  const needed = contract.level + 6;
+  return made >= needed ? (made === needed ? "=" : `+${made - needed}`) : `−${needed - made}`;
+}
+
+function Foot({ summary }: { readonly summary: FieldSummary }): React.JSX.Element {
+  const human = summary.humanPercentage;
   return (
-    <span className="flex items-baseline gap-1.5">
-      {contract === null ? (
-        <span className="text-xs text-white/45">passed out</span>
-      ) : (
-        <ContractText contract={contract} on="dark" />
+    <div className="border-t border-white/15 pt-2 text-sm">
+      <p className="flex items-baseline justify-between">
+        <span className="text-white/55">
+          Overall · {summary.boardsRanked} of {summary.boardsPlayed} ranked
+        </span>
+        <span className="font-semibold tabular-nums">
+          {summary.percentage === null ? "—" : `${Math.round(summary.percentage)}%`}
+        </span>
+      </p>
+      {/* Absent rather than nought until somebody else has played one of these boards:
+          §1.8a's whole point is that a figure against machine runs and a figure against
+          people are different claims, and a zero here would be the wrong one. */}
+      {human === null ? null : (
+        <p className="flex items-baseline justify-between text-white/55">
+          <span>Against people</span>
+          <span className="tabular-nums">{Math.round(human)}%</span>
+        </p>
       )}
-      <span className="text-xs tabular-nums text-white/60">{signed(points)}</span>
-    </span>
+    </div>
   );
 }
 

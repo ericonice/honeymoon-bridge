@@ -503,23 +503,28 @@ export function summarizeMatch(match: MatchState): MatchSummary {
 }
 
 /**
- * A field session, whose verdict is one signed total against what was recorded.
+ * A field session, whose verdict is where you placed rather than what you scored.
  *
- * **`points` is the margin and its negative**, which is the same shape duplicate uses
- * and means the same thing: a board is worth one signed figure rather than two running
- * totals, because there is only one comparison being made. The seat opposite is the
- * opposition rather than an opponent with a score of its own — it is the same computer
- * that set the reference, which is the whole rule the format rests on.
+ * **`points` is the percentage and its complement**, and that is a real figure rather
+ * than a convenience: matchpoints are conserved, so a session scoring 70% is one where
+ * everybody else's results scored 30% against it. The seat opposite is the opposition
+ * rather than an opponent with a total of its own — §1.8a fixes it for exactly that
+ * reason — so the complement is the field's, not the computer's.
  *
- * `winner` reads that margin, and level is a real answer: a session settled in IMPs
- * lands on nothing at all far more readily than a rubber does, and reading a draw as a
- * loss is a bug this project has already had to fix once.
+ * Rounded here and only here. The percentage is a mean of means and carries a
+ * fraction; every screen and every stored result wants a whole number, and rounding
+ * once at the boundary is what stops two of them disagreeing in the last digit.
+ *
+ * `winner` reads it, and level is a real answer: an even split of matchpoints is far
+ * likelier than a tied rubber, and reading a draw as a loss is a bug this project has
+ * already had to fix once.
  */
 function summarizeFieldMatch(session: FieldState): MatchSummary {
   const summary = summarizeField(session);
+  const placed = Math.round(summary.percentage ?? 0);
   const points: Pair<number> = [0, 0];
-  points[session.me] = summary.margin;
-  points[opponentOf(session.me)] = -summary.margin;
+  points[session.me] = placed;
+  points[opponentOf(session.me)] = 100 - placed;
 
   return {
     bonus: summary.score?.bonus ?? 0,
@@ -536,8 +541,14 @@ function summarizeFieldMatch(session: FieldState): MatchSummary {
     // `objectiveFor` is what makes sure the bidder is told so.
     botStanding: { rubber: newRubber("rubber"), vulnerable: summary.vulnerable },
     vulnerable: summary.vulnerable,
+    // Nothing ranked is not a draw — it is a session whose fields never came back, so
+    // there is no verdict to give rather than a level one.
     winner:
-      !summary.complete || summary.margin === 0 ? null : summary.margin > 0 ? session.me : opponentOf(session.me),
+      !summary.complete || summary.percentage === null || placed === 50
+        ? null
+        : placed > 50
+          ? session.me
+          : opponentOf(session.me),
   };
 }
 

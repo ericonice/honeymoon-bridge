@@ -280,7 +280,7 @@ export function DealComplete({
               format the way a rubber's two games are. */}
           {standing.kind === "field" ? (
             <p className="mt-1 text-sm text-white/60">
-              {standing.summary.boardsPlayed} boards, {standing.summary.boardsCompared} compared
+              {standing.summary.boardsPlayed} boards, {standing.summary.boardsRanked} ranked
             </p>
           ) : standing.kind === "duplicate" ? (
             <p className="mt-1 text-sm text-white/60">

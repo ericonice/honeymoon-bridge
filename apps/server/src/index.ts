@@ -20,7 +20,7 @@ import { inviteCode, isInviteCode } from "./codes.js";
 import type { Env } from "./env.js";
 import {
   fieldBoardsFor,
-  fieldReferenceFor,
+  fieldFor,
   fieldResultFrom,
   recordFieldResult,
 } from "./field.js";
@@ -1001,7 +1001,7 @@ export default {
       return json(request, { ok: true }, 201);
     }
 
-    // What a board has been worth, for somebody who has played it.
+    // Every other result on a board, for somebody who has played it.
     //
     // A 404 rather than a 403 for anyone who has not: the rule being enforced is
     // §1.8a's — the comparison is not available until the board has been played —
@@ -1013,11 +1013,11 @@ export default {
         return json(request, { error: "Not signed in" }, 401);
       }
       const board = url.searchParams.get("board") ?? "";
-      const reference = await fieldReferenceFor(env, board, accountId);
-      if (reference === null) {
+      const field = await fieldFor(env, board, accountId);
+      if (field === null) {
         return json(request, { error: "No such board" }, 404);
       }
-      return json(request, { reference });
+      return json(request, { field });
     }
 
     // The individual matches behind that record, newest first — the record

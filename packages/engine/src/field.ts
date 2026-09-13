@@ -1,6 +1,5 @@
 import { applyAction, startDeal } from "./deal.js";
-import { duplicateScoreFor, impsFor } from "./duplicate.js";
-import type { DuplicateScoring } from "./duplicate.js";
+import { duplicateScoreFor } from "./duplicate.js";
 import type { Contract, DealAction, DealState, Pair, PlayerId } from "./types.js";
 
 /**
@@ -45,34 +44,54 @@ export interface FieldBoard {
 }
 
 /**
- * What a board's recorded history came to, once it is allowed to be seen.
+ * Who played a recorded result, which is not the same evidence in every case.
  *
- * `points` is from the seat being scored, so the caller is responsible for asking
- * for the stream this board was played from — the engine compares seat-indexed
+ * Three can appear on a board and §1.8a keeps them apart deliberately: a score made
+ * across the table from a person was shaped by that person, where a solo one was
+ * made against the fixed opposition everybody else faced. All three count; the
+ * traveller says which.
+ */
+export type FieldEntryKind = "computer" | "solo" | "table";
+
+/**
+ * One recorded result on a board — a whole deal, not a summary of several.
+ *
+ * **It is a real hand somebody played**, and that is a requirement rather than a
+ * convenience: §1.8a shows the contract and the result beside the score, and the
+ * moment an entry were an average of runs the line on screen and the number in the
+ * ranking would come apart, with nothing on the page explaining the gap.
+ *
+ * `points` is from the seat holding *this board's* stream, so a caller is
+ * responsible for asking for the right one — the engine compares seat-indexed
  * numbers and cannot check that for anybody.
  *
- * `contract` and `tricks` are one representative recorded deal rather than a
- * property of the average, and they are here because a bare pair of numbers says
- * far less than a contract does. **They are not the same hand this seat held**: the
- * recorded result faced the same twenty-six offers and made its own keep-or-reject
- * decisions, so whatever displays these has to say so.
+ * **It is not the same hand this seat held.** The recorded result faced the same
+ * twenty-six offers and made its own keep-or-reject decisions, so whatever displays
+ * one has to say so.
  */
-export interface FieldReference {
+export interface FieldEntry {
   readonly contract: Contract | null;
-  /** How many recorded results the figure is over. One is the generated entry alone. */
-  readonly entries: number;
+  readonly kind: FieldEntryKind;
   readonly points: number;
   readonly tricks: Pair<number> | null;
+  /** What to call whoever made it. "Computer" for a generated run. */
+  readonly who: string;
 }
 
-/** A board this session has finished, and what it was worth once the history landed. */
+/** A board this session has finished, and the field it is ranked against. */
 export interface FieldResult {
   readonly board: FieldBoard;
   readonly contract: Contract | null;
+  /**
+   * Everybody else's results on this board, or null until they arrive.
+   *
+   * Null is a board played and not yet ranked rather than a board nobody else has
+   * played — §1.8a withholds the field until the deal is over, and it may never turn
+   * up. An empty list is the other thing: a board whose only result is this one.
+   */
+  readonly field: readonly FieldEntry[] | null;
   /** Each seat's whole score for the deal, bonus included, exactly as duplicate pays it. */
   readonly points: Pair<number>;
-  /** Null until the history arrives, and null forever if it never does. */
-  readonly reference: FieldReference | null;
   readonly tricks: Pair<number>;
 }
 
@@ -89,16 +108,14 @@ export interface FieldState {
   /** The seat whose score is being compared. The other seat is the opposition. */
   readonly me: PlayerId;
   readonly results: readonly FieldResult[];
-  readonly scoring: DuplicateScoring;
 }
 
 export interface StartFieldOptions {
   readonly boards: readonly FieldBoard[];
   readonly me: PlayerId;
-  readonly scoring?: DuplicateScoring;
 }
 
-export function startField({ boards, me, scoring = "points" }: StartFieldOptions): FieldState {
+export function startField({ boards, me }: StartFieldOptions): FieldState {
   const first = boards[0];
   if (first === undefined) {
     throw new Error("a field session needs at least one board");
@@ -109,7 +126,6 @@ export function startField({ boards, me, scoring = "points" }: StartFieldOptions
     deal: startDeal({ seed: first.seed, starter: first.starter }),
     me,
     results: [],
-    scoring,
   };
 }
 
@@ -177,8 +193,8 @@ function commitField(state: FieldState): FieldState {
       {
         board,
         contract: state.deal.contract,
+        field: null,
         points: score === null ? [0, 0] : score.points,
-        reference: null,
         tricks: state.deal.tricksWon,
       },
     ],
@@ -186,92 +202,126 @@ function commitField(state: FieldState): FieldState {
 }
 
 /**
- * Folds a board's history in, whenever it turns up.
+ * Folds a board's field in, whenever it turns up.
  *
  * Keyed by the board's id rather than by position, because the fetch is not on the
- * critical path and may well land after the next board has been dealt — or after
- * two more have. A reference for a board this session does not hold is ignored
- * rather than refused: it can only mean a stale response.
+ * critical path and may well land after the next board has been dealt — or after two
+ * more have. A field for a board this session does not hold is ignored rather than
+ * refused: it can only mean a stale response.
  */
-export function withReference(
+export function withField(
   state: FieldState,
   boardId: string,
-  reference: FieldReference,
+  field: readonly FieldEntry[],
 ): FieldState {
-  if (!state.results.some((one) => one.board.id === boardId && one.reference === null)) {
+  if (!state.results.some((one) => one.board.id === boardId && one.field === null)) {
     return state;
   }
   return {
     ...state,
     results: state.results.map((one) =>
-      one.board.id === boardId && one.reference === null ? { ...one, reference } : one,
+      one.board.id === boardId && one.field === null ? { ...one, field } : one,
     ),
   };
 }
 
 /**
- * What a board came to: this seat's score against what the history got on it.
+ * Matchpoints: two for every result beaten, one for every result tied, as a
+ * percentage of the most that were available.
  *
- * Null while the history is missing, which is a board played and not yet compared
- * rather than a board worth nothing. Everything downstream has to keep those two
- * apart — the same distinction duplicate's pad draws between a zero and a blank.
+ * The whole of §1.8a's scoring. A percentage rather than a raw count because field
+ * sizes vary — a board three people have played holds more results than an untouched
+ * one — and a count of results beaten is not comparable across two boards with
+ * different fields where a percentage is.
+ *
+ * Null for an empty field, which is a board nobody else has played rather than a
+ * board scored zero. Everything downstream has to keep those apart, the same
+ * distinction duplicate's pad draws between a zero and a blank.
  */
-export function fieldMarginOf(
-  result: FieldResult,
-  me: PlayerId,
-  scoring: DuplicateScoring,
-): number | null {
-  if (result.reference === null) {
+export function matchpointsOf(points: number, against: readonly FieldEntry[]): number | null {
+  if (against.length === 0) {
     return null;
   }
-  const difference = result.points[me] - result.reference.points;
-  // `impsFor` already carries the sign through. Multiplying by `Math.sign` as well
-  // reads as belt and braces and is a double negation: a board lost by 500 came back
-  // as +11 IMPs, which a test caught and reading the call site would not have.
-  return scoring === "imps" ? impsFor(difference) : Math.round(difference);
+  const scored = against.reduce(
+    (total, one) => total + (points > one.points ? 2 : points === one.points ? 1 : 0),
+    0,
+  );
+  return (scored / (2 * against.length)) * 100;
+}
+
+/**
+ * Where this seat placed on a board, as a percentage.
+ *
+ * Null while the field is missing or empty — a board played and not yet ranked. The
+ * caller decides what to draw for that; what it must not do is read as nought.
+ */
+export function boardPercentageOf(result: FieldResult, me: PlayerId): number | null {
+  return result.field === null ? null : matchpointsOf(result.points[me], result.field);
+}
+
+/**
+ * The same, counting only results a person made.
+ *
+ * §1.8a: a high percentage against seven machine runs and one person means "better
+ * than the computer usually manages on this stock", where the same figure against
+ * six people means something else entirely, and a bare percentage cannot tell them
+ * apart. Null until somebody else has played the board, which reads as "nobody to
+ * compare with yet" rather than as a zero.
+ */
+export function humanPercentageOf(result: FieldResult, me: PlayerId): number | null {
+  if (result.field === null) {
+    return null;
+  }
+  return matchpointsOf(
+    result.points[me],
+    result.field.filter((one) => one.kind !== "computer"),
+  );
 }
 
 export interface FieldSummary {
-  /** Boards whose history has arrived, which is what `margin` is over. */
-  readonly boardsCompared: number;
-  /** Boards played, whether or not their history has arrived. */
+  /** Boards whose field has arrived and is not empty — what `percentage` is over. */
+  readonly boardsRanked: number;
+  /** Boards played, whether or not their field has arrived. */
   readonly boardsPlayed: number;
   readonly complete: boolean;
-  /** The session's running total against the field, in whatever it is being scored in. */
-  readonly margin: number;
+  /**
+   * The session so far, as the mean of its boards' percentages.
+   *
+   * The mean rather than a total, because a session's boards need not all have a
+   * field yet and a running total would quietly punish a board whose results have
+   * not come back. Null until at least one board has been ranked.
+   */
+  readonly percentage: number | null;
+  /** The same over people's results alone. Null until there are any. */
+  readonly humanPercentage: number | null;
   readonly results: readonly FieldResult[];
   /** The deal on the table, once it is complete and was not passed out. */
   readonly score: ReturnType<typeof duplicateScoreFor>;
-  /**
-   * What `margin` is denominated in, carried rather than inferred.
-   *
-   * A pad drawing these figures has to name the currency, and a margin in IMPs and one
-   * in points are not distinguishable by size — a session can genuinely be +14 either
-   * way. Guessing is how two surfaces come to disagree about what a number means.
-   */
-  readonly scoring: DuplicateScoring;
   /** Prescribed by the board on the table, or by the last one at the end of a session. */
   readonly vulnerable: Pair<boolean>;
 }
 
+function meanOf(values: readonly (number | null)[]): number | null {
+  const found = values.filter((one): one is number => one !== null);
+  return found.length === 0
+    ? null
+    : found.reduce((total, one) => total + one, 0) / found.length;
+}
+
 export function summarizeField(state: FieldState): FieldSummary {
   // Nothing to fold in: a board is committed by the action that finishes it, so the
-  // total already moves as the session is played and the last board is in `results`
-  // like every other. That is the whole reason the commit moved off this function.
-  const folded = state;
-  const compared = folded.results.filter((one) => one.reference !== null);
+  // session moves as it is played and the last board is in `results` like every
+  // other. That is the whole reason the commit moved off this function.
   const board = state.boards[state.at] ?? state.boards[state.boards.length - 1]!;
+  const placings = state.results.map((one) => boardPercentageOf(one, state.me));
   return {
-    boardsCompared: compared.length,
-    boardsPlayed: folded.results.length,
-    complete: folded.results.length >= folded.boards.length,
-    margin: compared.reduce(
-      (total, one) => total + (fieldMarginOf(one, folded.me, folded.scoring) ?? 0),
-      0,
-    ),
-    results: folded.results,
+    boardsPlayed: state.results.length,
+    boardsRanked: placings.filter((one) => one !== null).length,
+    complete: state.results.length >= state.boards.length,
+    humanPercentage: meanOf(state.results.map((one) => humanPercentageOf(one, state.me))),
+    percentage: meanOf(placings),
+    results: state.results,
     score: duplicateScoreFor(state.deal, board.vulnerable),
-    scoring: folded.scoring,
     vulnerable: board.vulnerable,
   };
 }

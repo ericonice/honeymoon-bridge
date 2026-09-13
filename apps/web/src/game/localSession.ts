@@ -13,7 +13,7 @@ import {
   rubberFacts,
   sortHand,
   startMatch,
-  withReference,
+  withField,
   summarizeMatch,
   viewFor,
 } from "@hb/engine";
@@ -37,11 +37,7 @@ import { botActionFor, fallbackActionFor } from "./botTurn.js";
 import { DIFFICULTIES } from "../bot/difficulty.js";
 import type { Difficulty } from "../bot/difficulty.js";
 import { LATEST_RELEASE, releaseFor } from "../bot/release.js";
-import {
-  fetchFieldReference,
-  reportFieldResult,
-  uncomparedBoards,
-} from "./fieldCorpus.js";
+import { fetchFieldEntries, reportFieldResult, unrankedBoards } from "./fieldCorpus.js";
 import { reportHandLog } from "./handLog.js";
 import { flush } from "./outbox.js";
 import {
@@ -718,7 +714,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
   }, [achievements, deal, summary.score, summary.vulnerable]);
 
   /**
-   * Asks what each played board has been worth, and folds the answers in.
+   * Asks for each played board's field, and folds the answers in.
    *
    * **Nothing on screen waits for this.** §1.8a requires the deal scored and the
    * comparison blank rather than the other way round, and the pad draws an
@@ -736,21 +732,21 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
     if (match.kind !== "field") {
       return;
     }
-    const wanted = uncomparedBoards(match.session.results);
+    const wanted = unrankedBoards(match.session.results);
     if (wanted.length === 0) {
       return;
     }
     let live = true;
     void (async () => {
       for (const board of wanted) {
-        const first = await fetchFieldReference(board.id);
-        const found = first ?? (await flush().then(() => fetchFieldReference(board.id)));
+        const first = await fetchFieldEntries(board.id);
+        const found = first ?? (await flush().then(() => fetchFieldEntries(board.id)));
         if (!live || found === null) {
           continue;
         }
         setMatch((current) =>
           current.kind === "field"
-            ? { kind: "field", session: withReference(current.session, board.id, found) }
+            ? { kind: "field", session: withField(current.session, board.id, found) }
             : current,
         );
       }

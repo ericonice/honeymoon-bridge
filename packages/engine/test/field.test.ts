@@ -2,14 +2,16 @@ import { describe, expect, it } from "vitest";
 import { legalActions } from "../src/deal.js";
 import {
   applyFieldAction,
+  boardPercentageOf,
   currentFieldBoard,
-  fieldMarginOf,
+  humanPercentageOf,
+  matchpointsOf,
   nextFieldDeal,
   startField,
   summarizeField,
-  withReference,
+  withField,
 } from "../src/field.js";
-import type { FieldBoard, FieldReference, FieldState } from "../src/field.js";
+import type { FieldBoard, FieldEntry, FieldState } from "../src/field.js";
 import type { Pair, PlayerId } from "../src/types.js";
 
 const ME: PlayerId = 0;
@@ -62,8 +64,8 @@ function playSession(state: FieldState): FieldState {
   throw new Error("session did not finish");
 }
 
-function reference(points: number, entries = 1): FieldReference {
-  return { contract: null, entries, points, tricks: null };
+function entry(points: number, kind: FieldEntry["kind"] = "computer"): FieldEntry {
+  return { contract: null, kind, points, tricks: null, who: kind === "computer" ? "Computer" : "Noah" };
 }
 
 describe("a board of a field session", () => {
@@ -111,76 +113,116 @@ describe("a board of a field session", () => {
   });
 });
 
-describe("what a board is compared against", () => {
+describe("where a board places", () => {
   /**
-   * §1.8a: the history is fetched only once the deal is over, so a board that has
-   * been played and not yet compared is a real state rather than an error — and it
-   * must not read as a board worth nothing.
+   * §1.8a: the field is fetched only once the deal is over, so a board played and
+   * not yet ranked is a real state — and it must not read as a board scored nought.
    */
-  it("is worth nothing at all until the history arrives, rather than worth zero", () => {
+  it("has no placing at all until the field arrives, rather than a placing of zero", () => {
     const done = playSession(startField({ boards: BOARDS, me: ME }));
     const summary = summarizeField(done);
 
-    expect(summary.boardsCompared).toBe(0);
-    expect(summary.margin).toBe(0);
+    expect(summary.boardsRanked).toBe(0);
+    expect(summary.percentage).toBeNull();
     for (const result of summary.results) {
-      expect(fieldMarginOf(result, ME, "points")).toBeNull();
+      expect(boardPercentageOf(result, ME)).toBeNull();
     }
   });
 
-  it("attaches a late reference to the board it belongs to", () => {
+  it("attaches a late field to the board it belongs to", () => {
     const done = playSession(startField({ boards: BOARDS, me: ME }));
-    const withOne = withReference(done, "b2", reference(120));
+    const withOne = withField(done, "b2", [entry(120)]);
     const summary = summarizeField(withOne);
 
-    expect(summary.boardsCompared).toBe(1);
-    expect(summary.results.find((one) => one.board.id === "b2")?.reference?.points).toBe(120);
-    expect(summary.results.find((one) => one.board.id === "b1")?.reference).toBeNull();
+    expect(summary.boardsRanked).toBe(1);
+    expect(summary.results.find((one) => one.board.id === "b2")?.field).toHaveLength(1);
+    expect(summary.results.find((one) => one.board.id === "b1")?.field).toBeNull();
   });
 
-  it("ignores a reference for a board this session is not playing", () => {
+  it("ignores a field for a board this session is not playing", () => {
     const done = playSession(startField({ boards: BOARDS, me: ME }));
 
-    expect(withReference(done, "elsewhere", reference(120))).toBe(done);
+    expect(withField(done, "elsewhere", [entry(120)])).toBe(done);
   });
 
-  it("takes the margin from this seat's own score", () => {
+  /** A board nobody else has played is unranked, not a wipe-out. */
+  it("has no placing on a board whose field is empty", () => {
+    const done = playSession(startField({ boards: BOARDS, me: ME }));
+    const alone = withField(done, "b1", []);
+
+    expect(boardPercentageOf(summarizeField(alone).results[0]!, ME)).toBeNull();
+    expect(summarizeField(alone).boardsRanked).toBe(0);
+  });
+
+  it("takes the placing from this seat's own score", () => {
     const done = playSession(startField({ boards: BOARDS, me: ME }));
     const mine = summarizeField(done).results[0]!.points[ME];
-    const compared = withReference(done, "b1", reference(mine - 300));
+    const beaten = withField(done, "b1", [entry(mine - 100), entry(mine - 50)]);
 
-    expect(fieldMarginOf(summarizeField(compared).results[0]!, ME, "points")).toBe(300);
+    expect(boardPercentageOf(summarizeField(beaten).results[0]!, ME)).toBe(100);
+  });
+});
+
+describe("matchpoints", () => {
+  it("pays two for a result beaten and one for a result tied", () => {
+    expect(matchpointsOf(500, [entry(100), entry(200)])).toBe(100);
+    expect(matchpointsOf(100, [entry(100), entry(200)])).toBe(25);
+    expect(matchpointsOf(0, [entry(100), entry(200)])).toBe(0);
+    expect(matchpointsOf(150, [entry(100), entry(200)])).toBe(50);
   });
 
   /**
-   * `impsFor` takes a size, so a losing board converted through it would come back
-   * positive — a sign this format cannot afford to lose, since the whole session is
-   * the sum of signed board margins.
+   * The reason the output is a percentage rather than a count of results beaten:
+   * fields differ in size once boards fill unevenly, and a count is not comparable
+   * across two boards where a percentage is.
    */
-  it("keeps the sign when the margin is converted to IMPs", () => {
-    const done = playSession(startField({ boards: BOARDS, me: ME, scoring: "imps" }));
-    const mine = summarizeField(done).results[0]!.points[ME];
-    const behind = withReference(done, "b1", reference(mine + 500));
-    const ahead = withReference(done, "b1", reference(mine - 500));
+  it("reads the same on fields of different sizes", () => {
+    const two = matchpointsOf(300, [entry(100), entry(200)]);
+    const four = matchpointsOf(300, [entry(100), entry(150), entry(200), entry(250)]);
 
-    const lost = fieldMarginOf(summarizeField(behind).results[0]!, ME, "imps")!;
-    const won = fieldMarginOf(summarizeField(ahead).results[0]!, ME, "imps")!;
-    expect(lost).toBeLessThan(0);
-    expect(won).toBe(-lost);
+    expect(two).toBe(100);
+    expect(four).toBe(two);
   });
 
-  it("totals only the boards that have come back", () => {
+  it("says nothing at all for an empty field", () => {
+    expect(matchpointsOf(300, [])).toBeNull();
+  });
+
+  /**
+   * §1.8a: a percentage made against machine scaffolding is not the same claim as
+   * one made against people, and a bare figure cannot tell them apart.
+   */
+  it("ranks against people separately, and says nothing until there are any", () => {
+    const done = playSession(startField({ boards: BOARDS, me: ME }));
+    const mine = summarizeField(done).results[0]!.points[ME];
+
+    const machines = withField(done, "b1", [entry(mine + 100), entry(mine + 200)]);
+    expect(boardPercentageOf(summarizeField(machines).results[0]!, ME)).toBe(0);
+    expect(humanPercentageOf(summarizeField(machines).results[0]!, ME)).toBeNull();
+
+    const mixed = withField(done, "b1", [entry(mine + 100), entry(mine - 100, "table")]);
+    expect(boardPercentageOf(summarizeField(mixed).results[0]!, ME)).toBe(50);
+    expect(humanPercentageOf(summarizeField(mixed).results[0]!, ME)).toBe(100);
+  });
+});
+
+describe("a session's own figure", () => {
+  /**
+   * The mean rather than a total, so a board whose field has not come back does not
+   * quietly drag the session down — it is simply not in the average yet.
+   */
+  it("averages the boards that have been ranked and ignores the rest", () => {
     const done = playSession(startField({ boards: BOARDS, me: ME }));
     const results = summarizeField(done).results;
-    const compared = withReference(
-      withReference(done, "b1", reference(results[0]!.points[ME] - 100)),
+    const ranked = withField(
+      withField(done, "b1", [entry(results[0]!.points[ME] - 10)]),
       "b3",
-      reference(results[2]!.points[ME] + 40),
+      [entry(results[2]!.points[ME] + 10)],
     );
-    const summary = summarizeField(compared);
+    const summary = summarizeField(ranked);
 
-    expect(summary.boardsCompared).toBe(2);
+    expect(summary.boardsRanked).toBe(2);
     expect(summary.boardsPlayed).toBe(3);
-    expect(summary.margin).toBe(60);
+    expect(summary.percentage).toBe(50);
   });
 });

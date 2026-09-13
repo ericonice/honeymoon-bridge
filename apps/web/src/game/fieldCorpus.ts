@@ -1,4 +1,4 @@
-import type { Contract, FieldBoard, FieldReference, FieldResult, Pair, PlayerId } from "@hb/engine";
+import type { Contract, FieldBoard, FieldEntry, FieldResult, Pair, PlayerId } from "@hb/engine";
 import { storedSession } from "./account.js";
 import { enqueue } from "./outbox.js";
 import { fieldBoardsUrl, fieldReferenceUrl, fieldResultUrl } from "./serverUrl.js";
@@ -78,14 +78,17 @@ export function reportFieldResult(options: {
 }
 
 /**
- * What a board has been worth, or null while it is not available.
+ * Every other result on a board, or null while the field is not available.
  *
  * Null for the ordinary case as well as every failure: the server answers 404 until
  * this account has a result recorded on the board, and just after a deal that is
  * usually a report still in flight rather than anything wrong. So the caller retries
  * once the outbox has drained rather than treating it as an answer.
+ *
+ * An **empty list** is a different answer and has to survive as one: a board whose
+ * only result is yours is unranked, not lost.
  */
-export async function fetchFieldReference(boardId: string): Promise<FieldReference | null> {
+export async function fetchFieldEntries(boardId: string): Promise<readonly FieldEntry[] | null> {
   const session = storedSession();
   if (session === null) {
     return null;
@@ -97,14 +100,14 @@ export async function fetchFieldReference(boardId: string): Promise<FieldReferen
     if (!response.ok) {
       return null;
     }
-    const body = (await response.json()) as { readonly reference?: FieldReference };
-    return body.reference ?? null;
+    const body = (await response.json()) as { readonly field?: readonly FieldEntry[] };
+    return body.field ?? null;
   } catch {
     return null;
   }
 }
 
-/** Boards this session has played and not yet been given a figure for. */
-export function uncomparedBoards(results: readonly FieldResult[]): readonly FieldBoard[] {
-  return results.filter((one) => one.reference === null).map((one) => one.board);
+/** Boards this session has played and not yet been given a field for. */
+export function unrankedBoards(results: readonly FieldResult[]): readonly FieldBoard[] {
+  return results.filter((one) => one.field === null).map((one) => one.board);
 }

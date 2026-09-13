@@ -181,6 +181,17 @@ function StandingRow({
   );
 }
 
+/**
+ * A placing, or a dash for a session no board of which has come back yet.
+ *
+ * A dash rather than "0%", which would be a real and terrible result rather than the
+ * absence of one — the same distinction every other figure in this app draws between
+ * nothing scored and nothing known.
+ */
+function percent(value: number | null): string {
+  return value === null ? "—" : `${Math.round(value)}%`;
+}
+
 function signed(value: number): string {
   return value === 0 ? "0" : `${value > 0 ? "+" : "−"}${Math.abs(value)}`;
 }
@@ -228,15 +239,15 @@ function FieldRows({ summary }: { readonly summary: FieldSummary }): React.JSX.E
   return (
     <>
       <p className="flex items-baseline justify-between gap-2 text-white/40">
-        <span>{summary.scoring === "imps" ? "IMPs" : "Total"}</span>
+        <span>Placing</span>
         <span className="font-semibold tabular-nums text-white/90">
-          {signed(summary.margin)}
+          {percent(summary.percentage)}
         </span>
       </p>
       <p className="flex items-baseline justify-between gap-2 text-white/40">
-        <span>Compared</span>
+        <span>Ranked</span>
         <span className="tabular-nums text-white/60">
-          {summary.boardsCompared}/{summary.boardsPlayed}
+          {summary.boardsRanked}/{summary.boardsPlayed}
         </span>
       </p>
     </>
@@ -248,13 +259,15 @@ function FieldFigures({ summary }: { readonly summary: FieldSummary }): React.JS
   return (
     <>
       <span className="whitespace-nowrap">
-        {summary.scoring === "imps" ? "IMPs" : "Total"}{" "}
-        <span className="font-semibold tabular-nums text-white/90">{signed(summary.margin)}</span>
+        Placing{" "}
+        <span className="font-semibold tabular-nums text-white/90">
+          {percent(summary.percentage)}
+        </span>
       </span>
       <span className="whitespace-nowrap">
-        Compared{" "}
+        Ranked{" "}
         <span className="tabular-nums text-white/60">
-          {summary.boardsCompared}/{summary.boardsPlayed}
+          {summary.boardsRanked}/{summary.boardsPlayed}
         </span>
       </span>
     </>

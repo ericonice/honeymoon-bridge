@@ -1,0 +1,19 @@
+-- Who a field result was played against, which is what tells its kind — §1.8a.
+--
+-- Three kinds of result sit on a board and they are not the same evidence:
+--
+--   computer against computer — a generated run, the scaffolding a board opens with;
+--   human against computer     — somebody playing solo, against the fixed opposition;
+--   human against human        — two people at a table, each shaped by who was opposite.
+--
+-- All three count and the traveller names which, because a score made across the
+-- table from a person was shaped by that person where a solo one was made against the
+-- opponent everybody else faced. The first two are already distinguishable — a
+-- generated row has no account — so this is the one column that has to be added, and
+-- it is the account that sat opposite.
+--
+-- **Null means nobody sat opposite, which is the computer.** Not "unknown": every row
+-- written before this column existed was solo play against the field computer, because
+-- a table could not run this format then, so the honest reading of the old rows is the
+-- same as the honest reading of a new one.
+ALTER TABLE field_results ADD COLUMN opponent_account_id TEXT REFERENCES accounts(id);

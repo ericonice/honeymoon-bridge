@@ -114,10 +114,12 @@ export function setPreferredFormat(format: MatchFormat): void {
  */
 export function queueFormat(): MatchFormat | null {
   const stored = readStored(QUEUE_FORMAT_KEY);
-  // **`"field"` is missing on purpose and must stay missing.** A field session is
-  // solo by construction — §1.8a — so it never enters the table negotiation at all,
-  // and a seat that somehow stored it here reads as no preference rather than as a
-  // format the queue would then have to fail to honour.
+  // **`"field"` is missing because the table cannot run one yet, not because the
+  // rules forbid it.** §1.8a makes a field session playable head to head — each seat
+  // ranked against its own stream's field, the two percentages compared — but the
+  // server has no way to deal one, and pairing two people for a format it cannot run
+  // is worse than reading the preference as "anyone". Add it here the day the table
+  // can, and not before.
   return stored === "game" || stored === "duplicate" || stored === "mirror" || stored === "rubber"
     ? stored
     : null;

@@ -21,18 +21,33 @@ export interface FieldBoardRow {
   readonly vulnerable: Pair<boolean>;
 }
 
-/** What a board's recorded results come to, once the asker is entitled to them. */
-export interface FieldReferenceRow {
+/** One recorded result, as a traveller draws it. */
+export interface FieldEntryRow {
   readonly contract: Contract | null;
-  readonly entries: number;
+  /**
+   * Who played whom — §1.8a. Three kinds sit on a board and they are not the same
+   * evidence: a score made across the table from a person was shaped by that person,
+   * where a solo one was made against the opposition everybody else faced.
+   *
+   * Derived rather than stored, because it already is: a generated row has no
+   * account, and a table result is one recorded with an opponent. The day a fourth
+   * pairing becomes legal is the day it earns a column.
+   */
+  readonly kind: "computer" | "solo" | "table";
   readonly points: number;
   readonly tricks: Pair<number> | null;
+  readonly who: string;
 }
 
 /** A result being recorded, whether the computer's own or a person's. */
 export interface FieldResultReport {
   readonly boardId: string;
   readonly contract: Contract | null;
+  /**
+   * The account that sat opposite, for a board played at a table. Absent for solo
+   * play, which is what makes the two distinguishable — see `0014_field_opponent`.
+   */
+  readonly opponentAccountId?: string;
   readonly points: number;
   readonly tricks: Pair<number>;
 }
@@ -117,6 +132,34 @@ export async function recordFieldResult(
     return;
   }
   await insertFieldResult(env, report, accountId, false, now);
+  await retireGeneratedRow(env, report.boardId);
+}
+
+/**
+ * Drops one generated run when a person's result joins a board — §1.8a.
+ *
+ * The scaffolding is there to make a board playable before anybody has met it, not to
+ * stay, so a field fills up with people one result at a time.
+ *
+ * **The oldest, and that is unbiased rather than arbitrary.** Choosing which machine
+ * run to drop looks like it needs care — drop the median and the field widens, drop an
+ * extreme and it narrows — but the generated runs are *exchangeable by construction*:
+ * they differ only in a derived seed and nothing distinguishes them. So "oldest" is
+ * exactly as unbiased as a coin flip and is deterministic where a coin flip is not.
+ *
+ * Once they are gone nothing is retired. People are not dropped to preserve a shape
+ * that existed for the machine's benefit, and matchpoints handle any field size.
+ */
+async function retireGeneratedRow(env: Env, boardId: string): Promise<void> {
+  await env.DB.prepare(
+    `DELETE FROM field_results
+      WHERE id = (SELECT id FROM field_results
+                   WHERE board_id = ? AND generated = 1
+                   ORDER BY played_at ASC, id ASC
+                   LIMIT 1)`,
+  )
+    .bind(boardId)
+    .run();
 }
 
 /** The computer's own entry, written when a board is generated rather than played. */
@@ -137,15 +180,16 @@ async function insertFieldResult(
 ): Promise<void> {
   await env.DB.prepare(
     `INSERT INTO field_results
-       (id, board_id, played_at, account_id, generated, points,
+       (id, board_id, played_at, account_id, opponent_account_id, generated, points,
         declarer, contract_level, contract_strain, contract_doubling, tricks_0, tricks_1)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       crypto.randomUUID(),
       report.boardId,
       now,
       accountId,
+      report.opponentAccountId ?? null,
       generated ? 1 : 0,
       Math.round(report.points),
       report.contract?.declarer ?? null,
@@ -159,26 +203,26 @@ async function insertFieldResult(
 }
 
 /**
- * What a board has been worth, for somebody who has earned the right to know.
+ * Every other recorded result on a board, for somebody who has earned the right.
  *
- * Null when the asker has no result of their own on this board, which is §1.8a's
- * rule rather than an authorization check: the history says what the contract was
- * and how it went, so handing it over first would be handing over the answer.
+ * Null when the asker has no result of their own here, which is §1.8a's rule rather
+ * than an authorization check: the field names the contract and says how it went, so
+ * handing it over first would be handing over the answer.
  *
- * **The asker's own result is excluded from the average**, which is what a duplicate
- * datum has always done — comparing a score against a figure it is itself part of
- * pulls the yardstick toward whoever is being measured, and on a board with two
- * entries it would halve every margin.
+ * **The asker's own result is left out**, because a ranking against a field you are
+ * yourself part of pulls toward you — on a two-entry board it would hand you a free
+ * tie with yourself.
  *
- * The contract shown is **one representative recorded deal**, the earliest, rather
- * than a property of the average. That is deliberate: an average has no contract,
- * and inventing one for it would be a figure nothing played.
+ * The rows come back whole rather than averaged. §1.8a shows a contract and a result
+ * beside every score, so an entry has to be a real deal somebody played; a mean has
+ * no contract, and inventing one for it would put a figure on screen that nothing
+ * played.
  */
-export async function fieldReferenceFor(
+export async function fieldFor(
   env: Env,
   boardId: string,
   accountId: string,
-): Promise<FieldReferenceRow | null> {
+): Promise<readonly FieldEntryRow[] | null> {
   const mine = await env.DB.prepare(
     `SELECT 1 FROM field_results WHERE board_id = ? AND account_id = ? LIMIT 1`,
   )
@@ -189,44 +233,45 @@ export async function fieldReferenceFor(
   }
 
   const { results } = await env.DB.prepare(
-    `SELECT points, declarer, contract_level, contract_strain, contract_doubling,
-            tricks_0, tricks_1
-       FROM field_results
-      WHERE board_id = ? AND (account_id IS NULL OR account_id != ?)
-      ORDER BY played_at ASC`,
+    `SELECT r.points, r.generated, r.opponent_account_id, r.declarer,
+            r.contract_level, r.contract_strain, r.contract_doubling,
+            r.tricks_0, r.tricks_1, a.name AS who
+       FROM field_results r
+       LEFT JOIN accounts a ON a.id = r.account_id
+      WHERE r.board_id = ? AND (r.account_id IS NULL OR r.account_id != ?)
+      ORDER BY r.played_at ASC`,
   )
     .bind(boardId, accountId)
     .all<{
       readonly points: number;
+      readonly generated: number;
+      readonly opponent_account_id: string | null;
       readonly declarer: number | null;
       readonly contract_level: number | null;
       readonly contract_strain: string | null;
       readonly contract_doubling: string | null;
       readonly tricks_0: number;
       readonly tricks_1: number;
+      readonly who: string | null;
     }>();
 
-  if (results.length === 0) {
-    return null;
-  }
-
-  const first = results[0]!;
-  return {
+  return results.map((row) => ({
     contract:
-      first.contract_level === null || first.contract_strain === null || first.declarer === null
+      row.contract_level === null || row.contract_strain === null || row.declarer === null
         ? null
         : {
-            declarer: (first.declarer === 1 ? 1 : 0) as PlayerId,
-            doubling: (first.contract_doubling ?? "none") as Contract["doubling"],
-            level: first.contract_level as Contract["level"],
-            strain: first.contract_strain as Contract["strain"],
+            declarer: (row.declarer === 1 ? 1 : 0) as PlayerId,
+            doubling: (row.contract_doubling ?? "none") as Contract["doubling"],
+            level: row.contract_level as Contract["level"],
+            strain: row.contract_strain as Contract["strain"],
           },
-    entries: results.length,
-    // Rounded, because a margin is compared against real scores and a fractional
-    // yardstick would put every board a fraction off zero.
-    points: Math.round(results.reduce((total, one) => total + one.points, 0) / results.length),
-    tricks: [first.tricks_0, first.tricks_1],
-  };
+    kind: row.generated === 1 ? "computer" : row.opponent_account_id === null ? "solo" : "table",
+    points: row.points,
+    tricks: [row.tricks_0, row.tricks_1],
+    // A person with no name yet is "a player" rather than a blank: the row is real
+    // and the traveller has to be able to draw it.
+    who: row.generated === 1 ? "Computer" : (row.who ?? "A player"),
+  }));
 }
 
 /**

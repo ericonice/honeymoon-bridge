@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env.js";
-import { fieldReferenceFor, fieldResultFrom } from "../src/field.js";
+import { fieldFor, fieldResultFrom } from "../src/field.js";
 
 /**
  * A database that answers a queued list of results in order.
  *
- * `fieldReferenceFor` makes exactly two queries — does the asker have a result here,
+ * `fieldFor` makes exactly two queries — does the asker have a result here,
  * then what everybody else got — so a queue says which is which without this having
  * to read SQL. **It deliberately cannot check a `WHERE` clause**, which is the same
  * limit `ratings.test.ts` states about its own stub: the exclusion of the asker's
@@ -37,6 +37,9 @@ function env(answers: readonly unknown[]): { readonly env: Env; readonly asked: 
 function entry(points: number, over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     points,
+    generated: 1,
+    opponent_account_id: null,
+    who: null,
     declarer: 0,
     contract_level: 3,
     contract_strain: "H",
@@ -98,54 +101,57 @@ describe("reading a reported field result", () => {
   });
 });
 
-describe("what a board has been worth", () => {
+describe("the field a board carries", () => {
   /**
-   * §1.8a: the comparison is not available until the board has been played. Checked
-   * here as *not asking the second question at all* rather than as a null return —
-   * a version that fetched the history and then declined to send it would pass a
-   * weaker test and would still have read the answer.
+   * §1.8a: the field is not available until the board has been played. Checked as
+   * *not asking the second question at all* rather than as a null return — a version
+   * that fetched the rows and then declined to send them would pass a weaker test
+   * and would still have read the answer.
    */
   it("says nothing, and looks nothing up, until the asker has played the board", async () => {
     const { env: stub, asked } = env([null]);
 
-    expect(await fieldReferenceFor(stub, "b1", "ada")).toBeNull();
+    expect(await fieldFor(stub, "b1", "ada")).toBeNull();
     expect(asked).toHaveLength(1);
   });
 
-  it("averages every recorded result", async () => {
+  it("returns every other result whole, rather than an average of them", async () => {
     const { env: stub } = env([{ 1: 1 }, [entry(140), entry(200), entry(-100)]]);
-    const reference = await fieldReferenceFor(stub, "b1", "ada");
+    const field = await fieldFor(stub, "b1", "ada");
 
-    expect(reference?.entries).toBe(3);
-    expect(reference?.points).toBe(80);
-  });
-
-  /** A yardstick with a fraction in it puts every board that fraction off zero. */
-  it("rounds the average, since it is compared against whole scores", async () => {
-    const { env: stub } = env([{ 1: 1 }, [entry(100), entry(151)]]);
-
-    expect((await fieldReferenceFor(stub, "b1", "ada"))?.points).toBe(126);
-  });
-
-  /**
-   * An average has no contract, so the one shown is a real recorded deal — the
-   * earliest — rather than anything derived. Inventing a contract for the mean would
-   * put a figure on screen that nothing played.
-   */
-  it("shows one recorded contract rather than one belonging to the average", async () => {
-    const { env: stub } = env([
-      { 1: 1 },
-      [entry(140), entry(620, { contract_level: 4, contract_strain: "S", declarer: 1 })],
-    ]);
-    const reference = await fieldReferenceFor(stub, "b1", "ada");
-
-    expect(reference?.contract).toEqual({
+    expect(field?.map((one) => one.points)).toEqual([140, 200, -100]);
+    expect(field?.[0]?.contract).toEqual({
       declarer: 0,
       doubling: "none",
       level: 3,
       strain: "H",
     });
-    expect(reference?.tricks).toEqual([9, 4]);
+  });
+
+  /**
+   * The three kinds of §1.8a, derived rather than stored: a generated row has no
+   * account, and a table result is one recorded with somebody opposite.
+   */
+  it("says who played whom", async () => {
+    const { env: stub } = env([
+      { 1: 1 },
+      [
+        entry(140, { generated: 1 }),
+        entry(200, { generated: 0, who: "Noah" }),
+        entry(300, { generated: 0, who: "Kate", opponent_account_id: "ada" }),
+      ],
+    ]);
+    const field = await fieldFor(stub, "b1", "ada");
+
+    expect(field?.map((one) => one.kind)).toEqual(["computer", "solo", "table"]);
+    expect(field?.map((one) => one.who)).toEqual(["Computer", "Noah", "Kate"]);
+  });
+
+  /** A real row belonging to somebody who has not named themselves still has to draw. */
+  it("names a nameless player rather than leaving the row blank", async () => {
+    const { env: stub } = env([{ 1: 1 }, [entry(200, { generated: 0, who: null })]]);
+
+    expect((await fieldFor(stub, "b1", "ada"))?.[0]?.who).toBe("A player");
   });
 
   it("reads a passed-out recorded deal as no contract rather than as a broken one", async () => {
@@ -154,17 +160,16 @@ describe("what a board has been worth", () => {
       [entry(0, { contract_level: null, contract_strain: null, declarer: null })],
     ]);
 
-    expect((await fieldReferenceFor(stub, "b1", "ada"))?.contract).toBeNull();
+    expect((await fieldFor(stub, "b1", "ada"))?.[0]?.contract).toBeNull();
   });
 
   /**
-   * A board whose only result is the asker's own has nothing to compare against, so
-   * it is blank rather than a margin of zero — the distinction the pad draws between
-   * a board played and not yet compared and a board worth nothing.
+   * A board whose only result is the asker's own has nobody to rank against, so it
+   * comes back empty — which the engine reads as unranked rather than as last.
    */
-  it("says nothing when the asker's own result is the only one", async () => {
+  it("comes back empty when the asker's own result is the only one", async () => {
     const { env: stub } = env([{ 1: 1 }, []]);
 
-    expect(await fieldReferenceFor(stub, "b1", "ada")).toBeNull();
+    expect(await fieldFor(stub, "b1", "ada")).toEqual([]);
   });
 });
