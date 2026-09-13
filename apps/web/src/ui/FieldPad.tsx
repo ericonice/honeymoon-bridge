@@ -129,7 +129,7 @@ function BoardRow({
                 {resultOf(result.contract, result.tricks)}
               </span>
               {result.contract.declarer === me ? null : (
-                <span className="text-[0.65rem] text-white/35">by them</span>
+                <span className="text-[0.65rem] text-white/35">defending</span>
               )}
             </>
           )}
@@ -252,10 +252,19 @@ function Row({
   /**
    * This row's player was defending, which is the one thing a score cannot say.
    *
-   * Without it a board where the opposition always declares and always makes reads as
-   * every line scoring nothing for no visible reason — a contract, a result, and a
-   * zero beside them. A defender of a made contract scores nothing, and that sentence
-   * is only obvious once the screen says who declared.
+   * Without it a board where the opposition always declares reads as every line
+   * scoring nothing for no visible reason — a contract, a result, and a zero beside
+   * them.
+   *
+   * **The word rather than "by them", which was a key the reader had to learn.**
+   * "Them" is relative to whoever owns the row, so it named a different person on
+   * every line — and on somebody else's row it reads far more naturally as *your*
+   * opponent. `defending` is true on its own terms wherever it appears, which is the
+   * same argument that had the pad name honors in words rather than mark them.
+   *
+   * It deliberately does not say who they were defending *against*: every entry on a
+   * field board faced the same computer, so that belongs to the board and is said
+   * once at the top rather than on every row.
    */
   readonly declaredByThem: boolean;
   readonly mine: boolean;
@@ -278,7 +287,7 @@ function Row({
               <ContractText contract={contract} on="dark" />
               <span className="text-xs text-white/45">{resultOf(contract, tricks)}</span>
               {declaredByThem ? (
-                <span className="text-[0.65rem] text-white/35">by them</span>
+                <span className="text-[0.65rem] text-white/35">defending</span>
               ) : null}
             </>
           )}

@@ -65,6 +65,24 @@ describe("the session pad", () => {
   });
 
   /**
+   * **Said, not implied.** It used to read "by them", which named a different person
+   * on every row — and on somebody else's line it reads as *your* opponent rather
+   * than theirs. A defender's row is the one that needs saying, because a defender of
+   * a contract that made scores nothing and a bare zero explains itself to nobody.
+   */
+  it("says which rows were defending, on their own terms", () => {
+    pad([
+      result("b1", 620, [
+        { ...entry(-100, "Noah", "solo"), contract: { declarer: 1, doubling: "none", level: 3, strain: "N" } },
+      ]),
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
+
+    expect(screen.getByText("defending")).toBeTruthy();
+    expect(screen.queryByText("by them")).toBeNull();
+  });
+
+  /**
    * Best first, with your own line wherever it lands — a traveller exists to show
    * where you *came*, and pinning your row to the top answers a different question
    * that the collapsed row above has already answered.
