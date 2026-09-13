@@ -1,5 +1,6 @@
 import { isInviteCode, signInCode } from "./codes.js";
 import type { Env } from "./env.js";
+import { scrubFieldResults } from "./field.js";
 import { scrubHandLogs } from "./handLogs.js";
 import { resetRecord } from "./results.js";
 
@@ -404,6 +405,13 @@ export async function deleteAccount(env: Env, accountId: string): Promise<void> 
 
   await resetRecord(env, accountId, { achievements: true });
   await scrubHandLogs(env, accountId);
+  // **Deleted here and deliberately not on a record reset**, which is the one place
+  // these two paths differ. A field result is what the next player is measured
+  // against, so it is more like a contribution to the corpus than like a win-loss —
+  // but it is still this account's row, and the account is going. A reset keeps them
+  // for a second reason: `fieldBoardsFor` decides what to offer by what you have
+  // already met, so clearing them would start handing back boards you remember.
+  await scrubFieldResults(env, accountId);
 
   await env.DB.batch([
     env.DB.prepare("DELETE FROM account_tokens WHERE account_id = ?").bind(accountId),
