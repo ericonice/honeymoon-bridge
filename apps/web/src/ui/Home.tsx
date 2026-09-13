@@ -140,8 +140,8 @@ const CELLS = ["rubber", "mirror", "duplicate", "field"] as const;
  * because they were already chosen short enough for four cells.
  */
 const FAMILIES = [
-  ["rubber", "mirror"],
-  ["duplicate", "field"],
+  { cells: ["rubber", "mirror"], label: "Games" },
+  { cells: ["duplicate", "field"], label: "Duplicate" },
 ] as const;
 
 function Format({
@@ -152,8 +152,8 @@ function Format({
   onChange(format: MatchFormat): void;
 }): React.JSX.Element {
   // Short because they have to be: four cells in a phone's column leave about seventy
-  // pixels each, which is roughly seven characters — see §3.6a. "Duplicate" no longer
-  // fits, and the word is carried by the line beneath the pair instead.
+  // pixels each, which is roughly seven characters — see §3.6a. "Duplicate" does not
+  // fit in a cell, which is why it is the *group's* name rather than a format's.
   const labels = {
     duplicate: "Replay",
     field: "Field",
@@ -167,26 +167,49 @@ function Format({
   return (
     <div className="flex gap-2">
       {FAMILIES.map((family) => (
-        <div key={family[0]} className="flex flex-1 gap-1 rounded-xl bg-white/5 p-1">
-          {family.map((cell) => (
-            <button
-              key={cell}
-              type="button"
-              aria-pressed={chosen === cell}
-              className={`flex-1 rounded-lg px-1.5 py-2 text-sm font-medium ${
-                chosen === cell ? "bg-white/15 text-white" : "text-white/55"
-              }`}
-              onClick={() => {
-                // Coming back to Rubber restores the length last chosen for it, rather
-                // than defaulting to two — which is what a trip through Duplicate used
-                // to do, silently promoting a single game to a full rubber.
-                onChange(cell === "rubber" ? rubberFormatFor(rubberGames()) : cell);
-              }}
-            >
-              {labels[cell]}
-            </button>
-          ))}
-        </div>
+        /* **A real `fieldset` and `legend`, which is what this actually is.** A named
+           group of related controls is the element's own job, so the browser cuts the
+           border for the label — no patch behind the notch, which matters on a ground
+           that is a gradient — and a screen reader announces "Duplicate, Field,
+           selected" rather than "Field, selected". Four other shapes were drawn and
+           compared; the rest were two anonymous divs that merely looked grouped.
+
+           **It costs about eight pixels** against the eighteen a label sitting above
+           costs, because the label straddles the edge instead of stacking on it. That
+           is the whole reason it wins on the one screen that must not scroll.
+
+           **Games and Duplicate, asymmetric on purpose.** The mirror of "Duplicate"
+           is "Rubber", which collides with the cell called Rubber inside that very
+           box; "Games" is what the family is made of and what its own length line
+           already says — "first to 2 games". */
+        <fieldset
+          key={family.label}
+          className="min-w-0 flex-1 rounded-xl border border-white/15 p-1"
+        >
+          <legend className="ms-2 px-1.5 text-[0.65rem] tracking-wide text-white/40 uppercase">
+            {family.label}
+          </legend>
+          <div className="flex gap-1">
+            {family.cells.map((cell) => (
+              <button
+                key={cell}
+                type="button"
+                aria-pressed={chosen === cell}
+                className={`flex-1 rounded-lg px-1.5 py-2 text-sm font-medium ${
+                  chosen === cell ? "bg-white/15 text-white" : "text-white/55"
+                }`}
+                onClick={() => {
+                  // Coming back to Rubber restores the length last chosen for it,
+                  // rather than defaulting to two — which is what a trip through
+                  // Duplicate used to do, silently promoting a single game to a rubber.
+                  onChange(cell === "rubber" ? rubberFormatFor(rubberGames()) : cell);
+                }}
+              >
+                {labels[cell]}
+              </button>
+            ))}
+          </div>
+        </fieldset>
       ))}
     </div>
   );

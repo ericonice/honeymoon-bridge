@@ -209,6 +209,19 @@ describe("how long a session runs", () => {
   });
 
   /**
+   * **The grouping is real, not drawn** — which is the reason this shape was chosen
+   * over four others that looked the same. A `fieldset` with a `legend` is a named
+   * group of related controls, so a screen reader announces "Duplicate, Field,
+   * selected" where two styled `div`s would announce only "Field, selected".
+   */
+  it("names each group to a screen reader, not only to the eye", () => {
+    show("rubber");
+
+    expect(screen.getByRole("group", { name: "Games" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Duplicate" })).toBeTruthy();
+  });
+
+  /**
    * **The row is two families and the line says which you are in.**
    *
    * Rubber and Mirror settle above and below a line with a race to a game; Replay and
