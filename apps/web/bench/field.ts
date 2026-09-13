@@ -273,7 +273,9 @@ function run(boards: number, runs: number): void {
  */
 function generate(seeds: number, runs: number): void {
   const base = baseArg();
-  const progress = createProgress(seeds, "seeds");
+  // Every seed: one is eight deals and about two minutes, so anything coarser leaves
+  // a run that is working and a run that has wedged looking identical for half an hour.
+  const progress = createProgress(seeds, "seeds", 1);
   const level = levelFor("championship");
   const boards: string[] = [];
   const results: string[] = [];
