@@ -155,7 +155,17 @@ export function objectiveFor(format: MatchFormat, release: Objective): Objective
   // first clause was right and is the reason this is not simply the equity objective —
   // measured, the single-game cell prices a mirror part-score at +0.95 where it is
   // worth **nothing** in the first half and +0.46 in the second.
-  if (format === "duplicate") {
+  // **A field board is a duplicate board and prices identically**, which is worth
+  // stating because the temptation is to give a new format a new objective. It has no
+  // rubber, vulnerability is prescribed, and the deal settles where it is played —
+  // the three facts `"duplicate"` exists for. What differs is only how the *result* is
+  // read afterwards, and a bidder cannot act on where it will place.
+  //
+  // Falling through to the release here is not a small mistake: under v3 that is the
+  // rubber equity objective, which prices progress toward a game the format can never
+  // have. Measured on duplicate, that cost **−364 points a session and a 38.5% win
+  // rate** — and it shipped, because `objectiveFor` existed and nothing called it.
+  if (format === "duplicate" || format === "field") {
     return "duplicate";
   }
   return format === "mirror" ? "mirror" : release;
