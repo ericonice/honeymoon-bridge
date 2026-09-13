@@ -6,6 +6,7 @@ import {
   currentFieldBoard,
   humanPercentageOf,
   matchpointsOf,
+  netFor,
   nextFieldDeal,
   startField,
   summarizeField,
@@ -156,7 +157,7 @@ describe("where a board places", () => {
 
   it("takes the placing from this seat's own score", () => {
     const done = playSession(startField({ boards: BOARDS, me: ME }));
-    const mine = summarizeField(done).results[0]!.points[ME];
+    const mine = netFor(summarizeField(done).results[0]!.points, ME);
     const beaten = withField(done, "b1", [entry(mine - 100), entry(mine - 50)]);
 
     expect(boardPercentageOf(summarizeField(beaten).results[0]!, ME)).toBe(100);
@@ -194,7 +195,7 @@ describe("matchpoints", () => {
    */
   it("ranks against people separately, and says nothing until there are any", () => {
     const done = playSession(startField({ boards: BOARDS, me: ME }));
-    const mine = summarizeField(done).results[0]!.points[ME];
+    const mine = netFor(summarizeField(done).results[0]!.points, ME);
 
     const machines = withField(done, "b1", [entry(mine + 100), entry(mine + 200)]);
     expect(boardPercentageOf(summarizeField(machines).results[0]!, ME)).toBe(0);
@@ -215,9 +216,9 @@ describe("a session's own figure", () => {
     const done = playSession(startField({ boards: BOARDS, me: ME }));
     const results = summarizeField(done).results;
     const ranked = withField(
-      withField(done, "b1", [entry(results[0]!.points[ME] - 10)]),
+      withField(done, "b1", [entry(netFor(results[0]!.points, ME) - 10)]),
       "b3",
-      [entry(results[2]!.points[ME] + 10)],
+      [entry(netFor(results[2]!.points, ME) + 10)],
     );
     const summary = summarizeField(ranked);
 

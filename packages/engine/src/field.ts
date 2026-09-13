@@ -61,9 +61,14 @@ export type FieldEntryKind = "computer" | "solo" | "table";
  * moment an entry were an average of runs the line on screen and the number in the
  * ranking would come apart, with nothing on the page explaining the gap.
  *
- * `points` is from the seat holding *this board's* stream, so a caller is
- * responsible for asking for the right one — the engine compares seat-indexed
- * numbers and cannot check that for anybody.
+ * `points` is the **net** from the seat holding this board's stream: what they
+ * scored less what the other seat scored. Not their own total, which is what this
+ * first stored and which quietly broke the ranking — the engine scores a deal the
+ * rubber way, two non-negative totals with the defender on nothing, so defending a
+ * contract that made exactly and defending one that made an overtrick both came out
+ * **0** and tied. A board where the opposition always declares then handed every
+ * entry the same score and every player 50%, with every difference between them
+ * erased before the matchpoints saw it.
  *
  * **It is not the same hand this seat held.** The recorded result faced the same
  * twenty-six offers and made its own keep-or-reject decisions, so whatever displays
@@ -93,6 +98,17 @@ export interface FieldResult {
   /** Each seat's whole score for the deal, bonus included, exactly as duplicate pays it. */
   readonly points: Pair<number>;
   readonly tricks: Pair<number>;
+}
+
+/**
+ * What a board came to for one seat, the way duplicate counts it.
+ *
+ * Their score less the other seat's, so defence is scored at all: a defender's own
+ * total is nought whether the contract scraped home or ran away with an overtrick,
+ * and a ranking built on that cannot tell the two apart.
+ */
+export function netFor(points: Pair<number>, me: PlayerId): number {
+  return points[me] - points[me === 0 ? 1 : 0];
 }
 
 export interface FieldState {
@@ -256,7 +272,7 @@ export function matchpointsOf(points: number, against: readonly FieldEntry[]): n
  * caller decides what to draw for that; what it must not do is read as nought.
  */
 export function boardPercentageOf(result: FieldResult, me: PlayerId): number | null {
-  return result.field === null ? null : matchpointsOf(result.points[me], result.field);
+  return result.field === null ? null : matchpointsOf(netFor(result.points, me), result.field);
 }
 
 /**
@@ -273,7 +289,7 @@ export function humanPercentageOf(result: FieldResult, me: PlayerId): number | n
     return null;
   }
   return matchpointsOf(
-    result.points[me],
+    netFor(result.points, me),
     result.field.filter((one) => one.kind !== "computer"),
   );
 }

@@ -340,8 +340,12 @@ function rowFor(boardId: string, run: Run, starter: 0 | 1, at: number, playedAt:
   const level = contract === null ? "NULL" : contract.level;
   const strain = contract === null ? "NULL" : `'${contract.strain}'`;
   const doubling = contract === null ? "NULL" : `'${contract.doubling}'`;
+  // The **net** from this board's seat. Storing the seat's own total instead cannot
+  // rank defence at all: this engine scores the rubber way, so a defender is on nought
+  // whether the contract scraped home or made an overtrick.
+  const net = run.points[mine] - run.points[theirs];
   return (
-    `('${boardId}-r${at}', '${boardId}', ${playedAt}, NULL, NULL, 1, ${run.points[mine]}, ` +
+    `('${boardId}-r${at}', '${boardId}', ${playedAt}, NULL, NULL, 1, ${net}, ` +
     `${declarer}, ${level}, ${strain}, ${doubling}, ${run.tricks[mine]}, ${run.tricks[theirs]})`
   );
 }

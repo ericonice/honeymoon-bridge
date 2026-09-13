@@ -1,3 +1,4 @@
+import { netFor } from "@hb/engine";
 import type { Contract, FieldBoard, FieldEntry, FieldResult, Pair, PlayerId } from "@hb/engine";
 import { storedSession } from "./account.js";
 import { enqueue } from "./outbox.js";
@@ -77,7 +78,10 @@ export function reportFieldResult(options: {
     body: JSON.stringify({
       boardId: options.board.id,
       contract: options.contract,
-      points: options.points[options.me],
+      // The **net** from this seat, not its own total — see `netFor`. A defender's
+      // own total is nought whether the contract scraped home or made an overtrick,
+      // so filing that would put a score in the corpus that cannot be ranked.
+      points: netFor(options.points, options.me),
       tricks: options.tricks,
     }),
   });

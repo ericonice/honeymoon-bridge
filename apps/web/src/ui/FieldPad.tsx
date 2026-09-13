@@ -1,4 +1,4 @@
-import { boardPercentageOf, humanPercentageOf } from "@hb/engine";
+import { boardPercentageOf, humanPercentageOf, netFor } from "@hb/engine";
 import type { FieldEntry, FieldResult, FieldSummary, PlayerId } from "@hb/engine";
 import { ContractText } from "./CardText.js";
 
@@ -81,7 +81,7 @@ function Board({
           mine
           contract={result.contract}
           declaredByThem={result.contract !== null && result.contract.declarer !== me}
-          points={result.points[me]}
+          points={netFor(result.points, me)}
           who="you"
           tricks={result.tricks}
         />
