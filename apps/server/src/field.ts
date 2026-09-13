@@ -96,12 +96,17 @@ export async function fieldBoardsFor(
     //
     // The second key is what makes a pool build a library rather than spread thin.
     // With nobody having played anything, every board ties on the first key and the
-    // order is the order they were generated in — so a single player works through
-    // the pool from the front, and the boards behind them are the ones the next
-    // player is offered first.
+    // order is the board's own number — so a single player works through the pool
+    // from the front, and the boards behind them are the ones the next player is
+    // offered first.
+    //
+    // The number rather than `created_at`, which was a timestamp being asked to mean
+    // a sequence and only worked because the generator stamped its rows a millisecond
+    // apart. `id` still breaks a tie, since a board with no number at all must still
+    // come out somewhere rather than sorting unpredictably.
     `SELECT id, seed, starter, vulnerable_0, vulnerable_1
        FROM (
-         SELECT b.id, b.seed, b.starter, b.vulnerable_0, b.vulnerable_1, b.created_at,
+         SELECT b.id, b.seed, b.starter, b.vulnerable_0, b.vulnerable_1, b.number,
                 COUNT(r.id) AS entries,
                 SUM(CASE WHEN r.generated = 0 THEN 1 ELSE 0 END) AS people,
                 ROW_NUMBER() OVER (
@@ -118,7 +123,7 @@ export async function fieldBoardsFor(
           GROUP BY b.id
        )
       WHERE side = 1
-      ORDER BY people DESC, created_at ASC, id ASC
+      ORDER BY people DESC, number ASC, id ASC
       LIMIT ?`,
   )
     .bind(accountId, count)

@@ -308,7 +308,10 @@ function generate(seeds: number, runs: number): void {
     progress(index + 1);
   }
 
-  writeFileSync("field-boards.sql", insertFor(BOARD_COLUMNS, "field_boards", boards));
+  writeFileSync(
+    "field-boards.sql",
+    `${insertFor(BOARD_COLUMNS, "field_boards", boards)}\n${NUMBER_BOARDS}`,
+  );
   writeFileSync("field-results.sql", insertFor(RESULT_COLUMNS, "field_results", results));
   console.log(
     `\n  wrote field-boards.sql (${boards.length} boards) and ` +
@@ -323,6 +326,19 @@ function generate(seeds: number, runs: number): void {
 
 const BOARD_COLUMNS =
   "id, seed, starter, vulnerable_0, vulnerable_1, bot_version, difficulty, created_at";
+
+/**
+ * Numbers every board in the pool by seed, which is the order they were generated in.
+ *
+ * Written as a statement to run rather than as a column in the insert, because a
+ * batch cannot know how many boards came before it — and because doing it this way is
+ * **idempotent**: it can be run after any load, or twice, and gives the same answer.
+ * Both sides of a stock share a number, since a board is a stock.
+ */
+const NUMBER_BOARDS =
+  "UPDATE field_boards SET number =\n" +
+  "  (SELECT COUNT(DISTINCT other.seed) FROM field_boards AS other\n" +
+  "    WHERE other.seed <= field_boards.seed);\n";
 const RESULT_COLUMNS =
   "id, board_id, played_at, account_id, opponent_account_id, generated, points, " +
   "declarer, contract_level, contract_strain, contract_doubling, tricks_0, tricks_1";
