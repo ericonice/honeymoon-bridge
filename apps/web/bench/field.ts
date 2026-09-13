@@ -305,14 +305,14 @@ function generate(seeds: number, runs: number): void {
       results.push(rowFor(`f${seed}-0`, run, 0, at, now + at));
       results.push(rowFor(`f${seed}-1`, run, 1, at, now + at));
     }
+    // **Written out after every seed, not at the end.** A hundred seeds is nearly two
+    // hours, and a run that dies at seed 99 having written nothing is two hours for
+    // nothing — which is not hypothetical, since this has been killed mid-run more
+    // than once. Rewriting both files each time costs milliseconds against the minute
+    // a seed takes, and what is on disk is always a corpus that can be loaded.
+    write(boards, results);
     progress(index + 1);
   }
-
-  writeFileSync(
-    "field-boards.sql",
-    `${insertFor(BOARD_COLUMNS, "field_boards", boards)}\n${NUMBER_BOARDS}`,
-  );
-  writeFileSync("field-results.sql", insertFor(RESULT_COLUMNS, "field_results", results));
   console.log(
     `\n  wrote field-boards.sql (${boards.length} boards) and ` +
       `field-results.sql (${results.length} results)\n` +
@@ -369,6 +369,14 @@ function rowFor(boardId: string, run: Run, starter: 0 | 1, at: number, playedAt:
     `('${boardId}-r${at}', '${boardId}', ${playedAt}, NULL, NULL, 1, ${net}, ` +
     `${declarer}, ${level}, ${strain}, ${doubling}, ${run.tricks[mine]}, ${run.tricks[theirs]})`
   );
+}
+
+function write(boards: readonly string[], results: readonly string[]): void {
+  writeFileSync(
+    "field-boards.sql",
+    `${insertFor(BOARD_COLUMNS, "field_boards", boards)}\n${NUMBER_BOARDS}`,
+  );
+  writeFileSync("field-results.sql", insertFor(RESULT_COLUMNS, "field_results", results));
 }
 
 function insertFor(columns: string, table: string, rows: readonly string[]): string {
