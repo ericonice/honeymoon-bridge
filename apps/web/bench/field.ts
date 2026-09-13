@@ -1,4 +1,11 @@
-import { applyAction, createRng, duplicateScoreFor, newRubber, startDeal } from "@hb/engine";
+import {
+  applyAction,
+  createRng,
+  duplicateScoreFor,
+  matchpointsOf,
+  newRubber,
+  startDeal,
+} from "@hb/engine";
 import type { Contract, DealState, Pair, PlayerId, Standing } from "@hb/engine";
 import { DEFAULT_GAME_EQUITY } from "../src/bot/bidValue.js";
 import { botForLevel } from "../src/bot/build.js";
@@ -6,7 +13,7 @@ import { levelFor } from "../src/bot/difficulty.js";
 import { LATEST_RELEASE } from "../src/bot/release.js";
 import { botTuningFor } from "../src/game/botTuning.js";
 import { botActionFor } from "../src/game/botTurn.js";
-import { writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createProgress } from "./progress.js";
 
 /**
@@ -399,7 +406,168 @@ function insertFor(columns: string, table: string, rows: readonly string[]): str
   return `INSERT INTO ${table} (${columns}) VALUES\n${rows.join(",\n")};\n`;
 }
 
-if (process.argv.includes("generate")) {
+/**
+ * Reads a corpus back out of the SQL the generator wrote.
+ *
+ * The files are this tool's own output and the shape is one `INSERT` with one tuple
+ * a line, so a split is enough and no database has to be running. Reading D1 instead
+ * would tie the bench to whatever happens to have been loaded, which is a worse
+ * dependency for a measurement than a file on disk.
+ */
+function corpus(): ReadonlyMap<string, CorpusBoard> {
+  const boards = new Map<string, CorpusBoard>();
+  for (const file of readdirSync(".").filter((one) => /^field.*-boards\.sql$/.test(one))) {
+    for (const row of tuples(readFileSync(file, "utf8"))) {
+      const [id, seed, starter, vul0, vul1] = row;
+      boards.set(unquote(id!), {
+        entries: [],
+        seed: Number(seed),
+        starter: Number(starter) === 1 ? 1 : 0,
+        vulnerable: [Number(vul0) === 1, Number(vul1) === 1],
+      });
+    }
+  }
+  for (const file of readdirSync(".").filter((one) => /^field.*-results\.sql$/.test(one))) {
+    for (const row of tuples(readFileSync(file, "utf8"))) {
+      const board = boards.get(unquote(row[1]!));
+      if (board !== undefined) {
+        board.entries.push(Number(row[6]));
+      }
+    }
+  }
+  return boards;
+}
+
+interface CorpusBoard {
+  readonly entries: number[];
+  readonly seed: number;
+  readonly starter: PlayerId;
+  readonly vulnerable: Pair<boolean>;
+}
+
+function tuples(sql: string): string[][] {
+  return sql
+    .split("\n")
+    .filter((line) => line.startsWith("('"))
+    .map((line) => line.replace(/^\(|\),?;?$/g, "").split(", "));
+}
+
+function unquote(value: string): string {
+  return value.replace(/^'|'$/g, "");
+}
+
+/**
+ * Two bidders over the same boards, each ranked against the field already on them.
+ *
+ * **The most sensitive instrument in here, and the reason is the pairing.** Every
+ * other bench fights the deal — `bench/rubber.ts` needs hundreds of rubbers to
+ * separate two similar bidders because the cards are most of the variance. Here the
+ * stock, the opposition and the field are identical for both sides and only the
+ * bidder differs, so the deal cancels outright. That is duplication doing for a
+ * measurement exactly what §1.8 does for a game.
+ *
+ * **And it calibrates itself.** The field was made by the bot at a known
+ * configuration, so a bidder that plays like the corpus scores **50% by
+ * construction**. There is no reference opponent to choose and no anchor to invent —
+ * which matters, because `bench/rubber.ts` has twice been caught by a reference that
+ * was quietly handicapping one side.
+ *
+ * What it cannot say: how a *person* would fare. It plays the bot in the player's
+ * seat, and the field it ranks against is that bot's own — so it is an opponent model
+ * of the corpus bidder, the same caveat `equity.ts` carries about its table.
+ *
+ *   npx vite-node bench/field.ts -- compare [boards] [objective=points]
+ */
+function compare(boards: number): void {
+  const pool = [...corpus().entries()].filter(([, board]) => board.entries.length > 0);
+  const wanted = pool.slice(0, boards);
+  if (wanted.length === 0) {
+    console.log("  no corpus on disk — run `generate` first\n");
+    return;
+  }
+  const other = objectiveArg();
+  const progress = createProgress(wanted.length, "boards", 10);
+  const differences: number[] = [];
+  let mineTotal = 0;
+  let theirsTotal = 0;
+
+  console.log(
+    `${wanted.length} boards, ${LATEST_RELEASE.name} at Championship\n` +
+      `  A  the field bidder (duplicate)\n  B  the same bidder pricing in ${other}\n`,
+  );
+
+  wanted.forEach(([id, board], at) => {
+    const mine = placeOf(board, generatorTuning());
+    const theirs = placeOf(board, { ...generatorTuning(), objective: other });
+    mineTotal += mine;
+    theirsTotal += theirs;
+    differences.push(mine - theirs);
+    progress(at + 1, `${id} ${mine.toFixed(0)}% / ${theirs.toFixed(0)}%`);
+  });
+
+  const spread = standardError(differences);
+  console.log(
+    `\n  A  ${(mineTotal / wanted.length).toFixed(1)}%` +
+      `\n  B  ${(theirsTotal / wanted.length).toFixed(1)}%` +
+      `\n  difference  ${mean(differences) >= 0 ? "+" : ""}${mean(differences).toFixed(1)}` +
+      ` ± ${spread.toFixed(1)} over ${wanted.length} boards\n` +
+      `\n  50% is the bidder that made the corpus — anything above it is beating that.\n`,
+  );
+}
+
+/** Plays one board with one tuning and returns where it placed, as a percentage. */
+function placeOf(board: CorpusBoard, tuning: ReturnType<typeof botTuningFor>): number {
+  const level = levelFor("championship");
+  // **Seeded outside the corpus's own range, which matters more than it looks.**
+  // Generation derives its runs as `seed ^ (run * 2 + 1)` and `seed ^ (run * 2 + 2)`
+  // for eight runs, so 1 through 16 are *taken*. Seeding a bidder at `seed ^ 1` makes
+  // it a byte-for-byte replay of corpus run 0 — so it ties with itself on every board
+  // and is dragged toward 50% however it bids. Caught because the first run came back
+  // at exactly 50.0%, which is the right reaction to a suspiciously round number.
+  const bots: Pair<ReturnType<typeof botForLevel>> = [
+    botForLevel({ level, rng: createRng(board.seed ^ 0x4001), tuning }),
+    // The opposition is the corpus's own, whatever the seat under test is playing —
+    // §1.8a's rule that a score says as much about who sat opposite as who made it.
+    botForLevel({ level, rng: createRng(board.seed ^ 0x4002), tuning: generatorTuning() }),
+  ];
+  const standing: Standing = { rubber: newRubber(), vulnerable: board.vulnerable };
+
+  let state: DealState = startDeal({ seed: board.seed, starter: board.starter });
+  while (state.phase !== "complete") {
+    const seat = state.toAct;
+    state = applyAction(state, seat, botActionFor({ bot: bots[seat], seat, standing, state }));
+  }
+  const score = duplicateScoreFor(state, board.vulnerable);
+  const net = score === null ? 0 : score.points[0] - score.points[1];
+  // Two for every entry beaten, one for every tie — `matchpointsOf`'s own arithmetic,
+  // reached through the engine so the bench and the game cannot disagree about it.
+  return (
+    matchpointsOf(
+      net,
+      board.entries.map((points) => ({ contract: null, kind: "computer", points, tricks: null, who: "" })),
+    ) ?? 50
+  );
+}
+
+function objectiveArg(): "duplicate" | "equity" | "mirror" | "points" {
+  const arg = process.argv.find((one) => one.startsWith("objective="));
+  const asked = arg === undefined ? "points" : arg.slice("objective=".length);
+  return asked === "equity" || asked === "mirror" || asked === "duplicate" ? asked : "points";
+}
+
+function standardError(values: readonly number[]): number {
+  if (values.length < 2) {
+    return 0;
+  }
+  const average = mean(values);
+  const variance =
+    values.reduce((total, one) => total + (one - average) ** 2, 0) / (values.length - 1);
+  return Math.sqrt(variance / values.length);
+}
+
+if (process.argv.includes("compare")) {
+  compare(numberArg(1, 50));
+} else if (process.argv.includes("generate")) {
   // The flag occupies the first positional slot, so the counts sit one along.
   generate(numberArg(1, 10), numberArg(2, 8));
 } else {
