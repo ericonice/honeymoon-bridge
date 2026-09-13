@@ -76,18 +76,36 @@ export async function fieldBoardsFor(
   count: number,
 ): Promise<readonly FieldBoardRow[]> {
   const { results } = await env.DB.prepare(
-    `SELECT b.id, b.seed, b.starter, b.vulnerable_0, b.vulnerable_1,
-            COUNT(r.id) AS entries
-       FROM field_boards b
-       LEFT JOIN field_results r ON r.board_id = b.id
-      WHERE b.seed NOT IN (
-              SELECT played.seed
-                FROM field_results mine
-                JOIN field_boards played ON played.id = mine.board_id
-               WHERE mine.account_id = ?
-            )
-      GROUP BY b.id
-      ORDER BY entries DESC, b.created_at ASC
+    // **One board per seed, which is not the same rule as excluding seeds already
+    // played.** A stock's two streams are separate boards, and the exclusion below
+    // only knows about boards played in *earlier* sessions — so without the
+    // partition a single fetch will happily hand somebody both ends of the same
+    // stock, and the second is played knowing every card. Found by probing the
+    // route rather than by reading it.
+    //
+    // Within a seed the **shallower** stream wins, so the two sides fill evenly.
+    // Taking the deeper one instead starves the other permanently: whoever meets the
+    // seed plays the deep side, which excludes the seed from them entirely, and the
+    // next player faces the same choice and makes the same one.
+    `SELECT id, seed, starter, vulnerable_0, vulnerable_1
+       FROM (
+         SELECT b.id, b.seed, b.starter, b.vulnerable_0, b.vulnerable_1, b.created_at,
+                COUNT(r.id) AS entries,
+                ROW_NUMBER() OVER (
+                  PARTITION BY b.seed ORDER BY COUNT(r.id) ASC, b.starter ASC
+                ) AS side
+           FROM field_boards b
+           LEFT JOIN field_results r ON r.board_id = b.id
+          WHERE b.seed NOT IN (
+                  SELECT played.seed
+                    FROM field_results mine
+                    JOIN field_boards played ON played.id = mine.board_id
+                   WHERE mine.account_id = ?
+                )
+          GROUP BY b.id
+       )
+      WHERE side = 1
+      ORDER BY entries DESC, created_at ASC
       LIMIT ?`,
   )
     .bind(accountId, count)
