@@ -121,6 +121,23 @@ function Secondary({
  */
 const CELLS = ["rubber", "mirror", "duplicate", "field"] as const;
 
+/**
+ * Where the row divides, and what the division is.
+ *
+ * **The split is by how a deal is scored**, which is the honest reason for it rather
+ * than the two duplicate formats merely having neighbouring names. Rubber and Mirror
+ * settle above and below a line with a race to a game; Replay and Field settle each
+ * board where it is played. Two and two.
+ *
+ * Drawn as a **wider gutter and nothing else** — proximity, which costs four pixels of
+ * a row that has none to spare and adds no mark to learn. A caption over the pair was
+ * the alternative and costs a line of height on the one screen that must not scroll,
+ * to say what the gutter and the line beneath already say between them. If the gutter
+ * turns out to read as nothing on a real phone, a hairline here is the next step up
+ * and still costs no height.
+ */
+const AFTER_RUBBER_SCORING = "mirror";
+
 function Format({
   format,
   onChange,
@@ -149,8 +166,8 @@ function Format({
           type="button"
           aria-pressed={chosen === cell}
           className={`flex-1 rounded-lg px-2 py-2 text-sm font-medium ${
-            chosen === cell ? "bg-white/15 text-white" : "text-white/55"
-          }`}
+            cell === AFTER_RUBBER_SCORING ? "mr-2" : ""
+          } ${chosen === cell ? "bg-white/15 text-white" : "text-white/55"}`}
           onClick={() => {
             // Coming back to Rubber restores the length last chosen for it, rather
             // than defaulting to two — which is what a trip through Duplicate used to
@@ -295,7 +312,12 @@ function FormatNote({
     // it rather than the number meaning two different things.
     return (
       <div className={`${NOTE_HEIGHT} ${lean} gap-1 px-1 text-xs text-white/45`}>
-        <span>Ranked over</span>
+        {/* The family, said where the explaining already happens. The gutter above
+            says there are two groups; this says which one you are in — and it is the
+            only place the word "Duplicate" survives, since the cells have no room for
+            nine characters at four across. */}
+        <span className="text-white/35">Duplicate ·</span>
+        <span>ranked over</span>
         <Step
           label="Fewer boards"
           disabled={deals <= MIN_SESSION_DEALS}
@@ -355,7 +377,8 @@ function FormatNote({
 
   return (
     <div className={`${NOTE_HEIGHT} ${lean} gap-1 px-1 text-xs text-white/45`}>
-      <span>A session of</span>
+      <span className="text-white/35">Duplicate ·</span>
+      <span>a session of</span>
       <Step
         label="Shorter session"
         disabled={deals <= MIN_SESSION_DEALS}
