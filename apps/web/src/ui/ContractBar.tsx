@@ -226,16 +226,26 @@ function signed(value: number): string {
  * session.
  */
 /**
- * A field session's standing: one total, and how much of it has come back.
+ * A field session's standing: where you are placing, and nothing else most of the time.
  *
- * Two figures rather than a session's three, because there is no second run to be
- * waiting on and no order to name. What there *is* instead is a board played whose
- * history has not arrived — §1.8a fetches it only after the deal — so the count says
- * how many of the boards behind you have actually been compared. A total over four of
- * six boards is not the same claim as a total over six, and a strip that showed only
- * the total would be making the stronger one.
+ * **The count of ranked boards is only drawn when it is not the whole story.** It read
+ * `Ranked 1/1` next to `Placing 59%` — two figures side by side, one of them a real
+ * score and the other a diagnostic that says `N/N` on every ordinary deal. Reported
+ * as not understandable, which it was: a row that almost always says the same thing
+ * teaches the eye to skip it, so the one moment it matters is the moment it is missed.
+ *
+ * It matters when §1.8a's fetch has not come back — the field arrives only after the
+ * deal, and may never — because a placing over four boards of six is a weaker claim
+ * than a placing over six. So that is when it speaks, and it says what is wrong rather
+ * than a fraction the reader has to interpret.
  */
+function waitingFor(summary: FieldSummary): string | null {
+  const waiting = summary.boardsPlayed - summary.boardsRanked;
+  return waiting <= 0 ? null : `${waiting} board${waiting === 1 ? "" : "s"} not back yet`;
+}
+
 function FieldRows({ summary }: { readonly summary: FieldSummary }): React.JSX.Element {
+  const waiting = waitingFor(summary);
   return (
     <>
       <p className="flex items-baseline justify-between gap-2 text-white/40">
@@ -244,18 +254,18 @@ function FieldRows({ summary }: { readonly summary: FieldSummary }): React.JSX.E
           {percent(summary.percentage)}
         </span>
       </p>
-      <p className="flex items-baseline justify-between gap-2 text-white/40">
-        <span>Ranked</span>
-        <span className="tabular-nums text-white/60">
-          {summary.boardsRanked}/{summary.boardsPlayed}
-        </span>
-      </p>
+      {waiting === null ? null : (
+        <p className="flex justify-end text-white/40">
+          <span className="text-[0.65rem]">{waiting}</span>
+        </p>
+      )}
     </>
   );
 }
 
-/** The same two figures on one wrapping line, for the compact strip. */
+/** The same, on one wrapping line, for the compact strip. */
 function FieldFigures({ summary }: { readonly summary: FieldSummary }): React.JSX.Element {
+  const waiting = waitingFor(summary);
   return (
     <>
       <span className="whitespace-nowrap">
@@ -264,12 +274,7 @@ function FieldFigures({ summary }: { readonly summary: FieldSummary }): React.JS
           {percent(summary.percentage)}
         </span>
       </span>
-      <span className="whitespace-nowrap">
-        Ranked{" "}
-        <span className="tabular-nums text-white/60">
-          {summary.boardsRanked}/{summary.boardsPlayed}
-        </span>
-      </span>
+      {waiting === null ? null : <span className="whitespace-nowrap">{waiting}</span>}
     </>
   );
 }

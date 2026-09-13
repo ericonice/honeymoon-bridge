@@ -195,8 +195,14 @@ function Foot({ summary }: { readonly summary: FieldSummary }): React.JSX.Elemen
   return (
     <div className="border-t border-white/15 pt-2 text-sm">
       <p className="flex items-baseline justify-between">
+        {/* The count only when it is not the whole story — see `waitingFor` in
+            `ContractBar`. "4 of 4 ranked" is a fraction a reader has to interpret to
+            learn that nothing is wrong. */}
         <span className="text-white/55">
-          Overall · {summary.boardsRanked} of {summary.boardsPlayed} ranked
+          Overall
+          {summary.boardsRanked < summary.boardsPlayed
+            ? ` · ${summary.boardsPlayed - summary.boardsRanked} not back yet`
+            : ""}
         </span>
         <span className="font-semibold tabular-nums">
           {summary.percentage === null ? "—" : `${Math.round(summary.percentage)}%`}
