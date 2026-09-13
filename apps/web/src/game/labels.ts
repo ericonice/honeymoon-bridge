@@ -13,7 +13,7 @@ import type { AchievementId, Call, Card, MatchFormat, Rank, Strain, Suit, Tier }
  * ambiguous.
  */
 export function matchNoun(format: MatchFormat): string {
-  if (format === "duplicate") {
+  if (format === "duplicate" || format === "field") {
     return "session";
   }
   if (format === "mirror") {

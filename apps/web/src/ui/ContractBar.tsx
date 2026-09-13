@@ -11,7 +11,6 @@ import type {
 } from "@hb/engine";
 import { ORDER_LABEL } from "../game/identity.js";
 import type { Density } from "../game/identity.js";
-import { ContractText } from "./CardText.js";
 
 export interface ContractBarProps {
   /** How much room this strip may take — see `Density`. */
@@ -594,42 +593,29 @@ export function ContractBar({
   standing,
   view,
 }: ContractBarProps): React.JSX.Element | null {
-  // Contract and trick count only apply once there is a contract, and only
-  // on the shown phase that means — see `TopBar`'s own doc for why this is
-  // the lagged phase rather than `view.phase`: the auction's own closing
-  // screen already shows the fresh contract itself, and showing it here too
-  // during that same held beat would be the same information twice, on
-  // screen at once.
-  const contract = phase === "play" || phase === "complete" ? view.contract : null;
-
-  if (phase === "complete" && contract === null) {
+  // **The contract and the trick count have left this strip**, which is the score and
+  // now only the score. They sat here through play and were absent through the draw
+  // and the auction, so the strip grew a row mid-deal and pushed the whole board down
+  // — the fault Home's note line had to be pinned to avoid. The contract is on the
+  // declarer's own `SeatLabel` instead, where whose it is needs no words; the trick
+  // count is simply gone, because `TrickRing` already counts each side *down* to what
+  // it still needs, which is the question being asked.
+  //
+  // So there is nothing left to draw once the deal is over: the reveal underneath
+  // already says what the contract made.
+  if (phase === "complete") {
     return null;
   }
 
   const content = (
-    <>
-      {phase === "complete" ? null : (
-        <StandingLines
-          density={density}
-          format={format}
-          handsPlayed={handsPlayed}
-          opponentName={opponentName}
-          standing={standing}
-          view={view}
-        />
-      )}
-      {contract === null ? null : (
-        <p className={`flex items-baseline justify-between gap-2 ${phase === "complete" ? "" : "mt-1"}`}>
-          <span className="min-w-0 truncate text-white/85">
-            <ContractText contract={contract} on="dark" />{" "}
-            {contract.declarer === view.me ? "by you" : `by ${opponentName}`}
-          </span>
-          <span className="shrink-0 tabular-nums text-white/60">
-            Tricks {view.tricksWon[view.me]} – {view.tricksWon[view.opponent]}
-          </span>
-        </p>
-      )}
-    </>
+    <StandingLines
+      density={density}
+      format={format}
+      handsPlayed={handsPlayed}
+      opponentName={opponentName}
+      standing={standing}
+      view={view}
+    />
   );
 
   if (onShowScore === null) {

@@ -705,6 +705,9 @@ export function PlayPhase({
 
           <SeatLabel
             active={live && !yourTurn}
+            // Only on the seat that bought it, which is what lets "by Computer"
+            // disappear: whose contract it is, is drawn rather than written.
+            contract={view.contract?.declarer === view.opponent ? view.contract : null}
             name={opponentName}
             rating={ratings.opponent}
             thinking={thinking}
@@ -801,7 +804,13 @@ export function PlayPhase({
           it has sat in the same footer all game, and by the time hands are
           revealed there is no active turn left for the dot to mean either. */}
       {swept && revealedHands !== null ? null : (
-        <SeatLabel active={yourTurn} name="You" rating={ratings.mine} vulnerable={vulnerable[view.me]} />
+        <SeatLabel
+          active={yourTurn}
+          contract={view.contract?.declarer === view.me ? view.contract : null}
+          name="You"
+          rating={ratings.mine}
+          vulnerable={vulnerable[view.me]}
+        />
       )}
 
       {flights.map((flight) => (

@@ -113,12 +113,26 @@ export function DealComplete({
   // scoring" meant one screen or two.
   const [showingStanding, setShowingStanding] = useState(false);
 
+  /**
+   * **Whether the *match* is over, which a two-game match's standing cannot say.**
+   *
+   * Each half is a real single game whose `rubber.complete` goes true when somebody
+   * reaches a hundred — and deriving the match from that declares a winner at half
+   * time on a format whose entire point is that the first half decides nothing. So it
+   * comes from the session, which knows.
+   */
+  const complete = matchComplete;
+
   // The pads are the one place the formats genuinely differ, and this screen
   // shows one on all four of its paths — so it is resolved once here rather than
   // branched at each of them.
   const pad =
     standing.kind === "field" ? (
-      <FieldPad latest me={view.me} summary={standing.summary} />
+      // **The whole session once it is over, the last board while it is running.**
+      // Between deals the reveal is about the hand that just finished; at the end the
+      // question has changed to how the session went, and eight boards is what
+      // answers it.
+      <FieldPad latest={!complete} me={view.me} summary={standing.summary} />
     ) : standing.kind === "duplicate" ? (
       <SessionPad summary={standing.summary} view={view} />
     ) : (
@@ -132,15 +146,6 @@ export function DealComplete({
         view={view}
       />
     );
-  /**
-   * **Whether the *match* is over, which a two-game match's standing cannot say.**
-   *
-   * Each half is a real single game whose `rubber.complete` goes true when somebody
-   * reaches a hundred — and deriving the match from that, as this did, declares a
-   * winner at half time on a format whose entire point is that the first half decides
-   * nothing. So it comes from the session, which knows.
-   */
-  const complete = matchComplete;
   const pairPoints = pairFigures(standing);
   const noun = matchNoun(format);
 
@@ -262,7 +267,17 @@ export function DealComplete({
     // that used to keep a mirror out too, until it was measured at +17 ± 34
     // rating points and the objection turned out to be about a quantity that
     // is zero. A mirror is rated; "Same boards back" is not.
-    const rating = repeated ? null : ratingChange({ opponent: opponentRating, won });
+    // **Null for a field session as well, and for a stronger reason than `repeated`.**
+    // §1.8a leaves rating open, so the server excludes the format from the walk
+    // entirely — a figure here would be a number that never arrives. Worse, a
+    // session's stored points are a *matchpoint percentage and its complement*
+    // rather than a total, so "beat the computer" is not what the result says.
+    // Blank rather than a guess, for the reason `botAnchor` returns null: nobody
+    // checks a figure that looks right.
+    const rating =
+      repeated || standing.kind === "field"
+        ? null
+        : ratingChange({ opponent: opponentRating, won });
 
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4">
