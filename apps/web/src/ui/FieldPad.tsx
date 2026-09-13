@@ -1,5 +1,5 @@
 import { boardPercentageOf, humanPercentageOf, netFor } from "@hb/engine";
-import type { FieldEntry, FieldResult, FieldSummary, PlayerId } from "@hb/engine";
+import type { FieldResult, FieldSummary, PlayerId } from "@hb/engine";
 import { useState } from "react";
 import { ContractText } from "./CardText.js";
 
@@ -151,6 +151,19 @@ function BoardRow({
 }
 
 /** Everybody's result on one board, yours among them. */
+/**
+ * A board's traveller: every result on it, **best first, with yours in its place**.
+ *
+ * Ordered by score rather than by who played, because the traveller exists to show
+ * where you came — and a list that pins your own line to the top answers a different
+ * question, "what did I do", which the row above it already answered. Reading down
+ * the order and finding yourself is the point.
+ *
+ * Sorted descending on the net, which is the same quantity the matchpoints rank, so
+ * the order on screen and the percentage beside it cannot disagree. Ties keep the
+ * order they arrived in — a stable sort — so two identical scores sit together
+ * instead of swapping about between renders.
+ */
 function Traveller({
   at,
   me,
@@ -161,6 +174,28 @@ function Traveller({
   readonly result: FieldResult;
 }): React.JSX.Element {
   const placed = boardPercentageOf(result, me);
+  const mine: Line = {
+    contract: result.contract,
+    declaredByThem: result.contract !== null && result.contract.declarer !== me,
+    mine: true,
+    note: null,
+    points: netFor(result.points, me),
+    tricks: result.tricks,
+    who: "you",
+  };
+  const others: readonly Line[] = (result.field ?? []).map((entry) => ({
+    contract: entry.contract,
+    // A recorded entry's declarer is normalised to the seat holding this board's
+    // stream, so 0 is always that row's own player.
+    declaredByThem: entry.contract !== null && entry.contract.declarer !== 0,
+    mine: false,
+    note: entry.kind === "table" ? "played a person" : null,
+    points: entry.points,
+    tricks: entry.tricks,
+    who: entry.who,
+  }));
+  const lines = [mine, ...others].sort((one, two) => two.points - one.points);
+
   return (
     <table className="w-full">
       <caption className="flex items-baseline justify-between pb-1 text-xs text-white/45">
@@ -170,14 +205,9 @@ function Traveller({
         </span>
       </caption>
       <tbody>
-        <Row
-          mine
-          contract={result.contract}
-          declaredByThem={result.contract !== null && result.contract.declarer !== me}
-          points={netFor(result.points, me)}
-          who="you"
-          tricks={result.tricks}
-        />
+        {lines.map((line, index) => (
+          <Row key={index} {...line} />
+        ))}
         {/* Null and empty are different answers and are drawn differently: one is a
             field that has not come back, the other a board nobody else has played. */}
         {result.field === null ? (
@@ -192,35 +222,28 @@ function Traveller({
               nobody else has played this board yet
             </td>
           </tr>
-        ) : (
-          result.field.map((entry, index) => <Entry key={index} entry={entry} />)
-        )}
+        ) : null}
       </tbody>
     </table>
   );
 }
 
-function Entry({ entry }: { readonly entry: FieldEntry }): React.JSX.Element {
-  return (
-    <Row
-      contract={entry.contract}
-      // A recorded entry's declarer is normalised to the seat holding this board's
-      // stream, so 0 is always the row's own player and 1 is always whoever sat
-      // opposite them — see the generator, which turns the second stream round.
-      declaredByThem={entry.contract !== null && entry.contract.declarer !== 0}
-      note={entry.kind === "table" ? "played a person" : null}
-      points={entry.points}
-      tricks={entry.tricks}
-      who={entry.who}
-    />
-  );
+/** One line of a traveller, whoever made it. */
+interface Line {
+  readonly contract: FieldResult["contract"];
+  readonly declaredByThem: boolean;
+  readonly mine: boolean;
+  readonly note: string | null;
+  readonly points: number;
+  readonly tricks: readonly number[] | null;
+  readonly who: string;
 }
 
 function Row({
   contract,
   declaredByThem,
-  mine = false,
-  note = null,
+  mine,
+  note,
   points,
   tricks,
   who,
@@ -235,8 +258,8 @@ function Row({
    * is only obvious once the screen says who declared.
    */
   readonly declaredByThem: boolean;
-  readonly mine?: boolean;
-  readonly note?: string | null;
+  readonly mine: boolean;
+  readonly note: string | null;
   readonly points: number;
   readonly tricks: readonly number[] | null;
   readonly who: string;

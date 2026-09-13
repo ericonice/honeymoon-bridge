@@ -64,6 +64,24 @@ describe("the session pad", () => {
     expect(screen.queryByText("Noah")).toBeNull();
   });
 
+  /**
+   * Best first, with your own line wherever it lands — a traveller exists to show
+   * where you *came*, and pinning your row to the top answers a different question
+   * that the collapsed row above has already answered.
+   */
+  it("sorts a board's results best first, with yours in its place", () => {
+    pad([result("b1", 170, [entry(620, "Computer"), entry(-100, "Computer")])]);
+    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
+
+    const order = screen
+      .getAllByRole("row")
+      .map((row) => row.textContent ?? "")
+      .filter((text) => text.includes("+") || text.includes("−"));
+    expect(order[0]).toContain("+620");
+    expect(order[1]).toContain("you");
+    expect(order[2]).toContain("−100");
+  });
+
   it("opens a board into everybody's result on it", () => {
     pad(BOARDS);
     fireEvent.click(screen.getByRole("button", { name: /Board 2/ }));
