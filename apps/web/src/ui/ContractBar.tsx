@@ -444,7 +444,16 @@ function StandingLines({
   if (density === "compact") {
     return (
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 text-xs text-white/45">
-        <span className="whitespace-nowrap">Hand {handNumber}</span>
+        {/* A session knows how long it is, so the count says how far through you are
+            rather than only where you are. A rubber does not — it ends when somebody
+            wins it — so it keeps a bare number. */}
+        <span className="whitespace-nowrap">
+          {standing.kind === "field"
+            ? `Board ${handNumber} of ${standing.summary.boards}`
+            : standing.kind === "duplicate"
+              ? `Deal ${handNumber} of ${standing.summary.boards.length * 2}`
+              : `Hand ${handNumber}`}
+        </span>
         {standing.kind === "field" ? (
           <FieldFigures summary={standing.summary} />
         ) : standing.kind === "duplicate" ? (
@@ -491,11 +500,13 @@ function StandingLines({
   return (
     <div className="text-xs">
       <p className="pb-0.5 text-white/40">
-        {standing.kind === "duplicate"
-          ? `Deal ${handNumber} of ${standing.summary.boards.length * 2}`
-          : pair === null
-            ? `Hand #${handNumber}`
-            : `Half ${pair.half} of 2 · hand #${handNumber}`}
+        {standing.kind === "field"
+          ? `Board ${handNumber} of ${standing.summary.boards}`
+          : standing.kind === "duplicate"
+            ? `Deal ${handNumber} of ${standing.summary.boards.length * 2}`
+            : pair === null
+              ? `Hand #${handNumber}`
+              : `Half ${pair.half} of 2 · hand #${handNumber}`}
         {standing.kind === "duplicate" && standing.summary.current?.replay === true
           ? " · replay"
           : ""}

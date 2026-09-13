@@ -295,6 +295,8 @@ export function humanPercentageOf(result: FieldResult, me: PlayerId): number | n
 }
 
 export interface FieldSummary {
+  /** How many boards the session is, which is what a progress line counts against. */
+  readonly boards: number;
   /** Boards whose field has arrived and is not empty — what `percentage` is over. */
   readonly boardsRanked: number;
   /** Boards played, whether or not their field has arrived. */
@@ -331,6 +333,7 @@ export function summarizeField(state: FieldState): FieldSummary {
   const board = state.boards[state.at] ?? state.boards[state.boards.length - 1]!;
   const placings = state.results.map((one) => boardPercentageOf(one, state.me));
   return {
+    boards: state.boards.length,
     boardsPlayed: state.results.length,
     boardsRanked: placings.filter((one) => one !== null).length,
     complete: state.results.length >= state.boards.length,
