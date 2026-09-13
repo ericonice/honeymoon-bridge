@@ -1,5 +1,4 @@
 import type { DealPhase, PlayerView } from "@hb/engine";
-import { ContractText } from "./CardText.js";
 import { SettingsIcon } from "./icons.js";
 
 export interface TopBarProps {
@@ -21,39 +20,21 @@ export interface TopBarProps {
   /** Dev-only shortcut past the phase in progress. Null when it is not on offer. */
   readonly onSkipPhase: (() => void) | null;
   onShowSettings(): void;
-  /** Whose contract it is, when it is not yours. */
-  readonly opponentName: string;
   readonly view: PlayerView;
 }
 
 /**
- * The phase — except during play, where it is the contract.
+ * The phase, in every state.
  *
- * **"Play" is the one headline here that tells a reader nothing they do not already
- * know**, and it occupies the largest, most fixed piece of text on the screen. The
- * contract is the thing a player actually hunts for mid-hand, and this is the only
- * place it can go that is both prominent and free.
- *
- * It lived in the score strip before, which was wrong twice: that strip is the
- * *score*, and it had no contract during the draw or the auction, so it grew a row
- * when play started and pushed the whole board down. It then spent a build on the
- * declarer's own `SeatLabel`, which is truer — whose contract it is needs no words
- * there — but that label is deliberately the quietest thing on the board so it will
- * not compete with the turn dot, and something you go looking for should not be in
- * the quietest element on screen.
- *
- * The headline already changes with the state, so this is not a new kind of thing
- * for it to do: it reads "Deal complete" the moment a deal ends.
+ * It briefly said the contract during play, on the reasoning that "Play" tells a
+ * reader nothing they do not know and this is the most prominent text on screen.
+ * True, and beside the point: the slot names the *phase* in three states, so naming
+ * a contract in the fourth makes one place mean two kinds of thing and the reader
+ * has to notice the pattern broke. The contract sits on the right of the strip's
+ * own deal row instead — see `ContractBar`, where it costs nothing and moves
+ * nothing.
  */
-function Headline({
-  opponentName,
-  phase,
-  view,
-}: {
-  readonly opponentName: string;
-  readonly phase: DealPhase;
-  readonly view: PlayerView;
-}): React.JSX.Element {
+function Headline({ phase }: { readonly phase: DealPhase }): React.JSX.Element {
   switch (phase) {
     case "draw": {
       return <>Draw</>;
@@ -62,18 +43,7 @@ function Headline({
       return <>Auction</>;
     }
     case "play": {
-      // A passed-out deal reaches "play" with no contract and goes straight on, so
-      // the phase word is still the honest answer for the beat that lasts.
-      return view.contract === null ? (
-        <>Play</>
-      ) : (
-        <>
-          <ContractText contract={view.contract} on="dark" />{" "}
-          <span className="font-normal text-white/55">
-            by {view.contract.declarer === view.me ? "you" : opponentName}
-          </span>
-        </>
-      );
+      return <>Play</>;
     }
     default: {
       return <>Deal complete</>;
@@ -85,7 +55,6 @@ export function TopBar({
   onLeave,
   onShowSettings,
   onSkipPhase,
-  opponentName,
   phase,
   view,
 }: TopBarProps): React.JSX.Element {
@@ -102,7 +71,7 @@ export function TopBar({
         </button>
       )}
       <h1 className="min-w-0 truncate text-base font-semibold text-white">
-        <Headline opponentName={opponentName} phase={phase} view={view} />
+        <Headline phase={phase} />
       </h1>
       <span className="flex-1" />
 

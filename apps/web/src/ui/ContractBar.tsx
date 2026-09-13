@@ -1,5 +1,6 @@
 import { GAME_THRESHOLD, closedMarginTotal, totalScore } from "@hb/engine";
 import type {
+  Contract,
   MatchFormat,
   DealPhase,
   DuplicateSummary,
@@ -10,6 +11,7 @@ import type {
   PlayerView,
 } from "@hb/engine";
 import { ORDER_LABEL } from "../game/identity.js";
+import { ContractText } from "./CardText.js";
 import type { Density } from "../game/identity.js";
 
 export interface ContractBarProps {
@@ -397,6 +399,7 @@ function pairTotal(earlier: Pair<number> | null, here: Pair<number>): Pair<numbe
 }
 
 function StandingLines({
+  contract,
   density,
   format,
   handsPlayed,
@@ -404,6 +407,8 @@ function StandingLines({
   standing,
   view,
 }: {
+  /** The contract, once the *shown* phase has one. Null through the draw and auction. */
+  readonly contract: Contract | null;
   readonly density: Density;
   readonly format: MatchFormat;
   readonly handsPlayed: number;
@@ -453,6 +458,17 @@ function StandingLines({
               ? `Deal ${handNumber} of ${standing.summary.boards.length * 2}`
               : `Hand ${handNumber}`}
         </span>
+        {/* Compact is the always-visible score on a short phone, so it needs the
+            contract for the same reason the full strip does — and as a wrapping item
+            rather than a row, which is what this layout is. */}
+        {contract === null ? null : (
+          <span className="whitespace-nowrap text-white/85">
+            <ContractText contract={contract} on="dark" />{" "}
+            <span className="text-white/50">
+              {contract.declarer === view.me ? "by you" : `by ${opponentName}`}
+            </span>
+          </span>
+        )}
         {standing.kind === "field" ? (
           <FieldFigures summary={standing.summary} />
         ) : standing.kind === "duplicate" ? (
@@ -498,18 +514,39 @@ function StandingLines({
 
   return (
     <div className="text-xs">
-      <p className="pb-0.5 text-white/40">
-        {standing.kind === "field"
-          ? `Board ${handNumber} of ${standing.summary.boards}`
-          : standing.kind === "duplicate"
-            ? `Deal ${handNumber} of ${standing.summary.boards.length * 2}`
-            : pair === null
-              ? `Hand #${handNumber}`
-              : `Half ${pair.half} of 2 · hand #${handNumber}`}
-        {standing.kind === "duplicate" && standing.summary.current?.replay === true
-          ? " · replay"
-          : ""}
-        {standing.kind === "duplicate" ? ` · ${ORDER_LABEL[standing.summary.schedule]}` : ""}
+      <p className="flex items-baseline justify-between gap-2 pb-0.5 text-white/40">
+        <span className="min-w-0 truncate">
+          {standing.kind === "field"
+            ? `Board ${handNumber} of ${standing.summary.boards}`
+            : standing.kind === "duplicate"
+              ? `Deal ${handNumber} of ${standing.summary.boards.length * 2}`
+              : pair === null
+                ? `Hand #${handNumber}`
+                : `Half ${pair.half} of 2 · hand #${handNumber}`}
+          {standing.kind === "duplicate" && standing.summary.current?.replay === true
+            ? " · replay"
+            : ""}
+          {standing.kind === "duplicate" ? ` · ${ORDER_LABEL[standing.summary.schedule]}` : ""}
+        </span>
+        {/* **The contract, on the right of the row that is already about the deal.**
+            This row says which hand you are on; the money is on the rows beneath it.
+            So a contract belongs here and not there — and the row exists in every
+            phase, so the right-hand half is simply empty until there is a contract
+            rather than a row appearing when play starts and pushing the board down.
+
+            It has now been in three other places. Inside the score proper, where it
+            grew that extra row; on the declarer's own `SeatLabel`, which is
+            deliberately the quietest thing on the board and so the wrong home for
+            something you go looking for; and in the top bar's headline, which names
+            the *phase* in every other state and should not mean two kinds of thing. */}
+        {contract === null ? null : (
+          <span className="shrink-0 text-white/85">
+            <ContractText contract={contract} on="dark" />{" "}
+            <span className="text-white/50">
+              {contract.declarer === view.me ? "by you" : `by ${opponentName}`}
+            </span>
+          </span>
+        )}
       </p>
       {standing.kind === "duplicate" || standing.kind === "field" ? null : (
         <StandingHeader opponentName={opponentName} />
@@ -607,8 +644,14 @@ export function ContractBar({
     return null;
   }
 
+  // The *shown* phase rather than `view.phase` — see `TopBar`'s own doc: the auction's
+  // closing screen is still up for a beat after the engine has moved on, and the
+  // contract it has just announced does not want repeating an inch below it.
+  const contract = phase === "play" ? view.contract : null;
+
   const content = (
     <StandingLines
+      contract={contract}
       density={density}
       format={format}
       handsPlayed={handsPlayed}

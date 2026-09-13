@@ -40,6 +40,18 @@ export function RobotGame(props: RobotGameProps): React.JSX.Element {
   const [needed] = useState(() => preferredFormat() === "field" && loadRobotMatch() === null);
   const [boards, setBoards] = useState<readonly FieldBoard[] | null>(null);
   const [failed, setFailed] = useState(false);
+  /**
+   * The session is shorter than was asked for, because the pool ran out.
+   *
+   * A board you have played retires its twin, so a regular player works through the
+   * corpus and eventually there are fewer left than a session wants. The server
+   * truthfully hands over what it has — and the game used to start six boards long
+   * with nothing saying why, which reads as the length setting being ignored.
+   *
+   * Held as a *count* rather than a flag so the screen can say how many, and cleared
+   * by the tap that starts the session: it is a thing said once, not a banner.
+   */
+  const [short, setShort] = useState<number | null>(null);
 
   useEffect(() => {
     if (!needed) {
@@ -57,6 +69,9 @@ export function RobotGame(props: RobotGameProps): React.JSX.Element {
         setFailed(true);
       } else {
         setBoards(found);
+        if (found.length < sessionDeals()) {
+          setShort(found.length);
+        }
       }
     });
     return () => {
@@ -94,6 +109,30 @@ export function RobotGame(props: RobotGameProps): React.JSX.Element {
     return (
       <div className="flex h-full items-center justify-center p-6 text-white/60">
         Finding boards…
+      </div>
+    );
+  }
+
+  if (short !== null) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+        <p className="text-lg font-semibold">
+          {short} {short === 1 ? "board" : "boards"}, not {sessionDeals()}
+        </p>
+        <p className="text-sm text-white/60">
+          That is every board you have not already played. More are generated as the
+          pool runs down — a board you have met is not offered again, so the ones left
+          are the ones that are new to you.
+        </p>
+        <button
+          type="button"
+          className="rounded-xl bg-white px-4 py-3 font-semibold text-stone-900"
+          onClick={() => {
+            setShort(null);
+          }}
+        >
+          Play {short === 1 ? "it" : "them"}
+        </button>
       </div>
     );
   }

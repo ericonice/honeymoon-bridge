@@ -11,6 +11,7 @@ import type {
 import { cleanup, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
+import { ContractBar } from "../src/ui/ContractBar.js";
 import { DealComplete } from "../src/ui/DealComplete.js";
 
 /**
@@ -101,6 +102,59 @@ function knowMyRating(): void {
 afterEach(() => {
   cleanup();
   localStorage.clear();
+});
+
+describe("the strip's deal row", () => {
+  /**
+   * The contract sits on the right of the row that already says which deal you are
+   * on — in **every** format, since that row is shared. It has been in three other
+   * places: inside the score proper, where it grew a row when play started and
+   * pushed the board down; on the declarer's own seat label, which is deliberately
+   * the quietest thing on the board; and in the top bar, which names the phase
+   * everywhere else and should not mean two kinds of thing.
+   */
+  it("carries the contract in every format, not only a session", () => {
+    for (const standing of [standingFor([result("b1", 620)]), rubberStanding()]) {
+      cleanup();
+      render(
+        createElement(ContractBar, {
+          density: "full" as const,
+          format: standing.kind === "field" ? ("field" as const) : ("rubber" as const),
+          handsPlayed: 1,
+          onShowScore: null,
+          opponentName: "Computer",
+          phase: "play" as const,
+          standing,
+          view: {
+            contract: { declarer: 0, doubling: "none", level: 4, strain: "S" },
+            me: ME,
+            opponent: 1,
+            phase: "play",
+            tricksWon: [0, 0],
+          } as PlayerView,
+        }),
+      );
+      expect(document.body.textContent ?? "").toContain("by you");
+    }
+  });
+
+  /** Nothing to draw before there is one — and nothing appears, so nothing moves. */
+  it("says nothing about a contract during the auction", () => {
+    render(
+      createElement(ContractBar, {
+        density: "full" as const,
+        format: "rubber" as const,
+        handsPlayed: 1,
+        onShowScore: null,
+        opponentName: "Computer",
+        phase: "auction" as const,
+        standing: rubberStanding(),
+        view: { contract: null, me: ME, opponent: 1, phase: "auction", tricksWon: [0, 0] } as PlayerView,
+      }),
+    );
+
+    expect(document.body.textContent ?? "").not.toContain("by you");
+  });
 });
 
 describe("finishing a field session", () => {
