@@ -283,6 +283,43 @@ function FormatNote({
     );
   }
 
+  if (format === "field") {
+    // **Boards, and every one of them is played.** Sharing the rubber's line here
+    // said "First to 2 games" under Field, which is wrong twice over: a field session
+    // has no games in it at all, and nothing about it is a race — the length is the
+    // number of boards you will meet, not a target somebody reaches first.
+    //
+    // The same stored preference as a session, because it answers the same question:
+    // how long is this, in deals. §1.8 spends two deals a board and §1.8a spends one,
+    // so the same count is five boards there and ten here — and the word changes with
+    // it rather than the number meaning two different things.
+    return (
+      <div className={`${NOTE_HEIGHT} ${lean} gap-1 px-1 text-xs text-white/45`}>
+        <span>Ranked over</span>
+        <Step
+          label="Fewer boards"
+          disabled={deals <= MIN_SESSION_DEALS}
+          onClick={() => {
+            onDealsChange(cleanSessionDeals(deals - SESSION_DEALS_STEP));
+          }}
+        >
+          &lsaquo;
+        </Step>
+        <output className="w-6 text-center font-semibold tabular-nums text-white/90">{deals}</output>
+        <Step
+          label="More boards"
+          disabled={deals >= MAX_SESSION_DEALS}
+          onClick={() => {
+            onDealsChange(cleanSessionDeals(deals + SESSION_DEALS_STEP));
+          }}
+        >
+          &rsaquo;
+        </Step>
+        <span>{deals === 1 ? "board" : "boards"}</span>
+      </div>
+    );
+  }
+
   if (format !== "duplicate") {
     // **A stepper with two stops, for the same reason duplicate has one.** Two arrows
     // to move between exactly two values is more machinery than a toggle needs — and

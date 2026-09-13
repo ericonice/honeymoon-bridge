@@ -1,7 +1,7 @@
 import type { FieldBoard } from "@hb/engine";
 import { useEffect, useState } from "react";
 import { fetchFieldBoards } from "../game/fieldCorpus.js";
-import { preferredFormat } from "../game/identity.js";
+import { preferredFormat, sessionDeals } from "../game/identity.js";
 import { matchNoun } from "../game/labels.js";
 import { useLocalSession } from "../game/localSession.js";
 import { loadRobotMatch } from "../game/robotPersistence.js";
@@ -46,7 +46,10 @@ export function RobotGame(props: RobotGameProps): React.JSX.Element {
       return;
     }
     let live = true;
-    void fetchFieldBoards().then((found) => {
+    // The length the row asked for, not a constant of this component's own — the
+    // stepper under the format row is where "how long is this" is answered, and a
+    // second answer here is how the two come to disagree.
+    void fetchFieldBoards(sessionDeals()).then((found) => {
       if (!live) {
         return;
       }

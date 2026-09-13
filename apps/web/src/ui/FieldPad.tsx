@@ -60,6 +60,7 @@ function Board({
         <Row
           mine
           contract={result.contract}
+          declaredByThem={result.contract !== null && result.contract.declarer !== me}
           points={result.points[me]}
           who="you"
           tricks={result.tricks}
@@ -90,6 +91,10 @@ function Entry({ entry }: { readonly entry: FieldEntry }): React.JSX.Element {
   return (
     <Row
       contract={entry.contract}
+      // A recorded entry's declarer is normalised to the seat holding this board's
+      // stream, so 0 is always the row's own player and 1 is always whoever sat
+      // opposite them — see the generator, which turns the second stream round.
+      declaredByThem={entry.contract !== null && entry.contract.declarer !== 0}
       note={entry.kind === "table" ? "played a person" : null}
       points={entry.points}
       tricks={entry.tricks}
@@ -100,6 +105,7 @@ function Entry({ entry }: { readonly entry: FieldEntry }): React.JSX.Element {
 
 function Row({
   contract,
+  declaredByThem,
   mine = false,
   note = null,
   points,
@@ -107,6 +113,15 @@ function Row({
   who,
 }: {
   readonly contract: FieldResult["contract"];
+  /**
+   * This row's player was defending, which is the one thing a score cannot say.
+   *
+   * Without it a board where the opposition always declares and always makes reads as
+   * every line scoring nothing for no visible reason — a contract, a result, and a
+   * zero beside them. A defender of a made contract scores nothing, and that sentence
+   * is only obvious once the screen says who declared.
+   */
+  readonly declaredByThem: boolean;
   readonly mine?: boolean;
   readonly note?: string | null;
   readonly points: number;
@@ -126,6 +141,9 @@ function Row({
             <>
               <ContractText contract={contract} on="dark" />
               <span className="text-xs text-white/45">{resultOf(contract, tricks)}</span>
+              {declaredByThem ? (
+                <span className="text-[0.65rem] text-white/35">by them</span>
+              ) : null}
             </>
           )}
           {note === null ? null : <span className="text-[0.65rem] text-white/35">{note}</span>}

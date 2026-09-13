@@ -16,7 +16,13 @@ import { fieldBoardsUrl, fieldReferenceUrl, fieldResultUrl } from "./serverUrl.j
  * requires the deal scored and the comparison blank rather than the other way round.
  */
 
-/** How many boards a session asks for. The server has its own ceiling. */
+/**
+ * The fallback length, for a caller that has no preference to hand.
+ *
+ * The real answer is the stepper under the format row — a field session is as long
+ * as the row says, in boards, and §1.8a spends one deal a board where §1.8 spends
+ * two. The server keeps its own ceiling regardless.
+ */
 export const FIELD_BOARDS = 8;
 
 /**
