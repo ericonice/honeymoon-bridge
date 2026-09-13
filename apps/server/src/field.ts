@@ -127,20 +127,67 @@ export async function fieldBoardsFor(
       LIMIT ?`,
   )
     .bind(accountId, count)
-    .all<{
-      readonly id: string;
-      readonly seed: number;
-      readonly starter: number;
-      readonly vulnerable_0: number;
-      readonly vulnerable_1: number;
-    }>();
+    .all<BoardColumns>();
 
-  return results.map((row) => ({
+  const fresh = results.map(asBoard);
+  if (fresh.length >= count) {
+    return fresh;
+  }
+  // **Nothing new left, so the twins come out** — §1.8a. A session that is silently
+  // short reads as the length setting being ignored, and the other side of a stock is
+  // a better answer than no board at all: recognising a board from thirteen
+  // unlabelled cards played some time ago is hard enough that the head start is
+  // mostly theoretical. What it is not is nothing, which is why the result it
+  // produces is kept out of the field — see `replayedFor`.
+  const twins = await twinBoardsFor(env, accountId, count - fresh.length);
+  return [...fresh, ...twins];
+}
+
+/**
+ * The other side of a stock this account has played, for topping a session up.
+ *
+ * Excluded by **board** rather than by seed, which is the whole difference from the
+ * query above: the seed is one this player has met, and what is being looked for is
+ * the side of it they have not.
+ */
+async function twinBoardsFor(
+  env: Env,
+  accountId: string,
+  count: number,
+): Promise<readonly FieldBoardRow[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT b.id, b.seed, b.starter, b.vulnerable_0, b.vulnerable_1
+       FROM field_boards b
+      WHERE b.seed IN (
+              SELECT played.seed
+                FROM field_results mine
+                JOIN field_boards played ON played.id = mine.board_id
+               WHERE mine.account_id = ?
+            )
+        AND b.id NOT IN (SELECT board_id FROM field_results WHERE account_id = ?)
+      ORDER BY b.number ASC, b.id ASC
+      LIMIT ?`,
+  )
+    .bind(accountId, accountId, count)
+    .all<BoardColumns>();
+  return results.map(asBoard);
+}
+
+interface BoardColumns {
+  readonly id: string;
+  readonly seed: number;
+  readonly starter: number;
+  readonly vulnerable_0: number;
+  readonly vulnerable_1: number;
+}
+
+function asBoard(row: BoardColumns): FieldBoardRow {
+  return {
     id: row.id,
     seed: row.seed,
     starter: (row.starter === 1 ? 1 : 0) as PlayerId,
     vulnerable: [row.vulnerable_0 === 1, row.vulnerable_1 === 1],
-  }));
+  };
 }
 
 /**
@@ -167,8 +214,31 @@ export async function recordFieldResult(
   if (already !== null) {
     return;
   }
-  await insertFieldResult(env, report, accountId, false, now);
-  await retireGeneratedRow(env, report.boardId);
+  // Worked out here rather than reported: it is simply whether this account already
+  // has a result on the same stock, which the server can see and a client has no
+  // business asserting.
+  const replayed = await replayedFor(env, report.boardId, accountId);
+  await insertFieldResult(env, report, accountId, false, now, replayed);
+  // **A replayed board does not retire a machine run.** The scaffolding is displaced
+  // by results that join the field, and this one does not.
+  if (!replayed) {
+    await retireGeneratedRow(env, report.boardId);
+  }
+}
+
+/** Whether this account has already played the other side of this board's stock. */
+async function replayedFor(env: Env, boardId: string, accountId: string): Promise<boolean> {
+  const found = await env.DB.prepare(
+    `SELECT 1
+       FROM field_results mine
+       JOIN field_boards played ON played.id = mine.board_id
+      WHERE mine.account_id = ?
+        AND played.seed = (SELECT seed FROM field_boards WHERE id = ?)
+      LIMIT 1`,
+  )
+    .bind(accountId, boardId)
+    .first();
+  return found !== null;
 }
 
 /**
@@ -204,7 +274,7 @@ export async function recordGeneratedResult(
   report: FieldResultReport,
   now: number,
 ): Promise<void> {
-  await insertFieldResult(env, report, null, true, now);
+  await insertFieldResult(env, report, null, true, now, false);
 }
 
 async function insertFieldResult(
@@ -213,12 +283,14 @@ async function insertFieldResult(
   accountId: string | null,
   generated: boolean,
   now: number,
+  replayed: boolean,
 ): Promise<void> {
   await env.DB.prepare(
     `INSERT INTO field_results
-       (id, board_id, played_at, account_id, opponent_account_id, generated, points,
-        declarer, contract_level, contract_strain, contract_doubling, tricks_0, tricks_1)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, board_id, played_at, account_id, opponent_account_id, generated, replayed,
+        points, declarer, contract_level, contract_strain, contract_doubling,
+        tricks_0, tricks_1)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       crypto.randomUUID(),
@@ -227,6 +299,7 @@ async function insertFieldResult(
       accountId,
       report.opponentAccountId ?? null,
       generated ? 1 : 0,
+      replayed ? 1 : 0,
       Math.round(report.points),
       report.contract?.declarer ?? null,
       report.contract?.level ?? null,
@@ -274,7 +347,9 @@ export async function fieldFor(
             r.tricks_0, r.tricks_1, a.name AS who
        FROM field_results r
        LEFT JOIN accounts a ON a.id = r.account_id
-      WHERE r.board_id = ? AND (r.account_id IS NULL OR r.account_id != ?)
+      WHERE r.board_id = ?
+        AND (r.account_id IS NULL OR r.account_id != ?)
+        AND coalesce(r.replayed, 0) = 0
       ORDER BY r.played_at ASC`,
   )
     .bind(boardId, accountId)

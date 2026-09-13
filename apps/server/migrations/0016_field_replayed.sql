@@ -1,0 +1,25 @@
+-- A result made on a stock this player had already met — §1.8a.
+--
+-- A board retires its twin for whoever plays it, because both hands turn face up at
+-- the end of every deal: meeting the other side means knowing thirteen of the
+-- twenty-six cards you are about to be offered, and roughly what the opposition will
+-- hold. So the twin is normally never offered.
+--
+-- **When there is nothing else left it is offered anyway**, which is the better answer
+-- than a session that is short for no reason a player can see. Recognising a board
+-- from thirteen unlabelled cards played some time ago is genuinely hard, so in
+-- practice the head start is mostly theoretical — but "mostly" is not a thing to build
+-- a shared standard on.
+--
+-- Hence this column. The result is **recorded**, so the board is not offered a third
+-- time, and **left out of the field** everybody else is ranked against. A standard
+-- that quietly absorbs results made with a head start drifts upward invisibly, which
+-- is the class of error this schema keeps being shaped to avoid.
+--
+-- Decided by the server rather than reported by the client: it is simply whether this
+-- account already has a result on another board with the same seed, which the server
+-- can see and a client has no business asserting.
+--
+-- Null means "first time", which is what every row written before this column existed
+-- was — a twin could not be offered at all then.
+ALTER TABLE field_results ADD COLUMN replayed INTEGER;

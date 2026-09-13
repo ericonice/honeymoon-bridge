@@ -120,9 +120,9 @@ export function RobotGame(props: RobotGameProps): React.JSX.Element {
           {short} {short === 1 ? "board" : "boards"}, not {sessionDeals()}
         </p>
         <p className="text-sm text-white/60">
-          That is every board you have not already played. More are generated as the
-          pool runs down — a board you have met is not offered again, so the ones left
-          are the ones that are new to you.
+          That is every board there is for you — new ones first, then the other side of
+          stocks you have played, and the pool has run out of both. More can be
+          generated; until then a shorter session is what is honestly available.
         </p>
         <button
           type="button"
