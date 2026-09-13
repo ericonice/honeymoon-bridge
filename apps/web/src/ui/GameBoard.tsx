@@ -579,6 +579,7 @@ export function GameBoard({
   return (
     <>
       <TopBar
+        opponentName={session.opponentName}
         phase={phase}
         view={view}
         onLeave={

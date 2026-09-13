@@ -1,25 +1,5 @@
-import type { Contract } from "@hb/engine";
-import { ContractText } from "./CardText.js";
 export interface SeatLabelProps {
   readonly active: boolean;
-  /**
-   * The contract this player bought, or null when they did not buy it.
-   *
-   * **Here rather than on the standing strip, which is the same move the rating
-   * made and for two reasons.** The strip is the *score*, and a contract is a fact
-   * about the deal rather than part of one. And the strip had no contract during the
-   * draw or the auction, so the line appeared when play began and pushed the whole
-   * board down twenty pixels mid-deal — the fault Home's own note line had to be
-   * pinned to avoid.
-   *
-   * Putting it on the declarer's own label is what lets "by you" and "by Computer"
-   * disappear: whose contract it is, is drawn rather than written.
-   *
-   * The trick count that sat beside it is simply gone. `TrickRing` already draws
-   * each side's countdown against the slots, and counting *down* to what a side
-   * still needs is the question being asked where counting up was not.
-   */
-  readonly contract?: Contract | null;
   readonly name: string;
   /**
    * What this player is rated, or null until something has said.
@@ -73,7 +53,6 @@ export interface SeatLabelProps {
  */
 export function SeatLabel({
   active,
-  contract,
   name,
   rating,
   thinking,
@@ -93,18 +72,6 @@ export function SeatLabel({
       {rating === null ? null : (
         <span className="shrink-0 tabular-nums text-white/30">{rating}</span>
       )}
-      {/* Louder than the rating and quieter than the name: it changes once a deal,
-          where the rating cannot change at all and the name is a column heading read
-          once. `shrink-0` because the name is what should truncate last — a clipped
-          contract is still readable, a clipped name is not a person. */}
-      {contract === undefined || contract === null ? null : (
-        <span className="shrink-0 text-white/75">
-          <ContractText contract={contract} on="dark" />
-        </span>
-      )}
-      {/* Dimmer than the name whether or not the seat is active. It is a fact about
-          the player rather than about the turn, and it does not change during a
-          deal — so it must not compete with the thing that does. */}
       {active ? (
         /* **A CSS animation rather than a JavaScript one, and that is the point.** The
            computer solves on the main thread, so nothing driven from JavaScript can
