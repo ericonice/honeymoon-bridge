@@ -51,6 +51,8 @@ npm run bench:strain    --workspace @hb/web -- "S:AK4 H:AK4 D:A43 C:AK32"
 npm run bench:draw      --workspace @hb/web -- 300      # draw policies against each other
 npm run bench:equity    --workspace @hb/web -- 1500      # what a standing is worth, as a win chance
 npx vite-node bench/honors.ts -- 300 0                  # whether honors decide anything
+npx vite-node bench/field.ts -- 12 8                    # how much the bot varies on one stock
+npx vite-node bench/field.ts -- generate 200 8          # write a field corpus — §1.8a, hours
 # What remembering a board is worth. Ten minutes; needs a sample count to do anything.
 npm run bench:rubber --workspace @hb/web -- 60 8 format=duplicate control nodouble memory
 
@@ -456,6 +458,10 @@ from ordinary bridge:
   game; a duplicate session prescribes it by board and pays for a game on the spot. Not Chicago.
   `MatchFormat` is the wide vocabulary and `RubberFormat` is the narrow one the rubber machinery
   keeps, so nothing has to invent a meaning for a rubber that is a duplicate.
+- **Duplicate is two formats: Replay and Field.** Replay plays a board twice and settles the
+  difference in points or IMPs; Field plays it once and ranks you among the results already recorded
+  on it, in matchpoints. Same board, same prescribed vulnerability, same deal settled where it is
+  played — only the source of the comparison differs. §1.8 and §1.8a.
 
 ## Conventions
 
@@ -1915,7 +1921,8 @@ was converted only for `"equity"`; a mirror objective is a probability on the sa
 raw would have been a landslide rather than a nudge. It converts through the mirror table, since what
 200 points is worth depends on where the pair stands.
 
-**Scoring is points, and `impsFor` is written and unused.** IMPs was the first proposal, on the
+**Scoring is points, and `impsFor` is written and unused.** (True of Replay, and overtaken for Field
+— see below, which is matchpointed and reaches this setting not at all.) IMPs was the first proposal, on the
 grounds that a concave scale stops one doubled disaster deciding a session. What weakened it is that
 duplication has *already* cancelled the deal, so a duplicate margin is far better behaved than a
 rubber margin to begin with. It cannot be a setting either — a session can be won on points and lost
@@ -1924,6 +1931,134 @@ maximise. So it is settled by measurement: a session records its board seeds, it
 both runs' scores, so any played session can be re-scored the other way and the two answers compared.
 Honors stay in, against duplicate bridge's own practice, because here a hand is built over 26
 decisions and four aces is something a player did.
+
+**Duplicate is two formats now — Replay and Field — and the second is the one that is duplicate in
+the ordinary sense.** §1.8a. A board is played **once** and ranked against the results already
+recorded on it, where §1.8 manufactures its comparison by having you play the stock twice yourself.
+The screen calls the old one **Replay** and the new one **Field**; nothing stored moved, so recorded
+sessions stay `"duplicate"` and stay in the same rating pool — a relabelling of one value rather than
+a re-modelling of it, the same constraint the one-game length respected. The names are forced by
+width as much as by meaning: four cells in a phone's column leave about seventy pixels each, or
+roughly seven characters, so nothing on that row can be as long as "Duplicate".
+
+**Scoring is matchpoints, and that overturned the entry above about `impsFor`.** A replay compares
+two runs, so a board can only say a *margin* and the argument is about how to scale one. A field of
+eight says *where you came*. Compressing eight real results into a datum and taking a difference from
+it throws the distribution away and then needs a concave scale to undo the damage. So a board is two
+matchpoints for every result beaten and one for every tie, as a percentage; the session is the **mean
+of its ranked boards** rather than a total, so a board whose field has not come back is not quietly
+dragging the figure down. The points-or-IMPs setting governs Replay alone.
+
+**A percentage rather than a count of results beaten, because fields differ in size.** Boards fill
+unevenly — one three people have played holds more results than an untouched one — and a count is not
+comparable across two boards where a percentage is. `test/field.test.ts` pins exactly that.
+
+**The bot's run-to-run variation started as a defect and became the feature, which is the most useful
+reversal in this whole thread.** Generating a board's yardstick as a *single figure* made the spread
+across runs error: `bench/field.ts` measured a board where 4♥ makes on some runs and fails on others
+swinging +100 to +520, which would have sat permanently in a number everybody is measured against.
+Ranked instead, those eight outcomes **are** the field and the spread is the board saying the contract
+is on a knife edge. **The awkward case inverted with it**: a board whose runs all agree — 4 of 12
+measured — now gives a traveller with no resolution, where any result either beats everything or loses
+to everything. Kept anyway. A hand where solid play always reaches the same contract for the same
+tricks is a *flat board*, which is a real thing in duplicate, and filtering them out would bias the
+corpus toward hands with something in them.
+
+**Along the way an arm was run to make the runs agree, and it says the opposite.** The hypothesis was
+that the disagreement was bid-search sampling error waiting to be averaged down, so the search was
+pinned to its sample count and the count quadrupled. Over the same 12 boards × 8 runs:
+
+| | 25 samples | 100 samples |
+| --- | --- | --- |
+| boards whose runs all scored alike | 4 of 12 | **3 of 12** |
+| mean spread across runs | 101 points | **114 points** |
+| cost of a run | 7.9s | **26.5s** |
+
+Four times the sampling, three and a half times the cost, and *more* variation. Whatever makes the
+bidder say 2♠ on one run and 3♠ on the next is not short of samples. It also settles the generator's
+configuration by cost alone: eight runs across 200 seeds is about 3.5 hours at 25 samples and roughly
+12 at 100.
+
+**The corpus is generated by `bench/field.ts generate <seeds> <runs>`, and one deal fills both of a
+stock's boards.** A board is a seed *and one side of it*; a single run scores both seats, so the run
+played with `starter: 0` gives the starter-0 board seat 0's score and the starter-1 board seat 1's.
+**The second board's entry has to be turned round and that is the trap**: a person playing the
+starter-1 board sits in seat 0 and draws *second*, which is the seat the generated deal called 1 — so
+its declarer, tricks and score are read with the seats exchanged. Stored as they came, every
+second-stream board in the corpus would name the wrong declarer and credit the wrong side.
+
+**Human results displace the computer's, oldest first, and "oldest" is unbiased rather than
+arbitrary.** Choosing which machine run to drop looks like it needs care — drop the median and the
+field widens, drop an extreme and it narrows — but the generated runs are **exchangeable by
+construction**: they differ only in a derived seed and nothing distinguishes them. So oldest is
+exactly as unbiased as a coin flip and is deterministic where a coin flip is not. Once they are gone
+nothing is retired: people are not dropped to preserve a shape that existed for the machine's benefit.
+
+**Three kinds of result sit on a board and the traveller says which** — computer against computer,
+human against computer, human against human. They are not the same evidence: a score made across the
+table from a person was shaped by that person where a solo one was made against the opposition
+everybody else faced. All three count. Derived rather than stored, because they already are: a
+generated row has no account and a table result is one recorded with an opponent
+(`0014_field_opponent.sql`, where **null means the computer rather than "unknown"** — every row
+written before that column existed was solo play).
+
+**A board's field is withheld until the board has been played, and it is enforced server-side.** It
+names the contract and says how it went, which is the largest hint anybody could be handed about a
+deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told
+a player something. `test/field.test.ts` checks it as **not asking the second question at all** rather
+than as a null return — a version that fetched the rows and then declined to send them would pass a
+weaker test and would still have read the answer. Checked by reverting the gate.
+
+**Verified against a real `wrangler dev`, and that is what found the bug reading the code had not.**
+`fieldBoardsFor` excluded seeds played in *earlier* sessions and nothing stopped one fetch handing
+over **both ends of the same stock** — three seeds came back as six boards, so a session would have
+dealt a board and then its mirror image, the second played knowing every card. Fixed with a
+`ROW_NUMBER() OVER (PARTITION BY seed)`.
+
+**Within a seed the *shallower* stream wins, and the obvious choice starves the other permanently.**
+Taking the deeper side means whoever meets the seed plays it, which excludes the seed from them
+entirely, and the next player faces the same choice and makes the same one — so one stream of every
+stock would never be played by anybody.
+
+The rest of the probe: 404 before playing, 201 on the report, a generated run retired **through the
+route** rather than through hand-written SQL, and each player's own result excluded from what they
+are shown — checked from both sides at once, with Ada seeing Computer 240 and Noah 170 while Noah saw
+Computer 240 and Ada 420.
+
+**Two local-D1 facts that cost an hour and do not announce themselves.** Foreign keys **are** enforced
+in local D1. And `wrangler d1 execute --file` does **not** reliably apply statements in the order they
+are written — a results insert referencing a board created higher in the same file fails on a foreign
+key, while the identical statements run separately succeed. The generator therefore writes two files
+and prints the two commands in order.
+
+**Two bugs the engine's own tests found rather than review.** `fieldMarginOf` multiplied by
+`Math.sign` on top of `impsFor`, which already carries the sign, so a board lost by 500 came back as
+**+11 IMPs** — dead since the move to matchpoints, but the shape is worth keeping: a redundant guard
+that is actually a double negation. And a board was committed when the *next* one was dealt, copying
+the session's arrangement — which meant the **last** board of a session was never committed, so its
+field could never attach and it was the one board that could never be ranked. The commit moved onto
+the action that completes the deal.
+
+**Still open, and the first one is a correctness gap rather than a preference.** The generator pins
+the bid search to its sample count with no deadline, so an entry is reproducible; the bot you play
+carries Championship's `searchBudgetMs: 250`. **Those are not the same opponent**, and §1.8a's central
+rule is that they are. Four shapes were costed and none is free: both sides on the shipped deadline
+makes the corpus unreproducible and set by whichever machine generated it (and at ~7ms a solve here
+against 2.6ms on a phone, *this* machine is the slow one); both sides pinned costs what `bidTiming.ts`
+already measured, median 956ms and p90 3,286ms a call, because the cost is hand shape rather than
+hardware; a generous finite budget binds on more than one call in ten and so is reproducible only on
+the easy hands; turning the search off is worth about 108 rating points the wrong way. The remaining
+candidate is a **low** pinned count — eight samples over the two or three strains in contention —
+which is bounded without a deadline and is plausibly close to what a phone completes today, since the
+shipped bidder does not finish its 25 samples on anybody's device. It wants the testing panel's "Time
+a bid search" row run on a real phone before it ships.
+
+**And the head-to-head is specified and not built.** §1.8a makes a field board playable at a table —
+each seat ranked against its own stream's field, the two percentages compared, which is ordinary pairs
+scoring and is what makes two seats holding opposite streams comparable at all. The Durable Object
+cannot deal from the corpus yet, so `queueFormat` still refuses Field: pairing two people for a format
+the server cannot run is worse than reading the preference as "anyone". The comment there says that
+rather than claiming the rules forbid it.
 
 **`game/match.ts` is the abstraction both formats satisfy**, as a tagged union with free functions
 rather than a common base — there is no common base. `MatchSummary` is shaped so almost nothing needs
