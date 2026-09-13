@@ -73,7 +73,7 @@ describe("the session pad", () => {
   it("says which rows were defending, on their own terms", () => {
     pad([
       result("b1", 620, [
-        { ...entry(-100, "Noah", "solo"), contract: { declarer: 1, doubling: "none", level: 3, strain: "N" } },
+        { ...entry(-100, "Noah", "solo"), contract: { declarer: 1, doubling: "none", level: 3, strain: "NT" } },
       ]),
     ]);
     fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
