@@ -290,9 +290,14 @@ function generate(seeds: number, runs: number): void {
     const seed = (base + index * 7919) >>> 0;
     const vulnerable = vulnerableFor(seed);
     for (const starter of [0, 1] as const) {
+      // **Distinct per board, in the order they are made.** Stamping a whole batch
+      // with one timestamp leaves the selector's "oldest first" with nothing to sort
+      // on, so play scatters across the pool instead of working through it — and a
+      // pool played thin is a pool whose boards never gather a field.
       boards.push(
         `('f${seed}-${starter}', ${seed}, ${starter}, ${vulnerable[0] ? 1 : 0}, ` +
-          `${vulnerable[1] ? 1 : 0}, ${LATEST_RELEASE.version}, 'championship', ${now})`,
+          `${vulnerable[1] ? 1 : 0}, ${LATEST_RELEASE.version}, 'championship', ` +
+          `${now + index * 2 + starter})`,
       );
     }
     for (let at = 0; at < runs; at += 1) {

@@ -87,10 +87,23 @@ export async function fieldBoardsFor(
     // Taking the deeper one instead starves the other permanently: whoever meets the
     // seed plays the deep side, which excludes the seed from them entirely, and the
     // next player faces the same choice and makes the same one.
+    //
+    // **Ordered by how many *people* have played it, then by when it was made.**
+    // A plain entry count cannot do the first job and looked as though it could: a
+    // board opens with eight machine runs, and a person joining retires one — so the
+    // count is eight before and eight after, and an ordering on it concentrates
+    // nothing. Counting the human rows is the question actually being asked.
+    //
+    // The second key is what makes a pool build a library rather than spread thin.
+    // With nobody having played anything, every board ties on the first key and the
+    // order is the order they were generated in — so a single player works through
+    // the pool from the front, and the boards behind them are the ones the next
+    // player is offered first.
     `SELECT id, seed, starter, vulnerable_0, vulnerable_1
        FROM (
          SELECT b.id, b.seed, b.starter, b.vulnerable_0, b.vulnerable_1, b.created_at,
                 COUNT(r.id) AS entries,
+                SUM(CASE WHEN r.generated = 0 THEN 1 ELSE 0 END) AS people,
                 ROW_NUMBER() OVER (
                   PARTITION BY b.seed ORDER BY COUNT(r.id) ASC, b.starter ASC
                 ) AS side
@@ -105,7 +118,7 @@ export async function fieldBoardsFor(
           GROUP BY b.id
        )
       WHERE side = 1
-      ORDER BY entries DESC, created_at ASC
+      ORDER BY people DESC, created_at ASC, id ASC
       LIMIT ?`,
   )
     .bind(accountId, count)
