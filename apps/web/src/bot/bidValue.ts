@@ -155,7 +155,7 @@ export function objectiveFor(format: MatchFormat, release: Objective): Objective
   // first clause was right and is the reason this is not simply the equity objective —
   // measured, the single-game cell prices a mirror part-score at +0.95 where it is
   // worth **nothing** in the first half and +0.46 in the second.
-  // **A field board is a duplicate board and prices identically**, which is worth
+  // **A Doop board is a duplicate board and prices identically**, which is worth
   // stating because the temptation is to give a new format a new objective. It has no
   // rubber, vulnerability is prescribed, and the deal settles where it is played —
   // the three facts `"duplicate"` exists for. What differs is only how the *result* is

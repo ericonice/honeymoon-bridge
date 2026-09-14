@@ -56,7 +56,7 @@ export function deleteAccountUrl(): string {
 }
 
 /**
- * The corpus a field session is played on — §1.8a.
+ * The corpus a Doop session is played on — §1.8a.
  *
  * Three routes rather than one, and the split is the format's central rule: boards
  * go out without their history, because a board's recorded results name the contract

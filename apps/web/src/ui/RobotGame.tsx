@@ -28,7 +28,7 @@ export interface RobotGameProps {
 /**
  * A match against the computer, running entirely in this browser.
  *
- * **Two components because a field session has to be fetched before it can start.**
+ * **Two components because a Doop session has to be fetched before it can start.**
  * Its boards come from the corpus rather than from a seed — §1.8a — and a hook
  * cannot decline to run, so `useLocalSession` is kept out of the mount that is still
  * waiting. Every other format skips the wait entirely: `boardsNeeded` is false and
@@ -36,7 +36,7 @@ export interface RobotGameProps {
  */
 export function RobotGame(props: RobotGameProps): React.JSX.Element {
   // Read once a mount, like every other setting this screen resolves. A resumed
-  // match brings its own boards, so only a *new* field session has to wait.
+  // match brings its own boards, so only a *new* Doop session has to wait.
   const [needed] = useState(() => preferredFormat() === "field" && loadRobotMatch() === null);
   const [boards, setBoards] = useState<readonly FieldBoard[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -80,7 +80,7 @@ export function RobotGame(props: RobotGameProps): React.JSX.Element {
   }, [needed]);
 
   if (needed && failed) {
-    // **Said rather than swapped for a rubber.** The row says Field; starting
+    // **Said rather than swapped for a rubber.** The row says Doop; starting
     // something else would be the bug that shipped Mirror broken, where the choice
     // and the game disagreed with nothing erroring anywhere.
     //
@@ -90,7 +90,7 @@ export function RobotGame(props: RobotGameProps): React.JSX.Element {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
         <p className="text-white/70">
-          No boards to play. A field session is played on boards the server already
+          No boards to play. A Doop session is played on boards the server already
           holds results for, and there are none to be had — either every one has been
           played on this account, or the server cannot be reached.
         </p>

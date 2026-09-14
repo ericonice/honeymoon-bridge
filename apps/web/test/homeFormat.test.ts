@@ -68,7 +68,7 @@ describe("choosing what to play, on Home", () => {
 
     expect(action("Rubber")).toBeTruthy();
     expect(action("Replay")).toBeTruthy();
-    expect(action("Field")).toBeTruthy();
+    expect(action("Doop")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "One game" })).toBeNull();
   });
 
@@ -82,7 +82,7 @@ describe("choosing what to play, on Home", () => {
     const changed = vi.fn();
     show("rubber", changed);
 
-    action("Field").click();
+    action("Doop").click();
     expect(changed).toHaveBeenCalledWith("field");
   });
 
@@ -92,7 +92,7 @@ describe("choosing what to play, on Home", () => {
 
     expect(action("Rubber").getAttribute("aria-pressed")).toBe("true");
     expect(action("Replay").getAttribute("aria-pressed")).toBe("false");
-    expect(action("Field").getAttribute("aria-pressed")).toBe("false");
+    expect(action("Doop").getAttribute("aria-pressed")).toBe("false");
   });
 
   it("marks the chosen one, so the row says what it is going to do", () => {
@@ -201,15 +201,15 @@ describe("how long a session runs", () => {
       screen.getByRole("button", { name }).parentElement;
 
     expect(groupOf("Rubber")).toBe(groupOf("Mirror"));
-    expect(groupOf("Replay")).toBe(groupOf("Field"));
+    expect(groupOf("Replay")).toBe(groupOf("Doop"));
     expect(groupOf("Rubber")).not.toBe(groupOf("Replay"));
   });
 
   /**
    * **The grouping is real, not drawn** — which is the reason this shape was chosen
    * over four others that looked the same. A `fieldset` with a `legend` is a named
-   * group of related controls, so a screen reader announces "Duplicate, Field,
-   * selected" where two styled `div`s would announce only "Field, selected".
+   * group of related controls, so a screen reader announces "Duplicate, Doop,
+   * selected" where two styled `div`s would announce only "Doop, selected".
    */
   it("names each group to a screen reader, not only to the eye", () => {
     show("rubber");
@@ -256,7 +256,7 @@ describe("how long a session runs", () => {
 
     cleanup();
     show("duplicate");
-    // Third of four now that Field has joined the row, so it points at neither edge.
+    // Third of four now that Doop has joined the row, so it points at neither edge.
     expect(line("A session of").className).toContain("text-center");
   });
 

@@ -20,7 +20,7 @@ import { fieldBoardsUrl, fieldReferenceUrl, fieldResultUrl } from "./serverUrl.j
 /**
  * The fallback length, for a caller that has no preference to hand.
  *
- * The real answer is the stepper under the format row — a field session is as long
+ * The real answer is the stepper under the format row — a Doop session is as long
  * as the row says, in boards, and §1.8a spends one deal a board where §1.8 spends
  * two. The server keeps its own ceiling regardless.
  */
@@ -82,7 +82,9 @@ export function reportFieldResult(options: {
   readonly tricks: Pair<number>;
 }): void {
   enqueue({
-    kind: "Field board",
+    // Display only — the outbox prints it in Settings and keys on nothing here, so a
+    // report queued under the old name still drains. It just reads as "Field board".
+    kind: "Doop board",
     url: fieldResultUrl(),
     // The only report here that needs one: boards are chosen by what this account
     // has already met, so an anonymous result would have nothing to be excluded from.

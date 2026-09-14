@@ -276,7 +276,7 @@ export function DealComplete({
     // that used to keep a mirror out too, until it was measured at +17 ± 34
     // rating points and the objection turned out to be about a quantity that
     // is zero. A mirror is rated; "Same boards back" is not.
-    // **Null for a field session as well, and for a stronger reason than `repeated`.**
+    // **Null for a Doop session as well, and for a stronger reason than `repeated`.**
     // §1.8a leaves rating open, so the server excludes the format from the walk
     // entirely — a figure here would be a number that never arrives. Worse, a
     // session's stored points are a *matchpoint percentage and its complement*

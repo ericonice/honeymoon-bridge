@@ -114,7 +114,7 @@ export function setPreferredFormat(format: MatchFormat): void {
  */
 export function queueFormat(): MatchFormat | null {
   const stored = readStored(QUEUE_FORMAT_KEY);
-  // Field is here now that a table can deal one — §1.8a's head-to-head, each seat
+  // Doop is here now that a table can deal one — §1.8a's head-to-head, each seat
   // ranked against its own stream's field and the two percentages compared. It is
   // last in the server's precedence, so in practice it still takes both seats.
   return stored === "game" ||

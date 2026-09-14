@@ -59,7 +59,7 @@ function ordinal(place: number): string {
 
 /** A signed points figure, with the minus sign that reads as one rather than a hyphen. */
 /**
- * The mean placing across a player's field sessions, or null for a format that has a
+ * The mean placing across a player's Doop sessions, or null for a format that has a
  * points margin to give instead.
  *
  * `pointsFor` is the sum of each session's percentage, so the mean is that over the
@@ -293,7 +293,7 @@ function OpponentLine({
       <span className="flex items-baseline justify-between gap-2">
         <span className="truncate text-[0.7rem] text-white/55">{formatPlural(record.format)}</span>
         <span className="flex shrink-0 items-baseline gap-1.5">
-          {/* **A field session settles in matchpoints, so its figure is a placing.**
+          {/* **A Doop session settles in matchpoints, so its figure is a placing.**
               The stored points are a percentage and its complement, which makes the
               margin beside every other format `2p − 100` — a real number about
               nothing. 58% is what the session actually said. */}
@@ -589,7 +589,7 @@ function combinedOf(group: OpponentGroup): CombinedRecord {
       deals: total.deals + record.deals,
       drawn: total.drawn + record.drawn,
       lost: total.lost + record.lost,
-      // **A field session's points are a percentage and its complement, so they are
+      // **A Doop session's points are a percentage and its complement, so they are
       // not points and cannot be added to any.** Summing them into an opponent's
       // margin mixes two currencies into one figure that describes neither — the
       // same mistake as pooling a rubber with a session, one level down. The

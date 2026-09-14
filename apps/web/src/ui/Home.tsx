@@ -126,7 +126,7 @@ const CELLS = ["rubber", "mirror", "duplicate", "field"] as const;
  *
  * **The split is by how a deal is scored**, which is the honest reason for it rather
  * than the two duplicate formats merely having neighbouring names. Rubber and Mirror
- * settle above and below a line with a race to a game; Replay and Field settle each
+ * settle above and below a line with a race to a game; Replay and Doop settle each
  * board where it is played.
  *
  * **A wider gutter was tried first and read as nothing** on a real phone — four
@@ -156,7 +156,11 @@ function Format({
   // fit in a cell, which is why it is the *group's* name rather than a format's.
   const labels = {
     duplicate: "Replay",
-    field: "Field",
+    // Doop is the name real bridge gives this: a board you play once, scored against
+    // the results already recorded on it. Four characters, so the seven-character cell
+    // budget is not close to binding — see `labels.ts` for why the stored value is
+    // still `"field"`, and `HelpOverlay`'s Doop section for what the word means.
+    field: "Doop",
     mirror: "Mirror",
     rubber: "Rubber",
   } as const;
@@ -170,8 +174,8 @@ function Format({
         /* **A real `fieldset` and `legend`, which is what this actually is.** A named
            group of related controls is the element's own job, so the browser cuts the
            border for the label — no patch behind the notch, which matters on a ground
-           that is a gradient — and a screen reader announces "Duplicate, Field,
-           selected" rather than "Field, selected". Four other shapes were drawn and
+           that is a gradient — and a screen reader announces "Duplicate, Doop,
+           selected" rather than "Doop, selected". Four other shapes were drawn and
            compared; the rest were two anonymous divs that merely looked grouped.
 
            **It costs about eight pixels** against the eighteen a label sitting above
@@ -335,7 +339,7 @@ function FormatNote({
 
   if (format === "field") {
     // **Boards, and every one of them is played.** Sharing the rubber's line here
-    // said "First to 2 games" under Field, which is wrong twice over: a field session
+    // said "First to 2 games" under Doop, which is wrong twice over: a Doop session
     // has no games in it at all, and nothing about it is a race — the length is the
     // number of boards you will meet, not a target somebody reaches first.
     //

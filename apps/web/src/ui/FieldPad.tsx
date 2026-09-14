@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ContractText } from "./CardText.js";
 
 /**
- * The scorepad of a field session: a board at a time, you among everybody else.
+ * The scorepad of a Doop session: a board at a time, you among everybody else.
  *
  * Not a table of boards. §1.8a ranks you against the results recorded on each board,
  * so what a reader needs per board is the **traveller** — every result on it, yours
@@ -263,7 +263,7 @@ function Row({
    * same argument that had the pad name honors in words rather than mark them.
    *
    * It deliberately does not say who they were defending *against*: every entry on a
-   * field board faced the same computer, so that belongs to the board and is said
+   * Doop board faced the same computer, so that belongs to the board and is said
    * once at the top rather than on every row.
    */
   readonly declaredByThem: boolean;

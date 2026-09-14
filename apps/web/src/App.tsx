@@ -82,10 +82,10 @@ export type Screen =
 /**
  * What an account is needed for here, and where to come back to afterwards.
  *
- * §3.7 gates playing a person, and a **field session** needs one for a different
+ * §3.7 gates playing a person, and a **Doop session** needs one for a different
  * reason that lands in the same place: §1.8a chooses boards by which ones *you*
  * have already met and files your result against the field, so there is no answer
- * to give a device that is nobody. Without this, choosing Field while signed out
+ * to give a device that is nobody. Without this, choosing Doop while signed out
  * reached the game and then said "no boards to play", which is true and useless —
  * the app knew perfectly well what was wrong and declined to say so.
  *

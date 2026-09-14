@@ -179,7 +179,7 @@ export interface StartingPoint {
  * time in.
  */
 /**
- * The rung and release a field session is played at, whatever Settings says.
+ * The rung and release a Doop session is played at, whatever Settings says.
  *
  * §1.8a: every board is played against the same computer the corpus was generated
  * by, because a score says as much about who was sitting opposite as about who made
@@ -208,10 +208,10 @@ export function startingPoint(fieldBoards: readonly FieldBoard[] = []): Starting
     }
   }
 
-  // A field session has no boards of its own to deal — they come from the corpus,
+  // A Doop session has no boards of its own to deal — they come from the corpus,
   // and `RobotGame` fetches them before this hook is mounted. Arriving here with
   // none means that gate failed, and a rubber is the least-wrong thing left: the
-  // row will say Field and the game will not be one, which is the mirror bug in
+  // row will say Doop and the game will not be one, which is the mirror bug in
   // miniature, but it is visible where a throw would be a blank screen.
   const asked = preferredFormat();
   const format = asked === "field" && fieldBoards.length === 0 ? "rubber" : asked;
@@ -261,7 +261,7 @@ export function startingPoint(fieldBoards: readonly FieldBoard[] = []): Starting
  */
 export interface LocalSessionOptions {
   /**
-   * The boards a field session is to be played on — §1.8a.
+   * The boards a Doop session is to be played on — §1.8a.
    *
    * Supplied rather than dealt, because a board is one the corpus already holds
    * results for. `RobotGame` fetches them before this hook is mounted, which is why
@@ -304,7 +304,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
   // Resolved once, at mount — a saved rubber restored, or a fresh one dealt —
   // so everything below reads one settled answer rather than separately
   // guessing whether this is a resume. See `startingPoint`'s own doc.
-  // Boards only matter on the mount that *starts* a field session: a saved one
+  // Boards only matter on the mount that *starts* a Doop session: a saved one
   // carries its own, and `startingPoint` prefers the save.
   const [initial] = useState(() => startingPoint(options.fieldBoards));
   // Read once, when the match starts, for the same reason the format is: an
@@ -655,7 +655,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
     // not before — `standing` was a rubber, and a session has none — and sending a
     // fresh one would have put a standing that never existed into stored data, which
     // is how a bench comes to report a figure describing neither of two games.
-    // A field board's result is filed the moment its deal ends, and the figure it
+    // A Doop board's result is filed the moment its deal ends, and the figure it
     // will be compared against is asked for separately — §1.8a. Through the outbox,
     // because a board somebody played must not depend on the network at the moment
     // it ended; and the report goes out even for a passed-out board, which is a real

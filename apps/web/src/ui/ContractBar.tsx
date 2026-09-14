@@ -227,7 +227,7 @@ function signed(value: number): string {
  * session.
  */
 /**
- * A field session's standing: where you are placing, and nothing else most of the time.
+ * A Doop session's standing: where you are placing, and nothing else most of the time.
  *
  * **The count of ranked boards is only drawn when it is not the whole story.** It read
  * `Ranked 1/1` next to `Placing 59%` — two figures side by side, one of them a real
