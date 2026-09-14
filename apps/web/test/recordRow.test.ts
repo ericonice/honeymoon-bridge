@@ -243,6 +243,41 @@ test("an opponent played in one format is still a single line", () => {
  * the honest shape for "whichever formats have been played", and it is what makes
  * a fourth format need no change here at all.
  */
+/**
+ * A field session settles in matchpoints, so its row shows a **placing** rather than
+ * a points margin. The stored points are a percentage and its complement, which makes
+ * the ordinary `for − against` come out as `2p − 100` — a real number about nothing.
+ */
+test("a field session shows how it placed, not a points margin", () => {
+  robot = [
+    record(),
+    record({ deals: 8, format: "field", lost: 0, matches: [], pointsAgainst: 42, pointsFor: 58, won: 1 }),
+  ];
+  show();
+  tap();
+
+  const text = rowText();
+  expect(text).toContain("58%");
+  // `for − against` on a percentage and its complement is `2p − 100`, a real number
+  // about nothing. It must not appear.
+  expect(text).not.toContain("+16");
+});
+
+/**
+ * And it must not be *added* to one either. An opponent's margin is a points total,
+ * and a session's stored points are not points — pooling the two describes neither.
+ */
+test("a field session is left out of an opponent's points margin", () => {
+  robot = [
+    record({ lost: 0, pointsAgainst: 0, pointsFor: 500, won: 1 }),
+    record({ format: "field", lost: 0, matches: [], pointsAgainst: 30, pointsFor: 70, won: 1 }),
+  ];
+  show();
+  tap();
+
+  expect(lines()[0]).toContain("+500");
+});
+
 test("a third format lands on the list rather than falling off it", () => {
   robot = [
     record(),

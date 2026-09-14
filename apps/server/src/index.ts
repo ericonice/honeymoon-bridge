@@ -25,6 +25,7 @@ import {
   recordFieldResult,
 } from "./field.js";
 import { handLogsFor, recordHandLog } from "./handLogs.js";
+import { isMatchFormat, storedFormat } from "./matchFormatRead.js";
 import type { HandLog } from "./handLogs.js";
 import { botAnchors } from "./ratings.js";
 import {
@@ -207,10 +208,7 @@ function robotRubberFrom(body: unknown): RobotRubber | null {
     // terms as an unrecognised difficulty rung: keep what the client said, so
     // `ratings.ts` can come out right by itself once it learns what to do with
     // it, rather than flattening it to something it is not.
-    format:
-      value.format === "game" || value.format === "duplicate" || value.format === "mirror"
-        ? value.format
-        : "rubber",
+    format: storedFormat(value.format),
     nickname: nickname === "" ? "Player" : nickname,
     points,
     pointsAgainst,
@@ -673,9 +671,7 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
     // load-bearing rather than a label: `objectiveFor` reads it to decide what the
     // bidder was pricing in, and a session's call replayed as a rubber's is a
     // different decision with the same auction in front of it.
-    ...(value.format === "duplicate" || value.format === "game" || value.format === "mirror"
-      ? { format: value.format }
-      : {}),
+    ...(isMatchFormat(value.format) ? { format: value.format } : {}),
     ...(rules === undefined ? {} : { rules }),
     ...(seed === null ? {} : { seed }),
     ...(standing === undefined ? {} : { standing }),
