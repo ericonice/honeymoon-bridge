@@ -44,11 +44,13 @@ export function formatPlural(format: MatchFormat): string {
 }
 
 const FORMAT_NAMES: Record<MatchFormat, { readonly many: string; readonly one: string }> = {
-  duplicate: { many: "replay sessions", one: "Replay" },
-  // Named for what it is measured against rather than for the mechanic, because the
-  // mechanic is the one it shares with Replay — see §3.6a, where the two sit as a
-  // pair on the row and the word "duplicate" is carried by the line beneath them.
-  field: { many: "field sessions", one: "Field" },
+  // **Both duplicate formats name the family here, where the row does not.**
+  // On Home the two sit inside a box captioned Duplicate, so the cells say only what
+  // distinguishes them. A record has no such box: a row reading "field sessions" next
+  // to one reading "rubbers" gives a reader no way to know the first two are the same
+  // family, and these names are read far more often than the cells are.
+  duplicate: { many: "duplicate – replay", one: "Duplicate – Replay" },
+  field: { many: "duplicate – field", one: "Duplicate – Field" },
   game: { many: "single games", one: "Single game" },
   mirror: { many: "mirror matches", one: "Mirror" },
   rubber: { many: "rubbers", one: "Rubber" },

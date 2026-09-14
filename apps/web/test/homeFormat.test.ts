@@ -538,7 +538,7 @@ describe("what Find says it is looking for", () => {
     setQueueFormat("duplicate");
     show("rubber");
 
-    expect(action("Find").textContent).toContain("only replay");
+    expect(action("Find").textContent).toContain("only duplicate – replay");
     expect(action("Find").textContent).not.toContain("whoever is free");
   });
 
