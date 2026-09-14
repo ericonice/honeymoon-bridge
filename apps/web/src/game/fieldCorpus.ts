@@ -76,7 +76,18 @@ export async function fetchFieldBoards(count = FIELD_BOARDS): Promise<readonly F
  */
 export function reportFieldResult(options: {
   readonly board: FieldBoard;
+  /**
+   * The computer that sat opposite, and the rung it played at.
+   *
+   * §1.8a fixes the opposition, and `localSession` pins a Doop session to
+   * `FIELD_RUNG` and `LATEST_RELEASE` to keep it fixed — but **`LATEST_RELEASE` is a
+   * moving target**, so shipping a v4 changes the opposition for everybody. Sent
+   * rather than assumed by the server for that reason: the constant describes what
+   * this build plays, and the row has to describe what that board was played against.
+   */
+  readonly botVersion: number;
   readonly contract: Contract | null;
+  readonly difficulty: string;
   readonly me: PlayerId;
   readonly points: Pair<number>;
   readonly tricks: Pair<number>;
@@ -91,7 +102,9 @@ export function reportFieldResult(options: {
     withSession: true,
     body: JSON.stringify({
       boardId: options.board.ids[options.me]!,
+      botVersion: options.botVersion,
       contract: options.contract,
+      difficulty: options.difficulty,
       // The **net** from this seat, not its own total — see `netFor`. A defender's
       // own total is nought whether the contract scraped home or made an overtrick,
       // so filing that would put a score in the corpus that cannot be ranked.

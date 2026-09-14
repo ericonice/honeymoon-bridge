@@ -42,7 +42,19 @@ export interface FieldEntryRow {
 /** A result being recorded, whether the computer's own or a person's. */
 export interface FieldResultReport {
   readonly boardId: string;
+  /**
+   * The rung the computer opposite was playing at, and its release.
+   *
+   * Absent for a board played at a table, where a person sat opposite and there is no
+   * computer to have a version — see `0017_field_result_opposition` for why that is
+   * unambiguous rather than a second meaning for null. Optional for the reason
+   * `botVersion` is optional on a match report: the service worker keeps old builds in
+   * circulation, and a board somebody played is worth recording whether or not their
+   * client knew the question.
+   */
+  readonly botVersion?: number;
   readonly contract: Contract | null;
+  readonly difficulty?: string;
   /**
    * The account that sat opposite, for a board played at a table. Absent for solo
    * play, which is what makes the two distinguishable — see `0014_field_opponent`.
@@ -289,8 +301,8 @@ async function insertFieldResult(
     `INSERT INTO field_results
        (id, board_id, played_at, account_id, opponent_account_id, generated, replayed,
         points, declarer, contract_level, contract_strain, contract_doubling,
-        tricks_0, tricks_1)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        tricks_0, tricks_1, bot_version, difficulty)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       crypto.randomUUID(),
@@ -307,6 +319,12 @@ async function insertFieldResult(
       report.contract?.doubling ?? null,
       report.tricks[0],
       report.tricks[1],
+      // **Stored raw rather than validated against a known list**, the same choice
+      // `results.difficulty` makes: a client can be deployed ahead of the server, and
+      // a rung stored as it was sent comes out right by itself once the server learns
+      // the name, where dropping it to null would lose it permanently.
+      report.botVersion ?? null,
+      report.difficulty ?? null,
     )
     .run();
 }
@@ -423,6 +441,16 @@ export function fieldResultFrom(body: unknown): FieldResultReport | null {
     contract,
     points: one.points,
     tricks: [tricks[0] as number, tricks[1] as number],
+    // Spread rather than assigned, because `exactOptionalPropertyTypes` distinguishes
+    // an absent field from one holding undefined — and absent is what an older client
+    // sends. Anything malformed is dropped rather than refusing the whole report: the
+    // score is the thing that must not be lost, and this is provenance beside it.
+    ...(typeof one.botVersion === "number" && Number.isFinite(one.botVersion)
+      ? { botVersion: one.botVersion }
+      : {}),
+    ...(typeof one.difficulty === "string" && one.difficulty.length > 0
+      ? { difficulty: one.difficulty }
+      : {}),
   };
 }
 

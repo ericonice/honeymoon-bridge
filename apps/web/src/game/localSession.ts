@@ -668,7 +668,12 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
         lastFieldBoard.current = played.board.ids[HUMAN];
         reportFieldResult({
           board: played.board,
+          // The release and rung that actually played, taken from the same two values
+          // the bot was built from rather than re-read from Settings — a forced rung
+          // recorded as the chosen one would describe a match nobody had.
+          botVersion: release.version,
           contract: played.contract,
+          difficulty: rung,
           me: HUMAN,
           points: played.points,
           tricks: played.tricks,

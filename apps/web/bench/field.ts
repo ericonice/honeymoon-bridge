@@ -348,7 +348,11 @@ const NUMBER_BOARDS =
   "    WHERE other.seed <= field_boards.seed);\n";
 const RESULT_COLUMNS =
   "id, board_id, played_at, account_id, opponent_account_id, generated, points, " +
-  "declarer, contract_level, contract_strain, contract_doubling, tricks_0, tricks_1";
+  "declarer, contract_level, contract_strain, contract_doubling, tricks_0, tricks_1, " +
+  // **On the result as well as on the board**, since a board records what generated
+  // it and a result records what *played* it — and once people start filing results
+  // those stop being the same question. See `0017_field_result_opposition`.
+  "bot_version, difficulty";
 
 /**
  * One result row, read from the side of the stock this board is.
@@ -374,7 +378,8 @@ function rowFor(boardId: string, run: Run, starter: 0 | 1, at: number, playedAt:
   const net = run.points[mine] - run.points[theirs];
   return (
     `('${boardId}-r${at}', '${boardId}', ${playedAt}, NULL, NULL, 1, ${net}, ` +
-    `${declarer}, ${level}, ${strain}, ${doubling}, ${run.tricks[mine]}, ${run.tricks[theirs]})`
+    `${declarer}, ${level}, ${strain}, ${doubling}, ${run.tricks[mine]}, ${run.tricks[theirs]}, ` +
+    `${LATEST_RELEASE.version}, 'championship')`
   );
 }
 

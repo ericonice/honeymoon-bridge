@@ -99,6 +99,59 @@ describe("reading a reported field result", () => {
       expect(fieldResultFrom(body)).toBeNull();
     }
   });
+
+  /**
+   * §1.8a fixes the opposition, and a result that does not say what it was played
+   * against cannot be held to that. The pin in `localSession` is to `LATEST_RELEASE`
+   * rather than to a particular version, so a v4 would move it for everybody.
+   */
+  it("keeps the computer that was sitting opposite", () => {
+    const parsed = fieldResultFrom({
+      boardId: "b1",
+      botVersion: 3,
+      contract: null,
+      difficulty: "championship",
+      points: 0,
+      tricks: [7, 6],
+    });
+
+    expect(parsed?.botVersion).toBe(3);
+    expect(parsed?.difficulty).toBe("championship");
+  });
+
+  /**
+   * **Absent rather than refused**, for the reason `botVersion` is optional on a match
+   * report: the service worker keeps old builds in circulation, and a board somebody
+   * played is worth recording whether or not their client knew the question. The score
+   * is the thing that must not be lost; this is provenance beside it.
+   *
+   * Asserted as the key being *absent*, not as undefined — `exactOptionalPropertyTypes`
+   * distinguishes them and the insert binds `?? null`, so a key present and undefined
+   * would store the same thing but means something different in the type.
+   */
+  it("takes a report from a client too old to name the opposition", () => {
+    const parsed = fieldResultFrom({ boardId: "b1", contract: null, points: 0, tricks: [7, 6] });
+
+    expect(parsed).not.toBeNull();
+    expect("botVersion" in parsed!).toBe(false);
+    expect("difficulty" in parsed!).toBe(false);
+  });
+
+  /** Dropped rather than refused, on the same reasoning: never lose the score over it. */
+  it("drops an opposition it cannot read and keeps the result", () => {
+    const parsed = fieldResultFrom({
+      boardId: "b1",
+      botVersion: "three",
+      contract: null,
+      difficulty: "",
+      points: 140,
+      tricks: [9, 4],
+    });
+
+    expect(parsed?.points).toBe(140);
+    expect("botVersion" in parsed!).toBe(false);
+    expect("difficulty" in parsed!).toBe(false);
+  });
 });
 
 describe("the field a board carries", () => {
