@@ -446,8 +446,12 @@ function corpus(): ReadonlyMap<string, CorpusBoard> {
   for (const file of readdirSync(".").filter((one) => /^field.*-results\.sql$/.test(one))) {
     for (const row of tuples(readFileSync(file, "utf8"))) {
       const board = boards.get(unquote(row[1]!));
-      if (board !== undefined) {
-        board.entries.push(Number(row[6]));
+      const points = Number(row[6]);
+      // A file still being written can end mid-line, and `Number` of a half-tuple is
+      // `NaN` — which would not throw, it would quietly poison one board's field and
+      // every percentage computed against it.
+      if (board !== undefined && Number.isFinite(points)) {
+        board.entries.push(points);
       }
     }
   }
