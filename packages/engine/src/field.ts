@@ -242,8 +242,12 @@ export function withField(
 }
 
 /**
- * Matchpoints: two for every result beaten, one for every result tied, as a
- * percentage of the most that were available.
+ * Matchpoints: **the share of the field you beat, counting a tie as half** — which is
+ * the sentence to hold on to. Two points a result beaten and one a tie is the same
+ * arithmetic and is how it is computed below, but the doubling is bookkeeping from
+ * the paper era and reads as a second, larger field: against eight results the most
+ * available is *sixteen*, which invites the question "sixteen of what". Beating six
+ * of eight and tying one is 6.5 of 8, and that is 81% either way.
  *
  * The whole of §1.8a's scoring. A percentage rather than a raw count because field
  * sizes vary — a board three people have played holds more results than an untouched
