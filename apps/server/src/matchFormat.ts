@@ -65,7 +65,14 @@ export interface Agreed {
  * rubber's own length, so the wrong end of this is one player in one pairing rather
  * than a category of them.
  */
-const PRECEDENCE: readonly MatchFormat[] = ["mirror", "rubber", "game", "duplicate"];
+/**
+ * **Field is last**, below duplicate, and the ordering is by how far each is from the
+ * game everyone else came for. A field board has already been played by other people,
+ * so being handed one unasked means meeting a stock somebody may remember — a worse
+ * thing to be dropped into than a session of fresh ones. Nothing outranks a seat that
+ * did not ask for it, so in practice it still takes both.
+ */
+const PRECEDENCE: readonly MatchFormat[] = ["mirror", "rubber", "game", "duplicate", "field"];
 
 /** A rubber and a single game are one format at two lengths, and resolve as one. */
 function isRubberish(format: MatchFormat): boolean {

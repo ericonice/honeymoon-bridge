@@ -26,6 +26,7 @@ import { applyDealAchievements, applyRubberAchievements } from "./achievements.j
 import { accountFor, verifySession } from "./auth.js";
 import { dealSeed } from "./codes.js";
 import type { Env } from "./env.js";
+import { tableBoardsFor } from "./field.js";
 import { formatFor } from "./matchFormat.js";
 import { DRAWN, recordRubber } from "./results.js";
 import type { SeatedAccount } from "./seating.js";
@@ -152,12 +153,38 @@ type StoredOnDisk = Omit<Stored, "match"> & {
  * deal's stock order; for a session it is also every board nobody has played yet,
  * which is why `snapshotFor` sends the standing's summary and never its state.
  */
-function startingMatch(seats: readonly [SeatRecord | null, SeatRecord | null]): MatchState | null {
+async function startingMatch(
+  env: Env,
+  seats: readonly [SeatRecord | null, SeatRecord | null],
+): Promise<MatchState | null> {
   const [first, second] = seats;
   if (first === null || second === null) {
     return null;
   }
   const agreed = formatFor(first, second);
+
+  if (agreed.format === "field") {
+    // **A table picks a *stock*, not a board.** §1.8a ranks each seat against its own
+    // stream's field, and the two streams are separate rows with separate histories —
+    // so a seed is only playable here if *neither* side has been met by *either*
+    // player. Solo play needs no such rule: it takes one side and retires the other.
+    const boards = await tableBoardsFor(env, agreed.boards, [first.accountId, second.accountId]);
+    // Nothing left that both seats are new to. A rubber rather than a short match,
+    // because the alternative at a table is offering somebody a stock their opponent
+    // has already seen, which is worse than playing a different game.
+    if (boards.length === 0) {
+      return startMatch({ firstBoard: dealSeed(), format: "rubber", seed: dealSeed(), starter: 0 });
+    }
+    return startMatch({
+      fieldBoards: boards,
+      firstBoard: dealSeed(),
+      format: "field",
+      me: 0,
+      seed: dealSeed(),
+      starter: 0,
+    });
+  }
+
   return startMatch({
     ...(agreed.format === "duplicate"
       ? { boards: agreed.boards, schedule: agreed.order, scoring: agreed.scoring }
@@ -384,7 +411,7 @@ export class Table extends DurableObject<Env> {
     // Both seats filled and nothing dealt yet: start the match. Every seed is
     // generated here and never leaves — one reconstructs a whole deal's stock order,
     // and for a session that is true of boards nobody has played yet.
-    const match = stored.match ?? startingMatch(seats);
+    const match = stored.match ?? (await startingMatch(this.env, seats));
 
     await this.#save({ ...stored, match, seats });
     await this.ctx.storage.deleteAlarm();

@@ -460,3 +460,48 @@ function contractFrom(value: unknown): Contract | null | undefined {
 export async function scrubFieldResults(env: Env, accountId: string): Promise<void> {
   await env.DB.prepare(`DELETE FROM field_results WHERE account_id = ?`).bind(accountId).run();
 }
+
+/**
+ * Stocks a table can play: those **neither seat has met on either side** — §1.8a.
+ *
+ * Solo play picks a board and retires its twin for that player. A table cannot: the
+ * two seats hold opposite sides of the same stock at the same time, so a seed is only
+ * fair here if all four combinations are new — each player against each side.
+ *
+ * Returned as the pair of boards per seed, in board order, so the table deals seat 0
+ * the first-draw side and seat 1 the other. Fewer than asked for means the pool has
+ * run out of stocks new to both, which the caller decides what to do about — and the
+ * answer is not twins: a twin at a table means one player knows the cards and the
+ * other does not, which is worse than a shorter match.
+ */
+export async function tableBoardsFor(
+  env: Env,
+  count: number,
+  accounts: readonly (string | null)[],
+): Promise<readonly FieldBoardRow[]> {
+  const ids = accounts.filter((one): one is string => one !== null);
+  if (ids.length === 0) {
+    return [];
+  }
+  const holes = ids.map(() => "?").join(", ");
+  const { results } = await env.DB.prepare(
+    `SELECT b.id, b.seed, b.starter, b.vulnerable_0, b.vulnerable_1
+       FROM field_boards b
+      WHERE b.seed IN (
+              SELECT seed FROM field_boards
+               WHERE seed NOT IN (
+                       SELECT played.seed
+                         FROM field_results theirs
+                         JOIN field_boards played ON played.id = theirs.board_id
+                        WHERE theirs.account_id IN (${holes})
+                     )
+               GROUP BY seed
+               ORDER BY MIN(number) ASC
+               LIMIT ?
+            )
+      ORDER BY b.number ASC, b.starter ASC`,
+  )
+    .bind(...ids, count)
+    .all<BoardColumns>();
+  return results.map(asBoard);
+}

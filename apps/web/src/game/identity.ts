@@ -114,13 +114,14 @@ export function setPreferredFormat(format: MatchFormat): void {
  */
 export function queueFormat(): MatchFormat | null {
   const stored = readStored(QUEUE_FORMAT_KEY);
-  // **`"field"` is missing because the table cannot run one yet, not because the
-  // rules forbid it.** §1.8a makes a field session playable head to head — each seat
-  // ranked against its own stream's field, the two percentages compared — but the
-  // server has no way to deal one, and pairing two people for a format it cannot run
-  // is worse than reading the preference as "anyone". Add it here the day the table
-  // can, and not before.
-  return stored === "game" || stored === "duplicate" || stored === "mirror" || stored === "rubber"
+  // Field is here now that a table can deal one — §1.8a's head-to-head, each seat
+  // ranked against its own stream's field and the two percentages compared. It is
+  // last in the server's precedence, so in practice it still takes both seats.
+  return stored === "game" ||
+    stored === "duplicate" ||
+    stored === "field" ||
+    stored === "mirror" ||
+    stored === "rubber"
     ? stored
     : null;
 }
