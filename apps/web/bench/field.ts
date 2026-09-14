@@ -401,9 +401,25 @@ function write(boards: readonly string[], results: readonly string[]): void {
   writeFileSync(`${prefix}-results.sql`, insertFor(RESULT_COLUMNS, "field_results", results));
 }
 
+/**
+ * How many rows go in one `INSERT`.
+ *
+ * It was one statement for the whole file, so nothing inside it could race anything
+ * else inside it — which is true for a handful of seeds and **fails outright at a
+ * hundred**: SQLite refuses a statement that long with `SQLITE_TOOBIG`, and a file of
+ * 1,600 rows is well past it. Chunking keeps the property that actually matters, that
+ * every row of a chunk lands or none does, and gives up only all-or-nothing across
+ * the whole file, which nothing depends on.
+ */
+const ROWS_PER_INSERT = 400;
+
 function insertFor(columns: string, table: string, rows: readonly string[]): string {
-  // One statement, so nothing inside a file can race anything else inside it.
-  return `INSERT INTO ${table} (${columns}) VALUES\n${rows.join(",\n")};\n`;
+  const statements: string[] = [];
+  for (let at = 0; at < rows.length; at += ROWS_PER_INSERT) {
+    const chunk = rows.slice(at, at + ROWS_PER_INSERT);
+    statements.push(`INSERT INTO ${table} (${columns}) VALUES\n${chunk.join(",\n")};\n`);
+  }
+  return statements.join("");
 }
 
 /**
