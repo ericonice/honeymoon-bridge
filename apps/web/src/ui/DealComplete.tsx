@@ -112,6 +112,13 @@ export function DealComplete({
   // the two ways a deal happened to finish decided whether "detailed
   // scoring" meant one screen or two.
   const [showingStanding, setShowingStanding] = useState(false);
+  /**
+   * The match-end screen has moved on from the board just played to the sitting.
+   *
+   * Its own state rather than `showingStanding`, which belongs to the claimed-finish
+   * path and is about a different pair of stages on a different screen.
+   */
+  const [showingSession, setShowingSession] = useState(false);
 
   /**
    * **Whether the *match* is over, which a two-game match's standing cannot say.**
@@ -128,11 +135,13 @@ export function DealComplete({
   // branched at each of them.
   const pad =
     standing.kind === "field" ? (
-      // **The whole session once it is over, the last board while it is running.**
-      // Between deals the reveal is about the hand that just finished; at the end the
-      // question has changed to how the session went, and eight boards is what
-      // answers it.
-      <FieldPad latest={!complete} me={view.me} summary={standing.summary} />
+      // **The board just played, then the whole session behind a tap** — the staging
+      // every other deal already gets, and the reason it is staged rather than chosen.
+      // Showing only the last board at the end buried the session; showing only the
+      // session skipped the last board's own result, so the final deal was the one
+      // deal of the sitting whose traveller you never saw. It is still a deal and
+      // deserves the same ending as the seven before it.
+      <FieldPad latest={!showingSession} me={view.me} summary={standing.summary} />
     ) : standing.kind === "duplicate" ? (
       <SessionPad summary={standing.summary} view={view} />
     ) : (
@@ -357,6 +366,20 @@ export function DealComplete({
         )}
 
         {pad}
+
+        {/* Only where there is a session to go on to. A rubber's pad is already the
+            whole rubber, so there is no second thing to show. */}
+        {standing.kind === "field" && !showingSession ? (
+          <button
+            type="button"
+            className="text-sm text-white/55 underline decoration-white/30 underline-offset-4"
+            onClick={() => {
+              setShowingSession(true);
+            }}
+          >
+            See the whole session
+          </button>
+        ) : null}
 
         {button}
       </div>

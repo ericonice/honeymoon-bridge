@@ -8,7 +8,7 @@ import type {
   PlayerId,
   PlayerView,
 } from "@hb/engine";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ContractBar } from "../src/ui/ContractBar.js";
@@ -197,9 +197,24 @@ describe("finishing a field session", () => {
     expect(document.body.textContent ?? "").toContain("Rating");
   });
 
-  /** The question at the end is how the session went, and every board answers it. */
-  it("shows every board once the session is over", () => {
+  /**
+   * **The last board is still a deal and gets the same ending as the seven before
+   * it.** Showing the whole session straight away skipped its traveller entirely, so
+   * it was the one board of the sitting whose result you never saw — which is the
+   * fault `useShownPhase` exists to prevent elsewhere, arrived at from a different
+   * direction.
+   */
+  it("shows the board just played before the session", () => {
     finish(THREE);
+
+    expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /whole session/i })).toBeTruthy();
+  });
+
+  /** And the session is a tap away, which is where every board answers for itself. */
+  it("shows every board once asked for the session", () => {
+    finish(THREE);
+    fireEvent.click(screen.getByRole("button", { name: /whole session/i }));
 
     expect(screen.getByRole("button", { name: /Board 1/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Board 3/ })).toBeTruthy();
