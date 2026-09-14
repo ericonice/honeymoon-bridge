@@ -327,7 +327,10 @@ function generate(seeds: number, runs: number): void {
       `  fails on a foreign key, because \`wrangler d1 execute --file\` does not\n` +
       `  reliably apply statements in the order they are written:\n` +
       `\n    npx wrangler d1 execute honeymoon-bridge --local --file=${outputPrefix()}-boards.sql` +
-      `\n    npx wrangler d1 execute honeymoon-bridge --local --file=${outputPrefix()}-results.sql\n`,
+      `\n    npx wrangler d1 execute honeymoon-bridge --local --file=${outputPrefix()}-results.sql\n` +
+      `\n  Then number the pool **once**, after every part above is loaded — not once\n` +
+      `  per part, which is what exhausted D1's daily row-read limit the first time:\n` +
+      `\n    npx wrangler d1 execute honeymoon-bridge --local --file=${outputPrefix()}-number.sql\n`,
   );
 }
 
@@ -341,11 +344,26 @@ const BOARD_COLUMNS =
  * batch cannot know how many boards came before it — and because doing it this way is
  * **idempotent**: it can be run after any load, or twice, and gives the same answer.
  * Both sides of a stock share a number, since a board is a stock.
+ *
+ * **It is its own file, and it used to be appended to every worker's boards file.**
+ * Idempotent was the argument for that, and idempotent it is — it was also quadratic,
+ * which nobody priced. The first version numbered each row with a correlated
+ * `COUNT(DISTINCT seed) WHERE seed <= this one`, so the plan was a scan of the table
+ * with a range scan of the seed index *per row*: about 2 million rows read over 1,998
+ * boards, and it ran once per file against a growing table. Loading a 999-board corpus
+ * in six parts therefore read about **5.05 million rows and exhausted D1's free daily
+ * limit of 5 million** — measured afterwards at 5,032,772, which is how this was found.
+ *
+ * The window-function form does one pass over the distinct seeds and one index seek per
+ * seed: roughly **5,000 rows** for the same answer, checked as identical on all 1,998
+ * rows of the generated corpus. Run it **once, after every part is loaded** — it is
+ * cheap now, but there is still no reason to do it six times.
  */
 const NUMBER_BOARDS =
-  "UPDATE field_boards SET number =\n" +
-  "  (SELECT COUNT(DISTINCT other.seed) FROM field_boards AS other\n" +
-  "    WHERE other.seed <= field_boards.seed);\n";
+  "UPDATE field_boards SET number = s.n\n" +
+  "  FROM (SELECT seed, ROW_NUMBER() OVER (ORDER BY seed) AS n\n" +
+  "          FROM (SELECT DISTINCT seed FROM field_boards)) AS s\n" +
+  " WHERE s.seed = field_boards.seed;\n";
 const RESULT_COLUMNS =
   "id, board_id, played_at, account_id, opponent_account_id, generated, points, " +
   "declarer, contract_level, contract_strain, contract_doubling, tricks_0, tricks_1, " +
@@ -399,11 +417,11 @@ function outputPrefix(): string {
 
 function write(boards: readonly string[], results: readonly string[]): void {
   const prefix = outputPrefix();
-  writeFileSync(
-    `${prefix}-boards.sql`,
-    `${insertFor(BOARD_COLUMNS, "field_boards", boards)}\n${NUMBER_BOARDS}`,
-  );
+  writeFileSync(`${prefix}-boards.sql`, insertFor(BOARD_COLUMNS, "field_boards", boards));
   writeFileSync(`${prefix}-results.sql`, insertFor(RESULT_COLUMNS, "field_results", results));
+  // Its own file so it is run once over the finished pool rather than once per worker
+  // — see `NUMBER_BOARDS`, and the five million rows the old arrangement cost.
+  writeFileSync(`${prefix}-number.sql`, NUMBER_BOARDS);
 }
 
 /**

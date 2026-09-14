@@ -2050,6 +2050,36 @@ route** rather than through hand-written SQL, and each player's own result exclu
 are shown — checked from both sides at once, with Ada seeing Computer 240 and Noah 170 while Noah saw
 Computer 240 and Ada 420.
 
+**The corpus load exhausted D1's free daily row-read limit, and it was one statement rather than the
+volume.** Loading 999 boards is about 18,000 inserted rows, which is nothing. What cost five million
+reads was `NUMBER_BOARDS`, the statement that numbers each board by its seed: the first version was a
+correlated `COUNT(DISTINCT seed) WHERE other.seed <= this one`, so the plan is a scan of the table with
+a **range scan of the seed index per row** — about 2 million rows over 1,998 boards. And it was appended
+to *every worker's* boards file, so it ran six times against a growing table.
+
+| | rows read |
+| --- | --- |
+| modelled, six loads of a growing table | 5,045,450 |
+| Cloudflare's `rows_read_24h` | **5,032,772** |
+| the free-tier daily limit | 5,000,000 |
+
+**Its own doc comment sold the repetition as a virtue** — "it can be run after any load, or twice, and
+gives the same answer". Idempotent it is; quadratic nobody priced. The `UPDATE ... FROM` window-function
+form does one pass over the distinct seeds and one index seek per seed — **about 5,000 rows**, checked
+as producing identical numbers on all 1,998 rows — and it is now its own file, run once after every part
+is loaded.
+
+**The diagnosis is worth more than the fix, because the first guess was wrong.** The obvious suspect was
+the app: `ratingsFor` scans the whole `results` table on every Record read and this file has an open
+thread saying so. `npx wrangler d1 insights` settles it in one command — the app's top five queries total
+**163,371 rows over seven days**, and `ratingsFor` is 7,254 of them. `wrangler d1 info` gives the other
+half: **433 read queries** producing five million rows, which can only be a handful of enormous ones. A
+quota is an arithmetic question, and both numbers are a command away rather than a guess.
+
+**One number from that run to watch rather than act on**: `fieldBoardsFor` averages **7,075 rows a call**
+and grows linearly with the corpus, since it aggregates every board to rank them before the `LIMIT`
+applies. Seventeen calls is nothing; ten thousand boards would make it ~35,000 a call.
+
 **Two local-D1 facts that cost an hour and do not announce themselves.** Foreign keys **are** enforced
 in local D1. And `wrangler d1 execute --file` does **not** reliably apply statements in the order they
 are written — a results insert referencing a board created higher in the same file fails on a foreign
