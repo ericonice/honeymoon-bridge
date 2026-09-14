@@ -2127,9 +2127,40 @@ differs. It also costs nothing per row, since which side you held is fixed for a
 cell needs a marker and nobody has to learn a key.
 
 **And it is what makes the two feet worth having.** Duplication hands each player both sides of every
-board, so *what I made holding the first draw* against *what I made holding the second* is a comparison
-with the luck already cancelled out — the direct analogue of a mirror's two half-totals, and a figure
-that sat inside the old pad's numbers without ever being added up.
+board, so *what I made holding the first draw* against *what I made holding the second* is the direct
+analogue of a mirror's two half-totals, and a figure that sat inside the old pad's numbers without ever
+being added up.
+
+**That paragraph described a design the code did not implement, for as long as the pad has existed.**
+`SessionPad` grouped its columns by `firstPlayOf`/`replayOf` — the order the runs happened — while
+`board.starter` alternates, so this seat held the first-draw stream in column one on some boards and
+the second-draw stream in column one on others. Each column was therefore a sum over *both* streams and
+the pair of them compared nothing. Reported as "the scoring for replay is incorrect", and it is:
+
+| the pad's two feet, on a **control** session — identical players, every board exactly flat | |
+| --- | --- |
+| grouped by run order, as drawn | **+2270 / −2270** |
+| grouped by side of the stock | **+70 / −70** |
+
+**A ±2270 swing on a session where nothing separated the players.** `drewFirstRunOf` and
+`drewSecondRunOf` are the fix, keyed on `drewFirstOn(board, run) === seat`; the cells, the feet and the
+recently-completed highlight all move with them, the last because this seat's first-draw run *is* the
+replay on every board the opponent started, so keying the highlight on the column marked the wrong cell
+on half the list.
+
+**The engine test could not see it, and the reason is the useful part: the invariant survives the bug.**
+It asserted the two subtotals sum to the session margin — which is true under *either* grouping, since
+both partition the same six runs. What separates them is **which run lands in which column**, so that is
+what the new test asks, and it carries its own anti-vacuity check: unless this seat's first-draw run is
+the replay on one board and the first play on another, the two groupings agree and the test would pass
+against the bug. The web test had the right fixture already — one board started by each seat — and
+pinned the wrong answer with it.
+
+**One claim above was wrong even after the fix, and correcting it is worth more than the fix.** The
+feet are *not* "a comparison with the luck already cancelled out". In a control they are ±70 rather
+than zero, and that figure is entirely about which side of these boards was the better one to hold.
+**What has the luck cancelled is the sum, not the split** — each foot says how this seat did holding
+one side of the stock, and no more than that.
 
 Two things went. The per-board margin, because side by side the sum is a glance and the width buys more
 elsewhere. And **"still to come round"**, because an empty cell beside a played one says it without

@@ -1,4 +1,4 @@
-import { firstPlayOf, firstPlayTotal, impsFor, marginTo, netTo, replayOf, replayTotal } from "@hb/engine";
+import { drewFirstRunOf, drewFirstTotal, drewSecondRunOf, drewSecondTotal, impsFor, marginTo, netTo } from "@hb/engine";
 import type { BoardOutcome, DuplicateResult, DuplicateSummary, PlayerView } from "@hb/engine";
 import { ORDER_LABEL } from "../game/identity.js";
 import { ContractText } from "./CardText.js";
@@ -81,9 +81,19 @@ export function SessionPad({
           arithmetic instead of just standing beside it. */}
       <div className="flex items-start gap-2">
         {/* Every figure below is yours, in both columns — nothing is reversed and nothing
-            needs a caption saying so. A column is which pass through the boards this was,
-            not which side of the stock you held, so a cell says who drew first on its own
-            run rather than the header saying it once for the whole column. */}
+            needs a caption saying so.
+
+            **A column is which side of the stock you held, not which pass through the
+            boards this was**, and that distinction is the whole point rather than a
+            nicety. `board.starter` alternates, so grouping by first-play-and-replay puts
+            this seat on the first-draw stream in column one on some boards and on the
+            second-draw stream in column one on others — which makes each column a sum
+            over both streams and the pair of them a comparison of nothing. Measured on a
+            control session, two identical players with every board exactly flat, the
+            run-order split read **+2270 and −2270**; by stream it reads +70 and −70.
+
+            Which side you held is fixed for a whole column, so the header says it once
+            and no cell needs a marker. */}
         <div className="relative min-w-0 flex-1">
           <span
             aria-hidden="true"
@@ -100,8 +110,8 @@ export function SessionPad({
           <div className="flex items-baseline gap-2 pb-1 text-xs text-white/45">
             <span className="w-4 shrink-0" aria-hidden="true" />
             <span className="flex min-w-0 flex-1 gap-4">
-              <span className="min-w-0 flex-1">First play</span>
-              <span className="min-w-0 flex-1">Replay</span>
+              <span className="min-w-0 flex-1">You drew 1st</span>
+              <span className="min-w-0 flex-1">You drew 2nd</span>
             </span>
           </div>
 
@@ -114,23 +124,33 @@ export function SessionPad({
               little more off, until the two columns no longer agreed on which row
               was which. */}
           {summary.boards.map((board) => {
-            const highlight = (run: DuplicateResult | null, replay: boolean): boolean =>
+            // Asked of the run itself rather than of the column it sits in. While the
+            // columns were first-play and replay the two were the same question; now
+            // that a column is a side of the stock, this seat's first-draw run *is* the
+            // replay on every board the opponent started — so keying on the column
+            // would mark the wrong cell on half the board list.
+            const highlight = (run: DuplicateResult | null): boolean =>
               run !== null &&
               summary.lastCompleted?.board === board.board &&
-              summary.lastCompleted.replay === replay;
-            const first = firstPlayOf(board);
-            const replay = replayOf(board);
+              summary.lastCompleted.replay === run.replay;
+            const mineFirst = drewFirstRunOf(board, view.me);
+            const mineSecond = drewSecondRunOf(board, view.me);
             return (
               <div key={board.board} className="flex min-h-6 items-baseline gap-2 py-0.5">
                 <span className="w-4 shrink-0 text-xs text-white/35 tabular-nums">
                   {board.board + 1}
                 </span>
                 <span className="flex min-w-0 flex-1 items-baseline gap-4">
-                  <RunCell board={board} highlight={highlight(first, false)} run={first} view={view} />
                   <RunCell
                     board={board}
-                    highlight={highlight(replay, true)}
-                    run={replay}
+                    highlight={highlight(mineFirst)}
+                    run={mineFirst}
+                    view={view}
+                  />
+                  <RunCell
+                    board={board}
+                    highlight={highlight(mineSecond)}
+                    run={mineSecond}
                     view={view}
                   />
                 </span>
@@ -143,10 +163,10 @@ export function SessionPad({
             <span className="w-4 shrink-0" aria-hidden="true" />
             <span className="flex min-w-0 flex-1 gap-4">
               <span className="min-w-0 flex-1 text-right tabular-nums">
-                {signed(firstPlayTotal(summary, view.me) ?? 0)}
+                {signed(drewFirstTotal(summary, view.me) ?? 0)}
               </span>
               <span className="min-w-0 flex-1 text-right tabular-nums">
-                {signed(replayTotal(summary, view.me) ?? 0)}
+                {signed(drewSecondTotal(summary, view.me) ?? 0)}
               </span>
             </span>
           </div>

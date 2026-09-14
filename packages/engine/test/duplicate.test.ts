@@ -7,6 +7,10 @@ import {
   closedMarginTotal,
   dealsFor,
   drewFirstOn,
+  drewFirstRunOf,
+  drewFirstTotal,
+  drewSecondRunOf,
+  drewSecondTotal,
   firstPlayOf,
   firstPlayTotal,
   minGapFor,
@@ -906,6 +910,51 @@ describe("a session", () => {
       const first = firstPlayTotal(summary, seat) ?? 0;
       const replay = replayTotal(summary, seat) ?? 0;
       expect(first + replay).toBe(summary.margin[seat]);
+    }
+  });
+
+  /**
+   * **The property the sum test could not see.** Splitting the margin by first-play and
+   * replay also sums to the whole, so the invariant already asserted here held perfectly
+   * while `SessionPad` drew two columns that each mixed both sides of the stock. What
+   * separates the two groupings is *which run lands in which column*, so that is what
+   * this asks.
+   *
+   * `board.starter` alternates, so a session of three boards has this seat drawing first
+   * in the first run on some and in the replay on others — which is exactly the case the
+   * old grouping got wrong and a single-board session could not produce.
+   */
+  it("puts the run this seat drew first on in its own column, whichever pass it was", () => {
+    const summary = summarizeDuplicate(playOut(startDuplicate({ ...options, boards: 3, minGap: 2 })));
+
+    for (const seat of [0, 1] as PlayerId[]) {
+      let sawReplay = false;
+      let sawFirstPlay = false;
+      for (const board of summary.boards) {
+        const mine = drewFirstRunOf(board, seat);
+        const theirs = drewSecondRunOf(board, seat);
+        expect(mine).not.toBeNull();
+        expect(theirs).not.toBeNull();
+        expect(drewFirstOn(board, mine!)).toBe(seat);
+        expect(drewFirstOn(board, theirs!)).not.toBe(seat);
+        sawReplay ||= mine!.replay;
+        sawFirstPlay ||= !mine!.replay;
+      }
+      // Anti-vacuity: unless this seat's first-draw run is the *replay* on at least one
+      // board and the *first play* on another, the two groupings agree and this test
+      // would pass against the bug it exists for.
+      expect(sawReplay && sawFirstPlay).toBe(true);
+    }
+  });
+
+  /** Each seat holds both sides of every board exactly once, so the two halves are the whole. */
+  it("splits the margin by side of the stock into subtotals that sum to it", () => {
+    const summary = summarizeDuplicate(playOut(startDuplicate({ ...options, boards: 3, minGap: 2 })));
+
+    for (const seat of [0, 1] as PlayerId[]) {
+      expect((drewFirstTotal(summary, seat) ?? 0) + (drewSecondTotal(summary, seat) ?? 0)).toBe(
+        summary.margin[seat],
+      );
     }
   });
 
