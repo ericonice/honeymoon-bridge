@@ -30,7 +30,7 @@ function result(id: string, mine: number, field: readonly FieldEntry[] | null): 
   return {
     board: { id, seed: 1, starter: 0, vulnerable: [false, false] },
     contract: { declarer: 0, doubling: "none", level: 4, strain: "S" },
-    field,
+    field: [field, null],
     points: [mine, 0],
     tricks: [10, 3],
   };
@@ -41,10 +41,9 @@ function pad(results: readonly FieldResult[]): void {
     at: results.length,
     boards: results.map((one) => one.board),
     deal: startDeal({ seed: 1, starter: 0 }),
-    me: ME,
     results,
   };
-  render(createElement(FieldPad, { me: ME, summary: summarizeField(state) }));
+  render(createElement(FieldPad, { me: ME, summary: summarizeField(state, ME) }));
 }
 
 afterEach(cleanup);
@@ -140,10 +139,9 @@ describe("the session pad", () => {
       at: BOARDS.length,
       boards: BOARDS.map((one) => one.board),
       deal: startDeal({ seed: 1, starter: 0 }),
-      me: ME,
-      results: BOARDS,
+        results: BOARDS,
     };
-    render(createElement(FieldPad, { latest: true, me: ME, summary: summarizeField(state) }));
+    render(createElement(FieldPad, { latest: true, me: ME, summary: summarizeField(state, ME) }));
 
     expect(screen.getByText("Noah")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();

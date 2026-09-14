@@ -259,11 +259,7 @@ export function startMatch(options: StartMatchOptions): MatchState {
       // Neither the seed nor the starter reaches this: a field board carries its own
       // stock and its own side of it, because both have to match what the recorded
       // results were played at. There is nothing here for the caller to choose.
-      session: startField({
-        ...(scoring === undefined ? {} : { scoring }),
-        boards: fieldBoards ?? [],
-        me: me ?? 0,
-      }),
+      session: startField({ boards: fieldBoards ?? [] }),
     };
   }
   if (format === "duplicate") {
@@ -448,9 +444,14 @@ function mirroredTable(table: TableState): TableState {
   });
 }
 
-export function summarizeMatch(match: MatchState): MatchSummary {
+/**
+ * `me` is only read by a field session, and only because that format ranks each seat
+ * against a different set of results. Every other format's standing is the same from
+ * either side, so the default keeps their callers unchanged.
+ */
+export function summarizeMatch(match: MatchState, me: PlayerId = 0): MatchSummary {
   if (match.kind === "field") {
-    return summarizeFieldMatch(match.session);
+    return summarizeFieldMatch(match.session, me);
   }
   if (match.kind === "duplicate") {
     const summary = summarizeDuplicate(match.session);
@@ -519,12 +520,12 @@ export function summarizeMatch(match: MatchState): MatchSummary {
  * likelier than a tied rubber, and reading a draw as a loss is a bug this project has
  * already had to fix once.
  */
-function summarizeFieldMatch(session: FieldState): MatchSummary {
-  const summary = summarizeField(session);
+function summarizeFieldMatch(session: FieldState, me: PlayerId): MatchSummary {
+  const summary = summarizeField(session, me);
   const placed = Math.round(summary.percentage ?? 0);
   const points: Pair<number> = [0, 0];
-  points[session.me] = placed;
-  points[opponentOf(session.me)] = 100 - placed;
+  points[me] = placed;
+  points[opponentOf(me)] = 100 - placed;
 
   return {
     bonus: summary.score?.bonus ?? 0,
@@ -547,8 +548,8 @@ function summarizeFieldMatch(session: FieldState): MatchSummary {
       !summary.complete || summary.percentage === null || placed === 50
         ? null
         : placed > 50
-          ? session.me
-          : opponentOf(session.me),
+          ? me
+          : opponentOf(me),
   };
 }
 

@@ -183,7 +183,7 @@ function Traveller({
     tricks: result.tricks,
     who: "you",
   };
-  const others: readonly Line[] = (result.field ?? []).map((entry) => ({
+  const others: readonly Line[] = (result.field[me] ?? []).map((entry) => ({
     contract: entry.contract,
     // A recorded entry's declarer is normalised to the seat holding this board's
     // stream, so 0 is always that row's own player.
@@ -210,13 +210,13 @@ function Traveller({
         ))}
         {/* Null and empty are different answers and are drawn differently: one is a
             field that has not come back, the other a board nobody else has played. */}
-        {result.field === null ? (
+        {result.field[me] === null ? (
           <tr>
             <td className="py-1 text-xs text-white/35" colSpan={3}>
               waiting for the other results
             </td>
           </tr>
-        ) : result.field.length === 0 ? (
+        ) : result.field[me]!.length === 0 ? (
           <tr>
             <td className="py-1 text-xs text-white/35" colSpan={3}>
               nobody else has played this board yet

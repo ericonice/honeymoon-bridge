@@ -57,7 +57,7 @@ function playSession(state: FieldState): FieldState {
   let current = state;
   for (let guard = 0; guard < 20; guard += 1) {
     current = playDeal(current);
-    if (summarizeField(current).complete) {
+    if (summarizeField(current, ME).complete) {
       return current;
     }
     current = nextFieldDeal(current);
@@ -71,7 +71,7 @@ function entry(points: number, kind: FieldEntry["kind"] = "computer"): FieldEntr
 
 describe("a board of a field session", () => {
   it("is dealt from its own stock and its own side of it", () => {
-    const state = startField({ boards: BOARDS, me: ME });
+    const state = startField({ boards: BOARDS });
 
     expect(state.deal.starter).toBe(BOARDS[0]!.starter);
     expect(currentFieldBoard(state)?.id).toBe("b1");
@@ -84,7 +84,7 @@ describe("a board of a field session", () => {
    * fail here rather than pass quietly.
    */
   it("takes each board's own starter as it goes", () => {
-    const first = startField({ boards: BOARDS, me: ME });
+    const first = startField({ boards: BOARDS });
     const second = nextFieldDeal(playDeal(first));
 
     expect(BOARDS[0]!.starter).not.toBe(BOARDS[1]!.starter);
@@ -92,8 +92,8 @@ describe("a board of a field session", () => {
   });
 
   it("plays every board exactly once and then is complete", () => {
-    const done = playSession(startField({ boards: BOARDS, me: ME }));
-    const summary = summarizeField(done);
+    const done = playSession(startField({ boards: BOARDS }));
+    const summary = summarizeField(done, ME);
 
     expect(summary.complete).toBe(true);
     expect(summary.boardsPlayed).toBe(BOARDS.length);
@@ -106,10 +106,10 @@ describe("a board of a field session", () => {
    * version of this bug grew a third run onto its last board.
    */
   it("does not commit the same board twice when asked to move on again", () => {
-    const done = playSession(startField({ boards: BOARDS, me: ME }));
+    const done = playSession(startField({ boards: BOARDS }));
     const again = nextFieldDeal(nextFieldDeal(done));
 
-    expect(summarizeField(again).boardsPlayed).toBe(BOARDS.length);
+    expect(summarizeField(again, ME).boardsPlayed).toBe(BOARDS.length);
     expect(again.results.map((one) => one.board.id)).toEqual(["b1", "b2", "b3"]);
   });
 });
@@ -120,8 +120,8 @@ describe("where a board places", () => {
    * not yet ranked is a real state — and it must not read as a board scored nought.
    */
   it("has no placing at all until the field arrives, rather than a placing of zero", () => {
-    const done = playSession(startField({ boards: BOARDS, me: ME }));
-    const summary = summarizeField(done);
+    const done = playSession(startField({ boards: BOARDS }));
+    const summary = summarizeField(done, ME);
 
     expect(summary.boardsRanked).toBe(0);
     expect(summary.percentage).toBeNull();
@@ -131,36 +131,70 @@ describe("where a board places", () => {
   });
 
   it("attaches a late field to the board it belongs to", () => {
-    const done = playSession(startField({ boards: BOARDS, me: ME }));
-    const withOne = withField(done, "b2", [entry(120)]);
-    const summary = summarizeField(withOne);
+    const done = playSession(startField({ boards: BOARDS }));
+    const withOne = withField(done, "b2", ME, [entry(120)]);
+    const summary = summarizeField(withOne, ME);
 
     expect(summary.boardsRanked).toBe(1);
-    expect(summary.results.find((one) => one.board.id === "b2")?.field).toHaveLength(1);
-    expect(summary.results.find((one) => one.board.id === "b1")?.field).toBeNull();
+    expect(summary.results.find((one) => one.board.id === "b2")?.field[ME]).toHaveLength(1);
+    expect(summary.results.find((one) => one.board.id === "b1")?.field[ME]).toBeNull();
   });
 
   it("ignores a field for a board this session is not playing", () => {
-    const done = playSession(startField({ boards: BOARDS, me: ME }));
+    const done = playSession(startField({ boards: BOARDS }));
 
-    expect(withField(done, "elsewhere", [entry(120)])).toBe(done);
+    expect(withField(done, "elsewhere", ME, [entry(120)])).toBe(done);
   });
 
   /** A board nobody else has played is unranked, not a wipe-out. */
   it("has no placing on a board whose field is empty", () => {
-    const done = playSession(startField({ boards: BOARDS, me: ME }));
-    const alone = withField(done, "b1", []);
+    const done = playSession(startField({ boards: BOARDS }));
+    const alone = withField(done, "b1", ME, []);
 
-    expect(boardPercentageOf(summarizeField(alone).results[0]!, ME)).toBeNull();
-    expect(summarizeField(alone).boardsRanked).toBe(0);
+    expect(boardPercentageOf(summarizeField(alone, ME).results[0]!, ME)).toBeNull();
+    expect(summarizeField(alone, ME).boardsRanked).toBe(0);
   });
 
   it("takes the placing from this seat's own score", () => {
-    const done = playSession(startField({ boards: BOARDS, me: ME }));
-    const mine = netFor(summarizeField(done).results[0]!.points, ME);
-    const beaten = withField(done, "b1", [entry(mine - 100), entry(mine - 50)]);
+    const done = playSession(startField({ boards: BOARDS }));
+    const mine = netFor(summarizeField(done, ME).results[0]!.points, ME);
+    const beaten = withField(done, "b1", ME, [entry(mine - 100), entry(mine - 50)]);
 
-    expect(boardPercentageOf(summarizeField(beaten).results[0]!, ME)).toBe(100);
+    expect(boardPercentageOf(summarizeField(beaten, ME).results[0]!, ME)).toBe(100);
+  });
+});
+
+describe("two seats at one board", () => {
+  /**
+   * **The whole reason a board's field is a `Pair`.** The two sides of a stock are
+   * separate boards with separate histories, so each seat is ranked against its own —
+   * and a session summarised for the wrong seat shows a player their opponent's
+   * placing on every board, which is what `snapshotFor` would have sent before the
+   * seat became an argument.
+   */
+  it("ranks each seat against its own side's results", () => {
+    const done = playSession(startField({ boards: BOARDS }));
+    const mine = netFor(summarizeField(done, 0).results[0]!.points, 0);
+    const theirs = netFor(summarizeField(done, 1).results[0]!.points, 1);
+
+    const both = withField(
+      withField(done, "b1", 0, [entry(mine + 100)]),
+      "b1",
+      1,
+      [entry(theirs - 100)],
+    );
+
+    expect(summarizeField(both, 0).percentage).toBe(0);
+    expect(summarizeField(both, 1).percentage).toBe(100);
+  });
+
+  /** One seat's field arriving says nothing about the other's. */
+  it("leaves the other seat unranked until its own results arrive", () => {
+    const done = playSession(startField({ boards: BOARDS }));
+    const one = withField(done, "b1", 0, [entry(0)]);
+
+    expect(summarizeField(one, 0).boardsRanked).toBe(1);
+    expect(summarizeField(one, 1).boardsRanked).toBe(0);
   });
 });
 
@@ -194,16 +228,16 @@ describe("matchpoints", () => {
    * one made against people, and a bare figure cannot tell them apart.
    */
   it("ranks against people separately, and says nothing until there are any", () => {
-    const done = playSession(startField({ boards: BOARDS, me: ME }));
-    const mine = netFor(summarizeField(done).results[0]!.points, ME);
+    const done = playSession(startField({ boards: BOARDS }));
+    const mine = netFor(summarizeField(done, ME).results[0]!.points, ME);
 
-    const machines = withField(done, "b1", [entry(mine + 100), entry(mine + 200)]);
-    expect(boardPercentageOf(summarizeField(machines).results[0]!, ME)).toBe(0);
-    expect(humanPercentageOf(summarizeField(machines).results[0]!, ME)).toBeNull();
+    const machines = withField(done, "b1", ME, [entry(mine + 100), entry(mine + 200)]);
+    expect(boardPercentageOf(summarizeField(machines, ME).results[0]!, ME)).toBe(0);
+    expect(humanPercentageOf(summarizeField(machines, ME).results[0]!, ME)).toBeNull();
 
-    const mixed = withField(done, "b1", [entry(mine + 100), entry(mine - 100, "table")]);
-    expect(boardPercentageOf(summarizeField(mixed).results[0]!, ME)).toBe(50);
-    expect(humanPercentageOf(summarizeField(mixed).results[0]!, ME)).toBe(100);
+    const mixed = withField(done, "b1", ME, [entry(mine + 100), entry(mine - 100, "table")]);
+    expect(boardPercentageOf(summarizeField(mixed, ME).results[0]!, ME)).toBe(50);
+    expect(humanPercentageOf(summarizeField(mixed, ME).results[0]!, ME)).toBe(100);
   });
 });
 
@@ -213,14 +247,15 @@ describe("a session's own figure", () => {
    * quietly drag the session down — it is simply not in the average yet.
    */
   it("averages the boards that have been ranked and ignores the rest", () => {
-    const done = playSession(startField({ boards: BOARDS, me: ME }));
-    const results = summarizeField(done).results;
+    const done = playSession(startField({ boards: BOARDS }));
+    const results = summarizeField(done, ME).results;
     const ranked = withField(
-      withField(done, "b1", [entry(netFor(results[0]!.points, ME) - 10)]),
+      withField(done, "b1", ME, [entry(netFor(results[0]!.points, ME) - 10)]),
       "b3",
+      ME,
       [entry(netFor(results[2]!.points, ME) + 10)],
     );
-    const summary = summarizeField(ranked);
+    const summary = summarizeField(ranked, ME);
 
     expect(summary.boardsRanked).toBe(2);
     expect(summary.boardsPlayed).toBe(3);

@@ -31,7 +31,7 @@ function result(id: string, mine: number): FieldResult {
   return {
     board: { id, seed: 1, starter: 0, vulnerable: [false, false] },
     contract: { declarer: 0, doubling: "none", level: 4, strain: "S" },
-    field: [
+    field: [[
       {
         contract: { declarer: 0, doubling: "none", level: 3, strain: "H" },
         kind: "computer",
@@ -39,7 +39,7 @@ function result(id: string, mine: number): FieldResult {
         tricks: [9, 4],
         who: "Computer",
       },
-    ],
+    ], null],
     points: [mine, 0],
     tricks: [10, 3],
   };
@@ -50,10 +50,9 @@ function standingFor(results: readonly FieldResult[]): MatchStanding {
     at: results.length,
     boards: results.map((one) => one.board),
     deal: startDeal({ seed: 1, starter: 0 }),
-    me: ME,
     results,
   };
-  return { kind: "field", summary: summarizeField(state) };
+  return { kind: "field", summary: summarizeField(state, ME) };
 }
 
 /** Everything `DealComplete` needs that is not the thing under test. */

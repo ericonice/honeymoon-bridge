@@ -88,13 +88,18 @@ export interface FieldResult {
   readonly board: FieldBoard;
   readonly contract: Contract | null;
   /**
-   * Everybody else's results on this board, or null until they arrive.
+   * Everybody else's results, **one list per seat**, or null until they arrive.
+   *
+   * A `Pair` because the two sides of a stock are separate boards with separate
+   * histories — §1.8a ranks each seat against *its own* stream's field. Solo play
+   * only ever fills one side; at a table both are filled and each seat is shown its
+   * own, which is what stops a snapshot handing somebody their opponent's placing.
    *
    * Null is a board played and not yet ranked rather than a board nobody else has
    * played — §1.8a withholds the field until the deal is over, and it may never turn
    * up. An empty list is the other thing: a board whose only result is this one.
    */
-  readonly field: readonly FieldEntry[] | null;
+  readonly field: Pair<readonly FieldEntry[] | null>;
   /** Each seat's whole score for the deal, bonus included, exactly as duplicate pays it. */
   readonly points: Pair<number>;
   readonly tricks: Pair<number>;
@@ -121,17 +126,14 @@ export interface FieldState {
   readonly at: number;
   readonly boards: readonly FieldBoard[];
   readonly deal: DealState;
-  /** The seat whose score is being compared. The other seat is the opposition. */
-  readonly me: PlayerId;
   readonly results: readonly FieldResult[];
 }
 
 export interface StartFieldOptions {
   readonly boards: readonly FieldBoard[];
-  readonly me: PlayerId;
 }
 
-export function startField({ boards, me }: StartFieldOptions): FieldState {
+export function startField({ boards }: StartFieldOptions): FieldState {
   const first = boards[0];
   if (first === undefined) {
     throw new Error("a field session needs at least one board");
@@ -140,7 +142,6 @@ export function startField({ boards, me }: StartFieldOptions): FieldState {
     at: 0,
     boards,
     deal: startDeal({ seed: first.seed, starter: first.starter }),
-    me,
     results: [],
   };
 }
@@ -209,7 +210,7 @@ function commitField(state: FieldState): FieldState {
       {
         board,
         contract: state.deal.contract,
-        field: null,
+        field: [null, null],
         points: score === null ? [0, 0] : score.points,
         tricks: state.deal.tricksWon,
       },
@@ -228,16 +229,22 @@ function commitField(state: FieldState): FieldState {
 export function withField(
   state: FieldState,
   boardId: string,
+  me: PlayerId,
   field: readonly FieldEntry[],
 ): FieldState {
-  if (!state.results.some((one) => one.board.id === boardId && one.field === null)) {
+  if (!state.results.some((one) => one.board.id === boardId && one.field[me] === null)) {
     return state;
   }
   return {
     ...state,
-    results: state.results.map((one) =>
-      one.board.id === boardId && one.field === null ? { ...one, field } : one,
-    ),
+    results: state.results.map((one) => {
+      if (one.board.id !== boardId || one.field[me] !== null) {
+        return one;
+      }
+      const filled: Pair<readonly FieldEntry[] | null> = [one.field[0], one.field[1]];
+      filled[me] = field;
+      return { ...one, field: filled };
+    }),
   };
 }
 
@@ -276,7 +283,8 @@ export function matchpointsOf(points: number, against: readonly FieldEntry[]): n
  * caller decides what to draw for that; what it must not do is read as nought.
  */
 export function boardPercentageOf(result: FieldResult, me: PlayerId): number | null {
-  return result.field === null ? null : matchpointsOf(netFor(result.points, me), result.field);
+  const field = result.field[me];
+  return field === null ? null : matchpointsOf(netFor(result.points, me), field);
 }
 
 /**
@@ -289,12 +297,13 @@ export function boardPercentageOf(result: FieldResult, me: PlayerId): number | n
  * compare with yet" rather than as a zero.
  */
 export function humanPercentageOf(result: FieldResult, me: PlayerId): number | null {
-  if (result.field === null) {
+  const field = result.field[me];
+  if (field === null) {
     return null;
   }
   return matchpointsOf(
     netFor(result.points, me),
-    result.field.filter((one) => one.kind !== "computer"),
+    field.filter((one) => one.kind !== "computer"),
   );
 }
 
@@ -330,18 +339,27 @@ function meanOf(values: readonly (number | null)[]): number | null {
     : found.reduce((total, one) => total + one, 0) / found.length;
 }
 
-export function summarizeField(state: FieldState): FieldSummary {
+/**
+ * The session as one seat sees it.
+ *
+ * **The seat is an argument rather than a property of the state**, which is what lets
+ * a table hand each player their own figures from one session. It was a field on
+ * `FieldState` while the format was solo, and a snapshot built from that would have
+ * shown the second seat their opponent's placings — every number on the screen
+ * belonging to somebody else, with nothing erroring anywhere.
+ */
+export function summarizeField(state: FieldState, me: PlayerId): FieldSummary {
   // Nothing to fold in: a board is committed by the action that finishes it, so the
   // session moves as it is played and the last board is in `results` like every
   // other. That is the whole reason the commit moved off this function.
   const board = state.boards[state.at] ?? state.boards[state.boards.length - 1]!;
-  const placings = state.results.map((one) => boardPercentageOf(one, state.me));
+  const placings = state.results.map((one) => boardPercentageOf(one, me));
   return {
     boards: state.boards.length,
     boardsPlayed: state.results.length,
     boardsRanked: placings.filter((one) => one !== null).length,
     complete: state.results.length >= state.boards.length,
-    humanPercentage: meanOf(state.results.map((one) => humanPercentageOf(one, state.me))),
+    humanPercentage: meanOf(state.results.map((one) => humanPercentageOf(one, me))),
     percentage: meanOf(placings),
     results: state.results,
     score: duplicateScoreFor(state.deal, board.vulnerable),

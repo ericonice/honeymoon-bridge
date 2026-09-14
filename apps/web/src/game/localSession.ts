@@ -746,7 +746,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
         }
         setMatch((current) =>
           current.kind === "field"
-            ? { kind: "field", session: withField(current.session, board.id, found) }
+            ? { kind: "field", session: withField(current.session, board.id, HUMAN, found) }
             : current,
         );
       }
