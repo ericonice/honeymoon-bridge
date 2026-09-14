@@ -87,10 +87,10 @@ function text(): string {
  * nobody needed to follow.
  */
 describe("the fixed score during a session", () => {
-  it("shows a total and no two-sided columns", () => {
+  it("shows one signed figure and no two-sided columns", () => {
     show({ kind: "duplicate", summary: session({ margin: [250, -250] }) });
 
-    expect(text()).toContain("Total");
+    expect(text()).toContain("Settled");
     expect(text()).toContain("+250");
     // The You / opponent header belongs to a two-column standing.
     expect(screen.queryByText("Computer")).toBeNull();
@@ -149,13 +149,15 @@ describe("the fixed score during a session", () => {
   });
 
   /**
-   * **Closed is the always-visible reading of what the session's actually-cancelled
-   * boards come to — a figure this strip is now the main place to see, rather than
-   * only in the scorepad a tap away.** It reads "—" until a board has come round
-   * twice, the same convention `firstPlayTotal`/`replayTotal` already use, even
-   * though `Total` may have already moved from a board's lone first run.
+   * **Nothing settled is zero, not a dash.** A board played once has contributed a
+   * real score and nothing decided, so the settled figure is the sum of no boards —
+   * which is 0. The same rule the scorepad settled on for its own dash: blank keeps
+   * its one meaning of "there is nothing here", and this is not that.
+   *
+   * The whole +420 is riding on the board still out, which is what the strip has to
+   * say rather than letting it stand as a score.
    */
-  it("reads Closed as a dash before any board has come round twice, even once Total has moved", () => {
+  it("settles nothing while a board has been played once, and says what is riding on it", () => {
     show({
       kind: "duplicate",
       summary: session({
@@ -165,10 +167,9 @@ describe("the fixed score during a session", () => {
       }),
     });
 
+    expect(text()).toContain("Settled 0/2");
+    expect(text()).toContain("2 still out");
     expect(text()).toContain("+420");
-    // Two boards, neither of them this one's — its own row is what says which.
-    expect(text()).toContain("Closed 0/2");
-    expect(text()).toContain("—");
   });
 
   it("sums only the boards that have actually closed, and counts them the same way", () => {
@@ -193,17 +194,23 @@ describe("the fixed score during a session", () => {
       }),
     });
 
-    expect(text()).toContain("Closed 1/2");
+    // **The anti-vacuity of this whole change.** The open board's 90 is in the total
+    // and must not be in Settled — so asserting the settled figure alone would pass
+    // against a strip that simply kept showing the total. Both halves, and they add
+    // back up to the 340 that was dropped.
+    expect(text()).toContain("Settled 1/2");
     expect(text()).toContain("+250");
+    expect(text()).toContain("1 still out");
+    expect(text()).toContain("+90");
+    expect(text()).not.toContain("+340");
   });
 
   /**
-   * **Under IMPs, Total and Closed always agree — see `closedMarginTotal`'s own
-   * doc — so showing both would be showing the same number twice.** One row
-   * survives, carrying the board count Closed used to and labelled with the
-   * scoring points never needs to name.
+   * **Under IMPs the settled figure names its currency and nothing is ever "out" with
+   * a number beside it** — `impsFor` converts a board's margin and an open board has
+   * none. The count still gets said, since that half of the question is answerable.
    */
-  it("collapses Total and Closed into one row under IMPs, rather than showing the same number twice", () => {
+  it("names IMPs on the settled figure rather than having its own row", () => {
     show({
       kind: "duplicate",
       summary: session({
@@ -214,9 +221,15 @@ describe("the fixed score during a session", () => {
       }),
     });
 
-    expect(text()).toContain("IMPs · 1/1");
-    // Only the one row — not a "Closed" label repeating the same figure.
-    expect(text()).not.toContain("Closed 1/1");
+    expect(text()).toContain("Settled (IMPs) 1/1");
+    // **+6, not +250** — the board's 250-point margin converted. Hardcoded rather than
+    // asked of `impsFor`, which is what makes this catch a strip showing raw points:
+    // computing the expectation through the same function the component uses would
+    // agree with it whatever either said.
+    expect(text()).toContain("+6");
+    expect(text()).not.toContain("+250");
+    // Every board is in, so there is nothing out and no row claiming there is.
+    expect(text()).not.toContain("still out");
   });
 
   it("does not name which board it is", () => {

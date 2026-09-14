@@ -1,4 +1,4 @@
-import { GAME_THRESHOLD, closedMarginTotal, totalScore } from "@hb/engine";
+import { GAME_THRESHOLD, sessionSplit, totalScore } from "@hb/engine";
 import type {
   Contract,
   MatchFormat,
@@ -198,33 +198,37 @@ function signed(value: number): string {
 }
 
 /**
- * A session's standing: the running total, and what the boards that have
- * actually closed come to.
+ * A session's standing: what is decided, and how much is still riding on stocks that
+ * have not come back.
  *
- * Used to be one signed score plus "what this deal came to before" — right for a
- * session with no two-sided rubber under it, but not why it was worth showing
- * that on its own. First play and replay subtotals sat here for a while, one
- * per pass through the boards — a real comparison, but a narrower one than
- * either of these, and it cost the two feet that answer the question a player
- * actually has mid-session: how much of this score is decided.
+ * **Total led this strip and has been dropped, because it is not a score.** A board is
+ * worth the difference between its two runs, so a deal whose stock nobody has answered
+ * yet contributes whatever this seat happened to make on it — early in a session that is
+ * mostly a statement about the cards. `DuplicateSummary.margin` runs per deal on purpose
+ * and its own doc says why; the mistake was letting the honest running figure be the one
+ * the player reads as their standing. Under `shuffled`, which puts no floor on the gap at
+ * all, a session can go a long way with nothing settled while that number moves the whole
+ * time. Reported as having no clear way of knowing how you are doing.
  *
- * **Closed is that answer, and it is not a repeat of Total — under points.** Total
- * runs on every deal played, so it moves before a board has actually cancelled its
- * own luck — see `DuplicateSummary.margin`'s own doc for why it does not wait.
- * Closed sums only the boards whose second run is in. The two agree once every
- * board is shut, and differ exactly while one is still half played, which is the
- * gap this row exists to say something about.
+ * So `sessionSplit`: **Settled** is the real duplicate score, boards both runs of which
+ * are in and the luck cancelled, and **still out** is what is riding on the rest. They sum
+ * to the total, so nothing is hidden — and at the end there is nothing out and Settled
+ * *is* the total, which is why dropping Total costs no final figure.
  *
- * **Under IMPs the two never differ, so there is only one row.** `impsFor` needs
- * both of a board's runs to have anything to convert, so `margin` already sums
- * closed boards only — the same figure `closedMarginTotal` computes, at every
- * point in the session rather than only once it is over. Showing both would be
- * showing one number twice; the row that survives carries the board count Closed
- * used to, since that half of the question is still worth answering.
+ * The "still out" figure is worth as much as the settled one under this order: a large
+ * number out means several boards are about to come back at once and can swing hard.
  *
- * "Played before" — the deal in hand's own earlier score — is gone rather than kept
- * alongside these: it answered a narrower question, this one board rather than the
- * session.
+ * **Under IMPs it carries a count and no figure**, which is the format rather than an
+ * omission — `impsFor` converts a board's margin and an open board has none. That also
+ * removes an old asymmetry here: IMPs used to get one row where points got two, because
+ * `margin` already summed closed boards only. Both now say the same two things, and the
+ * currency is named on the settled row rather than implied by which rows exist.
+ *
+ * Earlier shapes, so they are not re-proposed: one signed score plus "what this deal came
+ * to before", which answered a narrower question — this one board rather than the
+ * session; and first-play/replay subtotals, one per pass through the boards, which is a
+ * split by *when* rather than by what is decided, and is the same mistake `SessionPad`'s
+ * feet made until it was measured.
  */
 /**
  * A Doop session's standing: where you are placing, and nothing else most of the time.
@@ -287,37 +291,36 @@ function SessionRows({
   readonly summary: DuplicateSummary;
   readonly view: PlayerView;
 }): React.JSX.Element {
-  const closed = closedMarginTotal(summary, view.me);
-
-  if (summary.scoring === "imps") {
-    return (
-      <p className="flex items-baseline justify-between gap-2 text-white/40">
-        <span>
-          IMPs · {summary.closed}/{summary.boards.length}
-        </span>
-        <span className="font-semibold tabular-nums text-white/90">
-          {closed === null ? "—" : signed(closed)}
-        </span>
-      </p>
-    );
-  }
+  const split = sessionSplit(summary, view.me);
+  const out = summary.boards.length - summary.closed;
 
   return (
     <>
-      <p className="flex items-baseline justify-between gap-2 text-white/40">
-        <span>Total</span>
-        <span className="font-semibold tabular-nums text-white/90">
-          {signed(summary.margin[view.me])}
-        </span>
-      </p>
+      {/* **Settled leads, and it is the only figure here that is a score.** The running
+          total used to lead and is honest arithmetic rather than a standing: a board is
+          worth the difference between its two runs, so until a stock comes back this
+          seat's figure on it is mostly what the cards were. See `sessionSplit`. */}
       <p className="flex items-baseline justify-between gap-2 text-white/40">
         <span>
-          Closed {summary.closed}/{summary.boards.length}
+          Settled{summary.scoring === "imps" ? " (IMPs)" : ""} {summary.closed}/
+          {summary.boards.length}
         </span>
-        <span className="tabular-nums text-white/60">
-          {closed === null ? "—" : signed(closed)}
+        <span className="font-semibold tabular-nums text-white/90">
+          {signed(split.settled)}
         </span>
       </p>
+      {out === 0 ? null : (
+        <p className="flex items-baseline justify-between gap-2 text-white/40">
+          <span>
+            {out} still out
+          </span>
+          {/* No figure under IMPs, which is the format rather than an omission — an
+              open board has no margin, so there is nothing to convert. */}
+          <span className="tabular-nums text-white/60">
+            {split.out === null ? "" : signed(split.out)}
+          </span>
+        </p>
+      )}
     </>
   );
 }
@@ -330,37 +333,28 @@ function SessionFigures({
   readonly summary: DuplicateSummary;
   readonly view: PlayerView;
 }): React.JSX.Element {
-  const closed = closedMarginTotal(summary, view.me);
-
-  if (summary.scoring === "imps") {
-    return (
-      <>
-        <span className="whitespace-nowrap">{ORDER_LABEL[summary.schedule]}</span>
-        <span className="whitespace-nowrap">
-          IMPs · {summary.closed}/{summary.boards.length}{" "}
-          <span className="font-semibold tabular-nums text-white/90">
-            {closed === null ? "—" : signed(closed)}
-          </span>
-        </span>
-      </>
-    );
-  }
+  const split = sessionSplit(summary, view.me);
+  const out = summary.boards.length - summary.closed;
 
   return (
     <>
       <span className="whitespace-nowrap">{ORDER_LABEL[summary.schedule]}</span>
       <span className="whitespace-nowrap">
-        Total{" "}
+        Settled{summary.scoring === "imps" ? " (IMPs)" : ""} {summary.closed}/
+        {summary.boards.length}{" "}
         <span className="font-semibold tabular-nums text-white/90">
-          {signed(summary.margin[view.me])}
+          {signed(split.settled)}
         </span>
       </span>
-      <span className="whitespace-nowrap">
-        Closed {summary.closed}/{summary.boards.length}{" "}
-        <span className="tabular-nums text-white/60">
-          {closed === null ? "—" : signed(closed)}
+      {out === 0 ? null : (
+        <span className="whitespace-nowrap">
+          {out} still out
+          {split.out === null ? "" : " "}
+          <span className="tabular-nums text-white/60">
+            {split.out === null ? "" : signed(split.out)}
+          </span>
         </span>
-      </span>
+      )}
     </>
   );
 }

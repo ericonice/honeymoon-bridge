@@ -909,6 +909,46 @@ export function closedMarginTotal(summary: DuplicateSummary, seat: PlayerId): nu
 }
 
 /**
+ * A session's running figure split into what is decided and what is not.
+ *
+ * **The running total is honest arithmetic and is not a score until boards come back.**
+ * A board is worth the difference between its two runs, so a deal whose stock nobody has
+ * answered yet contributes whatever this seat happened to make on it — which early in a
+ * session is mostly a statement about the cards. Under `shuffled` there is no floor on
+ * the gap at all, so a session can run a long way with nothing settled, and the one
+ * number on screen moves the whole time while meaning very little. Reported as not
+ * knowing how you are doing.
+ *
+ * So the pair rather than the total: `settled` is the real duplicate score — boards both
+ * runs of which are in, luck cancelled — and `out` is what is riding on the stocks still
+ * to come back. **The two sum to the total**, which is why they are computed together
+ * here rather than subtracted at each call site.
+ *
+ * `out` is **null under IMPs**, and that is the format rather than a gap: `impsFor`
+ * converts a board's *margin*, and an open board has no margin to convert. Its count is
+ * still worth saying, which is what `DuplicateSummary.closed` against `boards.length` is
+ * for. Under points a board's runs are plain scores and add up like any others.
+ *
+ * `settled` is **0 rather than null** when nothing has come back, on the same rule the
+ * scorepad settled for its dash: zero is a real answer — the sum of no boards — where a
+ * blank has to keep its one meaning of "there is nothing here".
+ */
+export interface SessionSplit {
+  /** Raw net on boards still to come round. Null under IMPs, which cannot value one. */
+  readonly out: number | null;
+  /** This seat's score on boards both runs of which are in, in the session's currency. */
+  readonly settled: number;
+}
+
+export function sessionSplit(summary: DuplicateSummary, seat: PlayerId): SessionSplit {
+  const settled = closedMargin(summary.boards, summary.scoring, seat);
+  if (summary.scoring === "imps") {
+    return { out: null, settled };
+  }
+  return { out: summary.margin[seat] - settled, settled };
+}
+
+/**
  * Deals the next board of the schedule, committing the finished deal.
  *
  * No seed argument, unlike `nextDeal`: a session's deals are its boards and they

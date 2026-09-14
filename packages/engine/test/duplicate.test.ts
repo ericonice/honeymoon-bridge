@@ -22,6 +22,7 @@ import {
   nextDuplicateDeal,
   replayOf,
   replayTotal,
+  sessionSplit,
   scheduleFor,
   scheduleKindOf,
   scoreDuplicateDeal,
@@ -956,6 +957,72 @@ describe("a session", () => {
         summary.margin[seat],
       );
     }
+  });
+
+  /**
+   * Half a session, with a real contract opened on every deal.
+   *
+   * `playOut` takes the first legal action, which is Pass — so every deal is passed
+   * out, every score is zero and any assertion about how a margin *splits* would hold
+   * trivially. The same dead end `returnMatch.test.ts` hit. This one bids the cheapest
+   * contract instead, and stops part-way so there are boards still open.
+   */
+  function playSome(session: DuplicateState, deals: number): DuplicateState {
+    let current = session;
+    let done = 0;
+    for (let guard = 0; guard < 8000 && done < deals; guard++) {
+      if (current.deal.phase === "complete") {
+        done += 1;
+        if (done >= deals || summarizeDuplicate(current).complete) {
+          return current;
+        }
+        current = nextDuplicateDeal(current);
+        continue;
+      }
+      const seat = current.deal.toAct;
+      const legal = legalActions(current.deal, seat).filter((action) => action.type !== "claim");
+      const bid = legal.find(
+        (action) => action.type === "call" && action.call.type === "bid",
+      );
+      current = applyDuplicateAction(current, seat, (bid ?? legal[0]!) as never);
+    }
+    return current;
+  }
+
+  /**
+   * What the strip draws mid-session. The property that matters is that nothing goes
+   * missing: a board played once is not settled, and its score is not thrown away
+   * either — it is out, and the two halves still add to the running total.
+   *
+   * Driven half a session in rather than played out, because a finished session has
+   * nothing out and the interesting state is the one the player spends most of a
+   * shuffled session looking at.
+   */
+  it("splits a part-played session into what is settled and what is still out", () => {
+    const summary = summarizeDuplicate(
+      playSome(startDuplicate({ ...options, boards: 3, minGap: 2 }), 4),
+    );
+
+    // Anti-vacuity, both halves of it: with every board closed `out` is 0 and the sum
+    // holds trivially, and with every deal passed out all three figures are 0 and it
+    // holds for a worse reason.
+    expect(summary.closed).toBeLessThan(summary.boards.length);
+    expect(summary.margin[0]).not.toBe(0);
+
+    for (const seat of [0, 1] as PlayerId[]) {
+      const split = sessionSplit(summary, seat);
+      expect(split.settled + (split.out ?? 0)).toBe(summary.margin[seat]);
+      expect(split.out).not.toBe(0);
+    }
+  });
+
+  /** An open board has no margin, so IMPs has nothing to convert and says so. */
+  it("has nothing out to report under IMPs, where an open board cannot be valued", () => {
+    const summary = summarizeDuplicate(
+      playSome(startDuplicate({ ...options, boards: 3, minGap: 2, scoring: "imps" }), 4),
+    );
+
+    expect(sessionSplit(summary, 0).out).toBeNull();
   });
 
   it("reads first play and replay as null before either has happened", () => {

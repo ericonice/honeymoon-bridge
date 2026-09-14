@@ -2426,6 +2426,41 @@ hypothetical rather than the call the game makes. **A control only tests what it
 and this file has now recorded four vacuous tests found by reverting the fix rather than by reading
 them.
 
+**The running total led the strip and has been dropped, because it is honest arithmetic and not a
+score.** A board is worth the difference between its two runs, so a deal whose stock nobody has answered
+yet contributes whatever this seat happened to make on it — early in a session that is mostly a
+statement about the cards. Under **shuffled**, which puts no floor on the gap at all, a session runs a
+long way with nothing settled while the one number on screen moves the whole time. Reported from real
+play as having no clear way of knowing how you are doing, on the format that is the most fun to play.
+
+`sessionSplit` is the answer and it invents nothing: **Settled** is the real duplicate score — boards
+both runs of which are in, the luck cancelled — and **still out** is what is riding on the rest. They
+sum to the total, so nothing is hidden, and at the end there is nothing out and Settled *is* the total,
+which is why dropping Total costs no final figure. Computed as a pair in the engine rather than
+subtracted at two call sites, since the strip has a stacked layout and a wrapping one and they must not
+be able to disagree.
+
+**"Still out" is the more interesting half under this order**, which is the part not obvious in advance:
+a large number out means several boards are about to come back at once and can swing hard.
+
+**Under IMPs it carries a count and no figure**, which is the format rather than an omission — `impsFor`
+converts a board's margin and an open board has none. That removed an asymmetry as well: IMPs used to
+get one row where points got two, because `margin` already summed closed boards only. Both formats now
+say the same two things and the currency is named on the settled row rather than implied by which rows
+exist.
+
+**Settled is `0` and not a dash when nothing has come back**, on the rule the scorepad already settled
+for its own dash: zero is a real answer, the sum of no boards, where a blank keeps its one meaning of
+"there is nothing here".
+
+**The test that matters is the one asserting both halves**, and the reason is the usual one. A fixture
+where one board is closed at +250 and another is open at +90 has a total of 340 — so asserting the
+settled figure alone would pass against a strip that had simply kept showing the total. It asserts +250,
+"1 still out", +90, *and the absence of +340*. Checked by reverting `sessionSplit` to return the total:
+that test fails and the other ten pass. The engine-level test needed a driver that **bids**, since
+`playOut` takes the first legal action and passes every deal out, which makes every figure zero and the
+sum hold for the worst possible reason.
+
 **The score runs now rather than waiting for a board to close.** It totalled closed boards only,
 which on a short session left it at nil for most of the way. Summing every deal played agrees with
 summing the boards once they are all shut — a board's margin *is* the sum of its two runs read from
