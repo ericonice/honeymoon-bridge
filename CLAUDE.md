@@ -458,8 +458,8 @@ from ordinary bridge:
   game; a duplicate session prescribes it by board and pays for a game on the spot. Not Chicago.
   `MatchFormat` is the wide vocabulary and `RubberFormat` is the narrow one the rubber machinery
   keeps, so nothing has to invent a meaning for a rubber that is a duplicate.
-- **Duplicate is two formats: Replay and Field.** Replay plays a board twice and settles the
-  difference in points or IMPs; Field plays it once and ranks you among the results already recorded
+- **Duplicate is two formats: Replay and Doop.** Replay plays a board twice and settles the
+  difference in points or IMPs; Doop plays it once and ranks you among the results already recorded
   on it, in matchpoints. Same board, same prescribed vulnerability, same deal settled where it is
   played — only the source of the comparison differs. §1.8 and §1.8a.
 
@@ -1921,7 +1921,7 @@ was converted only for `"equity"`; a mirror objective is a probability on the sa
 raw would have been a landslide rather than a nudge. It converts through the mirror table, since what
 200 points is worth depends on where the pair stands.
 
-**Scoring is points, and `impsFor` is written and unused.** (True of Replay, and overtaken for Field
+**Scoring is points, and `impsFor` is written and unused.** (True of Replay, and overtaken for Doop
 — see below, which is matchpointed and reaches this setting not at all.) IMPs was the first proposal, on the
 grounds that a concave scale stops one doubled disaster deciding a session. What weakened it is that
 duplication has *already* cancelled the deal, so a duplicate margin is far better behaved than a
@@ -1932,14 +1932,39 @@ both runs' scores, so any played session can be re-scored the other way and the 
 Honors stay in, against duplicate bridge's own practice, because here a hand is built over 26
 decisions and four aces is something a player did.
 
-**Duplicate is two formats now — Replay and Field — and the second is the one that is duplicate in
+**Duplicate is two formats now — Replay and Doop — and the second is the one that is duplicate in
 the ordinary sense.** §1.8a. A board is played **once** and ranked against the results already
 recorded on it, where §1.8 manufactures its comparison by having you play the stock twice yourself.
-The screen calls the old one **Replay** and the new one **Field**; nothing stored moved, so recorded
+The screen calls the old one **Replay** and the new one **Doop**; nothing stored moved, so recorded
 sessions stay `"duplicate"` and stay in the same rating pool — a relabelling of one value rather than
 a re-modelling of it, the same constraint the one-game length respected. The names are forced by
 width as much as by meaning: four cells in a phone's column leave about seventy pixels each, or
 roughly seven characters, so nothing on that row can be as long as "Duplicate".
+
+**It was called Field first, and the rename is the better name rather than a nicer one.** Doop is what
+real bridge calls this — duplicate's comparison at a single table, by playing boards that have already
+been played and scoring against what the people before you made of them, which is §1.8a exactly.
+"Field" named the *yardstick* rather than the game, and it is still the right word inside the format:
+`FieldEntry`, `fieldBoardsFor`, "the field is hidden until you have played". **So the rename is UI-only
+and deliberately shallow.** The stored value stays `"field"`, because `ratings.ts` keys on the string
+and renaming it would move every recorded session out of its pool — the same constraint the one-game
+length respected, taken for the second time.
+
+**Help said nothing about it at all, through shipping, playing, a rename and a deploy.** Help is the
+one surface with nothing that breaks when it falls behind: no test fails, no type complains, and the
+format worked perfectly while the screen explaining the game did not mention it existed. It has a
+section now, and `test/helpOverlay.test.ts` holds it there with a `Record<MatchFormat, string>` of
+which heading explains which format — **so adding a format fails to compile rather than shipping
+undocumented**, the same guard `preferredFormat.test.ts` uses on the union it validates.
+
+Two stale claims went with it, both found by reading Help against this file rather than by anything
+failing. The Replay section said duplicate was "against the computer only for now", which stopped being
+true when a table could deal one. And the Mirror section said the computer's recall was "worth almost
+nothing here" — which rested on 52.5% ± 4.9, the null this file has since recorded as **wrong and
+load-bearing**; it is 56.7% at 2.9σ re-measured. The rating treatment has not changed, so that sentence
+stayed; the claim about the measurement did not. **A help screen quoting a number this file has
+retracted is the one kind of help worth less than none**, which is the objection `ScoringOverlay` was
+built to answer and the same objection applies to prose.
 
 **Scoring is matchpoints, and that overturned the entry above about `impsFor`.** A replay compares
 two runs, so a board can only say a *margin* and the argument is about how to scale one. A field of
@@ -2053,12 +2078,34 @@ which is bounded without a deadline and is plausibly close to what a phone compl
 shipped bidder does not finish its 25 samples on anybody's device. It wants the testing panel's "Time
 a bid search" row run on a real phone before it ships.
 
-**And the head-to-head is specified and not built.** §1.8a makes a field board playable at a table —
-each seat ranked against its own stream's field, the two percentages compared, which is ordinary pairs
-scoring and is what makes two seats holding opposite streams comparable at all. The Durable Object
-cannot deal from the corpus yet, so `queueFormat` still refuses Field: pairing two people for a format
-the server cannot run is worse than reading the preference as "anyone". The comment there says that
-rather than claiming the rules forbid it.
+**The head-to-head is built, and the probe is what found the bug.** §1.8a makes a Doop board playable
+at a table — each seat ranked against its own stream's field, the two percentages compared, which is
+ordinary pairs scoring and is what makes two seats holding opposite streams comparable at all. The
+Durable Object deals from the corpus now: `pairedStocks` folds the two rows of a seed into one board so
+both seats hold opposite streams of the same shuffle, and `#applyField` files both results and folds
+both fields in, wrapped so it cannot cost the move.
+
+**Verified against a real `wrangler dev`, two sockets, a whole four-board session.** Format negotiated
+as `field`, both seats ranked 4 of 4, and the two placings came back **complementary** — 21% against
+79%, then 100% against 0% on an earlier run — which is the property the format rests on and the one
+thing no unit test can assert, since it is about two clients rather than one. `winner` came back as the
+seat with the higher placing.
+
+**And §1.4 was checked rather than assumed: four seeds crossed for four boards played.** A seed
+reconstructs a stock, so the only boards whose seeds may reach a client are the ones already played out
+— where both hands are face up anyway. Nothing upcoming leaked.
+
+**What the probe found that reading had not**: `formatFor` computed its board count as "duplicate, or
+else zero", so a Doop table asked for **zero** boards, found none, and fell back to a rubber with
+nothing erroring anywhere. `boardsAsked` is that ternary as a named function — a field board is one
+deal and a replay board is two. **Third time in one day that a conditional reading "this format, or
+else nothing" swallowed the new one**, after the two validating readers; the shape is worth recognising
+on sight.
+
+Three of the four bugs in that session were in the probe rather than the server, and they are the ones
+worth writing down because the next probe will hit them: the message type is `state` and not
+`snapshot`, `join` needs `protocol: 1`, and **each socket needs its own `token`** — a seat is held by
+token, so two sockets sending none both reclaim seat 0 and the table never fills.
 
 **`game/match.ts` is the abstraction both formats satisfy**, as a tagged union with free functions
 rather than a common base — there is no common base. `MatchSummary` is shaped so almost nothing needs
@@ -2939,7 +2986,7 @@ auction.
   not progress toward a game do not bring the rubber closer" and turned out to be +0.08.
 
 - **The bot maximises points in a format scored on placement, and that is the same mispricing this
-  file has already recorded twice.** `objectiveFor` gives Field the `"duplicate"` objective, on the
+  file has already recorded twice.** `objectiveFor` gives Doop the `"duplicate"` objective, on the
   argument that a field board *is* a duplicate board — no rubber, prescribed vulnerability, the deal
   settled where it is played. That is right about how the **deal** is scored and wrong about how the
   **format** is: §1.8a settles a board in *matchpoints*, and duplicate settles it in points.

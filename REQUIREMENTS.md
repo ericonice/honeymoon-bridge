@@ -670,7 +670,7 @@ already is one.
 ### 1.8 Scoring — Duplicate
 
 **Duplicate is two formats and this is the first of them.** On screen it is **Replay**; §1.8a is
-**Field**. They are separate choices drawn as a pair rather than one choice with a setting — see
+**Doop**. They are separate choices drawn as a pair rather than one choice with a setting — see
 §3.6a. What a board is, prescribed vulnerability and a deal settled where it is played are common to
 both.
 
@@ -830,7 +830,7 @@ game nobody is playing — it just errs in the other direction now, crediting th
 rather than too much. §3.7's ratings therefore skip duplicate results until enough real sessions
 exist to place it.
 
-### 1.8a Duplicate Against the Field
+### 1.8a Doop — Duplicate Against the Field
 
 The second flavour of §1.8, and it is the one that is duplicate in the ordinary sense of the word: a
 board is played **once**, and what decides it is **where your result places among the results already
@@ -1504,7 +1504,7 @@ browser.
 Four cells, and five games behind them. A **rubber** as §1.7 describes it, whose length — first to one
 game or to two — is chosen on the line beneath rather than as a format of its own: a single game is a
 rubber that stops early, not a different kind of match, and putting it beside the others made the row
-mix categories. A **mirror** of §1.9. And the two duplicate formats: **Replay** of §1.8 and **Field**
+mix categories. A **mirror** of §1.9. And the two duplicate formats: **Replay** of §1.8 and **Doop**
 of §1.8a.
 
 A rubber is the game this was built to play; the one-game length exists because a rubber runs the
@@ -1512,7 +1512,7 @@ better part of an hour and not every sitting has that in it; duplicate exists to
 cards out of the result; and a mirror does the same thing over a match short enough to finish in one
 sitting.
 
-**Replay and Field are separate choices, drawn as a pair.** They are two formats and each is one tap —
+**Replay and Doop are separate choices, drawn as a pair.** They are two formats and each is one tap —
 not a cell you pick and then configure, which would put the choice a step further away than the other
 three and make one of the four behave unlike the rest. But they are far more like each other than like
 anything else on the row: a board is a seed, vulnerability is prescribed, a deal settles where it is
@@ -1527,21 +1527,28 @@ the grouping already shows.
 taste: four cells in a phone's column leave about seventy pixels each, or roughly seven characters
 under the padding, so nothing on this row can be as long as "Duplicate". **Replay** is this codebase's
 own term for what §1.8 does — the replay hands each seat the other stream — and names the mechanic
-honestly: you play the board, then play it again from the other side. **Field** is the bridge word for
-what §1.8a adds, and for the only thing distinguishing it: there is somebody else's result to be
-measured against, and you never see them.
+honestly: you play the board, then play it again from the other side. **Doop** is what real bridge calls what §1.8a
+adds — a way to get duplicate's comparison at a single table, by playing boards that have already been
+played and scoring against what the people before you made of them. It was **Field** first, after the
+bridge word for the set of results you are ranked among; that word is still the right one *inside* the
+format and is used throughout this section, but it named the yardstick rather than the game. Four
+characters, so the cell budget above is nowhere near binding.
 
 **Nothing stored is re-modelled.** Replay keeps `"duplicate"`, so every session already recorded stays
-in the same rating pool and on the same screens; Field is a value of its own, because it is a different
+in the same rating pool and on the same screens; Doop is a value of its own, because it is a different
 match with a different result and pooling the two would be the mistake the rating pool exists to avoid.
+**Its stored value is `"field"` and stays that way** — the name is drawn in the UI and nowhere below it,
+which is the same relabelling-not-re-modelling constraint the one-game length respected, and for the
+same reason: `ratings.ts` keys on the stored string, so renaming the value would move every recorded
+session out of its pool.
 The grouping is drawn on the row and is not a thing that is stored.
 
-**Field is playable at a table, and it needs both seats.** §1.8a scores each seat against its own
+**Doop is playable at a table, and it needs both seats.** §1.8a scores each seat against its own
 stream's field and compares the two percentages, so a head-to-head is the classic pairs arrangement
 rather than an exception to the format. What it cannot do is happen to somebody: it is played on boards
 that have already been played, so being dropped into one unasked means meeting a stock a stranger may
 have met before. It therefore sits **last in the ordering, below Duplicate** — nothing outranks a seat
-that did not ask for it — and a table settling on Field needs boards **neither** seat has met, which is
+that did not ask for it — and a table settling on Doop needs boards **neither** seat has met, which is
 the one extra thing the server has to arrange that no other format asks for.
 
 **Chosen on the home screen, above the buttons that start a match, and not in Settings.** The test is
@@ -1588,8 +1595,8 @@ other can simply agree, and bad in a queue, where somebody asking for a session 
 stranger who wanted the same thing or was handed a rubber with nothing saying why. **A rule that
 leaves somebody waiting is worse here than one that hands them a neighbouring game.**
 
-Field is last and replay second to last, and the ordering is by how far each is from the game
-everyone else came for. Field goes below replay because it is played on boards that have already
+Doop is last and replay second to last, and the ordering is by how far each is from the game
+everyone else came for. Doop goes below replay because it is played on boards that have already
 been played: being handed one unasked means meeting a stock somebody else may remember, which is a
 worse thing to be dropped into than a session of fresh ones. Replay is below the rubber for the
 reason duplicate always was — a board is a scoring unit, the deals repeat, and being dropped into
