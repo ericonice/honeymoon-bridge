@@ -17,8 +17,9 @@ import type { Pair, PlayerId } from "../src/types.js";
 
 const ME: PlayerId = 0;
 
+/** Both sides named, since a table plays one stock from either end at once. */
 function board(id: string, seed: number, starter: PlayerId, vulnerable: Pair<boolean>): FieldBoard {
-  return { id, seed, starter, vulnerable };
+  return { ids: [id, `${id}-other`], seed, starter, vulnerable };
 }
 
 const BOARDS: readonly FieldBoard[] = [
@@ -74,7 +75,7 @@ describe("a board of a field session", () => {
     const state = startField({ boards: BOARDS });
 
     expect(state.deal.starter).toBe(BOARDS[0]!.starter);
-    expect(currentFieldBoard(state)?.id).toBe("b1");
+    expect(currentFieldBoard(state)?.ids[0]).toBe("b1");
   });
 
   /**
@@ -97,7 +98,7 @@ describe("a board of a field session", () => {
 
     expect(summary.complete).toBe(true);
     expect(summary.boardsPlayed).toBe(BOARDS.length);
-    expect(summary.results.map((one) => one.board.id)).toEqual(["b1", "b2", "b3"]);
+    expect(summary.results.map((one) => one.board.ids[0])).toEqual(["b1", "b2", "b3"]);
   });
 
   /**
@@ -110,7 +111,7 @@ describe("a board of a field session", () => {
     const again = nextFieldDeal(nextFieldDeal(done));
 
     expect(summarizeField(again, ME).boardsPlayed).toBe(BOARDS.length);
-    expect(again.results.map((one) => one.board.id)).toEqual(["b1", "b2", "b3"]);
+    expect(again.results.map((one) => one.board.ids[0])).toEqual(["b1", "b2", "b3"]);
   });
 });
 
@@ -136,8 +137,8 @@ describe("where a board places", () => {
     const summary = summarizeField(withOne, ME);
 
     expect(summary.boardsRanked).toBe(1);
-    expect(summary.results.find((one) => one.board.id === "b2")?.field[ME]).toHaveLength(1);
-    expect(summary.results.find((one) => one.board.id === "b1")?.field[ME]).toBeNull();
+    expect(summary.results.find((one) => one.board.ids[0] === "b2")?.field[ME]).toHaveLength(1);
+    expect(summary.results.find((one) => one.board.ids[0] === "b1")?.field[ME]).toBeNull();
   });
 
   it("ignores a field for a board this session is not playing", () => {
@@ -177,9 +178,10 @@ describe("two seats at one board", () => {
     const mine = netFor(summarizeField(done, 0).results[0]!.points, 0);
     const theirs = netFor(summarizeField(done, 1).results[0]!.points, 1);
 
+    // Each side is a board of its own, so each is filled by its own id.
     const both = withField(
       withField(done, "b1", 0, [entry(mine + 100)]),
-      "b1",
+      "b1-other",
       1,
       [entry(theirs - 100)],
     );

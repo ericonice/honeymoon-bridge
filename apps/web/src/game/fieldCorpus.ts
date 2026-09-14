@@ -47,9 +47,21 @@ export async function fetchFieldBoards(count = FIELD_BOARDS): Promise<readonly F
     if (!response.ok) {
       return null;
     }
-    const body = (await response.json()) as { readonly boards?: readonly FieldBoard[] };
+    const body = (await response.json()) as {
+      readonly boards?: readonly { readonly id: string; readonly seed: number; readonly starter: PlayerId; readonly vulnerable: Pair<boolean> }[];
+    };
     const boards = body.boards ?? [];
-    return boards.length === 0 ? null : boards;
+    // **One side named, the other null.** Solo play holds one stream and the computer
+    // holds the other, and the computer records nothing and is ranked against
+    // nothing — so there is no second board id for this game to have.
+    return boards.length === 0
+      ? null
+      : boards.map((one) => ({
+          ids: [one.id, null] as Pair<string | null>,
+          seed: one.seed,
+          starter: one.starter,
+          vulnerable: one.vulnerable,
+        }));
   } catch {
     return null;
   }
@@ -76,7 +88,7 @@ export function reportFieldResult(options: {
     // has already met, so an anonymous result would have nothing to be excluded from.
     withSession: true,
     body: JSON.stringify({
-      boardId: options.board.id,
+      boardId: options.board.ids[options.me]!,
       contract: options.contract,
       // The **net** from this seat, not its own total — see `netFor`. A defender's
       // own total is nought whether the contract scraped home or made an overtrick,
@@ -118,6 +130,9 @@ export async function fetchFieldEntries(boardId: string): Promise<readonly Field
 }
 
 /** Boards this session has played and not yet been given a field for. */
-export function unrankedBoards(results: readonly FieldResult[]): readonly FieldBoard[] {
-  return results.filter((one) => one.field === null).map((one) => one.board);
+export function unrankedBoards(
+  results: readonly FieldResult[],
+  me: PlayerId,
+): readonly FieldBoard[] {
+  return results.filter((one) => one.field[me] === null).map((one) => one.board);
 }

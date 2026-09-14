@@ -662,10 +662,10 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
     // result and usually a bad one.
     if (match.kind === "field") {
       const played = match.session.results[match.session.results.length - 1];
-      if (played !== undefined && played.board.id === lastFieldBoard.current) {
+      if (played !== undefined && played.board.ids[HUMAN] === lastFieldBoard.current) {
         // Already filed. `results` only grows, so this is the one guard needed.
       } else if (played !== undefined) {
-        lastFieldBoard.current = played.board.id;
+        lastFieldBoard.current = played.board.ids[HUMAN];
         reportFieldResult({
           board: played.board,
           contract: played.contract,
@@ -732,21 +732,21 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
     if (match.kind !== "field") {
       return;
     }
-    const wanted = unrankedBoards(match.session.results);
+    const wanted = unrankedBoards(match.session.results, HUMAN);
     if (wanted.length === 0) {
       return;
     }
     let live = true;
     void (async () => {
       for (const board of wanted) {
-        const first = await fetchFieldEntries(board.id);
-        const found = first ?? (await flush().then(() => fetchFieldEntries(board.id)));
+        const first = await fetchFieldEntries(board.ids[HUMAN]!);
+        const found = first ?? (await flush().then(() => fetchFieldEntries(board.ids[HUMAN]!)));
         if (!live || found === null) {
           continue;
         }
         setMatch((current) =>
           current.kind === "field"
-            ? { kind: "field", session: withField(current.session, board.id, HUMAN, found) }
+            ? { kind: "field", session: withField(current.session, board.ids[HUMAN]!, HUMAN, found) }
             : current,
         );
       }

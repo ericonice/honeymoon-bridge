@@ -36,8 +36,16 @@ import type { Contract, DealAction, DealState, Pair, PlayerId } from "./types.js
  * vulnerability its recorded results were played at and nothing can drift it.
  */
 export interface FieldBoard {
-  /** The corpus's own identifier, which is what a result is reported against. */
-  readonly id: string;
+  /**
+   * The corpus's identifier for **each seat's side of the stock**, which is what a
+   * result is reported against and what a field is fetched for.
+   *
+   * A `Pair` because the two streams are separate rows with separate histories, and
+   * at a table both are in play at once — seat 0 on one side, seat 1 on the other, in
+   * the same deal. Solo play fills one and leaves the other null: the opposition is
+   * the computer, which records nothing and is ranked against nothing.
+   */
+  readonly ids: Pair<string | null>;
   readonly seed: number;
   readonly starter: PlayerId;
   readonly vulnerable: Pair<boolean>;
@@ -232,13 +240,13 @@ export function withField(
   me: PlayerId,
   field: readonly FieldEntry[],
 ): FieldState {
-  if (!state.results.some((one) => one.board.id === boardId && one.field[me] === null)) {
+  if (!state.results.some((one) => one.board.ids[me] === boardId && one.field[me] === null)) {
     return state;
   }
   return {
     ...state,
     results: state.results.map((one) => {
-      if (one.board.id !== boardId || one.field[me] !== null) {
+      if (one.board.ids[me] !== boardId || one.field[me] !== null) {
         return one;
       }
       const filled: Pair<readonly FieldEntry[] | null> = [one.field[0], one.field[1]];

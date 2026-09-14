@@ -28,7 +28,7 @@ function entry(points: number, who: string, kind: FieldEntry["kind"] = "computer
 
 function result(id: string, mine: number, field: readonly FieldEntry[] | null): FieldResult {
   return {
-    board: { id, seed: 1, starter: 0, vulnerable: [false, false] },
+    board: { ids: [id, null], seed: 1, starter: 0, vulnerable: [false, false] },
     contract: { declarer: 0, doubling: "none", level: 4, strain: "S" },
     field: [field, null],
     points: [mine, 0],

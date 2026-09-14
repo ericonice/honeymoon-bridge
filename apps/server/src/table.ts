@@ -6,13 +6,16 @@ import {
   nextIn,
   restoreTable,
   rubberFacts,
+  netFor,
   startMatch,
+  withField,
   summarizeMatch,
 } from "@hb/engine";
 import type {
   DuplicateSchedule,
   DuplicateScoring,
   MatchFormat,
+  FieldBoard,
   MatchState,
   MatchSummary,
   PlayerId,
@@ -26,7 +29,8 @@ import { applyDealAchievements, applyRubberAchievements } from "./achievements.j
 import { accountFor, verifySession } from "./auth.js";
 import { dealSeed } from "./codes.js";
 import type { Env } from "./env.js";
-import { tableBoardsFor } from "./field.js";
+import { fieldFor, recordFieldResult, tableBoardsFor } from "./field.js";
+import type { FieldBoardRow } from "./field.js";
 import { formatFor } from "./matchFormat.js";
 import { DRAWN, recordRubber } from "./results.js";
 import type { SeatedAccount } from "./seating.js";
@@ -147,6 +151,43 @@ type StoredOnDisk = Omit<Stored, "match"> & {
 };
 
 /**
+ * The two rows of each stock, folded into the one board a table deals.
+ *
+ * `tableBoardsFor` returns both sides in board order, so they arrive adjacent: the
+ * first-draw side then the other. A table plays them as **one deal** — seat 0 on one
+ * side, seat 1 on the other — where solo play would have met them as two separate
+ * boards weeks apart.
+ *
+ * A stock missing a side is dropped rather than played one-sided: the seat without a
+ * board has nothing to be ranked against, and a match where one player is scored and
+ * the other is not is worse than a shorter one.
+ */
+function pairedStocks(rows: readonly FieldBoardRow[]): readonly FieldBoard[] {
+  const bySeed = new Map<number, FieldBoardRow[]>();
+  for (const row of rows) {
+    bySeed.set(row.seed, [...(bySeed.get(row.seed) ?? []), row]);
+  }
+  const boards: FieldBoard[] = [];
+  for (const [seed, sides] of bySeed) {
+    const first = sides.find((one) => one.starter === 0);
+    const second = sides.find((one) => one.starter === 1);
+    if (first === undefined || second === undefined) {
+      continue;
+    }
+    boards.push({
+      // Seat 0 takes the side that draws first, which is what `starter` already means
+      // everywhere else — so the deal is dealt from `first` and seat 1 is ranked
+      // against the row recorded for the other stream.
+      ids: [first.id, second.id],
+      seed,
+      starter: first.starter,
+      vulnerable: first.vulnerable,
+    });
+  }
+  return boards;
+}
+
+/**
  * The match two filled seats have agreed to play, or null while one is empty.
  *
  * Every seed is minted here and never leaves the object. For a rubber that is one
@@ -168,7 +209,9 @@ async function startingMatch(
     // stream's field, and the two streams are separate rows with separate histories —
     // so a seed is only playable here if *neither* side has been met by *either*
     // player. Solo play needs no such rule: it takes one side and retires the other.
-    const boards = await tableBoardsFor(env, agreed.boards, [first.accountId, second.accountId]);
+    const boards = pairedStocks(
+      await tableBoardsFor(env, agreed.boards, [first.accountId, second.accountId]),
+    );
     // Nothing left that both seats are new to. A rubber rather than a short match,
     // because the alternative at a table is offering somebody a stock their opponent
     // has already seen, which is worse than playing a different game.
@@ -453,6 +496,18 @@ export class Table extends DurableObject<Env> {
       applied = false;
       console.error("could not apply achievements", (error as Error).message);
     }
+    // Wrapped for the reason above: a field board's results and the fields they are
+    // ranked against are database work on the one action that completes a deal, and
+    // none of it may cost the move. A failure leaves the boards unranked — which the
+    // pad already draws as "waiting for the other results", because §1.8a required a
+    // comparison that never arrives to leave the deal scored and the figure blank.
+    let ranked = next;
+    try {
+      ranked = await this.#applyField(next, stored.seats);
+    } catch (error) {
+      console.error("could not rank the board", (error as Error).message);
+    }
+    next = ranked;
     await this.#save({
       ...stored,
       // Only a run that actually got through counts as done, so a resent
@@ -463,6 +518,63 @@ export class Table extends DurableObject<Env> {
       recorded,
     });
     await this.#broadcast();
+  }
+
+  /**
+   * Files both seats' results on a finished field board, and folds both fields back.
+   *
+   * **Both, in one pass, because a table plays one stock from either end at once.**
+   * Solo play records one result and fetches one field; here each seat has a board of
+   * its own on the same deal, and each is ranked against that board's own history.
+   *
+   * The opponent's account travels with each result, which is what makes the entry
+   * *human against human* rather than solo — §1.8a keeps the three kinds apart
+   * because a score made across the table from a person was shaped by that person.
+   *
+   * Idempotent by the same rule the session uses: a result already filed for this
+   * account on this board is dropped by `recordFieldResult`, and a field already
+   * folded in is left alone by `withField`.
+   */
+  async #applyField(
+    match: MatchState,
+    seats: readonly [SeatRecord | null, SeatRecord | null],
+  ): Promise<MatchState> {
+    if (match.kind !== "field") {
+      return match;
+    }
+    const played = match.session.results[match.session.results.length - 1];
+    if (played === undefined || dealOf(match).phase !== "complete") {
+      return match;
+    }
+
+    let session = match.session;
+    for (const seat of SEATS) {
+      const id = played.board.ids[seat];
+      const mine = seats[seat];
+      const theirs = seats[seat === 0 ? 1 : 0];
+      if (id === null || mine?.accountId == null) {
+        continue;
+      }
+      await recordFieldResult(
+        this.env,
+        {
+          // Read from this seat's side, which is how every entry on that board was
+          // recorded — see the generator, which turns the second stream round.
+          boardId: id,
+          contract: played.contract,
+          ...(theirs?.accountId == null ? {} : { opponentAccountId: theirs.accountId }),
+          points: netFor(played.points, seat),
+          tricks: [played.tricks[seat], played.tricks[seat === 0 ? 1 : 0]],
+        },
+        mine.accountId,
+        Date.now(),
+      );
+      const field = await fieldFor(this.env, id, mine.accountId);
+      if (field !== null) {
+        session = withField(session, id, seat, field);
+      }
+    }
+    return { kind: "field", session };
   }
 
   /**

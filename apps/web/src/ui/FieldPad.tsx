@@ -78,13 +78,13 @@ export function FieldPad({
       </p>
       {summary.results.map((result, at) => (
         <BoardRow
-          key={result.board.id}
+          key={result.board.ids[me] ?? at}
           at={at}
           me={me}
-          open={open === result.board.id}
+          open={open === result.board.ids[me]}
           result={result}
           onToggle={() => {
-            setOpen(open === result.board.id ? null : result.board.id);
+            setOpen(open === result.board.ids[me] ? null : (result.board.ids[me] ?? null));
           }}
         />
       ))}

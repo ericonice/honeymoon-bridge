@@ -29,7 +29,7 @@ const view = { contract: null, me: ME, opponent: 1, phase: "complete" } as Playe
 
 function result(id: string, mine: number): FieldResult {
   return {
-    board: { id, seed: 1, starter: 0, vulnerable: [false, false] },
+    board: { ids: [id, null], seed: 1, starter: 0, vulnerable: [false, false] },
     contract: { declarer: 0, doubling: "none", level: 4, strain: "S" },
     field: [[
       {
