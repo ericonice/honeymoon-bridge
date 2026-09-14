@@ -2914,13 +2914,29 @@ auction.
   `botTuning.ts` already records — a function written so two callers could not disagree, with a case
   missing rather than a caller missing.
 
-- **But duplicate's own objective is not beating plain points in a field session, and the sign is
-  against it.** −1.5 ± 1.9 over the same 200 boards, which is 0.8σ and a coin flip. A hypothesis worth
-  recording because it would be the second pair of errors in here that happen to cancel: what `points`
-  adds and `duplicate` does not is `positionalValue`, a credit for part-scores and games a session can
-  never bank. That is plainly wrong for the reason it exists — and under **matchpoints** competing hard
-  for a part-score is *correct*, because a part-score that beats the field is a top. So the wrong credit
-  may be producing roughly right behaviour. Being re-run at 500 boards rather than acted on.
+- **Duplicate's own objective and plain points are indistinguishable in a field session, measured
+  rather than assumed.** At 200 boards points was ahead by 1.5 ± 1.9, which was 0.8σ and was written
+  down here as a hypothesis: what `points` adds and `duplicate` does not is `positionalValue`, a credit
+  for part-scores and games a session can never bank — plainly wrong for the reason it exists, and yet
+  under **matchpoints** competing hard for a part-score is *correct*, since a part-score that beats the
+  field is a top. So the wrong credit might have been producing roughly right behaviour, which would
+  have been the second pair of errors in here that happen to cancel.
+
+  | over 500 boards | mean placing |
+  | --- | --- |
+  | duplicate objective | **48.7%** |
+  | the same bidder pricing in points | **48.6%** |
+  | difference | **+0.1 ± 1.2** |
+
+  **The sign flipped and the gap vanished**, so there was nothing to explain: the credit is not
+  compensating for anything, it simply does not reach far enough to change a call. Both arms sit about
+  a point under the 50% self-calibration mark, which is the corpus null holding — neither pricing beats
+  the bidder that generated the field.
+
+  Worth keeping as an instrument note rather than a finding: **0.8σ is a coin flip and this file
+  treated it as a direction long enough to build a mechanism for it.** The error bar said so at the
+  time. Same lesson as the +0.01 ± 0.02 margin coefficient that got written down as "points that are
+  not progress toward a game do not bring the rubber closer" and turned out to be +0.08.
 
 - **The bot maximises points in a format scored on placement, and that is the same mispricing this
   file has already recorded twice.** `objectiveFor` gives Field the `"duplicate"` objective, on the
