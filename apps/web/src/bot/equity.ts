@@ -127,6 +127,53 @@ export interface EquityTable {
  * bidder, and the opponent that matters is a person. The 293 recorded deals in the
  * hand log are the population to fit against, and nothing has done that yet.
  */
+/**
+ * The same table, fitted from rubbers in which **both seats double off the solver**.
+ *
+ * **A candidate, not the shipped table**, and it stays that way until it has beaten the
+ * shipped one head to head. This file records the same re-fit being installed on the
+ * strength of its coefficients twice and losing both times — the mirror refit dropped
+ * the bidder from 60.2% to 50.6%, the rubber one from 78.9% to 66.6% — so plausible
+ * numbers are exactly what a bad table looks like from here.
+ *
+ * `bench/equity.ts 800 8`, with `bench/oracle.ts` on both seats. Two things moved:
+ *
+ * | | shipped | re-fit |
+ * | --- | --- | --- |
+ * | `gameLead` | 0.6104 | **0.5331** |
+ * | `level.part` | **−0.2204** | **+0.1594** |
+ *
+ * **A game is worth about 13% less when the stretch for it can be doubled**, which is
+ * the predicted direction: the shipped table was learnt where overreach was free.
+ *
+ * **And `level.part` has stopped being nonsense**, which is the more interesting half.
+ * The shipped −0.22 says a part-score at level makes you *less* likely to take the
+ * rubber; it is flagged below as not understood, and has taken four values across four
+ * fits. The plausible reading is a selection effect: with no doubler, a seat merely
+ * holding a part-score is disproportionately one that settled when it should have
+ * stretched, so the fit reads "part-scores lose" as causal. With punishment in the game
+ * that stops being true, and the cell lands in line with the other three states.
+ *
+ * Structural checks all held — level fits 0.500, one game each fits 0.500, and a game up
+ * mirrors a game down at 0.630 against 0.630 — and calibration is monotone across six
+ * bands, though in-sample.
+ */
+export const EQUITY_DOUBLED: EquityTable = {
+  // **Not re-fitted**, carried across from the shipped table so the two differ in the
+  // rubber cells alone. A mirror is its own fit (`format=mirror`) and changing both at
+  // once would leave a head-to-head unable to say which half moved — the same reason the
+  // defending search left this seat's own contracts alone.
+  game: { margin: 0.1738, part: 0.9548 },
+  gameLead: 0.5331,
+  level: { margin: 0.144, part: 0.1594 },
+  mirror: {
+    first: { margin: 0.1409, part: -0.0561 },
+    second: { carried: -0.0904, margin: 0.2113, part: 0.4649 },
+  },
+  oneEach: { margin: 0.1823, part: 0.7248 },
+  oneUp: { margin: 0.1285, part: 0.7366 },
+};
+
 export const EQUITY: EquityTable = {
   game: { margin: 0.1738, part: 0.9548 },
   gameLead: 0.6104,

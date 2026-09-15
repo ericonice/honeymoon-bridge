@@ -46,6 +46,7 @@ import { botActionFor } from "../src/game/botTurn.js";
 import { actOn, dealOf, nextIn, startMatch, summarizeMatch } from "@hb/engine";
 import { createProgress } from "./progress.js";
 import { ORACLE_FROM_DOWN, oracleDouble, oracleSeatsFor } from "./oracle.js";
+import { EQUITY_DOUBLED } from "../src/bot/equity.js";
 
 /**
  * Two bidders across full rubbers, which is the only bench that can see what a
@@ -456,6 +457,8 @@ interface RunOptions {
    * a pass, a raise over them and a double gets a measured distribution or a counted
    * blend.
    */
+  /** `table=refit` prices the challenger's standings with `EQUITY_DOUBLED`. */
+  readonly table: boolean;
   readonly defend: number;
   readonly search: number;
   /** Two difficulty rungs to play against each other, challenger first. */
@@ -512,6 +515,7 @@ function run({
   search,
   defend,
   searchMode,
+  table,
   versusWeight,
 }: RunOptions): void {
   const tuning = { gameEquity };
@@ -559,6 +563,17 @@ function run({
           // number each level shows in Settings should be the one this produced.
           const level = levels[challenger ? 0 : 1];
           return botForLevel({ level, rng, tuning: { ...tuning, ...level.tuning } });
+        }
+        if (table) {
+          // **The re-fitted equity table against the one it would replace.** Everything
+          // else is identical, including the objective — the only difference is which
+          // numbers price a standing. Installing a re-fit on the strength of its
+          // coefficients has been tried twice here and lost twice, which is why this
+          // exists rather than an edit to `EQUITY`.
+          return cardPlay(rng, {
+            objective: "equity",
+            ...(challenger ? { equityTable: EQUITY_DOUBLED } : {}),
+          });
         }
         if (defend > 0) {
           // **Twelve samples, not twenty-five, and the cap is what makes this a fair
@@ -665,6 +680,8 @@ function run({
       ? `${levelName(levels[0])} against ${levelName(levels[1])}, their own sample counts`
       : search > 0
         ? `the bidder searching its tricks at ${search}ms (${searchMode}) against the same bidder counting them${play}`
+      : table
+        ? `the re-fitted equity table against the shipped one, everything else identical${play}`
       : defend > 0
         ? `the bidder searching what they take declaring, at ${defend}ms, against the same bidder counting it${play}`
         : releases !== null
@@ -880,6 +897,7 @@ run({
   levels: levelsFrom(process.argv.find((arg) => arg.startsWith("levels="))),
   releases: releasesFrom(process.argv.find((arg) => arg.startsWith("releases="))),
   defend: Number(process.argv.find((arg) => arg.startsWith("defend="))?.slice("defend=".length) ?? 0),
+  table: process.argv.includes("table=refit"),
   search: Number(process.argv.find((arg) => arg.startsWith("search="))?.slice("search=".length) ?? 0),
   searchMode: process.argv.includes("mean") ? "mean" : "odds",
   oracle: process.argv.includes("nodouble")

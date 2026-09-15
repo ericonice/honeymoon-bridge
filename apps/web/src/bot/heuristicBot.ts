@@ -3,6 +3,7 @@ import type { Bid, Call, Card, Contract, DrawTake, PlayerId, PlayerView, Rng, St
 import { DEFAULT_GAME_EQUITY, expectedValue } from "./bidValue.js";
 import type { Objective } from "./bidValue.js";
 import { pointsAsEquity } from "./equity.js";
+import type { EquityTable } from "./equity.js";
 import { boardFacing, offeredSoFar, offersFacingOpponent } from "./boardRecall.js";
 import type { BoardOutcome } from "./boardRecall.js";
 import { centredOn, searchTricks, spreadOdds } from "./searchTricks.js";
@@ -204,6 +205,11 @@ export interface BotTuning {
    * how uncertain it is said to be. `"mean"` moves the centre and leaves the width
    * alone, which is the only way to tell those apart.
    */
+  /**
+   * The equity table to price a standing with — for playing a re-fit against the table
+   * it would replace, which is the only thing that has ever settled one of these.
+   */
+  readonly equityTable?: EquityTable;
   readonly searchMode?: "mean" | "odds";
   readonly searchSamples?: number;
   /**
@@ -670,6 +676,8 @@ interface CallContext extends LastTimeContext {
   readonly lastTimeWeight: number;
   readonly gameEquity: number;
   readonly objective: Objective;
+  /** Which equity table prices a standing — see `BotTuning.equityTable`. */
+  readonly equityTable: EquityTable | undefined;
   readonly searchMode: "mean" | "odds";
   /** What they take declaring, by strain — empty unless `searchDefending` is on. */
   readonly theirSpreads: ReadonlyMap<Strain, TrickSpread> | null;
@@ -689,7 +697,7 @@ interface CallContext extends LastTimeContext {
  * it is a large negative, and a contract that goes down cheaply can beat it.
  */
 function valueOfPassing(context: CallContext): number {
-  const { gameEquity, objective, standing, view } = context;
+  const { equityTable, gameEquity, objective, standing, view } = context;
   const contract = standingContract(view);
   if (contract === null) {
     return 0;
@@ -715,7 +723,7 @@ function valueOfPassing(context: CallContext): number {
  * keeps the two halves of a competitive decision consistent with each other.
  */
 function bidCandidates(context: CallContext, disguiseCredit: number): Candidate[] {
-  const { gameEquity, objective, standing, view } = context;
+  const { equityTable, gameEquity, objective, standing, view } = context;
   return callsFor(view).flatMap((call) => {
     if (call.type !== "bid") {
       return [];
@@ -735,7 +743,8 @@ function bidCandidates(context: CallContext, disguiseCredit: number): Candidate[
             estimate: estimateFor(contract, context),
             exposedToDouble: true,
             gameEquity,
-            objective,
+            equityTable,
+        objective,
             odds: oddsFor(context, contract),
             hand: view.hand,
             me: view.me,
@@ -762,7 +771,7 @@ function bidCandidates(context: CallContext, disguiseCredit: number): Candidate[
  * being a special case at the moment the bot can estimate what it beats them by.
  */
 function doubleCandidate(context: CallContext): Candidate[] {
-  const { gameEquity, objective, standing, view } = context;
+  const { equityTable, gameEquity, objective, standing, view } = context;
   const contract = standingContract(view);
   if (contract === null || !callsFor(view).some((call) => call.type === "double")) {
     return [];
@@ -776,6 +785,7 @@ function doubleCandidate(context: CallContext): Candidate[] {
         estimate: estimateFor(doubled, context),
         exposedToDouble: false,
         gameEquity,
+        equityTable,
         objective,
         odds: oddsFor(context, doubled),
         hand: view.hand,
@@ -851,6 +861,8 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
   const searchSamples = tuning.searchSamples ?? 0;
   const searchMode = tuning.searchMode ?? "odds";
   const searchDefending = tuning.searchDefending ?? false;
+  // Undefined means the shipped table, which `equityOf` defaults to.
+  const equityTable = tuning.equityTable;
   const theirBidOnOwnWeight = tuning.theirBidOnOwnWeight ?? THEIR_BID_ON_OWN_WEIGHT;
 
   return {
@@ -887,6 +899,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
           : null;
       return bestCall({
         disguiseCredit,
+        equityTable,
         gameEquity,
         lastTimeWeight,
         objective,
