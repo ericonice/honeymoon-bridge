@@ -313,8 +313,47 @@ function SessionRows({
           {signed(split.settled)}
         </span>
       </p>
+      {pointsWorthShowing(summary) ? (
+        <p className="flex items-baseline justify-between gap-2 text-white/40">
+          <span>Points</span>
+          <span className="tabular-nums text-white/60">{signed(runningPoints(summary, view))}</span>
+        </p>
+      ) : null}
     </>
   );
+}
+
+/**
+ * The session's running score in **points**, whatever it is being scored in.
+ *
+ * **Under IMPs there is otherwise nothing alive on this strip**, and that is the format
+ * rather than an oversight: `impsFor` converts a board's *margin*, an open board has no
+ * margin, so an IMPs session's own figure counts closed boards only and cannot move
+ * until a stock repeats. Under a shuffled order that is most of the first half.
+ * Reported as there being no score until both halves are played, which is literally
+ * true there and only loosely true under points.
+ *
+ * Points are available every deal even in an IMPs session — the engine scores each deal
+ * in points and only *converts* at the board — so this is a real figure rather than an
+ * invented one, and it is `summary.points` rather than a fresh fold: the gross totals
+ * differ by exactly the sum of every run's net, which is what makes them the same
+ * quantity the points-scored session shows as its own total.
+ */
+function runningPoints(summary: DuplicateSummary, view: PlayerView): number {
+  return summary.points[view.me] - summary.points[view.opponent];
+}
+
+/**
+ * Whether that figure says anything the settled one does not.
+ *
+ * **Under IMPs, always**: the two are different units and neither implies the other.
+ * Under points they are the same quantity and converge exactly when the last board comes
+ * back — so it is shown only while a board is still open, which is the one time it
+ * differs. Printing one number twice is what kept IMPs to a single row in the first
+ * place, and the rule is the same one read from the other side.
+ */
+function pointsWorthShowing(summary: DuplicateSummary): boolean {
+  return summary.scoring === "imps" || summary.closed < summary.boards.length;
 }
 
 /** The same figure(s) on one wrapping line, for a phone with no room for rows. */
@@ -337,6 +376,12 @@ function SessionFigures({
           {signed(split.settled)}
         </span>
       </span>
+      {pointsWorthShowing(summary) ? (
+        <span className="whitespace-nowrap">
+          Points{" "}
+          <span className="tabular-nums text-white/60">{signed(runningPoints(summary, view))}</span>
+        </span>
+      ) : null}
     </>
   );
 }

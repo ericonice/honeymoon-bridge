@@ -265,6 +265,56 @@ describe("the fixed score during a session", () => {
     expect(text()).not.toContain("still out");
   });
 
+  /**
+   * **The case the whole row was changed for, and it is IMPs.** An IMPs session's own
+   * figure counts closed boards only — `impsFor` converts a board's margin and an open
+   * board has none — so it cannot move until a stock repeats, which under a shuffled
+   * order is most of the first half. Reported as there being no score until both halves
+   * are played, which is exactly true here and was only loosely true under points.
+   *
+   * The points figure is the live one, and it is real rather than invented: every deal
+   * is scored in points and only converted at the board.
+   */
+  it("carries a running points figure in an IMPs session, where nothing else moves", () => {
+    show({
+      kind: "duplicate",
+      summary: session({
+        boards: [board({ played: [run({ points: 420 })] }), board({ board: 1 })],
+        dealsPlayed: 1,
+        margin: [0, 0],
+        points: [420, 0],
+        scoring: "imps",
+      }),
+    });
+
+    expect(text()).toContain("Settled (IMPs) 0/2");
+    expect(text()).toContain("Points");
+    expect(text()).toContain("+420");
+  });
+
+  /**
+   * Under points the two are the same quantity and converge when the last board comes
+   * back, so the second figure is dropped exactly then — printing one number twice is
+   * what kept IMPs to a single row in the first place.
+   */
+  it("drops the points figure once a points session has every board in", () => {
+    show({
+      kind: "duplicate",
+      summary: session({
+        boards: [
+          board({ margin: 250, played: [run({ points: 420 }), run({ points: 170, replay: true })] }),
+        ],
+        closed: 1,
+        dealsPlayed: 2,
+        margin: [250, -250],
+        points: [250, 0],
+      }),
+    });
+
+    expect(text()).toContain("Settled 1/1");
+    expect(text()).not.toContain("Points");
+  });
+
   it("does not name which board it is", () => {
     show({
       kind: "duplicate",
