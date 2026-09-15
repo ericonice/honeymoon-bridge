@@ -3032,6 +3032,51 @@ auction.
 
 ### Open threads
 
+- **The doubled re-fit was played against the shipped table and lost, and the run found something
+  bigger than the table.** `bench/equity.ts 800 8` with `bench/oracle.ts` on both seats moved two cells
+  — `gameLead` 0.6104 to 0.5331, and `level.part` from **−0.2204 to +0.1594**, the cell this file has
+  called "not understood" across four fits. Every structural check held and calibration was monotone
+  across six bands. It looked right, which is exactly what the last two rejected re-fits looked like.
+
+  | 320 plays, `table=refit oracle=both`, 8-sample card play | |
+  | --- | --- |
+  | rubbers won | 158 to 150, 51.3% ± 2.8 — **0.5σ, a null** |
+  | **points margin** | **−1491 ± 394 a rubber, 3.8σ** |
+  | challenger down 2+ in its own contract | 17% of deals, **2225 a rubber** |
+
+  **Level on rubbers and four standard errors down on points**, which is coherent rather than
+  contradictory: doubled penalties go *above* the line, so they bleed points without changing the race
+  to a hundred below it. `EQUITY_DOUBLED` stays beside `EQUITY` as a rejected candidate rather than
+  being deleted, because the numbers that produced it are worth keeping next to the result they got.
+
+  **The finding that matters is the doubling rate.** This run doubled **10.93 times a rubber, 69% of
+  deals**, and rubbers stretched from 9.8 deals to 15.8. The symmetric control at the same settings
+  doubled 27% of deals — the difference is the bidder, since that control ran the *points* bidder and
+  this one runs v3, which stretches. Against a person, the hand log says **273 of 1,449 v3 deals were
+  doubled, 19%.**
+
+  | who is doubling | share of deals doubled |
+  | --- | --- |
+  | a real person, 1,449 logged v3 deals | **19%** |
+  | `oracleDouble` from down 2, points bidder | 27% |
+  | `oracleDouble` from down 2, v3 | **69%** |
+
+  **So the reference punishes about three and a half times as hard as the opponent the bot actually
+  plays**, and a table fitted against it is fitted against a world far crueller than the real one. That
+  is the same class of error as fitting the original table under heuristic card play where contracts
+  failed too often — corrected in one direction and overshot in the other. A bidder tuned here would
+  come out timid against a human, which is the failure mode this file already recorded once when a
+  refit produced a bidder going down two in 6% of deals against 10% and losing 314 points a match.
+
+  **`ORACLE_FROM_DOWN = 2` is the knob, and it was chosen to match `DOUBLED_FROM_DOWN` rather than to
+  match anybody's behaviour.** The comment says so in as many words — the point was that the bot's
+  assumption about when it gets doubled would be *true* against the reference, which isolates a wrong
+  trick estimate from a wrong model of the opponent. That is a good reason for a diagnostic and a bad
+  one for a fitting harness. The next step is to raise the threshold until the doubling rate against v3
+  lands near the 19% a person actually produces, and re-fit against that — and to state plainly that
+  the resulting table is an opponent model of *a human doubler*, which is the population that matters.
+
+
 - **1,449 v3 deals say the whole remaining deficit is doubling, and the bench cannot see it.** The
   figures this file quotes from `bench/hands.ts` — +66 a deal declaring, −135 on contracts it lets the
   other seat buy — are **v2 numbers from 204 deals**, and they were used to motivate work on v3 a year
