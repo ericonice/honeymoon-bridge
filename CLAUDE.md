@@ -3070,12 +3070,40 @@ auction.
   18% to 13% and the win rate did not move, which was read as "those contracts cost points without
   costing games". Against a human doubler they cost 218 a deal.
 
-  The cheap next step is a **control run with the oracle on at a real sample count** — two identical
-  bidders must score 50%, and this file records that check failing at 61.8% under *heuristic* play while
-  explicitly leaving "whether the oracle is sound with a sample count" untested. If it is sound at eight
-  samples, the reference can punish overreach and v3's stretch can be re-tuned against something that
-  hurts. If it is not, a doubler that is neither an oracle nor the old five-level rule has to be built
-  before any of this is measurable.
+  **Run, and the oracle is sound under real card play.** 240 plays, `120 8 control` with the doubler on:
+
+  | two identical bidders, oracle on the reference seat | heuristic play | **8-sample play** |
+  | --- | --- | --- |
+  | rubbers won, challenger (no oracle) | 61.8% ± 2.0 | **50.0% ± 3.2** |
+  | from even | 6 standard errors | **0.0** |
+  | points margin to the challenger | — | **−144 ± 73**, 2.0σ |
+  | doubles | — | 1.30 a rubber, 13% of deals |
+
+  **Exactly 120 to 120.** The doubler no longer handicaps the seat holding it, which is what better card
+  play was predicted to fix: the oracle doubles off double-dummy par, and a bot at eight samples comes
+  near enough to par that its doubles land. So the reference can punish overreach at last, and
+  `nodouble` stops being compulsory.
+
+  **What the −144 is, and it is not a fault:** with the oracle on **one** seat the configuration is
+  asymmetric, so the exchange that forces a control's margin to zero no longer applies. The number is
+  therefore a clean measurement of what holding a perfect doubler is worth — **about 144 points a
+  rubber** — where under heuristic play it was worth *losing* twelve points of win rate.
+
+  **It moves points and not games, which is the warning to carry into the retune.** This file has
+  already been caught by that once: `equity.ts`'s re-fit cut down-two-or-more from 18% to 13%, the win
+  rate did not move, and it was written down as "those contracts cost points without costing games". The
+  hand log's deficit is **+29 ± 11 points a deal**, not a win rate — so the retune has to be judged on
+  the **points margin**, with rubbers won as the guard against trading too much away rather than as the
+  headline.
+
+  One figure already shows the mechanism: the control bidder goes down two or more in 12% of its own
+  deals costing **399 a rubber**, against the 13% and 325 recorded for the same bidder under `nodouble`.
+  The same overreach, priced by a doubler that works.
+
+  **The next step is `oracle=both`**, which does not exist — `oracleSeat` takes one seat. Arming both
+  restores the exchange symmetry, so a control returns to exactly zero on points as well as on games,
+  and a challenger's overreach is punished on the same terms as the reference's. That is the harness the
+  stretch should be re-fitted against.
 
   **The lesson about the log itself:** 1,453 v3 deals had accumulated and nothing had ever read them,
   while numbers from its predecessor went on being quoted as current. `bench/hands.ts` reports per
