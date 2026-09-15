@@ -3046,47 +3046,62 @@ auction.
 
 ### Open threads
 
-- **The bidder searches the position it declares and counts the one it defends, and the fix is built
-  and unmeasured.** `searchTricks` has always solved with the opponent on lead, which answers what
-  *this* seat takes declaring; `estimateFor` uses it on the `declarer === me` branch only. The branch
-  that prices a pass, a competitive raise or a double — against a contract **they** would declare — has
-  gone on using the counted `evaluate.ts` estimate the whole time.
+- **Searching the position the opponent declares is built, measured, and worth nothing.** The bidder
+  had always solved with the opponent on lead, which answers what *this* seat takes declaring;
+  `estimateFor` used it on the `declarer === me` branch only, so the branch pricing a pass, a
+  competitive raise or a double against a contract **they** would declare went on counting. That looked
+  like the gap worth closing, because `bench/hands.ts` splits the recorded games as **+66 a deal on
+  contracts it declares and −135 a deal on the ones it lets the other seat buy**, and the counted
+  estimate carries ~1.5 tricks of error against the search's 1.04.
 
-  **That is the half the recorded games say it loses in.** `bench/hands.ts` over 204 logged deals:
-  **+66 a deal on contracts it declares, −135 a deal on the ones it lets the other seat buy.** The
-  counted estimate carries about 1.5 tricks of average error against the search's 1.04, and calibration
-  does not rescue it — the defending blend is bias-corrected already (+0.13, +0.11 at the four level),
-  which removes the *average* error, not the per-hand one. A bad double is a per-hand error.
+  `SearchOptions.defending` is a **second solve of the same guessed hands with this seat on lead** — not
+  the first read backwards, since `13 − x` is what they take *while this seat declares*, a position
+  nobody is in. That is what `mirrorOdds` computed, and it is deleted rather than left beside the
+  correct version. Scoped to the contract on the table, so one strain or none.
 
-  `SearchOptions.defending` is a **second solve of the same guessed hands with this seat on lead**, not
-  the first read backwards — `13 − x` is what they take *while this seat declares*, a position nobody is
-  in, which is what `mirrorOdds` computed and why it has been deleted rather than left beside the
-  correct version. Scoped to `strainsWorthDefending`, which is the contract on the table when they would
-  declare it: **one strain or none**, so the cost is near a third of the search rather than double.
-  Gated on `BotTuning.searchDefending`, **off by default**, so `test/botRelease.test.ts` passes and v3 is
-  untouched.
+  | 320 plays, 8-sample card play, `defend=500 nodouble` | |
+  | --- | --- |
+  | rubbers won | 149 to 171, **46.6% ± 2.8** |
+  | from even | **1.2 standard errors** |
+  | margin | −45 ± 60 a rubber, 0.8σ |
+  | worth | −24 rating points |
+  | down 2+ in its own contract | 7% of deals, 109 a rubber |
 
-  **The census is done and the lever fires: 25% of calls changed** — over 20 deals, 24 decisions with
-  their contract standing, 24 defending spreads produced, 6 different calls. Well clear of the dead-knob
-  threshold this file records. It also took two goes: the first census read `view.contract`, which is
-  null until the auction settles, and reported **0 of 0** — indistinguishable from a capability that
-  does not work, and the same instrument failure as the board-recognition census that read 0 of 480.
+  **Neither figure is significant and both lean the wrong way**, across six consecutive checkpoints
+  pinned at 47%. Kept behind `BotTuning.searchDefending`, **off**, so nothing shipped changes.
 
-  **What is missing is the only thing that decides it, a rubber margin.** The run is
-  `npm run bench:rubber --workspace @hb/web -- 160 8 defend=250 nodouble`, which puts the same budget on
-  both seats and gives only the challenger the defending solve. It is **about two hours**: the bench
-  plays each rubber twice with the seats exchanged, so 160 rubbers is 320 plays at roughly 25s each.
-  Started and abandoned for that reason rather than for a result.
+  **Two confounds had to be removed before the number meant anything, and the first was a bug this file
+  had already recorded once.** `expectedValue` reads `options.odds ?? outcomeOdds(options.estimate)`, so
+  supplying odds makes the estimate unreachable — handing it a raw search distribution for their
+  contract silently discarded the blend with their bid, which carries `THEIR_BID_WEIGHT` of **0.75** on
+  that branch. It measured **30% ± 7 over 40 plays**. The identical mistake, replacing the estimate
+  wholesale rather than correcting it, cost +651 a rubber against +467 when the search was first built.
+  `centredOn` is the fix: keep the shape from the search and the centre from the blend, which preserves
+  both findings instead of making them fight. The same checkpoint then read 45%.
 
-  Two notes for whoever runs it. **Redirecting to a file with `>` block-buffers Node's stdout**, so the
-  every-25-plays progress never appears and a working run looks identical to a wedged one — the exact
-  trap `bench/progress.ts` documents in its own header. And `nodouble` belongs in this run like every
-  other, since the oracle doubler handicaps whichever seat it is applied to under solver card play.
+  The second: a wall-clock budget means the extra solve buys **fewer samples**, measured at 11.0 against
+  14.9 at 250ms — degrading the declaring estimate that already worked. A cap both sides reach removes
+  it: at 500ms and twelve samples the two complete 10.8 and 10.9 and run out on the same hands.
 
-  If it wins, the follow-up is already implied: `THEIR_BID_WEIGHT` was fitted against a *counted*
-  defending estimate, and a better estimate of that term should move the optimal trust in their bid.
-  Fit it after, not in the same change.
+  **The prediction on record before the finish was half right and the half that failed is the useful
+  part.** Dilution: the search replaces `fromMyHand`, weighted `1 − 0.75 = 0.25`, so half a trick of
+  improvement becomes an eighth of a trick in the estimate — and this file already records an eighth as
+  inert, from `LAST_TIME_WEIGHT` at 0.20 being "present and inert" for the same reason. Dilution
+  predicts a result *indistinguishable* from even; six readings at 47% is mildly worse than that.
 
+  **What is untested is the premise, and it should have been tested first.** The 1.04-against-1.54
+  figure is a **declaring** number. Nobody has measured whether a searched estimate beats a counted one
+  when the *opponent* declares — and there is reason to doubt it, since the search guesses their hand
+  from the sampler and `impliedByTheirBid` exists precisely because this seat's read of a hand they have
+  bid is weak. A par measurement in tricks costs about a minute and separates the two readings: clearly
+  better in tricks plus a null in rubbers means dilution, and the experiment worth two hours is then a
+  **sweep of `THEIR_BID_WEIGHT` with the search on** — it was fitted against a counted term and is being
+  held at 0.75 here, so the on-arm is measured while handicapped. Not better in tricks means the premise
+  is wrong, `searchDefending` should go, and the −135 a deal wants a different explanation: the doubling
+  threshold, or pricing a pass against a contract they may still improve.
+
+  **Measure in tricks before measuring in points** is the rule this cost two hours by ignoring, and it is
+  written down several times above.
 
 - **`bench/field.ts compare` is the most sensitive instrument in here, and the reason is the
   pairing.** Two bidders over the same corpus boards, each ranked against the field already on them:
