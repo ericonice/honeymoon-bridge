@@ -3656,6 +3656,31 @@ propagated.** It named it, the asset path still returned HTML, and the request I
 cached that HTML under the exact URL every visitor was about to load. The app was broken until the
 next deploy.
 
+**That order was followed on the next deploy and it happened anyway, so it is not the rule.** Alias
+returned JS, `?v=` returned JS, the plain path returned `text/html` — and `cf-cache-status: HIT` with a
+`last-modified` matching that very request says the request itself created the cache entry. **`?v=` and
+the plain path are different cache keys**, so the buster proving the origin has the file proves nothing
+about what the plain path will get; the window is between the upload finishing and the *custom domain*
+switching to the new deployment, and a request landing inside it caches the fallback for a year.
+
+The rule that actually held, on the recovery deploy: **wait until the domain's own `index.html` names
+the new hash before requesting any plain asset path.** Polled with a buster, six times ten seconds
+apart; the plain path then came back `application/javascript` with `cf-cache-status: MISS`. Note this
+contradicts the older lesson above — that index naming the asset is not proof — so neither check is
+sufficient alone and the honest summary is that **every plain-path request from the CLI is a gamble,
+and the only reason to take it is to confirm a recovery.**
+
+**The real fault is in `_headers` and it is structural.** `/assets/*` carries
+`max-age=31536000, immutable`, and Pages matches header rules **by path**, so the SPA fallback served
+for a *missing* `/assets/*` file inherits a one-year immutable cache. A transient miss is therefore
+permanent. The fix worth testing is a `_redirects` rule making an unknown `/assets/*` **404 instead of
+falling back to the shell** — a hashed asset that does not exist is not a route and should never render
+the app. It is untested because getting Pages' precedence wrong would break every asset request, and it
+should be proved on a *preview* branch deploy before it goes near `main`.
+
+Recovery is unchanged and it works: rebuild — the build stamp changes, so the content hash changes —
+and redeploy, which orphans the poisoned path.
+
 The order that is actually safe: deploy, verify on the `*.pages.dev` alias, then probe the domain
 with `?v=<timestamp>` and check `content-type`, and only then touch the plain path. Recovery is a
 rebuild — the build stamp changes, so the content hash changes — and a redeploy, which orphans the
