@@ -635,31 +635,6 @@ export function replayOf(outcome: BoardOutcome): DuplicateResult | null {
   return outcome.played.find((run) => run.replay) ?? null;
 }
 
-/**
- * The run of this board on which `seat` drew first — the side of the stock, not the
- * order the runs happened in.
- *
- * **These exist because grouping by run order is not a comparison.** `board.starter`
- * alternates, so on one board a seat holds the first-draw stream in the first run and
- * on the next it holds it in the replay. Splitting a session by `firstPlayOf` therefore
- * adds up results from *both* streams in each column, and the two totals are about
- * nothing: measured over a control session — two identical players, every board exactly
- * flat — that split reads **+2270 and −2270** where the stream split reads +70 and −70.
- *
- * Duplication hands each seat both sides of every board exactly once, which is what
- * makes these two subtotals a pair worth putting side by side: each says how this seat
- * did holding one side of the stock. Note what that is and is not — in a control it is
- * ±70 rather than zero, because the split is a fact about which side of these boards was
- * the better one to hold. What has the luck cancelled is the **sum**, not the split.
- */
-export function drewFirstRunOf(outcome: BoardOutcome, seat: PlayerId): DuplicateResult | null {
-  return outcome.played.find((run) => drewFirstOn(outcome, run) === seat) ?? null;
-}
-
-/** The run of this board on which `seat` drew second. See `drewFirstRunOf`. */
-export function drewSecondRunOf(outcome: BoardOutcome, seat: PlayerId): DuplicateResult | null {
-  return outcome.played.find((run) => drewFirstOn(outcome, run) !== seat) ?? null;
-}
 
 export function marginTo(outcome: BoardOutcome, seat: PlayerId): number {
   if (outcome.margin === null) {
@@ -854,20 +829,6 @@ export function replayTotal(summary: DuplicateSummary, seat: PlayerId): number |
   return subtotalBy(summary, seat, replayOf);
 }
 
-/**
- * This seat's net across every board it has drawn first on, or null before any.
- *
- * What `SessionPad`'s two columns are footed with — see `drewFirstRunOf` for why this
- * is the split worth drawing and the run-order one is not.
- */
-export function drewFirstTotal(summary: DuplicateSummary, seat: PlayerId): number | null {
-  return subtotalBy(summary, seat, (outcome) => drewFirstRunOf(outcome, seat));
-}
-
-/** This seat's net across every board it has drawn second on, or null before any. */
-export function drewSecondTotal(summary: DuplicateSummary, seat: PlayerId): number | null {
-  return subtotalBy(summary, seat, (outcome) => drewSecondRunOf(outcome, seat));
-}
 
 /**
  * A seat's closed boards, converted through whatever `scoring` asks for and

@@ -198,8 +198,8 @@ describe("a session's scorepad", () => {
     const shown = text();
     // The columns are first play and replay, said once at the top rather than once
     // per run — which is what buys the room for both figures to sit side by side.
-    expect(shown).toContain("You drew 1st");
-    expect(shown).toContain("You drew 2nd");
+    expect(shown).toContain("First play");
+    expect(shown).toContain("Replay");
     // Side by side, in that order, so the board's worth is the two of them added up.
     expect(cells()).toEqual(["4♥ you = +420", "3♥ opp = −170"]);
     // 420 − 170 = 250, and the session total is the only place it is stated.
@@ -346,21 +346,21 @@ describe("a session's scorepad", () => {
   });
 
   /**
-   * The two feet, which are the reason the columns are what they are.
+   * The two feet: what you made the first time you met these boards, against what you
+   * made when they came back. The gap between them is the memory advantage a replay
+   * hands you, which is the comparison §1.8 builds the format around.
    *
-   * **This pinned the wrong split until it was measured.** It used to foot every *first
-   * play* against every *replay* — organised by when a run happened — and called that a
-   * comparison with the luck cancelled. It is not one: `starter` alternates, so each
-   * column summed results from both sides of the stock and neither was about anything.
-   * On a control session, two identical players with every board flat, that split read
-   * ±2270 where the stream split reads ±70.
+   * **Grouped by side of the stock for one release and put back.** The argument for the
+   * change was that `starter` alternates, so a run-order column holds different streams
+   * on different boards — true, and not a reason: the chronology is what the column is
+   * *for*, and the stream split's stated justification (luck cancelled) was already known
+   * to be false.
    *
-   * The fixture is what makes this able to tell the difference, and it was already here:
-   * board 0 is started by ME and board 1 by THEM, so this seat's first-draw run is the
-   * first play on one board and the replay on the other. With both boards started by the
-   * same seat the two groupings agree and this test would pass against the bug.
+   * The fixture still separates the two groupings, which is what lets this say which one
+   * is drawn: board 0 is started by ME and board 1 by THEM, so the two disagree on board
+   * 1. With both boards started by the same seat they agree and this passes either way.
    */
-  it("foots each side of the stock separately", () => {
+  it("foots first play and replay separately", () => {
     show(
       summaryOf(
         [
@@ -374,9 +374,8 @@ describe("a session's scorepad", () => {
           board({
             board: 1,
             margin: -60,
-            // They drew first here, so this seat's own first-draw run is the *replay* —
-            // which is the case that separates a column-per-stock-side from a
-            // column-per-pass, and the case the old grouping got wrong.
+            // They drew first here, so this board's first play is *their* run — the case
+            // that separates a column-per-pass from a column-per-stock-side.
             starter: THEM,
             played: [
               run({ board: 1, contract: contract(2, "S", THEM), points: 110 }),
@@ -388,11 +387,13 @@ describe("a session's scorepad", () => {
       ),
     );
 
-    // Drew 1st: +420 on board 1 (its first play) and +50 on board 2 (its replay, since
-    // they started that one). Drew 2nd: −170 and −110. The two feet are those sums and
-    // nothing else, and they still add to the +190 margin — which the old grouping also
-    // did, and is exactly why summing to the margin could not catch this.
-    expect(feet()).toEqual(["+470", "−280"]);
+    // First play: +420 on board 1, −110 on board 2 (their run there, so negated to you).
+    // Replay: −170 and +50. Those sums, and they add to the +190 margin.
+    //
+    // The stream split reads +470 / −280 over this same fixture, so this pins *which*
+    // grouping is drawn rather than merely that the halves add up — summing to the margin
+    // is true of both and cannot tell them apart.
+    expect(feet()).toEqual(["+310", "−120"]);
   });
 
   it("foots the column with the session total", () => {

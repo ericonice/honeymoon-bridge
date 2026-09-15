@@ -2170,48 +2170,38 @@ comparison was on screen and the comparison was still *vertical*, which is the a
 cell carries the contract, who declared, the result in bridge's notation and your net — so the board's
 worth is two adjacent figures added up rather than a third number claiming it.
 
-**The columns are which side of the stock you held, not the order the runs were played**, which is the
-one place this deliberately does *not* copy the mirror pad's chronological halves. The reason was
-already written in the component: "replay" names when a deal happened, and that is the single thing
-about a pair of runs that does not matter — the same stock offered the other way round is what
-differs. It also costs nothing per row, since which side you held is fixed for a whole column, so no
-cell needs a marker and nobody has to learn a key.
+**The columns are which pass through the boards this was — first play and replay — and that survived
+being changed and changed back.** "Replay" names when a deal happened, and for a *cell* that is the one
+thing about a pair of runs that does not matter; what a *column* is for is the chronology, because the
+gap between the two feet is **how you did meeting a board against how you did when it came back**. That
+is the memory advantage §1.8 builds the format around, and it is the one comparison on the pad a player
+can act on.
 
-**And it is what makes the two feet worth having.** Duplication hands each player both sides of every
-board, so *what I made holding the first draw* against *what I made holding the second* is the direct
-analogue of a mirror's two half-totals, and a figure that sat inside the old pad's numbers without ever
-being added up.
+**It was grouped by side of the stock for one release, on an argument that was wrong twice over.** The
+case: `board.starter` alternates, so a run-order column holds the first-draw stream on some boards and
+the second-draw stream on others; and a control session — two identical players, every board exactly
+flat — reads **±2270** split by run against **±70** split by stream. Both facts are true and neither is
+a reason. **±70 is not "less wrong", it is a smaller number measuring a different thing** — in a control
+that split is *entirely* about which side of these boards was the better one to hold, which is luck
+rather than play. And the justification quoted for the change, that the stream split is the comparison
+"with the luck already cancelled out", was a claim **this file had already retracted** in the same
+breath as making it: what has the luck cancelled is the sum, not the split.
 
-**That paragraph described a design the code did not implement, for as long as the pad has existed.**
-`SessionPad` grouped its columns by `firstPlayOf`/`replayOf` — the order the runs happened — while
-`board.starter` alternates, so this seat held the first-draw stream in column one on some boards and
-the second-draw stream in column one on others. Each column was therefore a sum over *both* streams and
-the pair of them compared nothing. Reported as "the scoring for replay is incorrect", and it is:
+**Reported from real play as the scoring looking off**, which is the sharper symptom: with a stream
+column, a board's *replay* sits in column one whenever the opponent started it, so reading down the pad
+is no longer chronological and two adjacent rows show runs from opposite passes.
 
-| the pad's two feet, on a **control** session — identical players, every board exactly flat | |
-| --- | --- |
-| grouped by run order, as drawn | **+2270 / −2270** |
-| grouped by side of the stock | **+70 / −70** |
+**The lesson is about which document to believe.** `SessionPad`'s own comment said run order; this file
+said side of the stock; they had contradicted each other for a release and the code agreed with the
+component. Changing the code to match the prose was backwards — **the component is the account with
+something at stake**, and a note here that disagrees with it is the thing to fix. Both now say the same
+thing, and the engine's stream helpers are deleted rather than left exported and unused.
 
-**A ±2270 swing on a session where nothing separated the players.** `drewFirstRunOf` and
-`drewSecondRunOf` are the fix, keyed on `drewFirstOn(board, run) === seat`; the cells, the feet and the
-recently-completed highlight all move with them, the last because this seat's first-draw run *is* the
-replay on every board the opponent started, so keying the highlight on the column marked the wrong cell
-on half the list.
-
-**The engine test could not see it, and the reason is the useful part: the invariant survives the bug.**
-It asserted the two subtotals sum to the session margin — which is true under *either* grouping, since
-both partition the same six runs. What separates them is **which run lands in which column**, so that is
-what the new test asks, and it carries its own anti-vacuity check: unless this seat's first-draw run is
-the replay on one board and the first play on another, the two groupings agree and the test would pass
-against the bug. The web test had the right fixture already — one board started by each seat — and
-pinned the wrong answer with it.
-
-**One claim above was wrong even after the fix, and correcting it is worth more than the fix.** The
-feet are *not* "a comparison with the luck already cancelled out". In a control they are ±70 rather
-than zero, and that figure is entirely about which side of these boards was the better one to hold.
-**What has the luck cancelled is the sum, not the split** — each foot says how this seat did holding
-one side of the stock, and no more than that.
+**And the engine test could not have caught either direction**, which is worth keeping: splitting the
+margin by run and splitting it by stream *both* sum to the whole, since both partition the same runs. It
+pins an invariant that survives the change, so the grouping is pinned in `test/sessionPad.test.ts`
+instead — over a fixture whose two boards are started by different seats, which is what makes the two
+groupings disagree at all.
 
 Two things went. The per-board margin, because side by side the sum is a glance and the width buys more
 elsewhere. And **"still to come round"**, because an empty cell beside a played one says it without

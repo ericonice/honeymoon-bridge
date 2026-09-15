@@ -1,4 +1,4 @@
-import { drewFirstRunOf, drewFirstTotal, drewSecondRunOf, drewSecondTotal, impsFor, marginTo, netTo } from "@hb/engine";
+import { firstPlayOf, firstPlayTotal, impsFor, marginTo, netTo, replayOf, replayTotal } from "@hb/engine";
 import type { BoardOutcome, DuplicateResult, DuplicateSummary, PlayerView } from "@hb/engine";
 import { ORDER_LABEL } from "../game/identity.js";
 import { ContractText } from "./CardText.js";
@@ -81,19 +81,26 @@ export function SessionPad({
           arithmetic instead of just standing beside it. */}
       <div className="flex items-start gap-2">
         {/* Every figure below is yours, in both columns — nothing is reversed and nothing
-            needs a caption saying so.
+            needs a caption saying so. A column is **which pass through the boards this
+            was**: the first time you met the stock, and the time it came back.
 
-            **A column is which side of the stock you held, not which pass through the
-            boards this was**, and that distinction is the whole point rather than a
-            nicety. `board.starter` alternates, so grouping by first-play-and-replay puts
-            this seat on the first-draw stream in column one on some boards and on the
-            second-draw stream in column one on others — which makes each column a sum
-            over both streams and the pair of them a comparison of nothing. Measured on a
-            control session, two identical players with every board exactly flat, the
-            run-order split read **+2270 and −2270**; by stream it reads +70 and −70.
+            **Grouped by the side of the stock for one release and put back, which is
+            worth recording because the argument for changing it was wrong twice over.**
+            The case was that `board.starter` alternates, so a run-order column holds the
+            first-draw stream on some boards and the second-draw stream on others — and
+            that a control session read ±2270 split by run against ±70 split by stream.
+            Both facts are true and neither is a reason. A control's ±70 is not "less
+            wrong", it is a smaller number measuring a different thing; and `CLAUDE.md`'s
+            justification for the stream split, that it is the comparison "with the luck
+            already cancelled out", had already been found false — in a control that split
+            is *entirely* about which side of these boards was better to hold.
 
-            Which side you held is fixed for a whole column, so the header says it once
-            and no cell needs a marker. */}
+            What a run-order column actually says is the useful thing: **how you did the
+            first time you met a board against how you did when it came back.** The gap
+            between those is the memory advantage a replay hands you, which is what §1.8
+            says the format is built around and is the one comparison a player can act on.
+            Reading down the pad also stays chronological, where the stream split put a
+            board's replay in column one whenever the opponent had started it. */}
         <div className="relative min-w-0 flex-1">
           <span
             aria-hidden="true"
@@ -110,8 +117,8 @@ export function SessionPad({
           <div className="flex items-baseline gap-2 pb-1 text-xs text-white/45">
             <span className="w-4 shrink-0" aria-hidden="true" />
             <span className="flex min-w-0 flex-1 gap-4">
-              <span className="min-w-0 flex-1">You drew 1st</span>
-              <span className="min-w-0 flex-1">You drew 2nd</span>
+              <span className="min-w-0 flex-1">First play</span>
+              <span className="min-w-0 flex-1">Replay</span>
             </span>
           </div>
 
@@ -133,8 +140,8 @@ export function SessionPad({
               run !== null &&
               summary.lastCompleted?.board === board.board &&
               summary.lastCompleted.replay === run.replay;
-            const mineFirst = drewFirstRunOf(board, view.me);
-            const mineSecond = drewSecondRunOf(board, view.me);
+            const mineFirst = firstPlayOf(board);
+            const mineSecond = replayOf(board);
             return (
               <div key={board.board} className="flex min-h-6 items-baseline gap-2 py-0.5">
                 <span className="w-4 shrink-0 text-xs text-white/35 tabular-nums">
@@ -163,10 +170,10 @@ export function SessionPad({
             <span className="w-4 shrink-0" aria-hidden="true" />
             <span className="flex min-w-0 flex-1 gap-4">
               <span className="min-w-0 flex-1 text-right tabular-nums">
-                {signed(drewFirstTotal(summary, view.me) ?? 0)}
+                {signed(firstPlayTotal(summary, view.me) ?? 0)}
               </span>
               <span className="min-w-0 flex-1 text-right tabular-nums">
-                {signed(drewSecondTotal(summary, view.me) ?? 0)}
+                {signed(replayTotal(summary, view.me) ?? 0)}
               </span>
             </span>
           </div>

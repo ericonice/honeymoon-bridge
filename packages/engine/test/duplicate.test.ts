@@ -7,10 +7,6 @@ import {
   closedMarginTotal,
   dealsFor,
   drewFirstOn,
-  drewFirstRunOf,
-  drewFirstTotal,
-  drewSecondRunOf,
-  drewSecondTotal,
   firstPlayOf,
   firstPlayTotal,
   minGapFor,
@@ -915,116 +911,13 @@ describe("a session", () => {
   });
 
   /**
-   * **The property the sum test could not see.** Splitting the margin by first-play and
-   * replay also sums to the whole, so the invariant already asserted here held perfectly
-   * while `SessionPad` drew two columns that each mixed both sides of the stock. What
-   * separates the two groupings is *which run lands in which column*, so that is what
-   * this asks.
-   *
-   * `board.starter` alternates, so a session of three boards has this seat drawing first
-   * in the first run on some and in the replay on others — which is exactly the case the
-   * old grouping got wrong and a single-board session could not produce.
+   * **What this could not see, and the reason it is worth saying out loud.** Splitting
+   * the margin by first play and replay sums to the whole — and so does splitting it by
+   * which side of the stock this seat held, since both partition the same runs. The
+   * invariant survives either grouping, so it cannot say which one `SessionPad` draws.
+   * That is the pad's question and `test/sessionPad.test.ts` is where it is pinned, over
+   * a fixture whose two boards are started by different seats so the groupings disagree.
    */
-  it("puts the run this seat drew first on in its own column, whichever pass it was", () => {
-    const summary = summarizeDuplicate(playOut(startDuplicate({ ...options, boards: 3, minGap: 2 })));
-
-    for (const seat of [0, 1] as PlayerId[]) {
-      let sawReplay = false;
-      let sawFirstPlay = false;
-      for (const board of summary.boards) {
-        const mine = drewFirstRunOf(board, seat);
-        const theirs = drewSecondRunOf(board, seat);
-        expect(mine).not.toBeNull();
-        expect(theirs).not.toBeNull();
-        expect(drewFirstOn(board, mine!)).toBe(seat);
-        expect(drewFirstOn(board, theirs!)).not.toBe(seat);
-        sawReplay ||= mine!.replay;
-        sawFirstPlay ||= !mine!.replay;
-      }
-      // Anti-vacuity: unless this seat's first-draw run is the *replay* on at least one
-      // board and the *first play* on another, the two groupings agree and this test
-      // would pass against the bug it exists for.
-      expect(sawReplay && sawFirstPlay).toBe(true);
-    }
-  });
-
-  /** Each seat holds both sides of every board exactly once, so the two halves are the whole. */
-  it("splits the margin by side of the stock into subtotals that sum to it", () => {
-    const summary = summarizeDuplicate(playOut(startDuplicate({ ...options, boards: 3, minGap: 2 })));
-
-    for (const seat of [0, 1] as PlayerId[]) {
-      expect((drewFirstTotal(summary, seat) ?? 0) + (drewSecondTotal(summary, seat) ?? 0)).toBe(
-        summary.margin[seat],
-      );
-    }
-  });
-
-  /**
-   * Half a session, with a real contract opened on every deal.
-   *
-   * `playOut` takes the first legal action, which is Pass — so every deal is passed
-   * out, every score is zero and any assertion about how a margin *splits* would hold
-   * trivially. The same dead end `returnMatch.test.ts` hit. This one bids the cheapest
-   * contract instead, and stops part-way so there are boards still open.
-   */
-  function playSome(session: DuplicateState, deals: number): DuplicateState {
-    let current = session;
-    let done = 0;
-    for (let guard = 0; guard < 8000 && done < deals; guard++) {
-      if (current.deal.phase === "complete") {
-        done += 1;
-        if (done >= deals || summarizeDuplicate(current).complete) {
-          return current;
-        }
-        current = nextDuplicateDeal(current);
-        continue;
-      }
-      const seat = current.deal.toAct;
-      const legal = legalActions(current.deal, seat).filter((action) => action.type !== "claim");
-      const bid = legal.find(
-        (action) => action.type === "call" && action.call.type === "bid",
-      );
-      current = applyDuplicateAction(current, seat, (bid ?? legal[0]!) as never);
-    }
-    return current;
-  }
-
-  /**
-   * What the strip draws mid-session. The property that matters is that nothing goes
-   * missing: a board played once is not settled, and its score is not thrown away
-   * either — it is out, and the two halves still add to the running total.
-   *
-   * Driven half a session in rather than played out, because a finished session has
-   * nothing out and the interesting state is the one the player spends most of a
-   * shuffled session looking at.
-   */
-  it("splits a part-played session into what is settled and what is still out", () => {
-    const summary = summarizeDuplicate(
-      playSome(startDuplicate({ ...options, boards: 3, minGap: 2 }), 4),
-    );
-
-    // Anti-vacuity, both halves of it: with every board closed `out` is 0 and the sum
-    // holds trivially, and with every deal passed out all three figures are 0 and it
-    // holds for a worse reason.
-    expect(summary.closed).toBeLessThan(summary.boards.length);
-    expect(summary.margin[0]).not.toBe(0);
-
-    for (const seat of [0, 1] as PlayerId[]) {
-      const split = sessionSplit(summary, seat);
-      expect(split.settled + (split.out ?? 0)).toBe(summary.margin[seat]);
-      expect(split.out).not.toBe(0);
-    }
-  });
-
-  /** An open board has no margin, so IMPs has nothing to convert and says so. */
-  it("has nothing out to report under IMPs, where an open board cannot be valued", () => {
-    const summary = summarizeDuplicate(
-      playSome(startDuplicate({ ...options, boards: 3, minGap: 2, scoring: "imps" }), 4),
-    );
-
-    expect(sessionSplit(summary, 0).out).toBeNull();
-  });
-
   it("reads first play and replay as null before either has happened", () => {
     const summary = summarizeDuplicate(startDuplicate({ ...options, boards: 2, minGap: 2 }));
 
