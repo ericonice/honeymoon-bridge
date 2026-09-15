@@ -179,17 +179,17 @@ describe("the fixed score during a session", () => {
   });
 
   /**
-   * **Nothing settled is zero, not a dash.** A board played once has contributed a
-   * real score and nothing decided, so the settled figure is the sum of no boards —
-   * which is 0. The same rule the scorepad settled on for its own dash: blank keeps
-   * its one meaning of "there is nothing here", and this is not that.
+   * **Before anything is settled the strip shows the running points, and says so.**
    *
-   * **And the run-1 score is not shown at all.** A second row used to say what was
-   * still out; a board's margin is your net in both runs added, so a board played once
-   * carries the luck of the stream you held and a big figure there is a warning rather
-   * than a credit. The strip says what is decided and stays quiet about the rest.
+   * `Settled 0/5 +0` is a dead number: it cannot move until a board comes back, which
+   * under a shuffled order can be most of the session — the very complaint this row was
+   * changed for. The points total is at least alive, and naming it *Points* rather than
+   * letting it sit under the Settled label is what stops it being read as a standing.
+   *
+   * The label carries the meaning, which is why the assertion is on the label as much as
+   * the figure: the same +420 under "Settled" would be a lie.
    */
-  it("settles nothing while a board has been played once, and says so without a figure", () => {
+  it("shows the running points, named as such, before any board has come back", () => {
     show({
       kind: "duplicate",
       summary: session({
@@ -199,10 +199,11 @@ describe("the fixed score during a session", () => {
       }),
     });
 
-    expect(text()).toContain("Settled 0/2");
+    expect(text()).toContain("Points");
+    expect(text()).toContain("+420");
+    // Not dressed as a settled score, and no third thing claiming boards are pending.
+    expect(text()).not.toContain("Settled");
     expect(text()).not.toContain("still out");
-    // The board's own run-1 score is deliberately absent — it is not a standing.
-    expect(text()).not.toContain("+420");
   });
 
   it("sums only the boards that have actually closed, and counts them the same way", () => {
