@@ -135,13 +135,27 @@ export function DealComplete({
   // branched at each of them.
   const pad =
     standing.kind === "field" ? (
-      // **The board just played, then the whole session behind a tap** — the staging
-      // every other deal already gets, and the reason it is staged rather than chosen.
-      // Showing only the last board at the end buried the session; showing only the
-      // session skipped the last board's own result, so the final deal was the one
-      // deal of the sitting whose traveller you never saw. It is still a deal and
-      // deserves the same ending as the seven before it.
-      <FieldPad latest={!showingSession} me={view.me} summary={standing.summary} />
+      // **Between deals, the board just played with the session behind a tap; at the
+      // end, the session with that board already open.**
+      //
+      // The staging is right while the sitting is under way — a reveal is about the
+      // hand that just finished, and redrawing every earlier board under it buries
+      // that in a scroll. It was wrong on the last one. Every other format's final
+      // screen *is* its whole pad: a rubber ends on its entire scorepad. A session
+      // ended on one board with the result behind a link nobody should have to find,
+      // which made this the one format that asked for an extra tap to see how it went.
+      //
+      // `openLast` is what makes that free rather than a trade. The objection staging
+      // was built for — that showing the session at the end skips the last board's own
+      // traveller — is answered by opening its row, so the final deal is still the
+      // traveller on screen and is now sitting inside the result rather than in place
+      // of it.
+      <FieldPad
+        latest={!complete && !showingSession}
+        me={view.me}
+        openLast={complete}
+        summary={standing.summary}
+      />
     ) : standing.kind === "duplicate" ? (
       <SessionPad summary={standing.summary} view={view} />
     ) : (
@@ -367,9 +381,10 @@ export function DealComplete({
 
         {pad}
 
-        {/* Only where there is a session to go on to. A rubber's pad is already the
-            whole rubber, so there is no second thing to show. */}
-        {standing.kind === "field" && !showingSession ? (
+        {/* Only where there is a session still to reveal. A rubber's pad is already the
+            whole rubber, and a *finished* session is showing all of itself — so the
+            link would either do nothing or offer what is already on screen. */}
+        {standing.kind === "field" && !complete && !showingSession ? (
           <button
             type="button"
             className="text-sm text-white/55 underline decoration-white/30 underline-offset-4"

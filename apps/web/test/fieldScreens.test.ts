@@ -197,26 +197,42 @@ describe("finishing a field session", () => {
   });
 
   /**
-   * **The last board is still a deal and gets the same ending as the seven before
-   * it.** Showing the whole session straight away skipped its traveller entirely, so
-   * it was the one board of the sitting whose result you never saw — which is the
-   * fault `useShownPhase` exists to prevent elsewhere, arrived at from a different
-   * direction.
+   * **A finished session shows the whole session, with no tap to find.**
+   *
+   * Every other format's last screen is its entire pad — a rubber ends on its whole
+   * scorepad — and this one ended on a single board with the result behind a link,
+   * which made it the one format that asked for an extra tap to see how it went.
+   * Reported as exactly that.
+   *
+   * The link is asserted *absent* rather than merely unused: leaving it would offer
+   * what is already on screen, which is a control that does nothing.
    */
-  it("shows the board just played before the session", () => {
+  it("shows the whole session as soon as it is over", () => {
     finish(THREE);
-
-    expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();
-    expect(screen.getByRole("button", { name: /whole session/i })).toBeTruthy();
-  });
-
-  /** And the session is a tap away, which is where every board answers for itself. */
-  it("shows every board once asked for the session", () => {
-    finish(THREE);
-    fireEvent.click(screen.getByRole("button", { name: /whole session/i }));
 
     expect(screen.getByRole("button", { name: /Board 1/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Board 3/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /whole session/i })).toBeNull();
+  });
+
+  /**
+   * **And the board just played is the one already open**, which is what makes showing
+   * the session cost nothing. The staging this replaced existed for a real reason — the
+   * last board was otherwise the one deal of the sitting whose traveller you never saw
+   * — and opening its row answers that rather than trading it away.
+   *
+   * Checked against a board that is *not* open, or this would pass against a pad that
+   * opened all of them, which is a different screen with the same assertion.
+   */
+  it("opens the last board's traveller, and only that one", () => {
+    finish(THREE);
+
+    expect(screen.getByRole("button", { name: /Board 3/ }).getAttribute("aria-expanded")).toBe(
+      "true",
+    );
+    expect(screen.getByRole("button", { name: /Board 1/ }).getAttribute("aria-expanded")).toBe(
+      "false",
+    );
   });
 
   /**

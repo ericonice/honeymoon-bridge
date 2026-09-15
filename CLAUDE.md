@@ -2027,6 +2027,27 @@ generated row has no account and a table result is one recorded with an opponent
 (`0014_field_opponent.sql`, where **null means the computer rather than "unknown"** — every row
 written before that column existed was solo play).
 
+**A finished session shows the whole session, and for a while it was the one format that made you
+ask.** `FieldPad` has two modes — the board just played, and a row a board opening into its traveller —
+and the deal-complete screen used the first on *every* deal including the last, with the session behind
+a "See the whole session" link. Between deals that staging is right: a reveal is about the hand that
+just finished, and redrawing every earlier board under it buries that in a scroll. On the last one it
+was wrong, because **every other format's final screen is its entire pad** — a rubber ends on its whole
+scorepad — so this was the only sitting whose result took an extra tap to find. Reported as exactly
+that.
+
+**`openLast` is what makes the fix free rather than a trade.** The staging existed for a real reason,
+written in the component: showing the session at the end skipped the last board's own traveller, making
+it the one deal of the sitting whose result you never saw. Opening that board's row answers the
+objection instead of accepting it — the final deal is still the traveller on screen, now sitting inside
+the result rather than in place of it. The link goes at the same time, since a finished session is
+already showing all of itself and the control would offer what is on screen.
+
+**Both replaced tests pinned the old behaviour and one of them is worth copying.** "Opens the last
+board's traveller" asserts that board 1 is `aria-expanded="false"` as well as that the last is `"true"` —
+without the negative it passes against a pad that opens every row, which is a different screen with the
+same assertion. Checked by reverting both props.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told
