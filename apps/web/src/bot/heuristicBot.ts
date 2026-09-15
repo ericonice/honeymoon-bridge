@@ -5,7 +5,7 @@ import type { Objective } from "./bidValue.js";
 import { pointsAsEquity } from "./equity.js";
 import { boardFacing, offeredSoFar, offersFacingOpponent } from "./boardRecall.js";
 import type { BoardOutcome } from "./boardRecall.js";
-import { searchTricks, spreadOdds } from "./searchTricks.js";
+import { centredOn, searchTricks, spreadOdds } from "./searchTricks.js";
 import type { TrickSpread } from "./searchTricks.js";
 import { chooseCard } from "./cardPlay.js";
 import { chooseTake } from "./drawDecision.js";
@@ -587,14 +587,23 @@ function oddsFor(context: CallContext, contract: Contract): readonly number[] | 
   // double-dummy tricks are not independent of who leads. `theirSpreads` is the
   // second solve and exists precisely so that branch has a measured shape instead of
   // the fitted bell curve around a counted blend.
-  const spread =
-    contract.declarer === context.view.me
-      ? context.spreads?.get(contract.strain)
-      : context.theirSpreads?.get(contract.strain);
+  const mine = contract.declarer === context.view.me;
+  const spread = mine
+    ? context.spreads?.get(contract.strain)
+    : context.theirSpreads?.get(contract.strain);
   if (spread === undefined || spread.samples < MIN_SEARCH_SAMPLES) {
     return undefined;
   }
-  return spreadOdds(spread);
+  // **Their contract keeps the search's shape and `estimateFor`'s centre.**
+  // `expectedValue` consults the estimate only when no odds are given, so handing it
+  // the raw distribution here threw away the blend with their bid — `THEIR_BID_WEIGHT`
+  // is 0.75 on this branch — and measured 30% of rubbers. See `centredOn`.
+  //
+  // This seat's own contracts are deliberately left alone. The same inconsistency
+  // exists there at a weight of 0.25, and that is the arrangement measured at 65% of
+  // rubbers and shipped; changing both at once would make a re-measurement unable to
+  // say which half moved.
+  return mine ? spreadOdds(spread) : centredOn(spreadOdds(spread), estimateFor(contract, context));
 }
 
 /**

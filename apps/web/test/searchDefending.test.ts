@@ -1,7 +1,7 @@
 import { applyAction, createRng, legalActionsForView, startDeal, viewFor } from "@hb/engine";
 import type { DealState, PlayerId, PlayerView, Strain } from "@hb/engine";
 import { describe, expect, it } from "vitest";
-import { searchTricks } from "../src/bot/searchTricks.js";
+import { centredOn, searchTricks } from "../src/bot/searchTricks.js";
 
 /**
  * The second solve, and why it is a second solve rather than an inversion.
@@ -98,5 +98,62 @@ describe("searching the position the opponent declares", () => {
     for (const strain of STRAINS) {
       expect(result.theirSpreads.get(strain)?.samples).toBe(result.spreads.get(strain)?.samples);
     }
+  });
+});
+
+/**
+ * Moving a measured distribution onto a blended centre.
+ *
+ * `expectedValue` reads `options.odds ?? outcomeOdds(options.estimate)`, so supplying
+ * odds makes the estimate unreachable. Handing it a raw search distribution for a
+ * contract the opponent declares therefore discarded the blend with their bid — weight
+ * 0.75 on that branch — and measured 30% of rubbers over 40 plays against an even
+ * expectation. Keeping the shape and moving the centre is what preserves both, and it
+ * is the same mistake, in the same file, that cost +651 a rubber against +467 when the
+ * search was first built.
+ */
+describe("centring a searched distribution on an estimate", () => {
+  const spike = (at: number): number[] =>
+    Array.from({ length: 14 }, (_, tricks) => (tricks === at ? 1 : 0));
+
+  const meanOf = (odds: readonly number[]): number =>
+    odds.reduce((total, chance, tricks) => total + chance * tricks, 0);
+
+  it("moves the mean to where it is asked, whole tricks or fractions of one", () => {
+    expect(meanOf(centredOn(spike(9), 7))).toBeCloseTo(7, 6);
+    expect(meanOf(centredOn(spike(5), 8.5))).toBeCloseTo(8.5, 6);
+  });
+
+  /** The width is the whole point of searching, so it must survive the move. */
+  it("keeps the shape rather than collapsing it onto the estimate", () => {
+    const spread = Array.from({ length: 14 }, (_, t) => (t >= 7 && t <= 11 ? 0.2 : 0));
+    const moved = centredOn(spread, 6);
+
+    expect(moved.filter((chance) => chance > 0.0001).length).toBeGreaterThanOrEqual(5);
+    expect(meanOf(moved)).toBeCloseTo(6, 6);
+  });
+
+  it("still sums to one, including when mass is pushed off an end", () => {
+    for (const target of [0, 1, 6.4, 12, 13]) {
+      const moved = centredOn(spike(9), target);
+      expect(moved.reduce((total, chance) => total + chance, 0)).toBeCloseTo(1, 6);
+      expect(moved.every((chance) => chance >= 0)).toBe(true);
+    }
+  });
+
+  /**
+   * A contract cannot take fourteen tricks, so mass piling at the end is correct rather
+   * than a rounding fault — and it means the result's mean falls short of an impossible
+   * target, which is the honest answer.
+   */
+  it("piles mass at the end rather than losing it past thirteen", () => {
+    const moved = centredOn(spike(12), 20);
+
+    expect(moved[13]).toBeCloseTo(1, 6);
+    expect(meanOf(moved)).toBeCloseTo(13, 6);
+  });
+
+  it("leaves a distribution already centred exactly where it is", () => {
+    expect(centredOn(spike(8), 8)).toEqual(spike(8));
   });
 });

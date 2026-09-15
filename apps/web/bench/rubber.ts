@@ -617,7 +617,14 @@ function run({
           return botForLevel({ level, rng, tuning: { ...tuning, ...level.tuning } });
         }
         if (defend > 0) {
-          const shared = { objective, searchBudgetMs: defend, searchSamples: 25 } as const;
+          // **Twelve samples, not twenty-five, and the cap is what makes this a fair
+          // comparison rather than a handicap.** The budget is wall-clock, so the
+          // challenger's extra solve per sample buys it *fewer samples* in the same
+          // time — measured at 11.0 against the reference's 14.9 at 250ms, which
+          // degrades the declaring estimate that already worked and confounds the very
+          // thing being tested. A cap both sides reach removes it: at 500ms and twelve,
+          // the two complete 10.8 and 10.9 samples and run out on the same hands.
+          const shared = { objective, searchBudgetMs: defend, searchSamples: 12 } as const;
           return challenger
             ? cardPlay(rng, { ...shared, searchDefending: true })
             : cardPlay(rng, shared);

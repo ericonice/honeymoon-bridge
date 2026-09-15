@@ -207,6 +207,56 @@ export function searchTricks(options: SearchOptions): SearchResult {
  * is checked *after* the first rather than before it — which is why the loop above
  * guards on `sampled > 0`.
  */
+/**
+ * The same shape, moved so its mean is `mean`.
+ *
+ * **Because a measured distribution and a blended estimate are two different claims,
+ * and handing `bidValue` the first silently throws away the second.** `expectedValue`
+ * reads `options.odds ?? outcomeOdds(options.estimate)` — supply odds and the estimate
+ * is not consulted at all. So passing a raw search distribution for a contract the
+ * *opponent* declares discarded the blend with their bid level, which carries
+ * `THEIR_BID_WEIGHT` of 0.75 and is, in this file's own words, the largest single thing
+ * the bidder knows. Measured: 30% ± 7 of rubbers over 40 plays, against an even
+ * expectation. The identical mistake — replacing the estimate wholesale rather than
+ * correcting it — cost this bidder +651 a rubber against +467 when the search was first
+ * built, and it is recorded in `CLAUDE.md` as such.
+ *
+ * Keeping the shape and moving the centre is what preserves both findings at once. The
+ * shape is what made searching worth 65% of rubbers — a flat hand and a wild two-suiter
+ * have different uncertainty and `TRICK_SPREAD` is one number for every hand — and the
+ * centre is where their bid, and what the board came to last time, get their say.
+ *
+ * Fractional shifts interpolate between the two whole ones either side, since an
+ * estimate is rarely a whole number of tricks. Mass pushed past either end piles up at
+ * the end rather than falling off: a contract cannot take fourteen tricks or minus one,
+ * so the alternative is a distribution that does not sum to one. That pile-up means the
+ * result's mean can fall a little short of the target at the extremes, which is correct
+ * — the shift is bounded by what is possible.
+ */
+export function centredOn(odds: readonly number[], mean: number): number[] {
+  const current = odds.reduce((total, chance, tricks) => total + chance * tricks, 0);
+  const shift = mean - current;
+  if (!Number.isFinite(shift) || Math.abs(shift) < 1e-9) {
+    return [...odds];
+  }
+
+  const whole = Math.floor(shift);
+  const part = shift - whole;
+  const moved = new Array<number>(TRICKS + 1).fill(0);
+  const put = (at: number, chance: number): void => {
+    const clamped = at < 0 ? 0 : at > TRICKS ? TRICKS : at;
+    moved[clamped] = (moved[clamped] ?? 0) + chance;
+  };
+  odds.forEach((chance, tricks) => {
+    if (chance === 0) {
+      return;
+    }
+    put(tricks + whole, chance * (1 - part));
+    put(tricks + whole + 1, chance * part);
+  });
+  return moved;
+}
+
 export function spreadOdds(spread: TrickSpread): number[] {
   if (spread.samples === 0) {
     return new Array<number>(TRICKS + 1).fill(1 / (TRICKS + 1));
