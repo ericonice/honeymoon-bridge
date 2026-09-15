@@ -45,6 +45,7 @@ import { boardKeyOf } from "../src/game/boardKey.js";
 import { botActionFor } from "../src/game/botTurn.js";
 import { actOn, dealOf, nextIn, startMatch, summarizeMatch } from "@hb/engine";
 import { createProgress } from "./progress.js";
+import { ORACLE_FROM_DOWN, oracleDouble, oracleSeatsFor } from "./oracle.js";
 
 /**
  * Two bidders across full rubbers, which is the only bench that can see what a
@@ -83,85 +84,8 @@ import { createProgress } from "./progress.js";
 const MAX_DEALS = 60;
 
 
-/**
- * Undertricks the oracle needs to see before it doubles.
- *
- * The same number as `DOUBLED_FROM_DOWN` in `bidValue.ts`, and that is the whole
- * point rather than a coincidence. The bot's bidding assumes it gets doubled
- * exactly when it is going down two or more; against this reference that
- * assumption is *true*, so anything it still loses to a double is a wrong trick
- * estimate rather than a wrong model of the opponent. Isolating those two was
- * impossible while the reference only doubled from the five level.
- */
-const ORACLE_FROM_DOWN = 2;
 
-/**
- * A double from a seat that can see both hands, used as a measuring instrument
- * and never as a player.
- *
- * This deliberately does not live in a `Bot`, and it is handed the `DealState`
- * rather than a `PlayerView` — which is exactly why it cannot be one. `solver.ts`
- * may never be given a position for a seat that is thinking, so the intercept
- * sits here in the bench, above the bot, and overrides the call it would have
- * made. A bot that could reach this would be a bot that cheats.
- *
- * Why an oracle rather than a stronger heuristic doubler: a heuristic one shares
- * the estimator's blind spots, so it fails to punish precisely the hands the
- * estimator misreads — which is the failure it is being built to catch. Recorded
- * games showed six of eight disasters doubled at the *four* level, all of them
- * invisible to a reference that starts at five.
- *
- * One solve per (declarer, strain) per deal. The cache is passed in rather than
- * closed over, because the hands are only final once the draw has ended and a
- * cache built any earlier would answer from a hand of the wrong size.
- */
-function oracleDouble(
-  state: DealState,
-  seat: PlayerId,
-  cache: Map<string, number>,
-): DealAction | null {
-  if (state.phase !== "auction" || currentDoubling(state.auction) !== "none") {
-    return null;
-  }
-  const entry = lastBidEntry(state.auction);
-  if (entry === null || entry.by === seat || entry.call.type !== "bid") {
-    return null;
-  }
-  if (
-    !legalActions(state, seat).some(
-      (action) => action.type === "call" && action.call.type === "double",
-    )
-  ) {
-    return null;
-  }
 
-  const declarer = entry.by;
-  const { level, strain } = entry.call.bid;
-  return level + 6 - solvedTricks(state, declarer, strain, cache) >= ORACLE_FROM_DOWN
-    ? { type: "call", call: { type: "double" } }
-    : null;
-}
-
-function solvedTricks(
-  state: DealState,
-  declarer: PlayerId,
-  strain: Strain,
-  cache: Map<string, number>,
-): number {
-  const key = `${declarer}${strain}`;
-  const known = cache.get(key);
-  if (known !== undefined) {
-    return known;
-  }
-  const solved = solve({
-    hands: [state.hands[0], state.hands[1]],
-    leader: opponentOf(declarer),
-    strain,
-    trick: [],
-  }).tricks[declarer];
-  cache.set(key, solved);
-  return solved;
-}
 
 interface Outcome {
   readonly deals: number;
@@ -211,8 +135,20 @@ interface MatchOptions {
   /** The seat whose disasters are counted. */
   readonly challenger: PlayerId;
   readonly format: MatchFormat;
-  /** The seat whose doubles come from the solver, or null for neither. */
-  readonly oracleSeat: PlayerId | null;
+  /**
+   * Which seats double off the solver rather than off their own judgement.
+   *
+   * **A pair rather than one seat, because arming one breaks the symmetry that makes a
+   * control mean anything.** `control` plays a bidder against an exact copy and the
+   * bench plays every rubber from both sides, so exchanging which copy is called the
+   * challenger scores the same game twice and the margins are exact negatives — the
+   * mean is then forced to zero. Give the oracle to one seat and that no longer holds:
+   * measured, two identical bidders came out 120 to 120 on rubbers and **−144 points a
+   * rubber**, which is a real asymmetry rather than noise. Arming both restores it, and
+   * is also the fairer comparison for a tuning run: the challenger's overreach and the
+   * reference's are punished on the same terms.
+   */
+  readonly oracleSeats: Pair<boolean>;
   readonly seed: number;
 }
 
@@ -232,7 +168,7 @@ function playMatch({
   bots,
   challenger,
   format,
-  oracleSeat,
+  oracleSeats,
   seed,
 }: MatchOptions): Outcome {
   // Recorded exactly as `localSession` records it: read off `pending` and the top of
@@ -297,7 +233,7 @@ function playMatch({
           recognised += 1;
         }
       }
-      const forced = seat === oracleSeat ? oracleDouble(deal, seat, solved) : null;
+      const forced = oracleSeats[seat] ? oracleDouble(deal, seat, solved) : null;
       if (forced !== null) {
         doubles += 1;
       }
@@ -436,7 +372,15 @@ interface RunOptions {
    */
   readonly gameEquity: number;
   /** False restores the old reference, which only doubled from the five level. */
-  readonly oracle: boolean;
+  /**
+   * `nodouble` for neither, the default for the reference alone, `oracle=both` for both.
+   *
+   * Both is what a tuning run wants — see `oracleSeats`. The reference-only default is
+   * kept because every margin recorded in `CLAUDE.md` before this was measured against
+   * it, and silently changing what the default means would make those numbers quietly
+   * incomparable rather than obviously so.
+   */
+  readonly oracle: "both" | "reference" | "none";
   /**
    * What the challenger prices calls in.
    *
@@ -680,7 +624,7 @@ function run({
         bots,
         challenger: challengerSeat,
         format,
-        oracleSeat: oracle ? them : null,
+        oracleSeats: oracleSeatsFor(oracle, challengerSeat, them),
         seed,
       });
       points.push(outcome.points[challengerSeat] - outcome.points[them]);
@@ -750,7 +694,9 @@ function run({
     );
   }
   console.log(
-    oracle
+    oracle === "both"
+      ? `  both seats double off the solver, from down 2 — symmetric, which is what a control needs`
+      : oracle === "reference"
       ? `  the reference doubles off the solver, from down ${ORACLE_FROM_DOWN}`
       : `  the reference doubles only from the five level — not comparable to an oracle run`,
   );
@@ -936,7 +882,11 @@ run({
   defend: Number(process.argv.find((arg) => arg.startsWith("defend="))?.slice("defend=".length) ?? 0),
   search: Number(process.argv.find((arg) => arg.startsWith("search="))?.slice("search=".length) ?? 0),
   searchMode: process.argv.includes("mean") ? "mean" : "odds",
-  oracle: !process.argv.includes("nodouble"),
+  oracle: process.argv.includes("nodouble")
+    ? "none"
+    : process.argv.includes("oracle=both")
+      ? "both"
+      : "reference",
   rubbers: Number(process.argv[2] ?? 60),
   samples: Number(process.argv[3] ?? 0) || 0,
   versusWeight: versusArg === undefined ? null : Number(versusArg.slice("vs=".length)),

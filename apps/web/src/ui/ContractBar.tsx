@@ -210,19 +210,24 @@ function signed(value: number): string {
  * all, a session can go a long way with nothing settled while that number moves the whole
  * time. Reported as having no clear way of knowing how you are doing.
  *
- * So `sessionSplit`: **Settled** is the real duplicate score, boards both runs of which
- * are in and the luck cancelled, and **still out** is what is riding on the rest. They sum
- * to the total, so nothing is hidden — and at the end there is nothing out and Settled
- * *is* the total, which is why dropping Total costs no final figure.
+ * So **Settled**, and nothing else: the real duplicate score, boards both runs of which
+ * are in and the luck cancelled. At the end there is nothing out and Settled *is* the
+ * total, which is why dropping Total costs no final figure.
  *
- * The "still out" figure is worth as much as the settled one under this order: a large
- * number out means several boards are about to come back at once and can swing hard.
+ * **A second row said what was still out, and it argued against itself.** A board's
+ * margin is your net in run 1 plus your net in run 2 — you hold one stream in each, so
+ * the cards cancel across the pair. A board still out has contributed only its run-1
+ * net, luck of the stream included, so a large positive there usually means you held the
+ * good cards and are about to hand them back. Drawn as a credit it read as money in the
+ * bank and was a warning. **And the count was redundant anyway**: `Settled 1/5` already
+ * says four are out. Reported as not helpful, which it was, twice over.
  *
- * **Under IMPs it carries a count and no figure**, which is the format rather than an
- * omission — `impsFor` converts a board's margin and an open board has none. That also
- * removes an old asymmetry here: IMPs used to get one row where points got two, because
- * `margin` already summed closed boards only. Both now say the same two things, and the
- * currency is named on the settled row rather than implied by which rows exist.
+ * `sessionSplit` still returns both halves, because the sum is what makes Settled
+ * checkable against the total; only the drawing of the second one is gone.
+ *
+ * **The currency is named on the settled row** rather than implied by which rows exist,
+ * which also removed an old asymmetry: IMPs used to get one row where points got two,
+ * because `margin` already summed closed boards only.
  *
  * Earlier shapes, so they are not re-proposed: one signed score plus "what this deal came
  * to before", which answered a narrower question — this one board rather than the
@@ -292,7 +297,6 @@ function SessionRows({
   readonly view: PlayerView;
 }): React.JSX.Element {
   const split = sessionSplit(summary, view.me);
-  const out = summary.boards.length - summary.closed;
 
   return (
     <>
@@ -309,18 +313,6 @@ function SessionRows({
           {signed(split.settled)}
         </span>
       </p>
-      {out === 0 ? null : (
-        <p className="flex items-baseline justify-between gap-2 text-white/40">
-          <span>
-            {out} still out
-          </span>
-          {/* No figure under IMPs, which is the format rather than an omission — an
-              open board has no margin, so there is nothing to convert. */}
-          <span className="tabular-nums text-white/60">
-            {split.out === null ? "" : signed(split.out)}
-          </span>
-        </p>
-      )}
     </>
   );
 }
@@ -334,7 +326,6 @@ function SessionFigures({
   readonly view: PlayerView;
 }): React.JSX.Element {
   const split = sessionSplit(summary, view.me);
-  const out = summary.boards.length - summary.closed;
 
   return (
     <>
@@ -346,15 +337,6 @@ function SessionFigures({
           {signed(split.settled)}
         </span>
       </span>
-      {out === 0 ? null : (
-        <span className="whitespace-nowrap">
-          {out} still out
-          {split.out === null ? "" : " "}
-          <span className="tabular-nums text-white/60">
-            {split.out === null ? "" : signed(split.out)}
-          </span>
-        </span>
-      )}
     </>
   );
 }

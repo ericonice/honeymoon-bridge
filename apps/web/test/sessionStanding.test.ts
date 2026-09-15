@@ -87,8 +87,24 @@ function text(): string {
  * nobody needed to follow.
  */
 describe("the fixed score during a session", () => {
+  /**
+   * The fixture has to hold a **closed** board. Settled sums boards both runs of which
+   * are in, so a session with nothing closed draws 0 whatever its margin is — these two
+   * used to pass off the "still out" row, and when that was deleted they were asserting
+   * a figure the strip had no reason to show.
+   */
   it("shows one signed figure and no two-sided columns", () => {
-    show({ kind: "duplicate", summary: session({ margin: [250, -250] }) });
+    show({
+      kind: "duplicate",
+      summary: session({
+        boards: [
+          board({ margin: 250, played: [run({ points: 420 }), run({ points: 170, replay: true })] }),
+          board({ board: 1 }),
+        ],
+        closed: 1,
+        margin: [250, -250],
+      }),
+    });
 
     expect(text()).toContain("Settled");
     expect(text()).toContain("+250");
@@ -98,7 +114,21 @@ describe("the fixed score during a session", () => {
   });
 
   it("shows a negative score as negative rather than as the opponent's", () => {
-    show({ kind: "duplicate", summary: session({ margin: [-140, 140] }) });
+    show({
+      kind: "duplicate",
+      summary: session({
+        boards: [
+          board({
+            margin: -140,
+            played: [run({ points: -90 }), run({ points: 50, replay: true })],
+          }),
+          board({ board: 1 }),
+        ],
+        closed: 1,
+        margin: [-140, 140],
+      }),
+    });
+
     expect(text()).toContain("−140");
   });
 
@@ -154,10 +184,12 @@ describe("the fixed score during a session", () => {
    * which is 0. The same rule the scorepad settled on for its own dash: blank keeps
    * its one meaning of "there is nothing here", and this is not that.
    *
-   * The whole +420 is riding on the board still out, which is what the strip has to
-   * say rather than letting it stand as a score.
+   * **And the run-1 score is not shown at all.** A second row used to say what was
+   * still out; a board's margin is your net in both runs added, so a board played once
+   * carries the luck of the stream you held and a big figure there is a warning rather
+   * than a credit. The strip says what is decided and stays quiet about the rest.
    */
-  it("settles nothing while a board has been played once, and says what is riding on it", () => {
+  it("settles nothing while a board has been played once, and says so without a figure", () => {
     show({
       kind: "duplicate",
       summary: session({
@@ -168,8 +200,9 @@ describe("the fixed score during a session", () => {
     });
 
     expect(text()).toContain("Settled 0/2");
-    expect(text()).toContain("2 still out");
-    expect(text()).toContain("+420");
+    expect(text()).not.toContain("still out");
+    // The board's own run-1 score is deliberately absent — it is not a standing.
+    expect(text()).not.toContain("+420");
   });
 
   it("sums only the boards that have actually closed, and counts them the same way", () => {
@@ -195,14 +228,14 @@ describe("the fixed score during a session", () => {
     });
 
     // **The anti-vacuity of this whole change.** The open board's 90 is in the total
-    // and must not be in Settled — so asserting the settled figure alone would pass
-    // against a strip that simply kept showing the total. Both halves, and they add
-    // back up to the 340 that was dropped.
+    // and must not be in Settled, so asserting +250 alone would pass against a strip
+    // that had simply kept showing the running total. The absence of 340 is what says
+    // the settled figure is a different number from the total, and the absence of 90
+    // is what says the open board is not being drawn either.
     expect(text()).toContain("Settled 1/2");
     expect(text()).toContain("+250");
-    expect(text()).toContain("1 still out");
-    expect(text()).toContain("+90");
     expect(text()).not.toContain("+340");
+    expect(text()).not.toContain("+90");
   });
 
   /**
@@ -228,7 +261,7 @@ describe("the fixed score during a session", () => {
     // agree with it whatever either said.
     expect(text()).toContain("+6");
     expect(text()).not.toContain("+250");
-    // Every board is in, so there is nothing out and no row claiming there is.
+    // Nothing anywhere claims a board is outstanding.
     expect(text()).not.toContain("still out");
   });
 

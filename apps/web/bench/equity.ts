@@ -26,6 +26,7 @@ import { createHeuristicBot } from "../src/bot/heuristicBot.js";
 import { createSamplingBot } from "../src/bot/samplingBot.js";
 import type { Bot } from "../src/bot/types.js";
 import { botActionFor } from "../src/game/botTurn.js";
+import { oracleDouble } from "./oracle.js";
 
 /**
  * What a standing is worth, measured rather than reasoned.
@@ -138,17 +139,30 @@ function playRubber(bots: Pair<Bot>, seed: number, format: RubberFormat): readon
 
   for (let deals = 0; deals < MAX_DEALS; deals++) {
     standings.push(table.rubberBefore);
+    // **Both seats double off the solver, and this bench had no doubling at all.**
+    // The table fitted here is what prices a standing, so it was learnt from rubbers
+    // in which nobody was ever punished for overreaching — the same shape of mistake
+    // as fitting it under heuristic card play and learning to stretch in a world
+    // where stretching was safe. Both seats rather than one, so the fit sees a
+    // symmetric game: an oracle on a single seat is worth about 144 points a rubber
+    // and would bias every standing toward whichever side happened to hold it.
+    //
+    // The cache is per deal because it is keyed by declarer and strain only — the
+    // hands are what change between deals, and nothing in the key says so.
+    const solved = new Map<string, number>();
     while (table.deal.phase !== "complete") {
       const seat = table.deal.toAct;
+      const forced = oracleDouble(table.deal, seat, solved);
       table = applyTableAction(
         table,
         seat,
-        botActionFor({
-          bot: bots[seat],
-          seat,
-          standing: { rubber: table.rubberBefore, vulnerable: vulnerability(table.rubberBefore) },
-          state: table.deal,
-        }),
+        forced ??
+          botActionFor({
+            bot: bots[seat],
+            seat,
+            standing: { rubber: table.rubberBefore, vulnerable: vulnerability(table.rubberBefore) },
+            state: table.deal,
+          }),
       );
     }
     const summary = summarize(table);
@@ -223,12 +237,18 @@ function playMirror(bots: Pair<Bot>, seed: number, halfFormat: RubberFormat): re
       });
     }
 
+    // Doubled the same way the rubber fit is — see `playRubber`. A mirror's halves are
+    // real games and a bidder that overreaches in one is punished in it, so a table
+    // fitted here without a doubler would be learnt from a different game again.
+    const solved = new Map<string, number>();
     while (dealOf(match).phase !== "complete") {
       const seat = dealOf(match).toAct;
+      const forced = oracleDouble(dealOf(match), seat, solved);
       match = actOn(
         match,
         seat,
-        botActionFor({ bot: bots[seat], seat, standing: before.botStanding, state: dealOf(match) }),
+        forced ??
+          botActionFor({ bot: bots[seat], seat, standing: before.botStanding, state: dealOf(match) }),
       );
     }
 
