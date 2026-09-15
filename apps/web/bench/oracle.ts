@@ -24,7 +24,28 @@ import { solve } from "../src/bot/solver.js";
  * estimate rather than a wrong model of the opponent. Isolating those two was
  * impossible while the reference only doubled from the five level.
  */
-export const ORACLE_FROM_DOWN = 2;
+export const ORACLE_FROM_DOWN = fromDown();
+
+/**
+ * `from=N` raises the bar, and the default of 2 stays what it was.
+ *
+ * **Because down-2 is a diagnostic setting and not a calibrated one.** Matching
+ * `DOUBLED_FROM_DOWN` makes the bot's own assumption about when it gets doubled *true*
+ * against this reference, which is what isolates a wrong trick estimate from a wrong
+ * model of the opponent — exactly right for asking where a loss comes from. It is wrong
+ * for *fitting* anything, because a reference that punishes harder than the real
+ * opponent produces a table tuned for a crueller world: measured, down-2 doubles **69%
+ * of v3's deals** where a person doubles **19%** of them across 1,449 logged deals.
+ *
+ * Read from the command line rather than passed, so the two benches that share this
+ * doubler cannot be run at different thresholds by accident — which is the failure the
+ * extraction into this module was for.
+ */
+function fromDown(): number {
+  const arg = process.argv.find((one) => one.startsWith("from="));
+  const asked = arg === undefined ? 2 : Number(arg.slice("from=".length));
+  return Number.isFinite(asked) && asked >= 1 ? Math.floor(asked) : 2;
+}
 
 /**
  * A double from a seat that can see both hands, used as a measuring instrument

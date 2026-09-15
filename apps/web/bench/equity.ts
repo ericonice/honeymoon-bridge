@@ -309,8 +309,25 @@ function untouched(rubber: RubberState): boolean {
 }
 
 function rebuildFromLog(path: string): Rebuilt {
+  // **Rubbers only, and the filter is load-bearing rather than defensive.** This was
+  // written when the log held nothing else, and it crashed the first time it met the
+  // log as it is now: `HandLogStanding.rubber` is *optional*, and a duplicate or field
+  // deal omits it entirely — not a partial standing but the whole of the one that deal
+  // was bid at, since what a session prices a call against is vulnerability and nothing
+  // else. A mirror half carries a rubber and still does not belong here: it is a single
+  // game inside a pair, which the `format=mirror` fit is for.
+  //
+  // Of 1,766 logged hands only a few hundred are rubbers, so what this drops is most of
+  // the file. That is the honest answer rather than a shortfall in the filter.
+  const isRubber = (hand: any): boolean =>
+    hand.format === undefined || hand.format === null || hand.format === "rubber";
   const logged = (JSON.parse(readFileSync(path, "utf8")) as any[])
-    .filter((hand) => hand.deal?.standing !== undefined && hand.deal?.contract !== null)
+    .filter(
+      (hand) =>
+        isRubber(hand.deal ?? hand) &&
+        hand.deal?.standing?.rubber !== undefined &&
+        hand.deal?.contract !== null,
+    )
     .sort((one, two) => one.playedAt - two.playedAt);
 
   const samples: Sample[] = [];
