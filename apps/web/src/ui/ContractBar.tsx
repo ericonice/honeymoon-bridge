@@ -210,20 +210,9 @@ function signed(value: number): string {
  * all, a session can go a long way with nothing settled while that number moves the whole
  * time. Reported as having no clear way of knowing how you are doing.
  *
- * So **Settled**: the real duplicate score, boards both runs of which are in and the
- * luck cancelled. At the end there is nothing out and Settled *is* the total, which is
- * why dropping Total costs no final figure.
- *
- * **Until the first board comes back it says Points instead**, because `Settled 0/5 +0`
- * is a dead number — it cannot move until a stock repeats, which under a shuffled order
- * is most of the session and is the complaint this row exists to answer. The points
- * total is at least alive. Naming it *Points* rather than leaving it under the Settled
- * label is the whole of what makes that honest: the same figure captioned Settled would
- * be a lie, and the caption is what changes at the hand-off.
- *
- * This is close to the Total it replaced and differs in the one way that matters — it
- * **hands over** to Settled rather than competing with it, so there is never a moment
- * when two figures on the strip claim to be the score.
+ * So **Settled**, and nothing else: the real duplicate score, boards both runs of which
+ * are in and the luck cancelled. At the end there is nothing out and Settled *is* the
+ * total, which is why dropping Total costs no final figure.
  *
  * **A second row said what was still out, and it argued against itself.** A board's
  * margin is your net in run 1 plus your net in run 2 — you hold one stream in each, so
@@ -308,18 +297,20 @@ function SessionRows({
   readonly view: PlayerView;
 }): React.JSX.Element {
   const split = sessionSplit(summary, view.me);
-  const settledYet = summary.closed > 0;
 
   return (
     <>
+      {/* **Settled leads, and it is the only figure here that is a score.** The running
+          total used to lead and is honest arithmetic rather than a standing: a board is
+          worth the difference between its two runs, so until a stock comes back this
+          seat's figure on it is mostly what the cards were. See `sessionSplit`. */}
       <p className="flex items-baseline justify-between gap-2 text-white/40">
         <span>
-          {settledYet
-            ? `Settled${summary.scoring === "imps" ? " (IMPs)" : ""} ${summary.closed}/${summary.boards.length}`
-            : "Points"}
+          Settled{summary.scoring === "imps" ? " (IMPs)" : ""} {summary.closed}/
+          {summary.boards.length}
         </span>
         <span className="font-semibold tabular-nums text-white/90">
-          {signed(settledYet ? split.settled : summary.margin[view.me])}
+          {signed(split.settled)}
         </span>
       </p>
     </>
@@ -335,17 +326,15 @@ function SessionFigures({
   readonly view: PlayerView;
 }): React.JSX.Element {
   const split = sessionSplit(summary, view.me);
-  const settledYet = summary.closed > 0;
 
   return (
     <>
       <span className="whitespace-nowrap">{ORDER_LABEL[summary.schedule]}</span>
       <span className="whitespace-nowrap">
-        {settledYet
-          ? `Settled${summary.scoring === "imps" ? " (IMPs)" : ""} ${summary.closed}/${summary.boards.length}`
-          : "Points"}{" "}
+        Settled{summary.scoring === "imps" ? " (IMPs)" : ""} {summary.closed}/
+        {summary.boards.length}{" "}
         <span className="font-semibold tabular-nums text-white/90">
-          {signed(settledYet ? split.settled : summary.margin[view.me])}
+          {signed(split.settled)}
         </span>
       </span>
     </>
