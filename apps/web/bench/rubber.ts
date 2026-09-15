@@ -501,6 +501,18 @@ interface RunOptions {
    */
   readonly releases: Pair<BotRelease> | null;
   /** Milliseconds the challenger may spend searching for a trick distribution. Zero is off. */
+  /**
+   * `defend=<ms>` — both sides search at this budget, and **only the challenger also
+   * solves the position where the opponent declares**.
+   *
+   * Its own flag rather than a variant of `search=`, because that one prices searching
+   * against counting and this prices searching *both* positions against searching one.
+   * Holding the budget, the sample count and everything else identical is the whole
+   * design: the only difference between the two seats is whether the branch that prices
+   * a pass, a raise over them and a double gets a measured distribution or a counted
+   * blend.
+   */
+  readonly defend: number;
   readonly search: number;
   /** Two difficulty rungs to play against each other, challenger first. */
   readonly levels: Pair<DifficultyLevel> | null;
@@ -554,6 +566,7 @@ function run({
   rubbers,
   samples,
   search,
+  defend,
   searchMode,
   versusWeight,
 }: RunOptions): void {
@@ -602,6 +615,12 @@ function run({
           // number each level shows in Settings should be the one this produced.
           const level = levels[challenger ? 0 : 1];
           return botForLevel({ level, rng, tuning: { ...tuning, ...level.tuning } });
+        }
+        if (defend > 0) {
+          const shared = { objective, searchBudgetMs: defend, searchSamples: 25 } as const;
+          return challenger
+            ? cardPlay(rng, { ...shared, searchDefending: true })
+            : cardPlay(rng, shared);
         }
         if (search > 0) {
           // The same bidder, one side searching for its trick distribution and
@@ -695,6 +714,8 @@ function run({
       ? `${levelName(levels[0])} against ${levelName(levels[1])}, their own sample counts`
       : search > 0
         ? `the bidder searching its tricks at ${search}ms (${searchMode}) against the same bidder counting them${play}`
+      : defend > 0
+        ? `the bidder searching what they take declaring, at ${defend}ms, against the same bidder counting it${play}`
         : releases !== null
         ? `v${releases[0].version} ${releases[0].name} against v${releases[1].version} ${releases[1].name}${play}`
             : versusWeight !== null
@@ -905,6 +926,7 @@ run({
   objective,
   levels: levelsFrom(process.argv.find((arg) => arg.startsWith("levels="))),
   releases: releasesFrom(process.argv.find((arg) => arg.startsWith("releases="))),
+  defend: Number(process.argv.find((arg) => arg.startsWith("defend="))?.slice("defend=".length) ?? 0),
   search: Number(process.argv.find((arg) => arg.startsWith("search="))?.slice("search=".length) ?? 0),
   searchMode: process.argv.includes("mean") ? "mean" : "odds",
   oracle: !process.argv.includes("nodouble"),

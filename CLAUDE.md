@@ -3025,6 +3025,48 @@ auction.
 
 ### Open threads
 
+- **The bidder searches the position it declares and counts the one it defends, and the fix is built
+  and unmeasured.** `searchTricks` has always solved with the opponent on lead, which answers what
+  *this* seat takes declaring; `estimateFor` uses it on the `declarer === me` branch only. The branch
+  that prices a pass, a competitive raise or a double — against a contract **they** would declare — has
+  gone on using the counted `evaluate.ts` estimate the whole time.
+
+  **That is the half the recorded games say it loses in.** `bench/hands.ts` over 204 logged deals:
+  **+66 a deal on contracts it declares, −135 a deal on the ones it lets the other seat buy.** The
+  counted estimate carries about 1.5 tricks of average error against the search's 1.04, and calibration
+  does not rescue it — the defending blend is bias-corrected already (+0.13, +0.11 at the four level),
+  which removes the *average* error, not the per-hand one. A bad double is a per-hand error.
+
+  `SearchOptions.defending` is a **second solve of the same guessed hands with this seat on lead**, not
+  the first read backwards — `13 − x` is what they take *while this seat declares*, a position nobody is
+  in, which is what `mirrorOdds` computed and why it has been deleted rather than left beside the
+  correct version. Scoped to `strainsWorthDefending`, which is the contract on the table when they would
+  declare it: **one strain or none**, so the cost is near a third of the search rather than double.
+  Gated on `BotTuning.searchDefending`, **off by default**, so `test/botRelease.test.ts` passes and v3 is
+  untouched.
+
+  **The census is done and the lever fires: 25% of calls changed** — over 20 deals, 24 decisions with
+  their contract standing, 24 defending spreads produced, 6 different calls. Well clear of the dead-knob
+  threshold this file records. It also took two goes: the first census read `view.contract`, which is
+  null until the auction settles, and reported **0 of 0** — indistinguishable from a capability that
+  does not work, and the same instrument failure as the board-recognition census that read 0 of 480.
+
+  **What is missing is the only thing that decides it, a rubber margin.** The run is
+  `npm run bench:rubber --workspace @hb/web -- 160 8 defend=250 nodouble`, which puts the same budget on
+  both seats and gives only the challenger the defending solve. It is **about two hours**: the bench
+  plays each rubber twice with the seats exchanged, so 160 rubbers is 320 plays at roughly 25s each.
+  Started and abandoned for that reason rather than for a result.
+
+  Two notes for whoever runs it. **Redirecting to a file with `>` block-buffers Node's stdout**, so the
+  every-25-plays progress never appears and a working run looks identical to a wedged one — the exact
+  trap `bench/progress.ts` documents in its own header. And `nodouble` belongs in this run like every
+  other, since the oracle doubler handicaps whichever seat it is applied to under solver card play.
+
+  If it wins, the follow-up is already implied: `THEIR_BID_WEIGHT` was fitted against a *counted*
+  defending estimate, and a better estimate of that term should move the optimal trust in their bid.
+  Fit it after, not in the same change.
+
+
 - **`bench/field.ts compare` is the most sensitive instrument in here, and the reason is the
   pairing.** Two bidders over the same corpus boards, each ranked against the field already on them:
   same stock, same opposition, same field, only the bidder differs, so the deal cancels outright —
