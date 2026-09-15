@@ -20,3 +20,6 @@ dev-dist/
 # Generated field corpora — see bench/field.ts. Written to be applied and discarded.
 apps/web/field-*.sql
 apps/web/field-*-*.sql
+
+# Pulled from production D1 for bench/hands.ts; large and regenerable.
+hands.json

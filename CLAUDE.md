@@ -3036,6 +3036,52 @@ auction.
 
 ### Open threads
 
+- **1,449 v3 deals say the whole remaining deficit is doubling, and the bench cannot see it.** The
+  figures this file quotes from `bench/hands.ts` — +66 a deal declaring, −135 on contracts it lets the
+  other seat buy — are **v2 numbers from 204 deals**, and they were used to motivate work on v3 a year
+  of play later. The log now holds 1,766 hands: 55 v1, 258 v2, **1,453 v3**. Re-run:
+
+  | person's way, per deal | v2 (255 deals) | v3 (1,449 deals) |
+  | --- | --- | --- |
+  | overall | +59 ± 27 | **+29 ± 11** |
+  | **undoubled deals only** | +47 | **−5.5** (the computer ahead) |
+  | **doubled deals only** | +129, on 15% of deals | **+176, on 19% of deals** |
+  | computer's level against par | −0.03 (bid 2.6, par 2.7) | **+0.46 (bid 3.0, par 2.5)** |
+  | tricks thrown away, computer | 0.49 | 0.36 |
+  | tricks thrown away, person | 0.55 | 0.43 |
+
+  **The declaring/defending asymmetry is gone.** Under v3 the computer makes +164 a deal on its own
+  undoubled contracts and loses 151 on the person's — near enough symmetric, which is just the ordinary
+  advantage of buying the contract. Under v2 it was +66 against −135, and *that* was the real asymmetry.
+  So the premise behind the defending-search work had already been fixed by the equity objective.
+
+  **What v3 traded for it is overreach.** It bids half a level above par where v2 bid at par, which
+  fixed the ordinary deals — undoubled went from +47 the person's way to 5.5 the computer's — and
+  created a doubling liability that is now **larger than the entire remaining deficit**: 273 doubled
+  deals carry +48,090 to the person while the other 1,176 carry 6,480 to the computer.
+
+  **And card play is no longer the story at all**: the computer throws away 0.36 tricks a deal against
+  the person's 0.43. It plays better than the person and bids worse.
+
+  **The instrument gap is the actionable part.** `nodouble` is in every bench run in this file, because
+  `oracleDouble` was found to handicap whichever seat it was applied to under heuristic card play — so
+  v3's stretch was fitted, re-fitted and measured in a world where **nothing doubles**, and the one thing
+  costing it points against a person is being doubled. `equity.ts`'s re-fit reduced down-2-or-more from
+  18% to 13% and the win rate did not move, which was read as "those contracts cost points without
+  costing games". Against a human doubler they cost 218 a deal.
+
+  The cheap next step is a **control run with the oracle on at a real sample count** — two identical
+  bidders must score 50%, and this file records that check failing at 61.8% under *heuristic* play while
+  explicitly leaving "whether the oracle is sound with a sample count" untested. If it is sound at eight
+  samples, the reference can punish overreach and v3's stretch can be re-tuned against something that
+  hurts. If it is not, a doubler that is neither an oracle nor the old five-level rule has to be built
+  before any of this is measurable.
+
+  **The lesson about the log itself:** 1,453 v3 deals had accumulated and nothing had ever read them,
+  while numbers from its predecessor went on being quoted as current. `bench/hands.ts` reports per
+  version precisely so that cannot happen, and it still did — because nobody ran it.
+
+
 - **Searching the position the opponent declares is built, measured, and worth nothing.** The bidder
   had always solved with the opponent on lead, which answers what *this* seat takes declaring;
   `estimateFor` used it on the `declarer === me` branch only, so the branch pricing a pass, a
