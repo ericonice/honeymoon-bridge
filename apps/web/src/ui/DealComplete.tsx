@@ -145,15 +145,14 @@ export function DealComplete({
       // ended on one board with the result behind a link nobody should have to find,
       // which made this the one format that asked for an extra tap to see how it went.
       //
-      // `openLast` is what makes that free rather than a trade. The objection staging
-      // was built for — that showing the session at the end skips the last board's own
-      // traveller — is answered by opening its row, so the final deal is still the
-      // traveller on screen and is now sitting inside the result rather than in place
-      // of it.
+      // **Every row shut, and the objection that used to answer is answered elsewhere
+      // now.** Showing the session here skips the last board's own traveller — which
+      // was true, and was why that row opened on mount. The reveal stages that
+      // traveller before this screen is reached at all, so opening it again drew the
+      // same thing twice in a row.
       <FieldPad
         latest={!complete && !showingSession}
         me={view.me}
-        openLast={complete}
         summary={standing.summary}
       />
     ) : standing.kind === "duplicate" ? (

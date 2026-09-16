@@ -20,7 +20,6 @@ import { ContractText } from "./CardText.js";
 export function FieldPad({
   latest = false,
   me,
-  openLast = false,
   summary,
 }: {
   /**
@@ -36,23 +35,14 @@ export function FieldPad({
    */
   readonly latest?: boolean;
   readonly me: PlayerId;
-  /**
-   * Open the last board's traveller on mount, for the end of a session.
-   *
-   * **This is what lets the finish show the whole session without hiding the board
-   * just played.** The staging above is right between deals and wrong at the end: a
-   * rubber's last screen is its entire scorepad, so a session's should be its entire
-   * session, and having to find "See the whole session" to reach the result was the
-   * one place this format asked for a tap the others did not. Opening the last row
-   * answers the objection that staging existed for — the final deal is still the one
-   * whose traveller you are looking at, it is simply sitting in the session rather
-   * than instead of it.
-   */
-  readonly openLast?: boolean;
   readonly summary: FieldSummary;
 }): React.JSX.Element {
-  const lastId = summary.results[summary.results.length - 1]?.board.ids[me] ?? null;
-  const [open, setOpen] = useState<string | null>(openLast ? lastId : null);
+  // **Every row shut, including the one just played.** Opening the last board on mount
+  // was what made showing the whole session at the end cost nothing — the final deal
+  // was otherwise the one board of the sitting whose traveller you never saw. The
+  // reveal stages that traveller on its own now, so having it open here as well drew
+  // the same thing twice in consecutive screens.
+  const [open, setOpen] = useState<string | null>(null);
 
   // The reveal is about the board that just finished, so it draws that one traveller
   // outright — there is nothing to choose between and nothing to open.

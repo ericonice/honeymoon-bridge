@@ -216,23 +216,25 @@ describe("finishing a field session", () => {
   });
 
   /**
-   * **And the board just played is the one already open**, which is what makes showing
-   * the session cost nothing. The staging this replaced existed for a real reason — the
-   * last board was otherwise the one deal of the sitting whose traveller you never saw
-   * — and opening its row answers that rather than trading it away.
+   * **Every row shut, including the board just played.**
    *
-   * Checked against a board that is *not* open, or this would pass against a pad that
-   * opened all of them, which is a different screen with the same assertion.
+   * That row opened on mount for a real reason — showing the whole session at the end
+   * otherwise skipped the last board's own traveller, making it the one deal of the
+   * sitting whose result you never saw. The reveal stages that traveller on its own
+   * now, before this screen is reached, so opening it here drew the same thing twice in
+   * consecutive screens.
+   *
+   * Asserted across two rows rather than one, so a pad that opened *every* row would
+   * fail rather than pass on whichever row happened to be checked.
    */
-  it("opens the last board's traveller, and only that one", () => {
+  it("leaves every board shut, the last one included", () => {
     finish(THREE);
 
-    expect(screen.getByRole("button", { name: /Board 3/ }).getAttribute("aria-expanded")).toBe(
-      "true",
-    );
-    expect(screen.getByRole("button", { name: /Board 1/ }).getAttribute("aria-expanded")).toBe(
-      "false",
-    );
+    for (const board of [1, 3]) {
+      expect(
+        screen.getByRole("button", { name: new RegExp(`Board ${board}`) }).getAttribute("aria-expanded"),
+      ).toBe("false");
+    }
   });
 
   /**

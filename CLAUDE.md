@@ -2052,12 +2052,15 @@ was wrong, because **every other format's final screen is its entire pad** — a
 scorepad — so this was the only sitting whose result took an extra tap to find. Reported as exactly
 that.
 
-**`openLast` is what makes the fix free rather than a trade.** The staging existed for a real reason,
-written in the component: showing the session at the end skipped the last board's own traveller, making
-it the one deal of the sitting whose result you never saw. Opening that board's row answers the
-objection instead of accepting it — the final deal is still the traveller on screen, now sitting inside
-the result rather than in place of it. The link goes at the same time, since a finished session is
-already showing all of itself and the control would offer what is on screen.
+**`openLast` made that free rather than a trade, and then stopped being needed.** The staging existed
+for a real reason, written in the component: showing the session at the end skipped the last board's
+own traveller, making it the one deal of the sitting whose result you never saw. Opening that board's
+row answered the objection instead of accepting it. The link went at the same time, since a finished
+session is already showing all of itself and the control would offer what is on screen.
+
+**The row is shut again now that the reveal stages that traveller on its own** — see the last-hand
+staging above. With both, the same traveller was drawn twice in consecutive screens. `openLast` is gone
+rather than left as an unused prop: the objection it answered is answered a screen earlier.
 
 **Both replaced tests pinned the old behaviour and one of them is worth copying.** "Opens the last
 board's traveller" asserts that board 1 is `aria-expanded="false"` as well as that the last is `"true"` —
