@@ -3099,6 +3099,35 @@ auction.
 
 ### Open threads
 
+- **The recorded Doop boards are a paired instrument against a human bidder, and nothing reads them
+  yet.** 18 sessions, 148 boards, **mean placing 59.1%** against a corpus calibrated to 50 — so the
+  person beats the bidder that generated the field. Each board is the sharpest comparison this project
+  has: *same stock, same opposition, same field*, a human bidder instead of the bot. That is exactly
+  what `bench/field.ts compare` does for two bots, and the deal cancels outright.
+
+  | over 148 boards | boards | mean placing | tops | bottoms |
+  | --- | --- | --- | --- | --- |
+  | **they declared** | 58 | **66.8%** | 22 | 10 |
+  | **you declared** | 88 | **54.1%** | 26 | 24 |
+
+  **The person's edge is almost entirely on defence**, and that is the exact inverse of the bot's own
+  hand-log split — it gains on contracts it declares and bleeds on the ones it lets the other seat buy.
+  Two independent measurements pointing at the same asymmetry from opposite ends.
+
+  And the level table is a direct target for the `TRICK_SPREAD` thread: the person opens at the one
+  level on 12 boards where the field averages **1.99**, placing 49.4% — their worst bracket — and takes
+  59.3% at the four level on their largest sample. Since both contracts sit against the same field, "how
+  does the bot's level compare with a human's on identical cards" is a query rather than a simulation.
+
+  **What to build when there are more: a `compare` mode that ranks the *recorded* boards instead of a
+  second bot.** What not to build is an equity fit off this — a rubber-indexed table needs rubbers, and
+  a session has no standing at all.
+
+  **The sample is the thing to wait on.** 148 boards is about ±4 points on an aggregate: enough for the
+  13-point defence gap, not enough per hand shape. The four-level row is already worth believing; the
+  one-level row at 12 boards is not.
+
+
 - **The equity table has now been re-fitted under two doubling regimes and lost both times, which
   exonerates it.** The shipped table was fitted from rubbers where **nothing ever doubles** —
   `bench/equity.ts` had no doubler at all until `bench/oracle.ts` was extracted and shared — so it
