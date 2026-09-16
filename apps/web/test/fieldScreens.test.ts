@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { newRubber, startDeal, summarizeField } from "@hb/engine";
+import { newRubber, startDeal, startDuplicate, summarizeDuplicate, summarizeField } from "@hb/engine";
 import type {
   FieldResult,
   FieldState,
@@ -82,6 +82,18 @@ function props(standing: MatchStanding, complete = true) {
 function finish(results: readonly FieldResult[], complete = true): string {
   render(createElement(DealComplete, props(standingFor(results), complete)));
   return document.body.textContent ?? "";
+}
+
+/**
+ * A real Replay standing, built through the engine rather than as a fixture — the
+ * question here is what a *format* is told, so the summary should be one the format
+ * actually produces.
+ */
+function duplicateStanding(): MatchStanding {
+  return {
+    kind: "duplicate",
+    summary: summarizeDuplicate(startDuplicate({ boards: 2, firstBoard: 1, minGap: 1, scheduleSeed: 1, starter: 0 })),
+  };
 }
 
 /** A rubber standing, for the one case that must still show a rating. */
@@ -245,5 +257,58 @@ describe("finishing a field session", () => {
     finish(THREE, false);
 
     expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();
+  });
+});
+
+/**
+ * **What a passed-out board is told it means, per format.**
+ *
+ * A rubber throws a passed-out deal in and redeals it with the same player drawing
+ * first. **Neither board format does**: `nextFieldDeal` and a session's schedule both
+ * advance unconditionally, so the board is spent and the pass is the result. Doop was
+ * being shown the rubber sentence, because the branch read "duplicate, or else the
+ * rubber one" — the fourth time a conditional of that shape has swallowed this format.
+ *
+ * Keyed on the standing kind rather than asserting one string, so the guard is against
+ * a *format* falling through rather than against a particular wording.
+ */
+describe("passing a board out", () => {
+  const REDEAL = /thrown in and redealt/;
+
+  function passedOut(standing: MatchStanding): string {
+    render(
+      createElement(DealComplete, {
+        ...props(standing, false),
+        view: { ...view, passedOut: true } as PlayerView,
+      }),
+    );
+    return document.body.textContent ?? "";
+  }
+
+  it("never promises a redeal in either board format", () => {
+    for (const standing of [standingFor([result("b1", 0)]), duplicateStanding()]) {
+      cleanup();
+      const shown = passedOut(standing);
+      expect(shown).toContain("Passed out");
+      expect(shown).toContain("not redealt");
+      expect(shown).not.toMatch(REDEAL);
+    }
+  });
+
+  /**
+   * The anti-vacuity half: a rubber really does redeal, so the sentence has to still
+   * exist. Without this, deleting it altogether would pass the assertions above.
+   */
+  it("still promises one in a rubber, which really does redeal", () => {
+    expect(passedOut(rubberStanding())).toMatch(REDEAL);
+  });
+
+  /**
+   * Doop says what it costs rather than only what it is. A passed-out board there is
+   * not a private zero — §1.8a ranks it against everybody who bid something on the
+   * same cards.
+   */
+  it("tells a Doop board it is still ranked", () => {
+    expect(passedOut(standingFor([result("b1", 0)]))).toContain("ranked against");
   });
 });

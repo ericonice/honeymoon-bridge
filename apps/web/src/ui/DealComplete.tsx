@@ -404,10 +404,23 @@ export function DealComplete({
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4 text-center">
         <h2 className="text-2xl font-semibold">Passed out</h2>
+        {/* **A board is not a deal, and Doop was being told a rubber's rule.** This
+            read "duplicate, or else the rubber sentence", so a passed-out Doop board
+            was described as thrown in and redealt — `nextFieldDeal` advances
+            unconditionally and does no such thing. Fourth time a conditional of that
+            shape has swallowed this format; the two board formats agree about the rule
+            and differ about what the board is then worth, which is why they are two
+            sentences rather than one.
+            
+            Doop says what it costs, because there a passed-out board is not merely a
+            zero: §1.8a ranks it against everybody who bid something on the same cards,
+            and it will place near the bottom of them. */}
         <p className="max-w-xs text-sm text-white/60">
-          {standing.kind === "duplicate"
-            ? "Neither of you bid, so nothing is scored — and the board is not redealt. A passed-out run is a result: whatever the other run comes to is the whole of what the board is worth."
-            : "Neither of you bid, so the deal is thrown in and redealt with the same player drawing first. Nothing is scored."}
+          {standing.kind === "field"
+            ? "Neither of you bid, so nothing is scored — and the board is not redealt. It still counts: it is ranked against everybody else who has played these cards, and they bid something."
+            : standing.kind === "duplicate"
+              ? "Neither of you bid, so nothing is scored — and the board is not redealt. A passed-out run is a result: whatever the other run comes to is the whole of what the board is worth."
+              : "Neither of you bid, so the deal is thrown in and redealt with the same player drawing first. Nothing is scored."}
         </p>
         {pad}
         {button}

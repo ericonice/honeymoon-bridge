@@ -2027,6 +2027,21 @@ generated row has no account and a table result is one recorded with an opponent
 (`0014_field_opponent.sql`, where **null means the computer rather than "unknown"** — every row
 written before that column existed was solo play).
 
+**A passed-out Doop board was told a rubber's rule, which is the fourth time this shape has bitten.**
+The sentence branched on `standing.kind === "duplicate"` and fell through to the rubber wording for
+everything else — so Doop said the deal was "thrown in and redealt with the same player drawing first",
+where `nextFieldDeal` advances unconditionally and does no such thing. **Neither board format redeals**:
+the board is spent and the pass is the result.
+
+The two board formats now say so separately, because they agree about the rule and differ about what
+the board is then worth. Doop's says what it *costs* — §1.8a ranks a passed-out board against everybody
+who bid something on the same cards, so it is not a private zero but a near-bottom placing.
+
+`test/fieldScreens.test.ts` pins it **per standing kind rather than by asserting a wording**, so the
+guard is against a format falling through rather than against a particular sentence. Its anti-vacuity
+half asserts a rubber *does* still promise a redeal — without it, deleting the sentence outright would
+pass. Checked by reverting.
+
 **The running score moved before the screen that explains it, and in Doop it grew a line while doing
 so.** The engine settles a deal the instant its thirteenth card lands, so the strip's total stepped
 while the player was still looking at the trick — and a Doop session additionally printed **"1 board not
