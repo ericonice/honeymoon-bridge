@@ -712,7 +712,10 @@ function run({
   }
   console.log(
     oracle === "both"
-      ? `  both seats double off the solver, from down 2 — symmetric, which is what a control needs`
+      ? // Interpolated, because the literal "2" that was here for one run is exactly the
+        // read-out lie this directory keeps catching: the threshold is a flag now, and a
+        // header stating a constant it does not read cannot be used to check a run.
+        `  both seats double off the solver, from down ${ORACLE_FROM_DOWN} — symmetric, which is what a control needs`
       : oracle === "reference"
       ? `  the reference doubles off the solver, from down ${ORACLE_FROM_DOWN}`
       : `  the reference doubles only from the five level — not comparable to an oracle run`,

@@ -128,35 +128,53 @@ export interface EquityTable {
  * hand log are the population to fit against, and nothing has done that yet.
  */
 /**
- * The same table, fitted from rubbers in which **both seats double off the solver**.
+ * The same table, fitted from rubbers in which **both seats double at a human rate**.
  *
- * **A candidate, not the shipped table**, and it stays that way until it has beaten the
+ * **A candidate, not the shipped table**, and it stays that way until it beats the
  * shipped one head to head. This file records the same re-fit being installed on the
- * strength of its coefficients twice and losing both times — the mirror refit dropped
- * the bidder from 60.2% to 50.6%, the rubber one from 78.9% to 66.6% — so plausible
- * numbers are exactly what a bad table looks like from here.
+ * strength of its coefficients three times now and losing every time — the mirror refit
+ * dropped 60.2% to 50.6%, the rubber one 78.9% to 66.6%, and the first version of *this*
+ * one lost 1491 points a rubber at 3.8 standard errors. Plausible numbers are exactly
+ * what a bad table looks like from here.
  *
- * `bench/equity.ts 800 8`, with `bench/oracle.ts` on both seats. Two things moved:
+ * `bench/equity.ts 800 8 from=3`, `bench/oracle.ts` on both seats.
  *
- * | | shipped | re-fit |
- * | --- | --- | --- |
- * | `gameLead` | 0.6104 | **0.5331** |
- * | `level.part` | **−0.2204** | **+0.1594** |
+ * **`from=3` rather than the default 2, and the calibration is the point.** Down-2 is
+ * chosen to match `DOUBLED_FROM_DOWN`, which makes the bot's assumption about when it
+ * gets doubled *true* against the reference — right for asking where a loss comes from,
+ * wrong for fitting, because it punishes far harder than the opponent the bot actually
+ * plays. Measured against v3:
  *
- * **A game is worth about 13% less when the stretch for it can be doubled**, which is
- * the predicted direction: the shipped table was learnt where overreach was free.
+ * | threshold | share of its deals doubled |
+ * | --- | --- |
+ * | down 2 | 42% |
+ * | **down 3** | **22%** |
+ * | down 4 | 8% |
+ * | *a person, over 1,449 logged deals* | *19%* |
  *
- * **And `level.part` has stopped being nonsense**, which is the more interesting half.
- * The shipped −0.22 says a part-score at level makes you *less* likely to take the
- * rubber; it is flagged below as not understood, and has taken four values across four
- * fits. The plausible reading is a selection effect: with no doubler, a seat merely
- * holding a part-score is disproportionately one that settled when it should have
- * stretched, so the fit reads "part-scores lose" as causal. With punishment in the game
- * that stops being true, and the cell lands in line with the other three states.
+ * | | shipped | first re-fit (down 2) | **this one (down 3)** |
+ * | --- | --- | --- | --- |
+ * | `gameLead` | 0.6104 | 0.5331 | **0.5439** |
+ * | `level.part` | **−0.2204** | +0.1594 | **+0.4097** |
+ * | `oneEach.part` | 0.6945 | 0.7248 | **1.2716** |
  *
- * Structural checks all held — level fits 0.500, one game each fits 0.500, and a game up
- * mirrors a game down at 0.630 against 0.630 — and calibration is monotone across six
- * bands, though in-sample.
+ * **`level.part` is positive again**, and it has now come out positive under both
+ * doubling regimes where every no-doubling fit made it negative. The shipped −0.22 says
+ * a part-score at level makes you *less* likely to take the rubber, which is flagged
+ * below as not understood and has taken four values across four fits. The reading that
+ * survives: with no doubler, a seat merely holding a part-score is disproportionately
+ * one that settled when it should have stretched, so the fit reads "part-scores lose"
+ * as causal. Punishment in the game removes the selection effect.
+ *
+ * **What it still is not is a model of the person.** `from=3` matches how *often* a
+ * human doubles, not *which* contracts — the oracle still doubles exactly what double
+ * dummy condemns, where a person doubles what they can read. Fitting against the log
+ * itself remains the honest version and remains out of reach: 1,766 logged hands rebuild
+ * into **40 rubbers**, with part-score cells at ±0.37 to ±0.80 and signs that do not
+ * survive inspection.
+ *
+ * Structural checks held — level 0.500, one game each 0.500, a game up mirroring a game
+ * down at 0.633 — and calibration is monotone across six bands, in-sample.
  */
 export const EQUITY_DOUBLED: EquityTable = {
   // **Not re-fitted**, carried across from the shipped table so the two differ in the
@@ -164,14 +182,14 @@ export const EQUITY_DOUBLED: EquityTable = {
   // once would leave a head-to-head unable to say which half moved — the same reason the
   // defending search left this seat's own contracts alone.
   game: { margin: 0.1738, part: 0.9548 },
-  gameLead: 0.5331,
-  level: { margin: 0.144, part: 0.1594 },
+  gameLead: 0.5439,
+  level: { margin: 0.1195, part: 0.4097 },
   mirror: {
     first: { margin: 0.1409, part: -0.0561 },
     second: { carried: -0.0904, margin: 0.2113, part: 0.4649 },
   },
-  oneEach: { margin: 0.1823, part: 0.7248 },
-  oneUp: { margin: 0.1285, part: 0.7366 },
+  oneEach: { margin: 0.2129, part: 1.2716 },
+  oneUp: { margin: 0.137, part: 0.6871 },
 };
 
 export const EQUITY: EquityTable = {

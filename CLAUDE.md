@@ -3032,181 +3032,56 @@ auction.
 
 ### Open threads
 
-- **The doubled re-fit was played against the shipped table and lost, and the run found something
-  bigger than the table.** `bench/equity.ts 800 8` with `bench/oracle.ts` on both seats moved two cells
-  — `gameLead` 0.6104 to 0.5331, and `level.part` from **−0.2204 to +0.1594**, the cell this file has
-  called "not understood" across four fits. Every structural check held and calibration was monotone
-  across six bands. It looked right, which is exactly what the last two rejected re-fits looked like.
+- **The equity table has now been re-fitted under two doubling regimes and lost both times, which
+  exonerates it.** The shipped table was fitted from rubbers where **nothing ever doubles** —
+  `bench/equity.ts` had no doubler at all until `bench/oracle.ts` was extracted and shared — so it
+  learnt what a standing is worth in a world where overreach is free. That looked like the explanation
+  for the one thing the hand log still blames v3 for: it bids **half a level above par** where v2 bid
+  at par, and 273 doubled deals carry the whole remaining deficit.
 
-  | 320 plays, `table=refit oracle=both`, 8-sample card play | |
-  | --- | --- |
-  | rubbers won | 158 to 150, 51.3% ± 2.8 — **0.5σ, a null** |
-  | **points margin** | **−1491 ± 394 a rubber, 3.8σ** |
-  | challenger down 2+ in its own contract | 17% of deals, **2225 a rubber** |
+  | 320 plays each, `table=refit oracle=both`, 8-sample card play | rubbers won | **points margin** | down 2+ |
+  | --- | --- | --- | --- |
+  | re-fit at **down 2** | 51.3% ± 2.8 (0.5σ) | **−1491 ± 394, 3.8σ** | 17% of deals, 2225 a rubber |
+  | re-fit at **down 3** | 48.3% ± 2.8 (0.6σ) | **−587 ± 282, 2.1σ** | 8% of deals, 1174 a rubber |
 
-  **Level on rubbers and four standard errors down on points**, which is coherent rather than
+  **Null on rubbers both times and worse on points both times**, which is coherent rather than
   contradictory: doubled penalties go *above* the line, so they bleed points without changing the race
-  to a hundred below it. `EQUITY_DOUBLED` stays beside `EQUITY` as a rejected candidate rather than
-  being deleted, because the numbers that produced it are worth keeping next to the result they got.
+  to a hundred below it.
 
-  **The finding that matters is the doubling rate.** This run doubled **10.93 times a rubber, 69% of
-  deals**, and rubbers stretched from 9.8 deals to 15.8. The symmetric control at the same settings
-  doubled 27% of deals — the difference is the bidder, since that control ran the *points* bidder and
-  this one runs v3, which stretches. Against a person, the hand log says **273 of 1,449 v3 deals were
-  doubled, 19%.**
+  **The calibration step was right about the first failure and did not rescue the second.** Down-2
+  doubles **42%** of v3's deals against a person's **19%** over 1,449 logged deals; down-3 gives 22%,
+  which is the matched rate. Re-fitting there cut the damage by about two thirds — and left it the wrong
+  side of zero. `ORACLE_FROM_DOWN` is a flag now (`from=N`, default 2) and is read from the command line
+  inside the shared module, so the two benches cannot be run at different thresholds by accident.
 
-  | who is doubling | share of deals doubled |
-  | --- | --- |
-  | a real person, 1,449 logged v3 deals | **19%** |
-  | `oracleDouble` from down 2, points bidder | 27% |
-  | `oracleDouble` from down 2, v3 | **69%** |
+  **So the conclusion is about where overreach is *not*.** Two re-fits, two regimes, both producing more
+  sensible-looking coefficients than the shipped table — `level.part` came out **positive under both**,
+  where every no-doubling fit made it negative — and neither beat it. **How a standing is priced is not
+  what makes v3 stretch.** `EQUITY_DOUBLED` stays beside `EQUITY` as a rejected candidate so the numbers
+  sit next to the result they got.
 
-  **So the reference punishes about three and a half times as hard as the opponent the bot actually
-  plays**, and a table fitted against it is fitted against a world far crueller than the real one. That
-  is the same class of error as fitting the original table under heuristic card play where contracts
-  failed too often — corrected in one direction and overshot in the other. A bidder tuned here would
-  come out timid against a human, which is the failure mode this file already recorded once when a
-  refit produced a bidder going down two in 6% of deals against 10% and losing 314 points a match.
+  **What `level.part` now has is a mechanism rather than a fourth value.** The shipped −0.2204 says a
+  part-score at level makes you *less* likely to take the rubber, and `equity.ts` flags it as not
+  understood across four fits. Under both doubling regimes it is positive. The reading: with no doubler,
+  a seat merely holding a part-score is disproportionately one that **settled** when it should have
+  stretched, so the fit reads "part-scores lose" as causal. Punishment removes the selection effect.
+  That is worth keeping even though the tables carrying it lost.
 
-  **`ORACLE_FROM_DOWN = 2` is the knob, and it was chosen to match `DOUBLED_FROM_DOWN` rather than to
-  match anybody's behaviour.** The comment says so in as many words — the point was that the bot's
-  assumption about when it gets doubled would be *true* against the reference, which isolates a wrong
-  trick estimate from a wrong model of the opponent. That is a good reason for a diagnostic and a bad
-  one for a fitting harness. The next step is to raise the threshold until the doubling rate against v3
-  lands near the 19% a person actually produces, and re-fit against that — and to state plainly that
-  the resulting table is an opponent model of *a human doubler*, which is the population that matters.
+  **Next suspect, and it is not the objective.** The estimate is unbiased — declaring bias +0.07 tricks
+  over 2,380 hand-strain pairs — so a bidder that bids half a level over par with an unbiased centre is
+  being pushed there by the *width*. `TRICK_SPREAD` is one fitted number applied to every hand, and an
+  over-wide distribution stretches: with a game bonus in reach the upside tail is worth more than the
+  downside costs, so the bidder buys a contract the centre does not support. That is testable against
+  the searched spread, which measures 1.11 tricks against the fitted 1.54 — and it predicts the shipped
+  bidder should overreach *less* on hands where the search completes, which the hand log can be asked
+  about directly.
 
-
-- **1,449 v3 deals say the whole remaining deficit is doubling, and the bench cannot see it.** The
-  figures this file quotes from `bench/hands.ts` — +66 a deal declaring, −135 on contracts it lets the
-  other seat buy — are **v2 numbers from 204 deals**, and they were used to motivate work on v3 a year
-  of play later. The log now holds 1,766 hands: 55 v1, 258 v2, **1,453 v3**. Re-run:
-
-  | person's way, per deal | v2 (255 deals) | v3 (1,449 deals) |
-  | --- | --- | --- |
-  | overall | +59 ± 27 | **+29 ± 11** |
-  | **undoubled deals only** | +47 | **−5.5** (the computer ahead) |
-  | **doubled deals only** | +129, on 15% of deals | **+176, on 19% of deals** |
-  | computer's level against par | −0.03 (bid 2.6, par 2.7) | **+0.46 (bid 3.0, par 2.5)** |
-  | tricks thrown away, computer | 0.49 | 0.36 |
-  | tricks thrown away, person | 0.55 | 0.43 |
-
-  **The declaring/defending asymmetry is gone.** Under v3 the computer makes +164 a deal on its own
-  undoubled contracts and loses 151 on the person's — near enough symmetric, which is just the ordinary
-  advantage of buying the contract. Under v2 it was +66 against −135, and *that* was the real asymmetry.
-  So the premise behind the defending-search work had already been fixed by the equity objective.
-
-  **What v3 traded for it is overreach.** It bids half a level above par where v2 bid at par, which
-  fixed the ordinary deals — undoubled went from +47 the person's way to 5.5 the computer's — and
-  created a doubling liability that is now **larger than the entire remaining deficit**: 273 doubled
-  deals carry +48,090 to the person while the other 1,176 carry 6,480 to the computer.
-
-  **And card play is no longer the story at all**: the computer throws away 0.36 tricks a deal against
-  the person's 0.43. It plays better than the person and bids worse.
-
-  **The instrument gap is the actionable part.** `nodouble` is in every bench run in this file, because
-  `oracleDouble` was found to handicap whichever seat it was applied to under heuristic card play — so
-  v3's stretch was fitted, re-fitted and measured in a world where **nothing doubles**, and the one thing
-  costing it points against a person is being doubled. `equity.ts`'s re-fit reduced down-2-or-more from
-  18% to 13% and the win rate did not move, which was read as "those contracts cost points without
-  costing games". Against a human doubler they cost 218 a deal.
-
-  **Run, and the oracle is sound under real card play.** 240 plays, `120 8 control` with the doubler on:
-
-  | two identical bidders, oracle on the reference seat | heuristic play | **8-sample play** |
-  | --- | --- | --- |
-  | rubbers won, challenger (no oracle) | 61.8% ± 2.0 | **50.0% ± 3.2** |
-  | from even | 6 standard errors | **0.0** |
-  | points margin to the challenger | — | **−144 ± 73**, 2.0σ |
-  | doubles | — | 1.30 a rubber, 13% of deals |
-
-  **Exactly 120 to 120.** The doubler no longer handicaps the seat holding it, which is what better card
-  play was predicted to fix: the oracle doubles off double-dummy par, and a bot at eight samples comes
-  near enough to par that its doubles land. So the reference can punish overreach at last, and
-  `nodouble` stops being compulsory.
-
-  **What the −144 is, and it is not a fault:** with the oracle on **one** seat the configuration is
-  asymmetric, so the exchange that forces a control's margin to zero no longer applies. The number is
-  therefore a clean measurement of what holding a perfect doubler is worth — **about 144 points a
-  rubber** — where under heuristic play it was worth *losing* twelve points of win rate.
-
-  **It moves points and not games, which is the warning to carry into the retune.** This file has
-  already been caught by that once: `equity.ts`'s re-fit cut down-two-or-more from 18% to 13%, the win
-  rate did not move, and it was written down as "those contracts cost points without costing games". The
-  hand log's deficit is **+29 ± 11 points a deal**, not a win rate — so the retune has to be judged on
-  the **points margin**, with rubbers won as the guard against trading too much away rather than as the
-  headline.
-
-  One figure already shows the mechanism: the control bidder goes down two or more in 12% of its own
-  deals costing **399 a rubber**, against the 13% and 325 recorded for the same bidder under `nodouble`.
-  The same overreach, priced by a doubler that works.
-
-  **The next step is `oracle=both`**, which does not exist — `oracleSeat` takes one seat. Arming both
-  restores the exchange symmetry, so a control returns to exactly zero on points as well as on games,
-  and a challenger's overreach is punished on the same terms as the reference's. That is the harness the
-  stretch should be re-fitted against.
-
-  **The lesson about the log itself:** 1,453 v3 deals had accumulated and nothing had ever read them,
-  while numbers from its predecessor went on being quoted as current. `bench/hands.ts` reports per
-  version precisely so that cannot happen, and it still did — because nobody ran it.
-
-
-- **Searching the position the opponent declares is built, measured, and worth nothing.** The bidder
-  had always solved with the opponent on lead, which answers what *this* seat takes declaring;
-  `estimateFor` used it on the `declarer === me` branch only, so the branch pricing a pass, a
-  competitive raise or a double against a contract **they** would declare went on counting. That looked
-  like the gap worth closing, because `bench/hands.ts` splits the recorded games as **+66 a deal on
-  contracts it declares and −135 a deal on the ones it lets the other seat buy**, and the counted
-  estimate carries ~1.5 tricks of error against the search's 1.04.
-
-  `SearchOptions.defending` is a **second solve of the same guessed hands with this seat on lead** — not
-  the first read backwards, since `13 − x` is what they take *while this seat declares*, a position
-  nobody is in. That is what `mirrorOdds` computed, and it is deleted rather than left beside the
-  correct version. Scoped to the contract on the table, so one strain or none.
-
-  | 320 plays, 8-sample card play, `defend=500 nodouble` | |
-  | --- | --- |
-  | rubbers won | 149 to 171, **46.6% ± 2.8** |
-  | from even | **1.2 standard errors** |
-  | margin | −45 ± 60 a rubber, 0.8σ |
-  | worth | −24 rating points |
-  | down 2+ in its own contract | 7% of deals, 109 a rubber |
-
-  **Neither figure is significant and both lean the wrong way**, across six consecutive checkpoints
-  pinned at 47%. Kept behind `BotTuning.searchDefending`, **off**, so nothing shipped changes.
-
-  **Two confounds had to be removed before the number meant anything, and the first was a bug this file
-  had already recorded once.** `expectedValue` reads `options.odds ?? outcomeOdds(options.estimate)`, so
-  supplying odds makes the estimate unreachable — handing it a raw search distribution for their
-  contract silently discarded the blend with their bid, which carries `THEIR_BID_WEIGHT` of **0.75** on
-  that branch. It measured **30% ± 7 over 40 plays**. The identical mistake, replacing the estimate
-  wholesale rather than correcting it, cost +651 a rubber against +467 when the search was first built.
-  `centredOn` is the fix: keep the shape from the search and the centre from the blend, which preserves
-  both findings instead of making them fight. The same checkpoint then read 45%.
-
-  The second: a wall-clock budget means the extra solve buys **fewer samples**, measured at 11.0 against
-  14.9 at 250ms — degrading the declaring estimate that already worked. A cap both sides reach removes
-  it: at 500ms and twelve samples the two complete 10.8 and 10.9 and run out on the same hands.
-
-  **The prediction on record before the finish was half right and the half that failed is the useful
-  part.** Dilution: the search replaces `fromMyHand`, weighted `1 − 0.75 = 0.25`, so half a trick of
-  improvement becomes an eighth of a trick in the estimate — and this file already records an eighth as
-  inert, from `LAST_TIME_WEIGHT` at 0.20 being "present and inert" for the same reason. Dilution
-  predicts a result *indistinguishable* from even; six readings at 47% is mildly worse than that.
-
-  **What is untested is the premise, and it should have been tested first.** The 1.04-against-1.54
-  figure is a **declaring** number. Nobody has measured whether a searched estimate beats a counted one
-  when the *opponent* declares — and there is reason to doubt it, since the search guesses their hand
-  from the sampler and `impliedByTheirBid` exists precisely because this seat's read of a hand they have
-  bid is weak. A par measurement in tricks costs about a minute and separates the two readings: clearly
-  better in tricks plus a null in rubbers means dilution, and the experiment worth two hours is then a
-  **sweep of `THEIR_BID_WEIGHT` with the search on** — it was fitted against a counted term and is being
-  held at 0.75 here, so the on-arm is measured while handicapped. Not better in tricks means the premise
-  is wrong, `searchDefending` should go, and the −135 a deal wants a different explanation: the doubling
-  threshold, or pricing a pass against a contract they may still improve.
-
-  **Measure in tricks before measuring in points** is the rule this cost two hours by ignoring, and it is
-  written down several times above.
+  **One read-out lie found while checking this, and it is the reason the run was checked at all.** The
+  `oracle=both` header printed "from down 2" as a literal while the `reference` branch interpolated
+  `ORACLE_FROM_DOWN`, so the log could not say which threshold had run. The flag was verified to work by
+  importing the constant directly rather than by trusting the header. **A read-out that states a
+  constant it does not read is not a read-out** — this directory has now recorded that failure in the
+  census, in the error bar, and in a header.
 
 - **`bench/field.ts compare` is the most sensitive instrument in here, and the reason is the
   pairing.** Two bidders over the same corpus boards, each ranked against the field already on them:
