@@ -2027,6 +2027,32 @@ generated row has no account and a table result is one recorded with an opponent
 (`0014_field_opponent.sql`, where **null means the computer rather than "unknown"** — every row
 written before that column existed was solo play).
 
+**The running score moved before the screen that explains it, and in Doop it grew a line while doing
+so.** The engine settles a deal the instant its thirteenth card lands, so the strip's total stepped
+while the player was still looking at the trick — and a Doop session additionally printed **"1 board not
+back yet"** underneath the placing for the length of a field fetch and then took it away again, because
+§1.8a fetches a board's field *after* the deal. Reported as a line appearing below Placing that was gone
+before it could be read, and as jitter. Both, and the same moment causes both.
+
+Two fixes, and neither is a delay. **The strip holds the standing until the reveal is actually on
+screen** — keyed on `revealedHands` rather than on the phase, so a *passed-out* deal never holds at all,
+there being no reveal to wait for and a passed-out field board still moving the placing. The ref is
+written during render rather than in an effect, which is the rule `useShownPhase` already states: a hold
+is a pure function of the transition, and an effect runs after the commit it would correct. Only the
+strip takes the held value — the reveal's own pad and `DealComplete` are reached after it releases, so
+no two surfaces ever disagree.
+
+And **`waitingFor` is silent about the board just played**. One board outstanding is the ordinary state
+the moment a deal ends and says nothing; two or more means a field that went out earlier has not come
+back, which is what the row was written for. Its height is reserved either way, since suppressing the
+text alone would leave the same shift the first time it did have something to say.
+
+**`test/standingHold.test.ts` drives the real board to its last card and reads the strip**, rather than
+calling the hook: what is being checked is *when a number reaches the screen*, and a hook test would
+assert the hold against the same expression that implements it. It compares the Total row alone — the
+whole strip is too broad, since the contract label arrives on its own schedule — and asserts that figure
+is non-empty first, or both comparisons would hold trivially. Checked by reverting the hold.
+
 **The last hand of a match skipped the stage every other hand gets, in every format.** `PlayPhase`'s
 reveal stages twice when `matchDetail` is on — the hand's own breakdown, then the pad — and the second
 stage was gated on `onContinue !== null`, which is false **exactly** when the deal also finishes the

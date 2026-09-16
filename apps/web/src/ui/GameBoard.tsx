@@ -533,6 +533,36 @@ export function GameBoard({
   // claim button, a bidding recap, both hands' cards laid bare — none of it
   // is still this deal's to offer once there is no more deal left to act on.
   const showingRevealedHands = revealedHands !== null && handsSettled.settled;
+
+  /**
+   * **The strip holds the standing until the reveal is actually on screen.**
+   *
+   * The engine settles a deal the instant its thirteenth card lands, so the running
+   * score moved while the player was still looking at the trick — a placing stepping
+   * from 59% to 62% with nothing yet having said why, and, in a Doop session, the
+   * "boards not back yet" line appearing beneath it for the length of a round trip.
+   * Reported as jitter, which it was: the score changed before the screen that explains
+   * it.
+   *
+   * Held only while a reveal is *coming and has not landed*, which is the whole window
+   * and no more. Keyed on `revealedHands` rather than on the phase so a **passed-out**
+   * deal never holds at all: there is no reveal there to wait for, and a field board
+   * passed out is still a result that moves the placing.
+   *
+   * The ref is written during render rather than in an effect, which is the rule this
+   * file already follows for `useShownPhase`: a hold is a pure function of the
+   * transition, and an effect runs after the commit it would have corrected.
+   *
+   * Only the strip takes it. Everything else that draws a standing — the reveal's own
+   * pad, `DealComplete` — is reached after the hold has released, so there is never a
+   * moment when two surfaces disagree about the score.
+   */
+  const holdingStanding = revealedHands !== null && !showingRevealedHands;
+  const heldStanding = useRef(session.standing);
+  if (!holdingStanding) {
+    heldStanding.current = session.standing;
+  }
+  const shownStanding = holdingStanding ? heldStanding.current : session.standing;
   // The footer's own reading of `showingRevealedHands`: this seat's revealed
   // thirteen are worth the room right up until a tap asks to see the match
   // pad instead, at which point they are competing with it for the same
@@ -604,7 +634,7 @@ export function GameBoard({
         handsPlayed={session.dealsPlayed}
         opponentName={session.opponentName}
         phase={phase}
-        standing={session.standing}
+        standing={shownStanding}
         view={view}
         // The complete screen already shows the scorepad in full, so a
         // button that opens the same thing again is not a real option there.

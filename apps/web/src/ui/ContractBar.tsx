@@ -249,9 +249,27 @@ function signed(value: number): string {
  * than a placing over six. So that is when it speaks, and it says what is wrong rather
  * than a fraction the reader has to interpret.
  */
+/**
+ * **Silent about the board just played, which is the one that is always pending.**
+ *
+ * §1.8a fetches a board's field *after* the deal, so the moment the thirteenth card
+ * lands `boardsPlayed` goes up and `boardsRanked` does not — every deal ended by
+ * printing "1 board not back yet" for as long as the round trip took, and then removing
+ * it again. Reported as a line appearing below Placing that was gone before it could be
+ * read, and as jitter, which it was: the row is conditional, so the strip grew by a line
+ * and the board under it moved down and back.
+ *
+ * One board outstanding is the ordinary state and says nothing; **two or more is the
+ * state worth reporting**, because it means a field that went out earlier has not come
+ * back and the placing is a weaker claim than the number suggests. That is what the row
+ * was written for, and it is true of the second board rather than the first.
+ *
+ * The height is reserved either way — see `FieldRows`. Suppressing the text alone would
+ * have left the same shift the first time it did have something to say.
+ */
 function waitingFor(summary: FieldSummary): string | null {
   const waiting = summary.boardsPlayed - summary.boardsRanked;
-  return waiting <= 0 ? null : `${waiting} board${waiting === 1 ? "" : "s"} not back yet`;
+  return waiting < 2 ? null : `${waiting} boards not back yet`;
 }
 
 function FieldRows({ summary }: { readonly summary: FieldSummary }): React.JSX.Element {
@@ -264,11 +282,14 @@ function FieldRows({ summary }: { readonly summary: FieldSummary }): React.JSX.E
           {percent(summary.percentage)}
         </span>
       </p>
-      {waiting === null ? null : (
-        <p className="flex justify-end text-white/40">
-          <span className="text-[0.65rem]">{waiting}</span>
-        </p>
-      )}
+      {/* **The row is always here and usually empty**, so nothing below it moves when
+          it finds something to say. A conditional row is what made the last card of
+          every deal shift the whole board down a line and back. `min-h` rather than a
+          non-breaking space: there is nothing to read, and a reserved line should not
+          put a character on screen to hold itself open. */}
+      <p className="flex min-h-[0.9rem] justify-end text-white/40">
+        {waiting === null ? null : <span className="text-[0.65rem]">{waiting}</span>}
+      </p>
     </>
   );
 }
