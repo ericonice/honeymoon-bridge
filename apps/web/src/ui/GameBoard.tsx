@@ -544,10 +544,19 @@ export function GameBoard({
    * Reported as jitter, which it was: the score changed before the screen that explains
    * it.
    *
-   * Held only while a reveal is *coming and has not landed*, which is the whole window
-   * and no more. Keyed on `revealedHands` rather than on the phase so a **passed-out**
-   * deal never holds at all: there is no reveal there to wait for, and a field board
-   * passed out is still a result that moves the placing.
+   * **Held until the pad is on screen, not merely until the hands are.** Releasing at
+   * the reveal was the first attempt and was not enough in a Doop session, because the
+   * placing does not move when the board is committed — a session's figure is the mean
+   * of its *ranked* boards, so it moves when the **field fetch lands**, which is around
+   * or after the reveal. The score still stepped while the player was reading the hands.
+   *
+   * So the hold runs through the reveal's first stage and releases when the second
+   * arrives — the stage that draws the pad, which is where these figures are meant to
+   * be read — or when the deal-complete screen is reached, whichever comes first. With
+   * `matchDetail` off there is no second stage and the phase change is what releases it.
+   *
+   * Keyed on `revealedHands` so a **passed-out** deal never holds at all: there is no
+   * reveal there to wait for, and a passed-out field board is still a result.
    *
    * The ref is written during render rather than in an effect, which is the rule this
    * file already follows for `useShownPhase`: a hold is a pure function of the
@@ -557,7 +566,7 @@ export function GameBoard({
    * pad, `DealComplete` — is reached after the hold has released, so there is never a
    * moment when two surfaces disagree about the score.
    */
-  const holdingStanding = revealedHands !== null && !showingRevealedHands;
+  const holdingStanding = revealedHands !== null && phase === "play" && !showingStanding;
   const heldStanding = useRef(session.standing);
   if (!holdingStanding) {
     heldStanding.current = session.standing;

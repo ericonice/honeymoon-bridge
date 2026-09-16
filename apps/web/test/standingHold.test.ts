@@ -52,7 +52,7 @@ function total(): string {
   return /Total([\d–\-]+)/.exec(strip())?.[1] ?? "";
 }
 
-test("the strip holds the score until the hands are revealed", () => {
+test("the strip holds the score until the pad is on screen", () => {
   const seat: PlayerId = 0;
   renderBoard({ rubberBefore: nearlyWon(), seat, seed: 7 });
 
@@ -100,7 +100,16 @@ test("the strip holds the score until the hands are revealed", () => {
   expect(board.state.deal.phase).toBe("complete");
   expect(total()).toBe(before);
 
-  // Let the trick hold and the sweep run; the reveal lands and the score moves.
+  // The reveal lands — and the score still waits, because the pad is a tap away and
+  // that is where these figures are meant to be read. In a Doop session it is also
+  // when the field fetch has had its chance, which is what actually moves a placing.
   settle(8000);
+  expect(total()).toBe(before);
+
+  // The tap that brings up the pad is what releases it.
+  act(() => {
+    document.querySelector<HTMLElement>("main div")?.click();
+  });
+  settle(4000);
   expect(total()).not.toBe(before);
 });

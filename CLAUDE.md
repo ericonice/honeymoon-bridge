@@ -2049,9 +2049,16 @@ back yet"** underneath the placing for the length of a field fetch and then took
 §1.8a fetches a board's field *after* the deal. Reported as a line appearing below Placing that was gone
 before it could be read, and as jitter. Both, and the same moment causes both.
 
-Two fixes, and neither is a delay. **The strip holds the standing until the reveal is actually on
-screen** — keyed on `revealedHands` rather than on the phase, so a *passed-out* deal never holds at all,
-there being no reveal to wait for and a passed-out field board still moving the placing. The ref is
+Two fixes, and neither is a delay. **The strip holds the standing until the pad is on screen** — keyed on `revealedHands`, so a
+*passed-out* deal never holds at all, there being no reveal to wait for and a passed-out field board
+still moving the placing.
+
+**Releasing at the reveal was the first attempt and was not enough**, which is worth recording because
+the reason is specific to this format: a Doop placing does not move when the board is committed. The
+session figure is the **mean of its ranked boards**, so it moves when the **field fetch lands** — around
+or after the reveal, at a moment network timing picks. Reported a second time as the score still
+updating too early. The hold now runs through the reveal's first stage and releases at the second, which
+is the stage that draws the pad and so the moment those figures are meant to be read. The ref is
 written during render rather than in an effect, which is the rule `useShownPhase` already states: a hold
 is a pure function of the transition, and an effect runs after the commit it would correct. Only the
 strip takes the held value — the reveal's own pad and `DealComplete` are reached after it releases, so
