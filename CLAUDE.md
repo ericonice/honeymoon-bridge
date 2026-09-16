@@ -2027,6 +2027,22 @@ generated row has no account and a table result is one recorded with an opponent
 (`0014_field_opponent.sql`, where **null means the computer rather than "unknown"** — every row
 written before that column existed was solo play).
 
+**The last hand of a match skipped the stage every other hand gets, in every format.** `PlayPhase`'s
+reveal stages twice when `matchDetail` is on — the hand's own breakdown, then the pad — and the second
+stage was gated on `onContinue !== null`, which is false **exactly** when the deal also finishes the
+match. So the final hand went straight from the reveal to the result, and the board just played was the
+one board of a Doop session you never saw on its own. Reported as jumping to the final screen.
+
+The argument for skipping it is in the code and is half right: `DealComplete` shows the standing
+anyway, so staging here would be the same figure twice. True of a rubber, where both places draw the
+same `Scorepad` — and **false of a Doop session**, where this stage draws the *board just played* and
+the final screen draws the whole session. Even where it does repeat, one tap is what makes the last
+hand end like the others.
+
+**`test/finalHorn.test.ts` documented the old behaviour in its own comment** — "Only one tap: this deal
+also finishes the match, so the reveal never stages the match pad of its own" — and failed on the
+change, which is what that walk is for. It taps twice now.
+
 **A finished session shows the whole session, and for a while it was the one format that made you
 ask.** `FieldPad` has two modes — the board just played, and a row a board opening into its traveller —
 and the deal-complete screen used the first on *every* deal including the last, with the session behind

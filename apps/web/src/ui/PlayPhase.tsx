@@ -599,17 +599,24 @@ export function PlayPhase({
   // tap is already the one saying this seat has seen enough, which
   // `onContinue` takes straight into the next deal wherever that is on offer.
   //
-  // **Never staged at all when this deal also finishes the rubber or a
-  // half.** `onContinue` is null exactly then, and the next screen —
-  // `DealComplete` — shows the standing on its own, unconditionally: showing
-  // it here too first would be the same figure twice, once as a stage of
-  // this reveal and once as the thing that screen is for.
+  // **Staged on the last deal too, and it used not to be.** This was gated on
+  // `onContinue !== null`, which is false *exactly* when the deal also finishes the
+  // match — so the final hand was the one hand of the sitting that skipped the stage
+  // every other hand gets, and went straight from the reveal to the result. Reported
+  // as jumping to the final screen.
+  //
+  // The argument for skipping it was that `DealComplete` shows the standing anyway, so
+  // staging here would be the same figure twice. That is true of a rubber, where both
+  // places draw the same `Scorepad` — and false of a Doop session, where this stage
+  // draws the *board just played* and the final screen draws the whole session. Even
+  // where it does repeat, one tap is what makes the last hand end like the others,
+  // which is what was actually asked for.
   function handleTap(): void {
     if (revealedHands !== null && swept) {
       if (waitingToContinue) {
         return;
       }
-      if (matchDetail && onContinue !== null && !showingStanding) {
+      if (matchDetail && !showingStanding) {
         setShowingStanding(true);
         onShowingStandingChange?.(true);
         return;

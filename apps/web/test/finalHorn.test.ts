@@ -63,17 +63,23 @@ function playToTheEnd(seat: PlayerId, seed: number): boolean {
     settle(4000);
   }
 
-  // The last trick sweeps away, both hands are revealed, and a tap on the
-  // table is what takes the board on to the final score — see
-  // `PlayPhase.handleTap`. Only one tap: this deal also finishes the match,
-  // so the reveal never stages the match pad of its own — `DealComplete`
-  // shows the standing next regardless, and showing it here too first would
-  // just be the same figure twice.
-  const table = document.querySelector<HTMLElement>("main div");
-  act(() => {
-    table?.click();
-  });
-  settle(4000);
+  // The last trick sweeps away, both hands are revealed, and taps on the table take
+  // the board on to the final score — see `PlayPhase.handleTap`.
+  //
+  // **Two taps, and it used to be one.** The reveal stages the hand's own breakdown
+  // and then the pad, and the last deal of a match used to skip the second stage
+  // because `onContinue` is null exactly then — so the final hand was the one hand
+  // that jumped straight to the result. It stages like every other hand now, which
+  // costs this walk one more tap.
+  const tap = (): void => {
+    const table = document.querySelector<HTMLElement>("main div");
+    act(() => {
+      table?.click();
+    });
+    settle(4000);
+  };
+  tap();
+  tap();
 
   return snapshotFor({ kind: "rubber", table: board.state }, seat).matchComplete;
 }
