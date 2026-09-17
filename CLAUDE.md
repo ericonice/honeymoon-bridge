@@ -766,6 +766,26 @@ That test also needed `vitest.config.ts` to carry `define` values for `__APP_VER
 so any component that prints one throws a bare `ReferenceError` under the runner — which is why no
 test had rendered this screen before.
 
+**The trick count is back, inside the ring, and that reverses a decision recorded here.** A numeral in
+the middle was drawn and dropped on the argument that a discrete ring already carries its own number, so
+the two together said one thing twice. **That is true of the information and false of the reading**:
+counting nine lit segments out of ten, at a glance, mid-trick, is work — and the count had meanwhile
+left `ContractBar`, so there was nowhere else to look. Reported as wanting to know the tricks taken from
+time to time, which is evidence about the reading that the original argument could not have had.
+
+It costs a bigger ring — **44px against 32** — because a numeral inside a 32px ring is about eleven
+pixels of type. Affordable here and nowhere else on this screen: the rings are absolutely positioned
+beside the trick slots, so they take no room from the cards, which §1.5 does not trade for anything. The
+offset grew with them, to `-right-[3.25rem]`, keeping the same eight pixels clear of the card — left at
+40 a wider ring would have crept back over the thing it sits beside.
+
+**The numeral needs no new state and cannot disagree with the ring**: `target - need` already *is* the
+tricks that seat has taken, and it saturates at the target exactly when the ring is replaced by the
+decided disc — so the one position where the two could differ is the one where the numeral is not drawn.
+`test/trickRing.test.ts` checks it against the engine on every trick of a whole deal rather than at one
+position, and counts both the live and the decided readings so a walk that never reached either fails
+instead of passing.
+
 **The ring has one live colour, and two escalating ramps were built and deleted to get there.**
 White resting with amber at the edge, then amber resting with orange one trick out and white at the
 edge itself. Both were a colour on one ring restating what the *other* ring was already saying in

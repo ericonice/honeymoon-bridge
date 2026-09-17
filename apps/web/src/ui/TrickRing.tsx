@@ -4,10 +4,25 @@ import type { TrickOutlook } from "@hb/engine";
  * How many tricks a seat still needs to win the deal, and whether it got there.
  *
  * One segment per trick of that seat's *own* target — ten for the declarer of
- * 4♠, four for its defender — lit as each is taken. The count is the segments and
- * nothing else: a numeral in the middle was drawn and dropped, because once the
- * ring is discrete it already carries the number and the two together were saying
- * one thing twice.
+ * 4♠, four for its defender — lit as each is taken, with **the count in the middle**.
+ *
+ * **The numeral was drawn, dropped, and is back, which is a reversal worth stating.**
+ * It went on the argument that a discrete ring already carries its own number, so the
+ * two together said one thing twice. That is true of the *information* and false of the
+ * reading: counting nine lit segments out of ten at a glance, mid-trick, is work, and
+ * the trick count had meanwhile left `ContractBar` — so there was nowhere else to look.
+ * Reported as wanting to know the tricks taken from time to time, which is evidence
+ * about the reading that the original argument could not have had.
+ *
+ * It costs a bigger ring — 44px against 32 — because a numeral inside a 32px ring is
+ * about eleven pixels of type. That is affordable here and nowhere else on this screen:
+ * the rings are absolutely positioned beside the trick slots, so they take no room from
+ * the cards, which §1.5 does not trade for anything.
+ *
+ * **The numeral is tricks taken, and needs no new state**: `target - need` already is
+ * that, and it saturates at the target exactly when the ring is replaced by the decided
+ * disc — so the one case where the two would disagree is the case where the numeral is
+ * not drawn at all.
  *
  * **The ring is a target, not the thirteen tricks.** So one is not comparable
  * with another — half lit is five tricks for the declarer of 4♠ and two for its
@@ -85,7 +100,7 @@ function gapFor(target: number): number {
   return Math.min(0.05, 0.18 / target);
 }
 
-export function TrickRing({ outlook, size = 24 }: TrickRingProps): React.JSX.Element {
+export function TrickRing({ outlook, size = 44 }: TrickRingProps): React.JSX.Element {
   const centre = size / 2;
   const radius = size * 0.36;
   const width = size * 0.1;
@@ -121,6 +136,20 @@ export function TrickRing({ outlook, size = 24 }: TrickRingProps): React.JSX.Ele
           />
         );
       })}
+
+      {decided ? null : (
+        <text
+          className="fill-white/85"
+          dominantBaseline="central"
+          fontSize={size * 0.34}
+          fontWeight={600}
+          textAnchor="middle"
+          x={centre}
+          y={centre}
+        >
+          {lit}
+        </text>
+      )}
 
       {decided ? (
         <>

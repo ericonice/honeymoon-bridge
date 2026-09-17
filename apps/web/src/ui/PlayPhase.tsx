@@ -201,8 +201,11 @@ function Slot({
   return (
     <div ref={slotRef} className="relative h-24 w-16">
       <CardSlot size="table" />
+      {/* Eight pixels clear of the card, which is what the offset is: the ring is 44px
+          wide, so its right edge sits at 52. It grew with the ring rather than staying
+          at 40, where a wider ring would have crept back over the card it sits beside. */}
       {ring === null ? null : (
-        <div className="absolute top-1/2 -right-10 -translate-y-1/2">{ring}</div>
+        <div className="absolute top-1/2 -right-[3.25rem] -translate-y-1/2">{ring}</div>
       )}
       {played === undefined ? null : (
         <motion.div
@@ -446,7 +449,7 @@ export function PlayPhase({
     }
     return (
       <>
-        <TrickRing outlook={outlook} size={32} />
+        <TrickRing outlook={outlook} />
         <span className="sr-only">
           {trickRingLabel({
             declaring: declaringIn(view, seat),

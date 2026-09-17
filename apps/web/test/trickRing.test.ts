@@ -76,6 +76,18 @@ function segments(mine: boolean): {
   };
 }
 
+/**
+ * The numeral in the middle of a seat's ring, or null when it is not drawn.
+ *
+ * It was dropped once on the argument that a discrete ring already carries its own
+ * number, and is back because counting nine segments out of ten mid-trick is work — and
+ * the trick count had meanwhile left `ContractBar`, so there was nowhere else to read it.
+ */
+function numeral(mine: boolean): string | null {
+  const text = ringsFor(mine)[0]?.querySelector("text");
+  return text === null || text === undefined ? null : (text.textContent ?? "");
+}
+
 /** Whether this seat's ring wears the check that says its target was reached. */
 function checked(mine: boolean): boolean {
   return ringsFor(mine).some(
@@ -402,4 +414,43 @@ test("the last trick sits undisturbed before the result appears", () => {
   settle(4000);
   expect(screen.queryByText("Tap to continue")).not.toBeNull();
   expect(slots(), "the slots outlived the trick they were holding").toBe(0);
+});
+
+/**
+ * **The numeral is the tricks that seat has taken**, checked against the engine on every
+ * trick of a whole deal rather than on one position — and counted, so a walk that never
+ * reached a live ring fails instead of passing.
+ *
+ * It is deliberately absent once a side has reached its target: the ring is replaced by
+ * the decided disc there, and `target - need` has saturated, so the one position where
+ * the numeral could disagree with the tricks actually taken is the one where it is not
+ * drawn.
+ */
+test("the ring carries the tricks that seat has taken, until its target is reached", () => {
+  const seat: PlayerId = 0;
+  driveToPlay(seat, 7);
+  let live = 0;
+  let decided = 0;
+
+  while (board.state.deal.phase === "play") {
+    for (const mine of [true, false] as const) {
+      const outlook = outlookNow(mine ? seat : ((1 - seat) as PlayerId));
+      if (outlook === null) {
+        continue;
+      }
+      if (outlook.state === "reached") {
+        decided += 1;
+        expect(numeral(mine)).toBeNull();
+        continue;
+      }
+      live += 1;
+      expect(numeral(mine)).toBe(String(outlook.target - outlook.need));
+    }
+    playOne();
+  }
+
+  // Anti-vacuity, both halves: a walk that never read a live ring, or never read a
+  // decided one, would assert nothing about the case it is named for.
+  expect(live).toBeGreaterThan(10);
+  expect(decided).toBeGreaterThan(0);
 });
