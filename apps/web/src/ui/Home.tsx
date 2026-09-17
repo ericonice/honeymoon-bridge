@@ -140,7 +140,11 @@ const CELLS = ["rubber", "mirror", "duplicate", "field"] as const;
  * because they were already chosen short enough for four cells.
  */
 const FAMILIES = [
-  { cells: ["rubber", "mirror"], label: "Games" },
+  // **"Rubbers" rather than "Games", because that is what both cells are.** A mirror
+  // is two rubber-scored games on one set of boards, so the pair share a line, a
+  // part-score and a race to a hundred — the thing that separates them from the box
+  // beside them. "Games" named a length where the distinction is the scoring.
+  { cells: ["rubber", "mirror"], label: "Rubbers" },
   { cells: ["duplicate", "field"], label: "Duplicate" },
 ] as const;
 
@@ -162,7 +166,12 @@ function Format({
     // still `"field"`, and `HelpOverlay`'s Doop section for what the word means.
     field: "Doop",
     mirror: "Mirror",
-    rubber: "Rubber",
+    // **"Standard", not "Rubber", now that the box above says Rubbers.** Repeating the
+    // family name on one of its own members reads as though that cell is the whole
+    // family and the other is an exception to it. Eight characters against the seven a
+    // cell nominally affords, which is why it is the longest thing on this row: the
+    // budget was measured for *four* cells side by side, and these sit two to a box.
+    rubber: "Standard",
   } as const;
   // A single game is the rubber cell at a length of one, so both live under it.
   const chosen =
@@ -182,10 +191,14 @@ function Format({
            costs, because the label straddles the edge instead of stacking on it. That
            is the whole reason it wins on the one screen that must not scroll.
 
-           **Games and Duplicate, asymmetric on purpose.** The mirror of "Duplicate"
-           is "Rubber", which collides with the cell called Rubber inside that very
-           box; "Games" is what the family is made of and what its own length line
-           already says — "first to 2 games". */
+           **Rubbers and Duplicate, and the objection to that pair is gone rather than
+           overruled.** This box was called "Games" because the natural mirror of
+           "Duplicate" is "Rubbers", and that collided with the cell called Rubber
+           inside it — a family and one of its own members sharing a name reads as
+           though the other member is an exception. Renaming that cell to **Standard**
+           removes the collision, and the two boxes now name the thing that actually
+           separates them: rubber scoring against a board settled where it is played.
+           "Games" named a *length*, which its own line underneath already says. */
         <fieldset
           key={family.label}
           className="min-w-0 flex-1 rounded-xl border border-white/15 p-1"

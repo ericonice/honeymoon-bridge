@@ -517,12 +517,29 @@ interface OpponentGroup {
 }
 
 /**
- * The order formats are listed in, which is the order they were added to the
- * game rather than anything about them. Stated because a `Map`'s insertion order
- * would otherwise make the list depend on which format happened to be played
- * first.
+ * The order formats are listed in: **everything rubber-scored, then the board formats.**
+ *
+ * The split is the one Home draws — a line, a part-score and a race to a hundred on one
+ * side, a board settled where it is played on the other — so a reader meets the two
+ * groups in the same order in both places. Within each it is the order they were added
+ * to the game, which is nothing about them but is at least stable; a `Map`'s insertion
+ * order would make the list depend on which format happened to be played first.
+ *
+ * **`"field"` was missing from this list and that is why Doop sorted first.** `indexOf`
+ * answers −1 for a format it does not know, which sorts ahead of `rubber` at 0 — so the
+ * newest format silently led every opponent's breakdown. Fifth time a list of formats
+ * has failed to be widened here, after the two validating readers, `formatFor`'s board
+ * count and the passed-out sentence.
+ *
+ * So it is checked by the compiler rather than by eye: `everyFormatIsOrdered` fails to
+ * compile the next time `MatchFormat` widens, which is the guard `preferredFormat` and
+ * `helpOverlay` already use on their own lists.
  */
-const FORMAT_ORDER: readonly MatchFormat[] = ["rubber", "game", "mirror", "duplicate"];
+const FORMAT_ORDER = ["rubber", "game", "mirror", "duplicate", "field"] as const;
+
+type OrderedFormat = (typeof FORMAT_ORDER)[number];
+const everyFormatIsOrdered: MatchFormat extends OrderedFormat ? true : never = true;
+void everyFormatIsOrdered;
 
 function lastPlayedOf(group: Pick<OpponentGroup, "records">): number {
   return Math.max(0, ...group.records.map((record) => record.lastPlayed));

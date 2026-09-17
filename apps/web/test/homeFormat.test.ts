@@ -66,7 +66,7 @@ describe("choosing what to play, on Home", () => {
   it("offers the games that genuinely differ", () => {
     show("rubber");
 
-    expect(action("Rubber")).toBeTruthy();
+    expect(action("Standard")).toBeTruthy();
     expect(action("Replay")).toBeTruthy();
     expect(action("Doop")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "One game" })).toBeNull();
@@ -90,7 +90,7 @@ describe("choosing what to play, on Home", () => {
   it("marks the rubber cell for a single game too", () => {
     show("game");
 
-    expect(action("Rubber").getAttribute("aria-pressed")).toBe("true");
+    expect(action("Standard").getAttribute("aria-pressed")).toBe("true");
     expect(action("Replay").getAttribute("aria-pressed")).toBe("false");
     expect(action("Doop").getAttribute("aria-pressed")).toBe("false");
   });
@@ -99,7 +99,7 @@ describe("choosing what to play, on Home", () => {
     show("duplicate");
 
     expect(action("Replay").getAttribute("aria-pressed")).toBe("true");
-    expect(action("Rubber").getAttribute("aria-pressed")).toBe("false");
+    expect(action("Standard").getAttribute("aria-pressed")).toBe("false");
   });
 
   /**
@@ -200,9 +200,9 @@ describe("how long a session runs", () => {
     const groupOf = (name: string): Element | null =>
       screen.getByRole("button", { name }).parentElement;
 
-    expect(groupOf("Rubber")).toBe(groupOf("Mirror"));
+    expect(groupOf("Standard")).toBe(groupOf("Mirror"));
     expect(groupOf("Replay")).toBe(groupOf("Doop"));
-    expect(groupOf("Rubber")).not.toBe(groupOf("Replay"));
+    expect(groupOf("Standard")).not.toBe(groupOf("Replay"));
   });
 
   /**
@@ -214,7 +214,7 @@ describe("how long a session runs", () => {
   it("names each group to a screen reader, not only to the eye", () => {
     show("rubber");
 
-    expect(screen.getByRole("group", { name: "Games" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Rubbers" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "Duplicate" })).toBeTruthy();
   });
 
@@ -477,7 +477,7 @@ describe("how long a rubber runs, remembered", () => {
     changed.mockClear();
 
     show("duplicate", changed);
-    action("Rubber").click();
+    action("Standard").click();
     expect(changed).toHaveBeenCalledWith("game");
   });
 
@@ -487,7 +487,7 @@ describe("how long a rubber runs, remembered", () => {
     const changed = vi.fn();
 
     show("duplicate", changed);
-    action("Rubber").click();
+    action("Standard").click();
 
     expect(changed).toHaveBeenCalledWith("rubber");
   });

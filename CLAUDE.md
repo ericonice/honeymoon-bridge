@@ -2751,6 +2751,21 @@ code" makes the reader match three phrases to three buttons by position, which i
 a label. `overflow-y-auto` stays as a safety net -- clipped is worse than scrolled -- but nothing is
 meant to reach it.
 
+**The two boxes are Rubbers and Duplicate, and the rubber cell is Standard.** The first box was called
+"Games" because the natural mirror of "Duplicate" is "Rubbers", and that collided with the cell called
+Rubber inside it — a family sharing a name with one of its own members reads as though the other member
+is an exception to it. Renaming the cell removes the collision rather than overruling it, and the two
+boxes then name the thing that actually separates them: **rubber scoring against a board settled where
+it is played**. "Games" named a *length*, which the line underneath already says.
+
+**And the record breakdown sorted Doop first, because `FORMAT_ORDER` never got `"field"`.** `indexOf`
+answers −1 for a format it does not know, which sorts ahead of `rubber` at 0 — so the newest format
+silently led every opponent's list. **Fifth time a list of formats has failed to be widened**, after the
+two validating readers, `formatFor`'s board count and the passed-out sentence. It is checked by the
+compiler now: a type-level assertion that the list covers `MatchFormat`, which fails to compile the next
+time one is added — the same guard `preferredFormat` and `helpOverlay` already carry. Verified by
+dropping `"field"` and watching three errors appear.
+
 **The row is two cells now, because "One game" was never a third format.** It is a rubber that stops
 at the first game, which is exactly what `RubberFormat`'s two values already say — so sitting it
 beside Duplicate made the row mix categories: two of three cells were the same game at different
