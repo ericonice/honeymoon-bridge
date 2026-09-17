@@ -2758,6 +2758,26 @@ is an exception to it. Renaming the cell removes the collision rather than overr
 boxes then name the thing that actually separates them: **rubber scoring against a board settled where
 it is played**. "Games" named a *length*, which the line underneath already says.
 
+**A Doop session's verdict read the *rounded* placing, and now reads the real one.** `points` is
+rounded because every screen and every stored row wants a whole number — and `winner` was read off that
+same figure, so a session placed at 50.4% was recorded as **drawn**: a decided result thrown away by a
+rounding that exists for display.
+
+**It is currently unreachable, and saying so is the point.** A board scores `k/2N`, so against the
+seven-result fields the corpus ships today the nearest value above 50% is **57.1%** — the half-point
+rounding window is never entered. A session's mean is finer, `sum k/2NB`, but eight boards still only
+land on multiples of 0.89%. The window opens once `N × B` passes about a hundred: a fifteen-board
+session, or a board whose field has filled up with people. So this is a rule made correct **before the
+corpus grows into it**, not a bug anyone has hit — and the test says so by constructing a
+hundred-result field on purpose rather than pretending the shipped one would do.
+
+**What this was not is the thing it was raised about.** Ties on a Doop board are ties in the *raw
+score* — four runs reaching exactly −810 — and no display precision separates identical numbers. A
+board played eight times by one bot on a hand with no decision in it is a **flat board**, which this
+file already records as a real thing in duplicate and deliberately keeps. Measured on a real session:
+of eight boards, six were unanimous 0% or 100%, and the two with ties tied on exact equality. Tenths of
+a percent would have changed nothing on any of them.
+
 **A rule sits between the two cells of each box**, inset top and bottom. Without it the pair reads as
 one wide control with a highlight somewhere in it: the selected cell carries a background and the other
 carries nothing, so on the unselected side there is no edge at all. Inset rather than full height,

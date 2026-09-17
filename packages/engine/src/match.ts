@@ -512,13 +512,27 @@ export function summarizeMatch(match: MatchState, me: PlayerId = 0): MatchSummar
  * rather than an opponent with a total of its own — §1.8a fixes it for exactly that
  * reason — so the complement is the field's, not the computer's.
  *
- * Rounded here and only here. The percentage is a mean of means and carries a
- * fraction; every screen and every stored result wants a whole number, and rounding
- * once at the boundary is what stops two of them disagreeing in the last digit.
+ * Rounded here and only here, and **only for `points`**. The percentage is a mean of
+ * means and carries a fraction; every screen and every stored result wants a whole
+ * number, and rounding once at the boundary is what stops two of them disagreeing in
+ * the last digit.
  *
- * `winner` reads it, and level is a real answer: an even split of matchpoints is far
- * likelier than a tied rubber, and reading a draw as a loss is a bug this project has
- * already had to fix once.
+ * **`winner` reads the unrounded figure, and used to read the rounded one.** A session
+ * placed at 50.4% rounds to 50 and was therefore recorded as *drawn* — a decided result
+ * thrown away by a rounding that exists for display.
+ *
+ * **It is currently unreachable, and that is worth writing down rather than implying
+ * urgency it does not have.** A board scores `k/2N`, so against a seven-result field
+ * the nearest value above 50% is **57.1%** — nowhere near the half-point rounding
+ * window. A session's mean is finer, `sum k/2NB`, but an eight-board session still only
+ * lands on multiples of 0.89%. The window opens once `N × B` passes about a hundred: a
+ * fifteen-board session, or a board whose field has filled up with people. So this is a
+ * rule being made correct before the corpus grows into it, not a bug anyone has hit.
+ *
+ * Level is still a real answer rather than a rounding artefact — an exactly even split
+ * of matchpoints is far likelier than a tied rubber, and reading a draw as a loss is a
+ * bug this project has already had to fix once. What changed is that it now has to be
+ * *exactly* even.
  */
 function summarizeFieldMatch(session: FieldState, me: PlayerId): MatchSummary {
   const summary = summarizeField(session, me);
@@ -545,9 +559,9 @@ function summarizeFieldMatch(session: FieldState, me: PlayerId): MatchSummary {
     // Nothing ranked is not a draw — it is a session whose fields never came back, so
     // there is no verdict to give rather than a level one.
     winner:
-      !summary.complete || summary.percentage === null || placed === 50
+      !summary.complete || summary.percentage === null || summary.percentage === 50
         ? null
-        : placed > 50
+        : summary.percentage > 50
           ? me
           : opponentOf(me),
   };
