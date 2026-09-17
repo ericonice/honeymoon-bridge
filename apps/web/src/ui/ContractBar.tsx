@@ -236,10 +236,23 @@ function signed(value: number): string {
  * feet made until it was measured.
  */
 /**
- * A Doop session's standing: where you are placing, and nothing else most of the time.
+ * A Doop session's standing: the score, and nothing else most of the time.
+ *
+ * **Called "Score" because that is what a duplicate player calls it** — "we had a 59%
+ * game" — and because the label it replaces was a rank word attached to a proportion.
+ * "Placing" sounds like it should read *3rd of 8* and instead reads *59%*, so the label
+ * and the figure disagreed about what kind of thing they were. Reported as unclear.
+ *
+ * The word is used elsewhere on this screen — the strip is tappable to *show the score*
+ * — and that was the argument against it. It turns out not to bite: the pad that tap
+ * opens is more of this same figure, so the two uses agree rather than compete.
+ *
+ * **The internals keep saying `placing`**, deliberately. Inside the code the useful
+ * distinction is against *points*, which a session also has, and "score" is the word
+ * that cannot make it.
  *
  * **The count of ranked boards is only drawn when it is not the whole story.** It read
- * `Ranked 1/1` next to `Placing 59%` — two figures side by side, one of them a real
+ * `Ranked 1/1` next to `Score 59%` — two figures side by side, one of them a real
  * score and the other a diagnostic that says `N/N` on every ordinary deal. Reported
  * as not understandable, which it was: a row that almost always says the same thing
  * teaches the eye to skip it, so the one moment it matters is the moment it is missed.
@@ -255,7 +268,7 @@ function signed(value: number): string {
  * §1.8a fetches a board's field *after* the deal, so the moment the thirteenth card
  * lands `boardsPlayed` goes up and `boardsRanked` does not — every deal ended by
  * printing "1 board not back yet" for as long as the round trip took, and then removing
- * it again. Reported as a line appearing below Placing that was gone before it could be
+ * it again. Reported as a line appearing below the score that was gone before it could be
  * read, and as jitter, which it was: the row is conditional, so the strip grew by a line
  * and the board under it moved down and back.
  *
@@ -277,7 +290,7 @@ function FieldRows({ summary }: { readonly summary: FieldSummary }): React.JSX.E
   return (
     <>
       <p className="flex items-baseline justify-between gap-2 text-white/40">
-        <span>Placing</span>
+        <span>Score</span>
         <span className="font-semibold tabular-nums text-white/90">
           {percent(summary.percentage)}
         </span>
@@ -300,7 +313,7 @@ function FieldFigures({ summary }: { readonly summary: FieldSummary }): React.JS
   return (
     <>
       <span className="whitespace-nowrap">
-        Placing{" "}
+        Score{" "}
         <span className="font-semibold tabular-nums text-white/90">
           {percent(summary.percentage)}
         </span>

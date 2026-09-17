@@ -370,7 +370,7 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
             {record.pointsFor.toLocaleString()} for
           </Fact>
         ) : (
-          <Fact detail={<>over {played} {played === 1 ? "session" : "sessions"}</>} label="Placing">
+          <Fact detail={<>over {played} {played === 1 ? "session" : "sessions"}</>} label="Score">
             {placing}%
           </Fact>
         )}
