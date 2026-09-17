@@ -1,16 +1,18 @@
-import { GAME_THRESHOLD, closedMarginTotal, totalScore } from "@hb/engine";
+import { GAME_THRESHOLD, sessionSplit, totalScore } from "@hb/engine";
 import type {
+  Contract,
   MatchFormat,
   DealPhase,
   DuplicateSummary,
+  FieldSummary,
   MatchStanding,
   Pair,
   PlayerId,
   PlayerView,
 } from "@hb/engine";
 import { ORDER_LABEL } from "../game/identity.js";
-import type { Density } from "../game/identity.js";
 import { ContractText } from "./CardText.js";
+import type { Density } from "../game/identity.js";
 
 export interface ContractBarProps {
   /** How much room this strip may take — see `Density`. */
@@ -180,39 +182,147 @@ function StandingRow({
   );
 }
 
+/**
+ * A placing, or a dash for a session no board of which has come back yet.
+ *
+ * A dash rather than "0%", which would be a real and terrible result rather than the
+ * absence of one — the same distinction every other figure in this app draws between
+ * nothing scored and nothing known.
+ */
+function percent(value: number | null): string {
+  return value === null ? "—" : `${Math.round(value)}%`;
+}
+
 function signed(value: number): string {
   return value === 0 ? "0" : `${value > 0 ? "+" : "−"}${Math.abs(value)}`;
 }
 
 /**
- * A session's standing: the running total, and what the boards that have
- * actually closed come to.
+ * A session's standing: what is decided, and how much is still riding on stocks that
+ * have not come back.
  *
- * Used to be one signed score plus "what this deal came to before" — right for a
- * session with no two-sided rubber under it, but not why it was worth showing
- * that on its own. First play and replay subtotals sat here for a while, one
- * per pass through the boards — a real comparison, but a narrower one than
- * either of these, and it cost the two feet that answer the question a player
- * actually has mid-session: how much of this score is decided.
+ * **Total led this strip and has been dropped, because it is not a score.** A board is
+ * worth the difference between its two runs, so a deal whose stock nobody has answered
+ * yet contributes whatever this seat happened to make on it — early in a session that is
+ * mostly a statement about the cards. `DuplicateSummary.margin` runs per deal on purpose
+ * and its own doc says why; the mistake was letting the honest running figure be the one
+ * the player reads as their standing. Under `shuffled`, which puts no floor on the gap at
+ * all, a session can go a long way with nothing settled while that number moves the whole
+ * time. Reported as having no clear way of knowing how you are doing.
  *
- * **Closed is that answer, and it is not a repeat of Total — under points.** Total
- * runs on every deal played, so it moves before a board has actually cancelled its
- * own luck — see `DuplicateSummary.margin`'s own doc for why it does not wait.
- * Closed sums only the boards whose second run is in. The two agree once every
- * board is shut, and differ exactly while one is still half played, which is the
- * gap this row exists to say something about.
+ * So **Settled**, and nothing else: the real duplicate score, boards both runs of which
+ * are in and the luck cancelled. At the end there is nothing out and Settled *is* the
+ * total, which is why dropping Total costs no final figure.
  *
- * **Under IMPs the two never differ, so there is only one row.** `impsFor` needs
- * both of a board's runs to have anything to convert, so `margin` already sums
- * closed boards only — the same figure `closedMarginTotal` computes, at every
- * point in the session rather than only once it is over. Showing both would be
- * showing one number twice; the row that survives carries the board count Closed
- * used to, since that half of the question is still worth answering.
+ * **A second row said what was still out, and it argued against itself.** A board's
+ * margin is your net in run 1 plus your net in run 2 — you hold one stream in each, so
+ * the cards cancel across the pair. A board still out has contributed only its run-1
+ * net, luck of the stream included, so a large positive there usually means you held the
+ * good cards and are about to hand them back. Drawn as a credit it read as money in the
+ * bank and was a warning. **And the count was redundant anyway**: `Settled 1/5` already
+ * says four are out. Reported as not helpful, which it was, twice over.
  *
- * "Played before" — the deal in hand's own earlier score — is gone rather than kept
- * alongside these: it answered a narrower question, this one board rather than the
- * session.
+ * `sessionSplit` still returns both halves, because the sum is what makes Settled
+ * checkable against the total; only the drawing of the second one is gone.
+ *
+ * **The currency is named on the settled row** rather than implied by which rows exist,
+ * which also removed an old asymmetry: IMPs used to get one row where points got two,
+ * because `margin` already summed closed boards only.
+ *
+ * Earlier shapes, so they are not re-proposed: one signed score plus "what this deal came
+ * to before", which answered a narrower question — this one board rather than the
+ * session; and first-play/replay subtotals, one per pass through the boards, which is a
+ * split by *when* rather than by what is decided, and is the same mistake `SessionPad`'s
+ * feet made until it was measured.
  */
+/**
+ * A Doop session's standing: the score, and nothing else most of the time.
+ *
+ * **Called "Score" because that is what a duplicate player calls it** — "we had a 59%
+ * game" — and because the label it replaces was a rank word attached to a proportion.
+ * "Placing" sounds like it should read *3rd of 8* and instead reads *59%*, so the label
+ * and the figure disagreed about what kind of thing they were. Reported as unclear.
+ *
+ * The word is used elsewhere on this screen — the strip is tappable to *show the score*
+ * — and that was the argument against it. It turns out not to bite: the pad that tap
+ * opens is more of this same figure, so the two uses agree rather than compete.
+ *
+ * **The internals keep saying `placing`**, deliberately. Inside the code the useful
+ * distinction is against *points*, which a session also has, and "score" is the word
+ * that cannot make it.
+ *
+ * **The count of ranked boards is only drawn when it is not the whole story.** It read
+ * `Ranked 1/1` next to `Score 59%` — two figures side by side, one of them a real
+ * score and the other a diagnostic that says `N/N` on every ordinary deal. Reported
+ * as not understandable, which it was: a row that almost always says the same thing
+ * teaches the eye to skip it, so the one moment it matters is the moment it is missed.
+ *
+ * It matters when §1.8a's fetch has not come back — the field arrives only after the
+ * deal, and may never — because a placing over four boards of six is a weaker claim
+ * than a placing over six. So that is when it speaks, and it says what is wrong rather
+ * than a fraction the reader has to interpret.
+ */
+/**
+ * **Silent about the board just played, which is the one that is always pending.**
+ *
+ * §1.8a fetches a board's field *after* the deal, so the moment the thirteenth card
+ * lands `boardsPlayed` goes up and `boardsRanked` does not — every deal ended by
+ * printing "1 board not back yet" for as long as the round trip took, and then removing
+ * it again. Reported as a line appearing below the score that was gone before it could be
+ * read, and as jitter, which it was: the row is conditional, so the strip grew by a line
+ * and the board under it moved down and back.
+ *
+ * One board outstanding is the ordinary state and says nothing; **two or more is the
+ * state worth reporting**, because it means a field that went out earlier has not come
+ * back and the placing is a weaker claim than the number suggests. That is what the row
+ * was written for, and it is true of the second board rather than the first.
+ *
+ * The height is reserved either way — see `FieldRows`. Suppressing the text alone would
+ * have left the same shift the first time it did have something to say.
+ */
+function waitingFor(summary: FieldSummary): string | null {
+  const waiting = summary.boardsPlayed - summary.boardsRanked;
+  return waiting < 2 ? null : `${waiting} boards not back yet`;
+}
+
+function FieldRows({ summary }: { readonly summary: FieldSummary }): React.JSX.Element {
+  const waiting = waitingFor(summary);
+  return (
+    <>
+      <p className="flex items-baseline justify-between gap-2 text-white/40">
+        <span>Score</span>
+        <span className="font-semibold tabular-nums text-white/90">
+          {percent(summary.percentage)}
+        </span>
+      </p>
+      {/* **The row is always here and usually empty**, so nothing below it moves when
+          it finds something to say. A conditional row is what made the last card of
+          every deal shift the whole board down a line and back. `min-h` rather than a
+          non-breaking space: there is nothing to read, and a reserved line should not
+          put a character on screen to hold itself open. */}
+      <p className="flex min-h-[0.9rem] justify-end text-white/40">
+        {waiting === null ? null : <span className="text-[0.65rem]">{waiting}</span>}
+      </p>
+    </>
+  );
+}
+
+/** The same, on one wrapping line, for the compact strip. */
+function FieldFigures({ summary }: { readonly summary: FieldSummary }): React.JSX.Element {
+  const waiting = waitingFor(summary);
+  return (
+    <>
+      <span className="whitespace-nowrap">
+        Score{" "}
+        <span className="font-semibold tabular-nums text-white/90">
+          {percent(summary.percentage)}
+        </span>
+      </span>
+      {waiting === null ? null : <span className="whitespace-nowrap">{waiting}</span>}
+    </>
+  );
+}
+
 function SessionRows({
   summary,
   view,
@@ -220,39 +330,64 @@ function SessionRows({
   readonly summary: DuplicateSummary;
   readonly view: PlayerView;
 }): React.JSX.Element {
-  const closed = closedMarginTotal(summary, view.me);
-
-  if (summary.scoring === "imps") {
-    return (
-      <p className="flex items-baseline justify-between gap-2 text-white/40">
-        <span>
-          IMPs · {summary.closed}/{summary.boards.length}
-        </span>
-        <span className="font-semibold tabular-nums text-white/90">
-          {closed === null ? "—" : signed(closed)}
-        </span>
-      </p>
-    );
-  }
+  const split = sessionSplit(summary, view.me);
 
   return (
     <>
-      <p className="flex items-baseline justify-between gap-2 text-white/40">
-        <span>Total</span>
-        <span className="font-semibold tabular-nums text-white/90">
-          {signed(summary.margin[view.me])}
-        </span>
-      </p>
+      {/* **Settled leads, and it is the only figure here that is a score.** The running
+          total used to lead and is honest arithmetic rather than a standing: a board is
+          worth the difference between its two runs, so until a stock comes back this
+          seat's figure on it is mostly what the cards were. See `sessionSplit`. */}
       <p className="flex items-baseline justify-between gap-2 text-white/40">
         <span>
-          Closed {summary.closed}/{summary.boards.length}
+          Settled{summary.scoring === "imps" ? " (IMPs)" : ""} {summary.closed}/
+          {summary.boards.length}
         </span>
-        <span className="tabular-nums text-white/60">
-          {closed === null ? "—" : signed(closed)}
+        <span className="font-semibold tabular-nums text-white/90">
+          {signed(split.settled)}
         </span>
       </p>
+      {pointsWorthShowing(summary) ? (
+        <p className="flex items-baseline justify-between gap-2 text-white/40">
+          <span>Points</span>
+          <span className="tabular-nums text-white/60">{signed(runningPoints(summary, view))}</span>
+        </p>
+      ) : null}
     </>
   );
+}
+
+/**
+ * The session's running score in **points**, whatever it is being scored in.
+ *
+ * **Under IMPs there is otherwise nothing alive on this strip**, and that is the format
+ * rather than an oversight: `impsFor` converts a board's *margin*, an open board has no
+ * margin, so an IMPs session's own figure counts closed boards only and cannot move
+ * until a stock repeats. Under a shuffled order that is most of the first half.
+ * Reported as there being no score until both halves are played, which is literally
+ * true there and only loosely true under points.
+ *
+ * Points are available every deal even in an IMPs session — the engine scores each deal
+ * in points and only *converts* at the board — so this is a real figure rather than an
+ * invented one, and it is `summary.points` rather than a fresh fold: the gross totals
+ * differ by exactly the sum of every run's net, which is what makes them the same
+ * quantity the points-scored session shows as its own total.
+ */
+function runningPoints(summary: DuplicateSummary, view: PlayerView): number {
+  return summary.points[view.me] - summary.points[view.opponent];
+}
+
+/**
+ * Whether that figure says anything the settled one does not.
+ *
+ * **Under IMPs, always**: the two are different units and neither implies the other.
+ * Under points they are the same quantity and converge exactly when the last board comes
+ * back — so it is shown only while a board is still open, which is the one time it
+ * differs. Printing one number twice is what kept IMPs to a single row in the first
+ * place, and the rule is the same one read from the other side.
+ */
+function pointsWorthShowing(summary: DuplicateSummary): boolean {
+  return summary.scoring === "imps" || summary.closed < summary.boards.length;
 }
 
 /** The same figure(s) on one wrapping line, for a phone with no room for rows. */
@@ -263,37 +398,24 @@ function SessionFigures({
   readonly summary: DuplicateSummary;
   readonly view: PlayerView;
 }): React.JSX.Element {
-  const closed = closedMarginTotal(summary, view.me);
-
-  if (summary.scoring === "imps") {
-    return (
-      <>
-        <span className="whitespace-nowrap">{ORDER_LABEL[summary.schedule]}</span>
-        <span className="whitespace-nowrap">
-          IMPs · {summary.closed}/{summary.boards.length}{" "}
-          <span className="font-semibold tabular-nums text-white/90">
-            {closed === null ? "—" : signed(closed)}
-          </span>
-        </span>
-      </>
-    );
-  }
+  const split = sessionSplit(summary, view.me);
 
   return (
     <>
       <span className="whitespace-nowrap">{ORDER_LABEL[summary.schedule]}</span>
       <span className="whitespace-nowrap">
-        Total{" "}
+        Settled{summary.scoring === "imps" ? " (IMPs)" : ""} {summary.closed}/
+        {summary.boards.length}{" "}
         <span className="font-semibold tabular-nums text-white/90">
-          {signed(summary.margin[view.me])}
+          {signed(split.settled)}
         </span>
       </span>
-      <span className="whitespace-nowrap">
-        Closed {summary.closed}/{summary.boards.length}{" "}
-        <span className="tabular-nums text-white/60">
-          {closed === null ? "—" : signed(closed)}
+      {pointsWorthShowing(summary) ? (
+        <span className="whitespace-nowrap">
+          Points{" "}
+          <span className="tabular-nums text-white/60">{signed(runningPoints(summary, view))}</span>
         </span>
-      </span>
+      ) : null}
     </>
   );
 }
@@ -332,6 +454,7 @@ function pairTotal(earlier: Pair<number> | null, here: Pair<number>): Pair<numbe
 }
 
 function StandingLines({
+  contract,
   density,
   format,
   handsPlayed,
@@ -339,6 +462,8 @@ function StandingLines({
   standing,
   view,
 }: {
+  /** The contract, once the *shown* phase has one. Null through the draw and auction. */
+  readonly contract: Contract | null;
   readonly density: Density;
   readonly format: MatchFormat;
   readonly handsPlayed: number;
@@ -378,8 +503,30 @@ function StandingLines({
   if (density === "compact") {
     return (
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 text-xs text-white/45">
-        <span className="whitespace-nowrap">Hand {handNumber}</span>
-        {standing.kind === "duplicate" ? (
+        {/* A session knows how long it is, so the count says how far through you are
+            rather than only where you are. A rubber does not — it ends when somebody
+            wins it — so it keeps a bare number. */}
+        <span className="whitespace-nowrap">
+          {standing.kind === "field"
+            ? `Board ${handNumber} of ${standing.summary.boards}`
+            : standing.kind === "duplicate"
+              ? `Deal ${handNumber} of ${standing.summary.boards.length * 2}`
+              : `Hand ${handNumber}`}
+        </span>
+        {/* Compact is the always-visible score on a short phone, so it needs the
+            contract for the same reason the full strip does — and as a wrapping item
+            rather than a row, which is what this layout is. */}
+        {contract === null ? null : (
+          <span className="whitespace-nowrap text-white/85">
+            <ContractText contract={contract} on="dark" />{" "}
+            <span className="text-white/50">
+              {contract.declarer === view.me ? "by you" : `by ${opponentName}`}
+            </span>
+          </span>
+        )}
+        {standing.kind === "field" ? (
+          <FieldFigures summary={standing.summary} />
+        ) : standing.kind === "duplicate" ? (
           <SessionFigures summary={standing.summary} view={view} />
         ) : (
           <>
@@ -422,21 +569,46 @@ function StandingLines({
 
   return (
     <div className="text-xs">
-      <p className="pb-0.5 text-white/40">
-        {standing.kind === "duplicate"
-          ? `Deal ${handNumber} of ${standing.summary.boards.length * 2}`
-          : pair === null
-            ? `Hand #${handNumber}`
-            : `Half ${pair.half} of 2 · hand #${handNumber}`}
-        {standing.kind === "duplicate" && standing.summary.current?.replay === true
-          ? " · replay"
-          : ""}
-        {standing.kind === "duplicate" ? ` · ${ORDER_LABEL[standing.summary.schedule]}` : ""}
+      <p className="flex items-baseline justify-between gap-2 pb-0.5 text-white/40">
+        <span className="min-w-0 truncate">
+          {standing.kind === "field"
+            ? `Board ${handNumber} of ${standing.summary.boards}`
+            : standing.kind === "duplicate"
+              ? `Deal ${handNumber} of ${standing.summary.boards.length * 2}`
+              : pair === null
+                ? `Hand #${handNumber}`
+                : `Half ${pair.half} of 2 · hand #${handNumber}`}
+          {standing.kind === "duplicate" && standing.summary.current?.replay === true
+            ? " · replay"
+            : ""}
+          {standing.kind === "duplicate" ? ` · ${ORDER_LABEL[standing.summary.schedule]}` : ""}
+        </span>
+        {/* **The contract, on the right of the row that is already about the deal.**
+            This row says which hand you are on; the money is on the rows beneath it.
+            So a contract belongs here and not there — and the row exists in every
+            phase, so the right-hand half is simply empty until there is a contract
+            rather than a row appearing when play starts and pushing the board down.
+
+            It has now been in three other places. Inside the score proper, where it
+            grew that extra row; on the declarer's own `SeatLabel`, which is
+            deliberately the quietest thing on the board and so the wrong home for
+            something you go looking for; and in the top bar's headline, which names
+            the *phase* in every other state and should not mean two kinds of thing. */}
+        {contract === null ? null : (
+          <span className="shrink-0 text-white/85">
+            <ContractText contract={contract} on="dark" />{" "}
+            <span className="text-white/50">
+              {contract.declarer === view.me ? "by you" : `by ${opponentName}`}
+            </span>
+          </span>
+        )}
       </p>
-      {standing.kind === "duplicate" ? null : (
+      {standing.kind === "duplicate" || standing.kind === "field" ? null : (
         <StandingHeader opponentName={opponentName} />
       )}
-      {standing.kind === "duplicate" ? (
+      {standing.kind === "field" ? (
+        <FieldRows summary={standing.summary} />
+      ) : standing.kind === "duplicate" ? (
         <SessionRows summary={standing.summary} view={view} />
       ) : (
         <>
@@ -513,42 +685,35 @@ export function ContractBar({
   standing,
   view,
 }: ContractBarProps): React.JSX.Element | null {
-  // Contract and trick count only apply once there is a contract, and only
-  // on the shown phase that means — see `TopBar`'s own doc for why this is
-  // the lagged phase rather than `view.phase`: the auction's own closing
-  // screen already shows the fresh contract itself, and showing it here too
-  // during that same held beat would be the same information twice, on
-  // screen at once.
-  const contract = phase === "play" || phase === "complete" ? view.contract : null;
-
-  if (phase === "complete" && contract === null) {
+  // **The contract and the trick count have left this strip**, which is the score and
+  // now only the score. They sat here through play and were absent through the draw
+  // and the auction, so the strip grew a row mid-deal and pushed the whole board down
+  // — the fault Home's note line had to be pinned to avoid. The contract is on the
+  // declarer's own `SeatLabel` instead, where whose it is needs no words; the trick
+  // count is simply gone, because `TrickRing` already counts each side *down* to what
+  // it still needs, which is the question being asked.
+  //
+  // So there is nothing left to draw once the deal is over: the reveal underneath
+  // already says what the contract made.
+  if (phase === "complete") {
     return null;
   }
 
+  // The *shown* phase rather than `view.phase` — see `TopBar`'s own doc: the auction's
+  // closing screen is still up for a beat after the engine has moved on, and the
+  // contract it has just announced does not want repeating an inch below it.
+  const contract = phase === "play" ? view.contract : null;
+
   const content = (
-    <>
-      {phase === "complete" ? null : (
-        <StandingLines
-          density={density}
-          format={format}
-          handsPlayed={handsPlayed}
-          opponentName={opponentName}
-          standing={standing}
-          view={view}
-        />
-      )}
-      {contract === null ? null : (
-        <p className={`flex items-baseline justify-between gap-2 ${phase === "complete" ? "" : "mt-1"}`}>
-          <span className="min-w-0 truncate text-white/85">
-            <ContractText contract={contract} on="dark" />{" "}
-            {contract.declarer === view.me ? "by you" : `by ${opponentName}`}
-          </span>
-          <span className="shrink-0 tabular-nums text-white/60">
-            Tricks {view.tricksWon[view.me]} – {view.tricksWon[view.opponent]}
-          </span>
-        </p>
-      )}
-    </>
+    <StandingLines
+      contract={contract}
+      density={density}
+      format={format}
+      handsPlayed={handsPlayed}
+      opponentName={opponentName}
+      standing={standing}
+      view={view}
+    />
   );
 
   if (onShowScore === null) {

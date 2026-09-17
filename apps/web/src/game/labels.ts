@@ -13,7 +13,7 @@ import type { AchievementId, Call, Card, MatchFormat, Rank, Strain, Suit, Tier }
  * ambiguous.
  */
 export function matchNoun(format: MatchFormat): string {
-  if (format === "duplicate") {
+  if (format === "duplicate" || format === "field") {
     return "session";
   }
   if (format === "mirror") {
@@ -44,7 +44,19 @@ export function formatPlural(format: MatchFormat): string {
 }
 
 const FORMAT_NAMES: Record<MatchFormat, { readonly many: string; readonly one: string }> = {
-  duplicate: { many: "duplicate sessions", one: "Duplicate" },
+  // **Both duplicate formats name the family here, where the row does not.**
+  // On Home the two sit inside a box captioned Duplicate, so the cells say only what
+  // distinguishes them. A record has no such box: a row reading "Doop sessions" next
+  // to one reading "rubbers" gives a reader no way to know the first two are the same
+  // family, and these names are read far more often than the cells are.
+  //
+  // **`"field"` is the stored value and `Doop` is the name**, which is a relabelling
+  // rather than a re-modelling — the same constraint the one-game length respected, and
+  // for the same reason: `ratings.ts` keys on the stored string, so renaming the value
+  // would move every recorded session out of its pool. The name changes here and
+  // nowhere below the UI.
+  duplicate: { many: "duplicate – replay", one: "Duplicate – Replay" },
+  field: { many: "duplicate – doop", one: "Duplicate – Doop" },
   game: { many: "single games", one: "Single game" },
   mirror: { many: "mirror matches", one: "Mirror" },
   rubber: { many: "rubbers", one: "Rubber" },

@@ -127,6 +127,71 @@ export interface EquityTable {
  * bidder, and the opponent that matters is a person. The 293 recorded deals in the
  * hand log are the population to fit against, and nothing has done that yet.
  */
+/**
+ * The same table, fitted from rubbers in which **both seats double at a human rate**.
+ *
+ * **A candidate, not the shipped table**, and it stays that way until it beats the
+ * shipped one head to head. This file records the same re-fit being installed on the
+ * strength of its coefficients three times now and losing every time — the mirror refit
+ * dropped 60.2% to 50.6%, the rubber one 78.9% to 66.6%, and the first version of *this*
+ * one lost 1491 points a rubber at 3.8 standard errors. Plausible numbers are exactly
+ * what a bad table looks like from here.
+ *
+ * `bench/equity.ts 800 8 from=3`, `bench/oracle.ts` on both seats.
+ *
+ * **`from=3` rather than the default 2, and the calibration is the point.** Down-2 is
+ * chosen to match `DOUBLED_FROM_DOWN`, which makes the bot's assumption about when it
+ * gets doubled *true* against the reference — right for asking where a loss comes from,
+ * wrong for fitting, because it punishes far harder than the opponent the bot actually
+ * plays. Measured against v3:
+ *
+ * | threshold | share of its deals doubled |
+ * | --- | --- |
+ * | down 2 | 42% |
+ * | **down 3** | **22%** |
+ * | down 4 | 8% |
+ * | *a person, over 1,449 logged deals* | *19%* |
+ *
+ * | | shipped | first re-fit (down 2) | **this one (down 3)** |
+ * | --- | --- | --- | --- |
+ * | `gameLead` | 0.6104 | 0.5331 | **0.5439** |
+ * | `level.part` | **−0.2204** | +0.1594 | **+0.4097** |
+ * | `oneEach.part` | 0.6945 | 0.7248 | **1.2716** |
+ *
+ * **`level.part` is positive again**, and it has now come out positive under both
+ * doubling regimes where every no-doubling fit made it negative. The shipped −0.22 says
+ * a part-score at level makes you *less* likely to take the rubber, which is flagged
+ * below as not understood and has taken four values across four fits. The reading that
+ * survives: with no doubler, a seat merely holding a part-score is disproportionately
+ * one that settled when it should have stretched, so the fit reads "part-scores lose"
+ * as causal. Punishment in the game removes the selection effect.
+ *
+ * **What it still is not is a model of the person.** `from=3` matches how *often* a
+ * human doubles, not *which* contracts — the oracle still doubles exactly what double
+ * dummy condemns, where a person doubles what they can read. Fitting against the log
+ * itself remains the honest version and remains out of reach: 1,766 logged hands rebuild
+ * into **40 rubbers**, with part-score cells at ±0.37 to ±0.80 and signs that do not
+ * survive inspection.
+ *
+ * Structural checks held — level 0.500, one game each 0.500, a game up mirroring a game
+ * down at 0.633 — and calibration is monotone across six bands, in-sample.
+ */
+export const EQUITY_DOUBLED: EquityTable = {
+  // **Not re-fitted**, carried across from the shipped table so the two differ in the
+  // rubber cells alone. A mirror is its own fit (`format=mirror`) and changing both at
+  // once would leave a head-to-head unable to say which half moved — the same reason the
+  // defending search left this seat's own contracts alone.
+  game: { margin: 0.1738, part: 0.9548 },
+  gameLead: 0.5439,
+  level: { margin: 0.1195, part: 0.4097 },
+  mirror: {
+    first: { margin: 0.1409, part: -0.0561 },
+    second: { carried: -0.0904, margin: 0.2113, part: 0.4649 },
+  },
+  oneEach: { margin: 0.2129, part: 1.2716 },
+  oneUp: { margin: 0.137, part: 0.6871 },
+};
+
 export const EQUITY: EquityTable = {
   game: { margin: 0.1738, part: 0.9548 },
   gameLead: 0.6104,

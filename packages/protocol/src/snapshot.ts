@@ -89,7 +89,12 @@ export interface SessionSnapshot {
  */
 export function snapshotFor(match: MatchState, seat: PlayerId): SessionSnapshot {
   const deal = dealOf(match);
-  const summary = summarizeMatch(match);
+  // **Summarised for the seat being sent to, not for seat 0.** Every other format's
+  // standing reads the same from either side, so this was invisible until §1.8a: a
+  // field session ranks each seat against a *different* set of recorded results, and
+  // a snapshot built from seat 0's view would have shown the second player their
+  // opponent's placing on every board, with nothing erroring anywhere.
+  const summary = summarizeMatch(match, seat);
   const hand = deal.hands[seat];
 
   return {

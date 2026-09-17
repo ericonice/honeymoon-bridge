@@ -18,6 +18,7 @@ import { paced, TRICK_TIMING } from "../game/timing.js";
 import { CardBack, CardFace, CardSlot } from "./CardFace.js";
 import { CardFlight, centerIn, centerInFromRect } from "./CardFlight.js";
 import type { Flight } from "./CardFlight.js";
+import { FieldPad } from "./FieldPad.js";
 import { CARD_WIDTHS, Hand, MINI_MIN_STEP, spreadStep, useRowRoom } from "./Hand.js";
 import { Scorepad } from "./Scorepad.js";
 import { DealResultHeadline } from "./ScoreRows.js";
@@ -200,8 +201,11 @@ function Slot({
   return (
     <div ref={slotRef} className="relative h-24 w-16">
       <CardSlot size="table" />
+      {/* Eight pixels clear of the card, which is what the offset is: the ring is 44px
+          wide, so its right edge sits at 52. It grew with the ring rather than staying
+          at 40, where a wider ring would have crept back over the card it sits beside. */}
       {ring === null ? null : (
-        <div className="absolute top-1/2 -right-10 -translate-y-1/2">{ring}</div>
+        <div className="absolute top-1/2 -right-[3.25rem] -translate-y-1/2">{ring}</div>
       )}
       {played === undefined ? null : (
         <motion.div
@@ -445,7 +449,7 @@ export function PlayPhase({
     }
     return (
       <>
-        <TrickRing outlook={outlook} size={32} />
+        <TrickRing outlook={outlook} taken={view.tricksWon[seat]} />
         <span className="sr-only">
           {trickRingLabel({
             declaring: declaringIn(view, seat),
@@ -598,17 +602,24 @@ export function PlayPhase({
   // tap is already the one saying this seat has seen enough, which
   // `onContinue` takes straight into the next deal wherever that is on offer.
   //
-  // **Never staged at all when this deal also finishes the rubber or a
-  // half.** `onContinue` is null exactly then, and the next screen —
-  // `DealComplete` — shows the standing on its own, unconditionally: showing
-  // it here too first would be the same figure twice, once as a stage of
-  // this reveal and once as the thing that screen is for.
+  // **Staged on the last deal too, and it used not to be.** This was gated on
+  // `onContinue !== null`, which is false *exactly* when the deal also finishes the
+  // match — so the final hand was the one hand of the sitting that skipped the stage
+  // every other hand gets, and went straight from the reveal to the result. Reported
+  // as jumping to the final screen.
+  //
+  // The argument for skipping it was that `DealComplete` shows the standing anyway, so
+  // staging here would be the same figure twice. That is true of a rubber, where both
+  // places draw the same `Scorepad` — and false of a Doop session, where this stage
+  // draws the *board just played* and the final screen draws the whole session. Even
+  // where it does repeat, one tap is what makes the last hand end like the others,
+  // which is what was actually asked for.
   function handleTap(): void {
     if (revealedHands !== null && swept) {
       if (waitingToContinue) {
         return;
       }
-      if (matchDetail && onContinue !== null && !showingStanding) {
+      if (matchDetail && !showingStanding) {
         setShowingStanding(true);
         onShowingStandingChange?.(true);
         return;
@@ -650,7 +661,9 @@ export function PlayPhase({
   // their own copy of this branch. Computed unconditionally, since it is
   // cheap and only ever rendered once the reveal is actually showing.
   const pad =
-    standing.kind === "duplicate" ? (
+    standing.kind === "field" ? (
+      <FieldPad latest me={view.me} summary={standing.summary} />
+    ) : standing.kind === "duplicate" ? (
       <SessionPad summary={standing.summary} view={view} />
     ) : (
       <Scorepad

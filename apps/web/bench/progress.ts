@@ -25,15 +25,24 @@ export interface Progress {
  * project has made repeatedly, and one an error bar printed beside the tally
  * makes hard to keep making.
  */
-function stride(): number {
+function stride(fallback: number): number {
   const arg = process.argv.find((one) => one.startsWith("every="));
-  const asked = arg === undefined ? EVERY : Number(arg.slice("every=".length));
-  return Number.isFinite(asked) && asked >= 1 ? Math.floor(asked) : EVERY;
+  const asked = arg === undefined ? fallback : Number(arg.slice("every=".length));
+  return Number.isFinite(asked) && asked >= 1 ? Math.floor(asked) : fallback;
 }
 
-export function createProgress(total: number, label: string): Progress {
+/**
+ * `fallback` is what to report every when nothing was asked for on the command line.
+ *
+ * Twenty-five suits a bench whose step is a deal or a rubber. It suits a bench whose
+ * step is *minutes* very badly: the corpus generator spends about two minutes a seed,
+ * so a 24-seed run printed one line at the start and nothing else for half an hour —
+ * which is exactly the property this module exists to prevent, arrived at from the
+ * other direction. A caller whose steps are slow says so.
+ */
+export function createProgress(total: number, label: string, fallback = EVERY): Progress {
   const started = performance.now();
-  const every = stride();
+  const every = stride(fallback);
 
   return (done: number, note = "") => {
     if (done % every !== 0 && done !== total) {

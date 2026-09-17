@@ -63,12 +63,27 @@ describe("choosing what to play, on Home", () => {
    * say. Sitting it beside Duplicate made the row mix categories, and how long a
    * rubber runs belongs on the line underneath where duplicate's length already is.
    */
-  it("offers the two games that genuinely differ", () => {
+  it("offers the games that genuinely differ", () => {
     show("rubber");
 
     expect(action("Rubber")).toBeTruthy();
-    expect(action("Duplicate")).toBeTruthy();
+    expect(action("Replay")).toBeTruthy();
+    expect(action("Doop")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "One game" })).toBeNull();
+  });
+
+  /**
+   * The two duplicate formats are separate choices rather than one cell with a
+   * setting under it — §3.6a — so each is one tap and each reports itself. What
+   * makes them a pair is drawn rather than nested, which a test cannot see; what
+   * it can check is that neither has become the other's sub-option.
+   */
+  it("makes each duplicate format its own choice", () => {
+    const changed = vi.fn();
+    show("rubber", changed);
+
+    action("Doop").click();
+    expect(changed).toHaveBeenCalledWith("field");
   });
 
   /** A single game is the rubber cell at a length of one, and the cell says so. */
@@ -76,13 +91,14 @@ describe("choosing what to play, on Home", () => {
     show("game");
 
     expect(action("Rubber").getAttribute("aria-pressed")).toBe("true");
-    expect(action("Duplicate").getAttribute("aria-pressed")).toBe("false");
+    expect(action("Replay").getAttribute("aria-pressed")).toBe("false");
+    expect(action("Doop").getAttribute("aria-pressed")).toBe("false");
   });
 
   it("marks the chosen one, so the row says what it is going to do", () => {
     show("duplicate");
 
-    expect(action("Duplicate").getAttribute("aria-pressed")).toBe("true");
+    expect(action("Replay").getAttribute("aria-pressed")).toBe("true");
     expect(action("Rubber").getAttribute("aria-pressed")).toBe("false");
   });
 
@@ -95,7 +111,7 @@ describe("choosing what to play, on Home", () => {
     const changed = vi.fn();
     show("rubber", changed);
 
-    action("Duplicate").click();
+    action("Replay").click();
     expect(changed).toHaveBeenCalledWith("duplicate");
   });
 
@@ -171,6 +187,38 @@ describe("how long a session runs", () => {
   });
 
   /**
+   * **The two families are separate groups, not four cells in a line.**
+   *
+   * Asserted as *which buttons share a parent* rather than by reading a class, for
+   * the reason the record screen learnt not to select on padding: the grouping is the
+   * property, and the ground it is drawn with is not. A wider gutter was the first
+   * attempt and read as nothing on a phone — this is the version that survives being
+   * looked at, and a test that could not tell the two apart would be no use.
+   */
+  it("puts the rubber-scored formats and the duplicate ones in separate groups", () => {
+    show("rubber");
+    const groupOf = (name: string): Element | null =>
+      screen.getByRole("button", { name }).parentElement;
+
+    expect(groupOf("Rubber")).toBe(groupOf("Mirror"));
+    expect(groupOf("Replay")).toBe(groupOf("Doop"));
+    expect(groupOf("Rubber")).not.toBe(groupOf("Replay"));
+  });
+
+  /**
+   * **The grouping is real, not drawn** — which is the reason this shape was chosen
+   * over four others that looked the same. A `fieldset` with a `legend` is a named
+   * group of related controls, so a screen reader announces "Duplicate, Doop,
+   * selected" where two styled `div`s would announce only "Doop, selected".
+   */
+  it("names each group to a screen reader, not only to the eye", () => {
+    show("rubber");
+
+    expect(screen.getByRole("group", { name: "Games" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Duplicate" })).toBeTruthy();
+  });
+
+  /**
    * The rubber's length is a stepper now, so both formats say how long they are in
    * the same words. Its two stops are the two `RubberFormat` values, and it reports
    * them as exactly those — a single game must still be stored and rated as `"game"`,
@@ -208,7 +256,8 @@ describe("how long a session runs", () => {
 
     cleanup();
     show("duplicate");
-    expect(line("A session of").className).toContain("text-right");
+    // Third of four now that Doop has joined the row, so it points at neither edge.
+    expect(line("A session of").className).toContain("text-center");
   });
 
   it("steps by two, since an odd count would leave a board played once", () => {
@@ -489,7 +538,7 @@ describe("what Find says it is looking for", () => {
     setQueueFormat("duplicate");
     show("rubber");
 
-    expect(action("Find").textContent).toContain("only duplicate");
+    expect(action("Find").textContent).toContain("only duplicate – replay");
     expect(action("Find").textContent).not.toContain("whoever is free");
   });
 

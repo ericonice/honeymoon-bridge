@@ -24,9 +24,15 @@ export interface TopBarProps {
 }
 
 /**
- * Just the phase, during the draw and the auction. Once a contract exists it
- * has its own strip below the bar — see `ContractBar` — so there is nothing
- * left for a headline here to add.
+ * The phase, in every state.
+ *
+ * It briefly said the contract during play, on the reasoning that "Play" tells a
+ * reader nothing they do not know and this is the most prominent text on screen.
+ * True, and beside the point: the slot names the *phase* in three states, so naming
+ * a contract in the fourth makes one place mean two kinds of thing and the reader
+ * has to notice the pattern broke. The contract sits on the right of the strip's
+ * own deal row instead — see `ContractBar`, where it costs nothing and moves
+ * nothing.
  */
 function Headline({ phase }: { readonly phase: DealPhase }): React.JSX.Element {
   switch (phase) {

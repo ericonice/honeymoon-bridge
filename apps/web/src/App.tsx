@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useAccount } from "./game/account.js";
 import { applyCardColor, readCardColor, writeCardColor } from "./game/cardColor.js";
 import type { Density } from "./game/identity.js";
+import type { MatchFormat } from "@hb/engine";
 import type { Destination } from "./game/destination.js";
 import { destinationFromWire, HOME, takeDestination } from "./game/destination.js";
 import { readDevTools, writeDevTools } from "./game/devTools.js";
@@ -81,13 +82,21 @@ export type Screen =
 /**
  * What an account is needed for here, and where to come back to afterwards.
  *
- * §3.7 gates playing a person and nothing else, so this is the whole of the
- * rule in one function — and returning the destination rather than a boolean is
- * what lets the sign-in link bring somebody back to the table they were invited
- * to rather than to a home screen.
+ * §3.7 gates playing a person, and a **Doop session** needs one for a different
+ * reason that lands in the same place: §1.8a chooses boards by which ones *you*
+ * have already met and files your result against the field, so there is no answer
+ * to give a device that is nobody. Without this, choosing Doop while signed out
+ * reached the game and then said "no boards to play", which is true and useless —
+ * the app knew perfectly well what was wrong and declined to say so.
+ *
+ * Returning the destination rather than a boolean is what lets the sign-in link
+ * bring somebody back where they were going rather than to a home screen.
  */
-function gateFor(screen: Screen): Destination | null {
+export function gateFor(screen: Screen, format: MatchFormat): Destination | null {
   switch (screen.kind) {
+    case "robot": {
+      return format === "field" ? { kind: "robot" } : null;
+    }
     case "searching": {
       return { kind: "queue" };
     }
@@ -428,7 +437,7 @@ export function App(): React.JSX.Element {
     }
   })();
 
-  const gate = gateFor(screen);
+  const gate = gateFor(screen, format);
 
   return (
     <ThemeContext value={theme}>

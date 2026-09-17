@@ -42,6 +42,14 @@ export interface SearchResult {
   /** Samples completed, which is what makes a deal replayable — see §2.1. */
   readonly sampled: number;
   readonly spreads: ReadonlyMap<Strain, TrickSpread>;
+  /**
+   * What the **opponent** takes declaring, for the strains named in `defending`.
+   *
+   * A second solve of the same guessed hands with this seat on lead, rather than
+   * `spreads` read backwards — see `defending` for why the cheap version is wrong.
+   * Empty when nothing was asked for.
+   */
+  readonly theirSpreads: ReadonlyMap<Strain, TrickSpread>;
 }
 
 export interface SearchOptions {
@@ -62,6 +70,22 @@ export interface SearchOptions {
   readonly rng: Rng;
   /** The strains worth pricing. Two or three in practice, not all five. */
   readonly strains: readonly Strain[];
+  /**
+   * Strains to *also* solve with this seat on lead, giving what the opponent takes
+   * declaring them.
+   *
+   * **This is a second solve and not an inversion of the first, which is the whole
+   * point.** `strains` are solved with the opponent leading, so they answer what this
+   * seat takes *declaring*; double-dummy tricks depend on who leads, so `13 − that` is
+   * not what the other side takes when *they* declare. Pricing a pass off the mirrored
+   * number was measured as pricing a position nobody was in — see `estimateFor`.
+   *
+   * Usually one strain: the contract already on the table, when the opponent would be
+   * declaring it. Passing and doubling are priced in the strain somebody else chose, so
+   * there is rarely more than one, which is what keeps the extra cost near a third of
+   * the search rather than double it.
+   */
+  readonly defending?: readonly Strain[];
   readonly view: PlayerView;
 }
 
@@ -75,7 +99,16 @@ export interface SearchOptions {
  * same worlds. Stopping *within* a sample would leave the last strains short.
  */
 export function searchTricks(options: SearchOptions): SearchResult {
-  const { budgetMs, maxSamples, remembered = [], rng, strains, theirOffers = null, view } = options;
+  const {
+    budgetMs,
+    defending = [],
+    maxSamples,
+    remembered = [],
+    rng,
+    strains,
+    theirOffers = null,
+    view,
+  } = options;
   const me = view.me;
   const them = opponentOf(me);
   const started = performance.now();
@@ -83,6 +116,10 @@ export function searchTricks(options: SearchOptions): SearchResult {
   const counts = new Map<Strain, number[]>();
   for (const strain of strains) {
     counts.set(strain, new Array<number>(TRICKS + 1).fill(0));
+  }
+  const theirCounts = new Map<Strain, number[]>();
+  for (const strain of defending) {
+    theirCounts.set(strain, new Array<number>(TRICKS + 1).fill(0));
   }
 
   let sampled = 0;
@@ -105,34 +142,48 @@ export function searchTricks(options: SearchOptions): SearchResult {
       const seen = counts.get(strain)!;
       seen[tricks] = (seen[tricks] ?? 0) + 1;
     }
+    for (const strain of defending) {
+      // **This seat leads**, which is the position when they declare — and it is a
+      // different search from the one above rather than the same one read backwards.
+      const tricks = solve({ hands, leader: me, strain, trick: [] }).tricks[them];
+      const seen = theirCounts.get(strain)!;
+      seen[tricks] = (seen[tricks] ?? 0) + 1;
+    }
     sampled += 1;
   }
 
-  const spreads = new Map<Strain, TrickSpread>();
-  for (const strain of strains) {
-    const taken = counts.get(strain)!;
-    const total = taken.reduce((sum, one, tricks) => sum + one * tricks, 0);
-    spreads.set(strain, {
-      counts: taken,
-      mean: sampled === 0 ? 0 : total / sampled,
-      samples: sampled,
-    });
-  }
+  const spreadsFrom = (from: ReadonlyMap<Strain, number[]>): Map<Strain, TrickSpread> => {
+    const built = new Map<Strain, TrickSpread>();
+    for (const [strain, taken] of from) {
+      const total = taken.reduce((sum, one, tricks) => sum + one * tricks, 0);
+      built.set(strain, {
+        counts: taken,
+        mean: sampled === 0 ? 0 : total / sampled,
+        samples: sampled,
+      });
+    }
+    return built;
+  };
 
-  return { elapsedMs: performance.now() - started, ranOut, sampled, spreads };
+  return {
+    elapsedMs: performance.now() - started,
+    ranOut,
+    sampled,
+    spreads: spreadsFrom(counts),
+    theirSpreads: spreadsFrom(theirCounts),
+  };
 }
 
 /**
- * The same distribution seen from the other side of the table.
- *
- * A solve reports both seats and they sum to thirteen, so the chance *they* take
- * `t` tricks is the chance this seat takes `13 - t`. Reversing the array is the
- * whole of it — which is what makes pricing a pass, and a double, cost nothing
- * beyond the search already run for this seat's own contracts.
+ * **`mirrorOdds` was here and is deliberately gone.** It reversed this seat's
+ * distribution to price a contract the opponent declares, on the reasoning that a
+ * solve reports both seats and they sum to thirteen. That arithmetic is right and the
+ * inference is not: the solve it read was taken with the opponent on lead, so
+ * reversing it answers "how many tricks do they take *while this seat declares*",
+ * which is not a position anybody is in. `SearchOptions.defending` is the correct
+ * version — a second solve with this seat leading — and leaving the cheap one exported
+ * beside it is an invitation to use it.
  */
-export function mirrorOdds(odds: readonly number[]): number[] {
-  return [...odds].reverse();
-}
 
 /**
  * **Not widened, and it was, on a theory formed while the code was broken.**
@@ -156,6 +207,56 @@ export function mirrorOdds(odds: readonly number[]): number[] {
  * is checked *after* the first rather than before it — which is why the loop above
  * guards on `sampled > 0`.
  */
+/**
+ * The same shape, moved so its mean is `mean`.
+ *
+ * **Because a measured distribution and a blended estimate are two different claims,
+ * and handing `bidValue` the first silently throws away the second.** `expectedValue`
+ * reads `options.odds ?? outcomeOdds(options.estimate)` — supply odds and the estimate
+ * is not consulted at all. So passing a raw search distribution for a contract the
+ * *opponent* declares discarded the blend with their bid level, which carries
+ * `THEIR_BID_WEIGHT` of 0.75 and is, in this file's own words, the largest single thing
+ * the bidder knows. Measured: 30% ± 7 of rubbers over 40 plays, against an even
+ * expectation. The identical mistake — replacing the estimate wholesale rather than
+ * correcting it — cost this bidder +651 a rubber against +467 when the search was first
+ * built, and it is recorded in `CLAUDE.md` as such.
+ *
+ * Keeping the shape and moving the centre is what preserves both findings at once. The
+ * shape is what made searching worth 65% of rubbers — a flat hand and a wild two-suiter
+ * have different uncertainty and `TRICK_SPREAD` is one number for every hand — and the
+ * centre is where their bid, and what the board came to last time, get their say.
+ *
+ * Fractional shifts interpolate between the two whole ones either side, since an
+ * estimate is rarely a whole number of tricks. Mass pushed past either end piles up at
+ * the end rather than falling off: a contract cannot take fourteen tricks or minus one,
+ * so the alternative is a distribution that does not sum to one. That pile-up means the
+ * result's mean can fall a little short of the target at the extremes, which is correct
+ * — the shift is bounded by what is possible.
+ */
+export function centredOn(odds: readonly number[], mean: number): number[] {
+  const current = odds.reduce((total, chance, tricks) => total + chance * tricks, 0);
+  const shift = mean - current;
+  if (!Number.isFinite(shift) || Math.abs(shift) < 1e-9) {
+    return [...odds];
+  }
+
+  const whole = Math.floor(shift);
+  const part = shift - whole;
+  const moved = new Array<number>(TRICKS + 1).fill(0);
+  const put = (at: number, chance: number): void => {
+    const clamped = at < 0 ? 0 : at > TRICKS ? TRICKS : at;
+    moved[clamped] = (moved[clamped] ?? 0) + chance;
+  };
+  odds.forEach((chance, tricks) => {
+    if (chance === 0) {
+      return;
+    }
+    put(tricks + whole, chance * (1 - part));
+    put(tricks + whole + 1, chance * part);
+  });
+  return moved;
+}
+
 export function spreadOdds(spread: TrickSpread): number[] {
   if (spread.samples === 0) {
     return new Array<number>(TRICKS + 1).fill(1 / (TRICKS + 1));

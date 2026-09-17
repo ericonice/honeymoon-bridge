@@ -72,9 +72,6 @@ export function SeatLabel({
       {rating === null ? null : (
         <span className="shrink-0 tabular-nums text-white/30">{rating}</span>
       )}
-      {/* Dimmer than the name whether or not the seat is active. It is a fact about
-          the player rather than about the turn, and it does not change during a
-          deal — so it must not compete with the thing that does. */}
       {active ? (
         /* **A CSS animation rather than a JavaScript one, and that is the point.** The
            computer solves on the main thread, so nothing driven from JavaScript can

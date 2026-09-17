@@ -1,5 +1,10 @@
+import type { FieldBoard } from "@hb/engine";
+import { useEffect, useState } from "react";
+import { fetchFieldBoards } from "../game/fieldCorpus.js";
+import { preferredFormat, sessionDeals } from "../game/identity.js";
 import { matchNoun } from "../game/labels.js";
 import { useLocalSession } from "../game/localSession.js";
+import { loadRobotMatch } from "../game/robotPersistence.js";
 import type { Density } from "../game/identity.js";
 import { clearRobotMatch } from "../game/robotPersistence.js";
 import { knownRatings, useBotAnchor } from "../game/records.js";
@@ -20,8 +25,123 @@ export interface RobotGameProps {
   onShowSettings(): void;
 }
 
-/** A rubber against the computer, running entirely in this browser. */
-export function RobotGame({
+/**
+ * A match against the computer, running entirely in this browser.
+ *
+ * **Two components because a Doop session has to be fetched before it can start.**
+ * Its boards come from the corpus rather than from a seed — §1.8a — and a hook
+ * cannot decline to run, so `useLocalSession` is kept out of the mount that is still
+ * waiting. Every other format skips the wait entirely: `boardsNeeded` is false and
+ * the table mounts on the first render, exactly as it always did.
+ */
+export function RobotGame(props: RobotGameProps): React.JSX.Element {
+  // Read once a mount, like every other setting this screen resolves. A resumed
+  // match brings its own boards, so only a *new* Doop session has to wait.
+  const [needed] = useState(() => preferredFormat() === "field" && loadRobotMatch() === null);
+  const [boards, setBoards] = useState<readonly FieldBoard[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  /**
+   * The session is shorter than was asked for, because the pool ran out.
+   *
+   * A board you have played retires its twin, so a regular player works through the
+   * corpus and eventually there are fewer left than a session wants. The server
+   * truthfully hands over what it has — and the game used to start six boards long
+   * with nothing saying why, which reads as the length setting being ignored.
+   *
+   * Held as a *count* rather than a flag so the screen can say how many, and cleared
+   * by the tap that starts the session: it is a thing said once, not a banner.
+   */
+  const [short, setShort] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!needed) {
+      return;
+    }
+    let live = true;
+    // The length the row asked for, not a constant of this component's own — the
+    // stepper under the format row is where "how long is this" is answered, and a
+    // second answer here is how the two come to disagree.
+    void fetchFieldBoards(sessionDeals()).then((found) => {
+      if (!live) {
+        return;
+      }
+      if (found === null) {
+        setFailed(true);
+      } else {
+        setBoards(found);
+        if (found.length < sessionDeals()) {
+          setShort(found.length);
+        }
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [needed]);
+
+  if (needed && failed) {
+    // **Said rather than swapped for a rubber.** The row says Doop; starting
+    // something else would be the bug that shipped Mirror broken, where the choice
+    // and the game disagreed with nothing erroring anywhere.
+    //
+    // Being signed out is no longer one of the ways to arrive here — `gateFor` sends
+    // that case to the sign-in wall, because the app knew what was wrong and this
+    // screen could only say that something was.
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+        <p className="text-white/70">
+          No boards to play. A Doop session is played on boards the server already
+          holds results for, and there are none to be had — either every one has been
+          played on this account, or the server cannot be reached.
+        </p>
+        <button
+          type="button"
+          className="rounded-xl bg-white px-4 py-3 font-semibold text-stone-900"
+          onClick={props.onLeave}
+        >
+          Back
+        </button>
+      </div>
+    );
+  }
+
+  if (needed && boards === null) {
+    return (
+      <div className="flex h-full items-center justify-center p-6 text-white/60">
+        Finding boards…
+      </div>
+    );
+  }
+
+  if (short !== null) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+        <p className="text-lg font-semibold">
+          {short} {short === 1 ? "board" : "boards"}, not {sessionDeals()}
+        </p>
+        <p className="text-sm text-white/60">
+          That is every board there is for you — new ones first, then the other side of
+          stocks you have played, and the pool has run out of both. More can be
+          generated; until then a shorter session is what is honestly available.
+        </p>
+        <button
+          type="button"
+          className="rounded-xl bg-white px-4 py-3 font-semibold text-stone-900"
+          onClick={() => {
+            setShort(null);
+          }}
+        >
+          Play {short === 1 ? "it" : "them"}
+        </button>
+      </div>
+    );
+  }
+
+  return <RobotTable {...props} fieldBoards={boards ?? []} />;
+}
+
+/** The match itself, mounted only once there is something for it to play. */
+function RobotTable({
   density,
   devTools,
   matchDetail,
@@ -29,12 +149,13 @@ export function RobotGame({
   onShowSettings,
   peeking,
   sound,
+  fieldBoards,
   tapToSelect,
   trickCount,
-}: RobotGameProps): React.JSX.Element {
+}: RobotGameProps & { readonly fieldBoards: readonly FieldBoard[] }): React.JSX.Element {
   // Read once a mount. It changes only when a match ends, and this screen is one match.
   const cached = knownRatings();
-  const session = useLocalSession({ peek: peeking });
+  const session = useLocalSession({ fieldBoards, peek: peeking });
   // Which opponent this is: the release, and the rung it is set to play at.
   // Read off the session itself rather than the current setting a second
   // time — `useLocalSession` is what actually pinned these, whether this

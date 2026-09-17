@@ -1,6 +1,7 @@
 import { applyDealScore, duplicateFrom, opponentOf, scoreDeal, totalScore } from "@hb/engine";
 import type { Card, Contract, MatchFormat, Pair, PlayerId, RubberState } from "@hb/engine";
 import { equityOf, mirrorEquityOf } from "./equity.js";
+import type { EquityTable } from "./equity.js";
 import type { Standing } from "./types.js";
 
 /**
@@ -155,7 +156,17 @@ export function objectiveFor(format: MatchFormat, release: Objective): Objective
   // first clause was right and is the reason this is not simply the equity objective —
   // measured, the single-game cell prices a mirror part-score at +0.95 where it is
   // worth **nothing** in the first half and +0.46 in the second.
-  if (format === "duplicate") {
+  // **A Doop board is a duplicate board and prices identically**, which is worth
+  // stating because the temptation is to give a new format a new objective. It has no
+  // rubber, vulnerability is prescribed, and the deal settles where it is played —
+  // the three facts `"duplicate"` exists for. What differs is only how the *result* is
+  // read afterwards, and a bidder cannot act on where it will place.
+  //
+  // Falling through to the release here is not a small mistake: under v3 that is the
+  // rubber equity objective, which prices progress toward a game the format can never
+  // have. Measured on duplicate, that cost **−364 points a session and a 38.5% win
+  // rate** — and it shipped, because `objectiveFor` existed and nothing called it.
+  if (format === "duplicate" || format === "field") {
     return "duplicate";
   }
   return format === "mirror" ? "mirror" : release;
@@ -175,6 +186,14 @@ export interface BidValueOptions {
   /** This seat's own hand, which is all it can count honors from. */
   readonly hand: readonly Card[];
   readonly me: PlayerId;
+  /**
+   * Which equity table to price a standing with, for measuring one against another.
+   *
+   * Defaults to the shipped `EQUITY`, so no caller changes by existing. It is here at
+   * all because a re-fit has to be *played* against the table it would replace before it
+   * can be installed — this file records two re-fits that looked right and lost.
+   */
+  readonly equityTable?: EquityTable | undefined;
   /** Defaults to points, so every caller that has not been told otherwise is unchanged. */
   readonly objective?: Objective;
   /**
@@ -232,7 +251,10 @@ function differentialAfter(options: BidValueOptions, tricks: number): number {
   const rubber = applyDealScore(standing.rubber, score);
 
   if (options.objective === "equity") {
-    return equityOf(rubber, me) - equityOf(standing.rubber, me);
+    return (
+      equityOf(rubber, me, options.equityTable) -
+      equityOf(standing.rubber, me, options.equityTable)
+    );
   }
 
   if (options.objective === "mirror") {

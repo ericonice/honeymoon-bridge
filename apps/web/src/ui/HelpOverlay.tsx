@@ -65,6 +65,7 @@ const SECTION_TITLES = [
   "scoring",
   "mirror",
   "duplicate",
+  "doop",
   "app",
   "known",
 ] as const;
@@ -105,6 +106,7 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
     app: false,
     auction: false,
+    doop: false,
     draw: false,
     duplicate: false,
     mirror: false,
@@ -254,8 +256,9 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
         <Section title="Scoring" open={open.scoring} onToggle={() => toggle("scoring")}>
           <Rule title="Rubber scoring">
             Best of three games, with vulnerability following from having won one, exactly as at a
-            rubber. The home screen will shorten a sitting to a single game instead, or swap it for a
-            duplicate session.
+            rubber. The home screen will shorten a sitting to a single game instead, or swap it for
+            one of the three formats that score differently — Mirror, Replay or Doop, each with a
+            section of its own below.
           </Rule>
           {/* A page rather than more rules here. It is what somebody opens mid-auction,
               and it is the one part of this app written for a person who has never
@@ -303,18 +306,37 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
             the first took. When the repeated deals run out it simply carries on with
             fresh ones, so a little of the second half is not mirrored. Most of it is.
           </Rule>
+          {/* **This said the computer's recall was worth almost nothing here, and that
+              was measured again and did not hold.** The figure it rested on was 52.5% ±
+              4.9 — a null with a wide bar, taken under a bidder nobody plays; re-run it
+              is 56.7% ± 2.9σ. The rating treatment has not changed, so the second
+              sentence is still a true statement of what the app does. The first is not,
+              and saying "worth almost nothing" where the honest answer is "worth
+              something, and we are re-measuring it" is the kind of help worth less than
+              none. */}
           <Rule title="You will remember the deals, and so will the computer">
             That is part of it. Every deal is played to all thirteen tricks, so both hands
             are known by the end and you meet them again a few minutes later. The computer
-            remembers them exactly. It turns out to be worth almost nothing here, so these
-            matches count toward your rating like any other.
+            remembers them exactly, on its hardest setting — worth enough to notice and not
+            enough to decide things. These matches count toward your rating like any other.
           </Rule>
         </Section>
 
         {/* Its own section rather than a rule under Scoring. Duplicate changes what a
             deal is *for*, not only what it pays — and a rubber player can skip the
-            whole heading, which is the argument for a heading. */}
-        <Section title="Duplicate" open={open.duplicate} onToggle={() => toggle("duplicate")}>
+            whole heading, which is the argument for a heading.
+
+            **Two sections now, because Duplicate is two formats.** This one is Replay
+            and the next is Doop, and they share only the family name: Replay plays a
+            board twice and settles the difference, Doop plays it once and ranks you
+            among results already recorded on it. The family is in both titles because
+            Home groups them under it, and a reader who saw that box needs the two
+            headings here to be recognisably the same pair. */}
+        <Section
+          title="Duplicate: Replay"
+          open={open.duplicate}
+          onToggle={() => toggle("duplicate")}
+        >
           <Rule title="The deck repeats, not the hand">
             At a real duplicate you and everybody else play the same thirteen cards. Nobody is dealt
             a hand here — you build one — so what repeats is the <em>deck</em>. A board is one
@@ -363,8 +385,64 @@ export function HelpOverlay({ onClose }: HelpOverlayProps): React.JSX.Element {
           </Rule>
           <Rule title="How long, and who with">
             The home screen sets the length in deals — always even, since every board is played
-            twice. Two deals is one board and a real session. Against the computer only for now: a
-            session runs on this device.
+            twice. Two deals is one board and a real session. Against the computer or across a
+            table, though at a table it takes both of you asking for it.
+          </Rule>
+        </Section>
+
+        {/* Its own section rather than more rules under Replay, on the same argument
+            that gave Replay one: the two share a family and nothing else. A reader who
+            plays one can skip the other entirely. */}
+        <Section title="Duplicate: Doop" open={open.doop} onToggle={() => toggle("doop")}>
+          {/* The word itself, first, because it is the one thing on this screen nobody
+              can work out from the board. Everything else here is a rule somebody meets
+              while playing; a name is not. */}
+          <Rule title="What the word means">
+            Real duplicate needs a roomful of people playing the same boards at once. Doop is
+            what a single table does instead: you play boards that have <em>already</em> been
+            played, and you are scored against what the people before you made of them. Same
+            comparison, four players short of a club night — or, here, two.
+          </Rule>
+          <Rule title="A board is played once">
+            This is the whole difference from Replay. There is no second half and no swapping
+            sides, because the comparison does not come from you playing it again — it comes
+            from everybody who has played that board before you.
+          </Rule>
+          <Rule title="You are scored on where you come, not on how much">
+            Every other result on the board is beaten, tied or lost to. Beat them all and the
+            board is 100%; lose to them all and it is 0%; a tie counts half. Your session is
+            the average across its boards. This is matchpoints, and it changes what good play
+            is: an overtrick that lifts you past one more result is worth exactly what a slam
+            bonus is, and going down a hundred to beat a part-score everybody else is making is
+            a top rather than a loss.
+          </Rule>
+          <Rule title="The field is hidden until you have played">
+            The results on a board name the contract and say how it went, which is the largest
+            hint anybody could be handed about a deal they are about to bid. So they arrive
+            after your own score does, not before — and if they have not arrived yet the board
+            simply sits unranked until they do.
+          </Rule>
+          <Rule title="Who else is in it">
+            To begin with, the computer: the boards were played through by it beforehand so
+            there was something to be ranked against on day one. As people play them those
+            results replace the computer&rsquo;s, oldest first, so a board gets more human over
+            time. The traveller says which each result was — computer alone, a person against
+            the computer, or two people at a table.
+          </Rule>
+          <Rule title="Two people can play one">
+            You each hold one side of the board and are ranked against that side&rsquo;s own
+            history, and the two placings are compared. That is ordinary pairs scoring, and it
+            is what makes two people holding different cards comparable at all.
+          </Rule>
+          <Rule title="Boards you have played are not offered again">
+            You are dealt boards this account has not met. Every deal is played out here, so a
+            board you have seen is a board whose cards you know — which would not be a
+            comparison with anybody.
+          </Rule>
+          <Rule title="Not rated, for now">
+            A Doop session goes on your record but does not move your rating. There is no honest
+            number to rate it against yet: the rating ladder is anchored on how the computer
+            plays, and coming third out of eight on a board is not that kind of result.
           </Rule>
         </Section>
 

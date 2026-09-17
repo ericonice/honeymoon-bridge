@@ -122,6 +122,17 @@ describe("which objective a format is played for", () => {
     expect(objectiveFor("duplicate", "points")).toBe("duplicate");
   });
 
+  /**
+   * A field board has no rubber either, so it prices as a duplicate board — and
+   * falling through to the release here is the same mistake, not a smaller one:
+   * under v3 that is the rubber equity objective, pricing progress toward a game the
+   * format can never have.
+   */
+  it("overrides it for a field session, which is a duplicate board by another name", () => {
+    expect(objectiveFor("field", "equity")).toBe("duplicate");
+    expect(objectiveFor("field", "points")).toBe("duplicate");
+  });
+
   it("overrides it for a two-game match as well", () => {
     expect(objectiveFor("mirror", "equity")).toBe("mirror");
     expect(objectiveFor("mirror", "points")).toBe("mirror");

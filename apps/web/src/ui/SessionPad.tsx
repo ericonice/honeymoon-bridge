@@ -81,9 +81,26 @@ export function SessionPad({
           arithmetic instead of just standing beside it. */}
       <div className="flex items-start gap-2">
         {/* Every figure below is yours, in both columns — nothing is reversed and nothing
-            needs a caption saying so. A column is which pass through the boards this was,
-            not which side of the stock you held, so a cell says who drew first on its own
-            run rather than the header saying it once for the whole column. */}
+            needs a caption saying so. A column is **which pass through the boards this
+            was**: the first time you met the stock, and the time it came back.
+
+            **Grouped by the side of the stock for one release and put back, which is
+            worth recording because the argument for changing it was wrong twice over.**
+            The case was that `board.starter` alternates, so a run-order column holds the
+            first-draw stream on some boards and the second-draw stream on others — and
+            that a control session read ±2270 split by run against ±70 split by stream.
+            Both facts are true and neither is a reason. A control's ±70 is not "less
+            wrong", it is a smaller number measuring a different thing; and `CLAUDE.md`'s
+            justification for the stream split, that it is the comparison "with the luck
+            already cancelled out", had already been found false — in a control that split
+            is *entirely* about which side of these boards was better to hold.
+
+            What a run-order column actually says is the useful thing: **how you did the
+            first time you met a board against how you did when it came back.** The gap
+            between those is the memory advantage a replay hands you, which is what §1.8
+            says the format is built around and is the one comparison a player can act on.
+            Reading down the pad also stays chronological, where the stream split put a
+            board's replay in column one whenever the opponent had started it. */}
         <div className="relative min-w-0 flex-1">
           <span
             aria-hidden="true"
@@ -114,23 +131,33 @@ export function SessionPad({
               little more off, until the two columns no longer agreed on which row
               was which. */}
           {summary.boards.map((board) => {
-            const highlight = (run: DuplicateResult | null, replay: boolean): boolean =>
+            // Asked of the run itself rather than of the column it sits in. While the
+            // columns were first-play and replay the two were the same question; now
+            // that a column is a side of the stock, this seat's first-draw run *is* the
+            // replay on every board the opponent started — so keying on the column
+            // would mark the wrong cell on half the board list.
+            const highlight = (run: DuplicateResult | null): boolean =>
               run !== null &&
               summary.lastCompleted?.board === board.board &&
-              summary.lastCompleted.replay === replay;
-            const first = firstPlayOf(board);
-            const replay = replayOf(board);
+              summary.lastCompleted.replay === run.replay;
+            const mineFirst = firstPlayOf(board);
+            const mineSecond = replayOf(board);
             return (
               <div key={board.board} className="flex min-h-6 items-baseline gap-2 py-0.5">
                 <span className="w-4 shrink-0 text-xs text-white/35 tabular-nums">
                   {board.board + 1}
                 </span>
                 <span className="flex min-w-0 flex-1 items-baseline gap-4">
-                  <RunCell board={board} highlight={highlight(first, false)} run={first} view={view} />
                   <RunCell
                     board={board}
-                    highlight={highlight(replay, true)}
-                    run={replay}
+                    highlight={highlight(mineFirst)}
+                    run={mineFirst}
+                    view={view}
+                  />
+                  <RunCell
+                    board={board}
+                    highlight={highlight(mineSecond)}
+                    run={mineSecond}
                     view={view}
                   />
                 </span>

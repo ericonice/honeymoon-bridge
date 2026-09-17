@@ -55,6 +55,26 @@ export function deleteAccountUrl(): string {
   return `${ORIGIN}/api/account/delete`;
 }
 
+/**
+ * The corpus a Doop session is played on — §1.8a.
+ *
+ * Three routes rather than one, and the split is the format's central rule: boards
+ * go out without their history, because a board's recorded results name the contract
+ * and say how it went. The history is its own request, and the server will only
+ * answer it for somebody who has already played the board.
+ */
+export function fieldBoardsUrl(count: number): string {
+  return `${ORIGIN}/api/field/boards?count=${count}`;
+}
+
+export function fieldResultUrl(): string {
+  return `${ORIGIN}/api/field/result`;
+}
+
+export function fieldReferenceUrl(boardId: string): string {
+  return `${ORIGIN}/api/field/reference?board=${encodeURIComponent(boardId)}`;
+}
+
 export function robotResultUrl(): string {
   return `${ORIGIN}/api/results/robot`;
 }

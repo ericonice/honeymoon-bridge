@@ -25,7 +25,7 @@ import {
  * that is not in this array, which is what makes the round trip below exhaustive
  * rather than merely broad.
  */
-const FORMATS = ["duplicate", "game", "mirror", "rubber"] as const;
+const FORMATS = ["duplicate", "field", "game", "mirror", "rubber"] as const;
 
 type Listed = (typeof FORMATS)[number];
 const everyFormatIsListed: MatchFormat extends Listed ? true : never = true;
@@ -69,7 +69,7 @@ describe("what format comes back out of storage", () => {
  * rather than as a rubber.
  */
 describe("what the queue is asked to look for", () => {
-  it("reads back every format that was written", () => {
+  it("reads back every format two people can agree to play", () => {
     for (const format of FORMATS) {
       setQueueFormat(format);
       expect(queueFormat()).toBe(format);

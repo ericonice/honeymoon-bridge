@@ -669,6 +669,18 @@ already is one.
 
 ### 1.8 Scoring — Duplicate
 
+**Duplicate is two formats and this is the first of them.** On screen it is **Replay**; §1.8a is
+**Doop**. They are separate choices drawn as a pair rather than one choice with a setting — see
+§3.6a. What a board is, prescribed vulnerability and a deal settled where it is played are common to
+both.
+
+**What is not common is how a board is scored, and the difference runs deeper than a setting.** A
+replay compares two runs, so a board can only say a *margin*, and the points-or-IMPs choice below is
+about how to scale one. A field ranks you among eight or more real results, so a board says *where you
+came* — §1.8a is matchpointed, a percentage, and the setting below does not reach it. Compressing a
+field into a datum and taking a difference from it would throw the distribution away and then need a
+concave scale to undo the damage.
+
 A third format, alongside the rubber of §1.7 and the single game of §3.6a. It exists to take the
 luck of the cards out of the result, which is what duplicate bridge is for — and it reaches
 something no other format here can, because the half of this game that nobody can measure is the
@@ -817,6 +829,172 @@ holds thirteen exact pairs; a person recognises some boards vaguely. So self-pla
 game nobody is playing — it just errs in the other direction now, crediting the player too little
 rather than too much. §3.7's ratings therefore skip duplicate results until enough real sessions
 exist to place it.
+
+### 1.8a Doop — Duplicate Against the Field
+
+The second flavour of §1.8, and it is the one that is duplicate in the ordinary sense of the word: a
+board is played **once**, and what decides it is **where your result places among the results already
+recorded on that board**. §1.8 manufactures a comparison by having you play the stock twice yourself.
+This one uses the comparison a club gets for free — everybody else who has held these cards.
+
+**It is what §1.8 is for, at half the deals.** A board is one deal here rather than two, so an
+eight-deal sitting buys eight comparisons instead of four, and the yardstick is other people rather
+than your own second attempt at a board you saw ten minutes ago.
+
+**A board is a seed *and* one side of it.** §1.8's board is a seed played twice; here the two streams
+are separate boards carrying their own recorded results, because one run of a deal scores both seats.
+Playing one retires the other for you — every deal is played to thirteen tricks and both hands are
+face up at the end, so meeting the same stock from the other side would be meeting it knowing
+everything.
+
+**Vulnerability is stored with the board** rather than derived, so a board is always played at the
+vulnerability its recorded results were played at, and a rule computed at two ends cannot drift at one
+of them.
+
+#### The field, and how it fills
+
+**A board carries about eight results, and you are ranked among them.** A board that nobody has played
+is not empty: it is generated first, by the computer playing it against itself eight times, and those
+eight runs are the field a board opens with. They are real deals rather than an average of deals —
+each is a contract, a result and a score somebody could read.
+
+**Human results displace the computer's, oldest first, until there are none left.** The scaffolding is
+there to make a board playable before anybody has met it, not to stay. Retiring the oldest machine run
+is unbiased and that is worth stating, because choosing which to drop looks like it needs care: drop
+the median and the field widens, drop an extreme and it narrows. The eight runs are **exchangeable by
+construction** — they differ only in a derived seed and nothing else distinguishes them — so "oldest"
+is exactly as unbiased as a coin flip, and it is deterministic where a coin flip is not.
+
+**Once the computer's rows are gone the field simply deepens.** People are not retired to preserve an
+eight-row shape. Discarding somebody's real board to keep an invariant that existed for the machine's
+benefit is a different act from replacing scaffolding, and it would mean a result you recorded quietly
+ceasing to count for everybody else. Matchpointing handles any field size, which is exactly why a
+percentage is the right output and a raw count of results beaten would not have been.
+
+**So field sizes vary once boards fill unevenly** — a board three people have played holds more than
+an untouched one — and that is fine for the same reason.
+
+#### Scoring is matchpoints
+
+**Your score on a board is your placement in its field, as a percentage**: two for each result you
+beat, one for each you tie, over twice the number you were compared against. The session is the mean
+of your boards. Nothing here settles in points or IMPs, and the points-or-IMPs setting of §3.6a
+governs §1.8 alone.
+
+**That is a different answer from §1.8's and the reason is the shape of the comparison.** A replay
+session compares two runs, so the only thing a board can say is a margin, and the argument there is
+about how to scale one. A field of eight says something a margin cannot: *where you came*. Compressing
+eight real results into a datum and taking a difference from it throws away the distribution and then
+needs a concave scale to undo the damage.
+
+**It also makes the computer's own variation harmless, which reverses how this was first designed.**
+Generating a board's benchmark as a single figure meant the spread across runs was *error*: a board
+where 4♥ makes on some runs and fails on others put a swing of 420 points into the yardstick
+permanently. Ranked instead, those eight outcomes **are** the field, and the spread is the board
+telling you the contract is on a knife edge. A board whose eight runs all come out alike is now the
+awkward case rather than the ideal one — it gives a traveller with no resolution, where any result
+either beats everything or loses to everything. Measured at a third of boards, and kept rather than
+engineered around: a hand where solid play always reaches the same contract for the same tricks is a
+**flat board**, which is a real thing in duplicate and reads correctly as "there was nothing in this
+one". Discarding them would bias the corpus toward hands with something in them and quietly stop the
+format ever showing you a hand whose answer is obvious.
+
+#### Two ways to play it
+
+**Solo, against the computer.** Boards you have not met, played one at a time, each ranked against its
+field. Here the opposition is fixed — the strongest release at the top rung — and the difficulty
+setting of §2.1 **does not apply**, which the screen has to say. A percentage earned against a weaker
+opponent than everybody else faced would be a number about the setting rather than about the player.
+
+**Head to head, at a table, on boards that have already been played.** You take one stream and your
+opponent takes the other, and each of you is matchpointed against **your own stream's** field. Then
+the two percentages are compared, and the higher wins the board.
+
+**That is ordinary pairs scoring, and the objection it answers is worth keeping.** Two people at one
+table hold opposite streams, so their scores are not comparable with each other — which reads as fatal
+and is exactly what matchpointing exists to fix. North–South and East–West at a club are never
+compared directly either; each is ranked against the field in its own direction and the percentages
+are compared. A field on both streams is what makes two seats at one table comparable, and without one
+they are not.
+
+So a board reads: you make 4♥ for +450 holding the first stream and score 70% against the results on
+it; your opponent goes down one defending the second stream and scores 40% against the results on
+that. You win the board 70 to 40. Eight boards, two percentages, and the higher wins the match.
+
+**What it costs is worth stating rather than discovering.** At a table you play the same person on
+every board, so if they are having a bad night your percentages are flattered on all of them and
+theirs depressed on all of them. Between the two of you that is symmetric and the match verdict is
+sound — it is a head-to-head. Against the *absent* field it is not, which is what the labels below are
+for.
+
+#### Who played whom, and why a traveller says so
+
+**Three kinds of result can sit on a board and they are not equivalent evidence:**
+
+- **computer against computer** — a generated run, the scaffolding a board opens with;
+- **human against computer** — somebody playing solo, against the fixed opposition above;
+- **human against human** — two people at a table, each shaped by who was sitting opposite.
+
+All three join the field, including the last. The alternative is refusing the most interesting results
+the corpus will ever hold, and the honest treatment is to record what produced a result rather than to
+admit only the results that need no explanation.
+
+**So the traveller names it**, and a board's own line says what is invariant rather than repeating it
+per row:
+
+```
+you        4♥  made +1     +450     70%
+Noah       3NT down 2      −100            played you
+Kate       4♥  made        +420            played the computer
+Computer   3♥  made +2     +200
+Computer   3♥  down 1      −100
+```
+
+**And a session reports what its percentage was made of.** A high figure earned against seven machine
+runs and one person means "better than the computer usually manages on this stock"; the same figure
+against six people means something else entirely, and nothing on a bare percentage distinguishes them.
+Both are matchpoints over subsets of rows that already exist, and the human-only figure is simply
+absent until somebody else has played the board — which reads correctly as "nobody to compare with
+yet" rather than as a zero.
+
+#### The history is not available until the board is played
+
+A board's field names the contract and says how it went, which is the largest hint anybody could be
+given about a hand they are about to bid. So a board is dealt with its seed and its vulnerability and
+nothing else, and what has been recorded on it arrives when the deal is over. **The comparison failing
+to arrive must leave the deal scored and the comparison blank, never the other way round.**
+
+**The seed does travel to the client, and that is not the leak §1.4 forbids.** A solo field board is
+played against the local computer, which is handed a `PlayerView` like any other bot, so the client
+already holds the stock exactly as it does in any robot game. What §1.4 forbids is a seed crossing to
+an *opponent's* device — and at a table the server is the authority and deals as it always does.
+
+#### Which boards you are offered
+
+**Boards you have not played, and among those the ones other people have.** The two halves pull
+opposite ways and both are needed. Always meeting a fresh board is what keeps this a test of play
+rather than of memory; but if everybody always met a board nobody had touched, every board would keep
+its eight machine runs forever and the field would never become people. So: **new to you, not new to
+everybody.**
+
+**A head-to-head wants boards neither player has met**, for the obvious reason, which is easier to
+guarantee in a corpus with room in it than in one that has been played thin.
+
+**A new board is generated only when somebody has played everything in the pool**, so boards can be
+made in batches well ahead of demand and nothing is ever computed while somebody waits.
+
+#### Open
+
+**Whether it is rated, and how.** Solo play has a stronger claim than anything in §3.7's Elo:
+identical opposition for every player, and a score already expressed as a placement. A head-to-head
+is a different question again, since the two percentages are contaminated by each other. That is a
+claim to face rather than to assume.
+
+**A board for every player, which is the shape this is pointing at and is a long way off.** A real
+duplicate session is N boards played by N pairs, everyone meeting every board, and the field on each
+is the room. What is described above is the same thing spread across evenings, with the computer
+standing in for the tables that are not there. The version with a board per player needs enough people
+playing at once to fill a movement, and this project has a family.
 
 ### 1.9 Scoring — Mirror
 
@@ -1323,15 +1501,55 @@ browser.
 
 ### 3.6a What You Are Playing
 
-Three cells, and four games behind them. A **rubber** as §1.7 describes it, whose length — first to one
+Four cells, and five games behind them. A **rubber** as §1.7 describes it, whose length — first to one
 game or to two — is chosen on the line beneath rather than as a format of its own: a single game is a
 rubber that stops early, not a different kind of match, and putting it beside the others made the row
-mix categories. A **mirror** of §1.9. And a **duplicate session** of §1.8.
+mix categories. A **mirror** of §1.9. And the two duplicate formats: **Replay** of §1.8 and **Doop**
+of §1.8a.
 
 A rubber is the game this was built to play; the one-game length exists because a rubber runs the
 better part of an hour and not every sitting has that in it; duplicate exists to take the luck of the
 cards out of the result; and a mirror does the same thing over a match short enough to finish in one
 sitting.
+
+**Replay and Doop are separate choices, drawn as a pair.** They are two formats and each is one tap —
+not a cell you pick and then configure, which would put the choice a step further away than the other
+three and make one of the four behave unlike the rest. But they are far more like each other than like
+anything else on the row: a board is a seed, vulnerability is prescribed, a deal settles where it is
+played, a board is one signed figure, and both read it through the same points-or-IMPs setting. Only
+the source of the comparison differs. So **the row shows the pairing rather than stating it** — the two
+sit in a container of their own, so they read as two ways of doing one thing, and the word
+**Duplicate** is carried by the line beneath, which is where the explaining already happens. A caption
+over the pair was the alternative and costs height on the one screen that must not scroll, to say what
+the grouping already shows.
+
+**The names are constrained by the fourth cell**, which is a width measurement rather than a matter of
+taste: four cells in a phone's column leave about seventy pixels each, or roughly seven characters
+under the padding, so nothing on this row can be as long as "Duplicate". **Replay** is this codebase's
+own term for what §1.8 does — the replay hands each seat the other stream — and names the mechanic
+honestly: you play the board, then play it again from the other side. **Doop** is what real bridge calls what §1.8a
+adds — a way to get duplicate's comparison at a single table, by playing boards that have already been
+played and scoring against what the people before you made of them. It was **Field** first, after the
+bridge word for the set of results you are ranked among; that word is still the right one *inside* the
+format and is used throughout this section, but it named the yardstick rather than the game. Four
+characters, so the cell budget above is nowhere near binding.
+
+**Nothing stored is re-modelled.** Replay keeps `"duplicate"`, so every session already recorded stays
+in the same rating pool and on the same screens; Doop is a value of its own, because it is a different
+match with a different result and pooling the two would be the mistake the rating pool exists to avoid.
+**Its stored value is `"field"` and stays that way** — the name is drawn in the UI and nowhere below it,
+which is the same relabelling-not-re-modelling constraint the one-game length respected, and for the
+same reason: `ratings.ts` keys on the stored string, so renaming the value would move every recorded
+session out of its pool.
+The grouping is drawn on the row and is not a thing that is stored.
+
+**Doop is playable at a table, and it needs both seats.** §1.8a scores each seat against its own
+stream's field and compares the two percentages, so a head-to-head is the classic pairs arrangement
+rather than an exception to the format. What it cannot do is happen to somebody: it is played on boards
+that have already been played, so being dropped into one unasked means meeting a stock a stranger may
+have met before. It therefore sits **last in the ordering, below Duplicate** — nothing outranks a seat
+that did not ask for it — and a table settling on Doop needs boards **neither** seat has met, which is
+the one extra thing the server has to arrange that no other format asks for.
 
 **Chosen on the home screen, above the buttons that start a match, and not in Settings.** The test is
 not *when* a setting is read — every one of these is read once, when a match starts — but **how often
@@ -1343,16 +1561,17 @@ gear, and there is no staleness to explain when the control sits directly above 
 consumes it.
 
 **One row, not one per action.** The two ways of starting a match would each carry their own copy of
-the same three options, and two controls for one preference is a preference that can disagree with
+the same options, and two controls for one preference is a preference that can disagree with
 itself. Joining a table takes the format from the table it is joining, so it needs none.
 
 **A duplicate session's length is chosen with it, in deals**, on a line under that row whose height
 never changes. In deals rather than boards because how long is this game is the question being
-answered, and it is how a rubber is experienced too. That line is not blank for the other two formats
-— it says what a rubber and a single game are, which is the explanation the Settings row's own
-description used to carry. Its constant height is the point: a control that appears and disappears
-shifts the primary button out from under the thumb reaching for it, which this did twice before it
-was fixed.
+answered, and it is how a rubber is experienced too. A field session's length is the same control read
+as boards, since §1.8a plays each board once, and it carries no even rule — nor the points-or-IMPs
+choice, which reaches Replay alone. That line is not blank for the other formats — it says what a rubber
+and a single game are, which is the explanation the Settings row's own description used to carry. Its
+constant height is the point: a control that appears and disappears shifts the primary button out from
+under the thumb reaching for it, which this did twice before it was fixed.
 
 **A single game pays 300.** Rubber bridge has no bonus for winning a *game* — its 700/500 is
 specifically for taking the rubber — so a single game played by the rubber rules would end with no
@@ -1368,21 +1587,25 @@ simply never arise. A shorter match is also a flatter one.
 
 **At a table with somebody else, two rules settle it, and they answer different questions.**
 
-*Which game* resolves by a **total ordering: mirror, then a rubber or a game, then duplicate.** The
-higher of the two preferences is what gets played, so a disagreement always has an answer and nobody
+*Which game* resolves by a **total ordering: mirror, then a rubber or a game, then replay, then
+field.** The higher of the two preferences is what gets played, so a disagreement always has an answer and nobody
 is left unpaired for a preference. This replaced a rule where duplicate and mirror each needed *both*
 seats and anything else fell back to a rubber — sound at an invite, where two people who know each
 other can simply agree, and bad in a queue, where somebody asking for a session either waited for a
 stranger who wanted the same thing or was handed a rubber with nothing saying why. **A rule that
 leaves somebody waiting is worse here than one that hands them a neighbouring game.**
 
-Duplicate is last because it is the format furthest from the game everyone else came for — a board is
-a scoring unit, the deals repeat, and being dropped into one unasked is being dropped into a different
-evening. So in practice it still takes both seats, since nothing outranks somebody who did not ask for
-it. Mirror is first because it is the least imposing thing that is not a rubber: rubber scoring, a
-line, a part-score, a race to a hundred, over deals that come back once. The cost, stated because it
-is the one asymmetry the old rule existed to avoid — somebody who asked for a single game and meets a
-mirror gets about twice what they asked for, which is a rubber's own length.
+Doop is last and replay second to last, and the ordering is by how far each is from the game
+everyone else came for. Doop goes below replay because it is played on boards that have already
+been played: being handed one unasked means meeting a stock somebody else may remember, which is a
+worse thing to be dropped into than a session of fresh ones. Replay is below the rubber for the
+reason duplicate always was — a board is a scoring unit, the deals repeat, and being dropped into
+one unasked is being dropped into a different evening. So in practice it still takes both seats,
+since nothing outranks somebody who did not ask for it. Mirror is first because it is the least
+imposing thing that is not a rubber: rubber scoring, a line, a part-score, a race to a hundred, over
+deals that come back once. The cost, stated because it is the one asymmetry the old rule existed to
+avoid — somebody who asked for a single game and meets a mirror gets about twice what they asked
+for, which is a rubber's own length.
 
 *How long* is separate and always takes the **shorter** of what the two asked. Deliberately not
 symmetric: somebody who wanted one game and is held in a rubber owes the best part of an hour they

@@ -13,10 +13,19 @@ import {
   rubberFacts,
   sortHand,
   startMatch,
+  withField,
   summarizeMatch,
   viewFor,
 } from "@hb/engine";
-import type { Card, DealAction, DealState, MatchState, Pair, PlayerId } from "@hb/engine";
+import type {
+  Card,
+  DealAction,
+  DealState,
+  FieldBoard,
+  MatchState,
+  Pair,
+  PlayerId,
+} from "@hb/engine";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_GAME_EQUITY } from "../bot/bidValue.js";
 import { levelFor } from "../bot/difficulty.js";
@@ -27,8 +36,10 @@ import { recordBotError } from "./botErrors.js";
 import { botActionFor, fallbackActionFor } from "./botTurn.js";
 import { DIFFICULTIES } from "../bot/difficulty.js";
 import type { Difficulty } from "../bot/difficulty.js";
-import { releaseFor } from "../bot/release.js";
+import { LATEST_RELEASE, releaseFor } from "../bot/release.js";
+import { fetchFieldEntries, reportFieldResult, unrankedBoards } from "./fieldCorpus.js";
 import { reportHandLog } from "./handLog.js";
+import { flush } from "./outbox.js";
 import {
   boldness,
   difficulty,
@@ -167,7 +178,18 @@ export interface StartingPoint {
  * fall back to a fresh rubber rather than crash the one it was meant to save
  * time in.
  */
-export function startingPoint(): StartingPoint {
+/**
+ * The rung and release a Doop session is played at, whatever Settings says.
+ *
+ * §1.8a: every board is played against the same computer the corpus was generated
+ * by, because a score says as much about who was sitting opposite as about who made
+ * it. Resolved here rather than where the bot is built, so the hand log and the
+ * match report name the opponent that actually played — a forced rung recorded as
+ * the chosen one would describe a match nobody had.
+ */
+const FIELD_RUNG: Difficulty = "championship";
+
+export function startingPoint(fieldBoards: readonly FieldBoard[] = []): StartingPoint {
   const saved = loadRobotMatch();
   if (saved !== null) {
     try {
@@ -186,7 +208,13 @@ export function startingPoint(): StartingPoint {
     }
   }
 
-  const format = preferredFormat();
+  // A Doop session has no boards of its own to deal — they come from the corpus,
+  // and `RobotGame` fetches them before this hook is mounted. Arriving here with
+  // none means that gate failed, and a rubber is the least-wrong thing left: the
+  // row will say Doop and the game will not be one, which is the mirror bug in
+  // miniature, but it is visible where a throw would be a blank screen.
+  const asked = preferredFormat();
+  const format = asked === "field" && fieldBoards.length === 0 ? "rubber" : asked;
   const seed = randomSeed();
   return {
     boardOffers: new Map(),
@@ -201,7 +229,9 @@ export function startingPoint(): StartingPoint {
       // a field yet, so what matters is only that a session's boards are
       // recorded, and `dealSeed` is what records them.
       firstBoard: randomSeed() % 1_000_000,
+      fieldBoards,
       format,
+      me: HUMAN,
       // Only a mirror reads it; every other format's length is its format.
       halfFormat: mirrorHalfFormat(),
       seed,
@@ -211,8 +241,8 @@ export function startingPoint(): StartingPoint {
       starter: randomSeed() % 2 === 0 ? HUMAN : OPPONENT,
     }),
     reportedAlready: false,
-    rung: difficulty(),
-    version: preferredRelease().version,
+    rung: format === "field" ? FIELD_RUNG : difficulty(),
+    version: format === "field" ? LATEST_RELEASE.version : preferredRelease().version,
   };
 }
 
@@ -230,6 +260,17 @@ export function startingPoint(): StartingPoint {
  * are rules, and a server has to do all of it identically.
  */
 export interface LocalSessionOptions {
+  /**
+   * The boards a Doop session is to be played on — §1.8a.
+   *
+   * Supplied rather than dealt, because a board is one the corpus already holds
+   * results for. `RobotGame` fetches them before this hook is mounted, which is why
+   * they arrive as an option rather than being fetched here: a hook cannot decline
+   * to run, and a session with nothing to play is not a state worth modelling.
+   *
+   * Ignored on a resume, which carries its own.
+   */
+  readonly fieldBoards?: readonly FieldBoard[];
   /**
    * Whether to hand the screens the computer's cards.
    *
@@ -263,7 +304,9 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
   // Resolved once, at mount — a saved rubber restored, or a fresh one dealt —
   // so everything below reads one settled answer rather than separately
   // guessing whether this is a resume. See `startingPoint`'s own doc.
-  const [initial] = useState(startingPoint);
+  // Boards only matter on the mount that *starts* a Doop session: a saved one
+  // carries its own, and `startingPoint` prefers the save.
+  const [initial] = useState(() => startingPoint(options.fieldBoards));
   // Read once, when the match starts, for the same reason the format is: an
   // opponent that changed how hard it played halfway through a rubber would be
   // two opponents in one match, and the version and difficulty both travel with
@@ -326,6 +369,15 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
    * round in rather than a board index in one and nothing in the others.
    */
   const boardOffers = useRef(initial.boardOffers);
+  /**
+   * The last field board whose result has been filed.
+   *
+   * A ref rather than a flag on the result, because the effect that files it runs on
+   * every completed deal and `results` only ever grows — so "the newest one is the
+   * one I already filed" is the whole of the guard, and it survives a re-render
+   * without anything having to be written back into the match.
+   */
+  const lastFieldBoard = useRef<string | null>(null);
   /**
    * `count` exists because `pairs.length` cannot be trusted for this: a reload
    * mid-draw resets this ref (it is deliberately not persisted — see below) while
@@ -603,6 +655,32 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
     // not before — `standing` was a rubber, and a session has none — and sending a
     // fresh one would have put a standing that never existed into stored data, which
     // is how a bench comes to report a figure describing neither of two games.
+    // A Doop board's result is filed the moment its deal ends, and the figure it
+    // will be compared against is asked for separately — §1.8a. Through the outbox,
+    // because a board somebody played must not depend on the network at the moment
+    // it ended; and the report goes out even for a passed-out board, which is a real
+    // result and usually a bad one.
+    if (match.kind === "field") {
+      const played = match.session.results[match.session.results.length - 1];
+      if (played !== undefined && played.board.ids[HUMAN] === lastFieldBoard.current) {
+        // Already filed. `results` only grows, so this is the one guard needed.
+      } else if (played !== undefined) {
+        lastFieldBoard.current = played.board.ids[HUMAN];
+        reportFieldResult({
+          board: played.board,
+          // The release and rung that actually played, taken from the same two values
+          // the bot was built from rather than re-read from Settings — a forced rung
+          // recorded as the chosen one would describe a match nobody had.
+          botVersion: release.version,
+          contract: played.contract,
+          difficulty: rung,
+          me: HUMAN,
+          points: played.points,
+          tricks: played.tricks,
+        });
+      }
+    }
+
     if (!deal.passedOut && deal.contract !== null && deal.initialHands !== null) {
       reportHandLog({
         auction: deal.auction,
@@ -639,6 +717,49 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
       });
     }
   }, [achievements, deal, summary.score, summary.vulnerable]);
+
+  /**
+   * Asks for each played board's field, and folds the answers in.
+   *
+   * **Nothing on screen waits for this.** §1.8a requires the deal scored and the
+   * comparison blank rather than the other way round, and the pad draws an
+   * uncompared board as blank rather than as zero — so this runs behind the game and
+   * a board that never comes back simply stays blank.
+   *
+   * It asks **twice**: once straight away, and again after the outbox has drained.
+   * The server answers 404 until this account has a result recorded on the board, so
+   * just after a deal the usual reason for a miss is the report still being in
+   * flight. That is the same shape `useRecords` settled on for the record screen,
+   * and for the opposite reason it is safe to await `flush()` here: this is not a
+   * screen, so a slow send delays a figure rather than a page.
+   */
+  useEffect(() => {
+    if (match.kind !== "field") {
+      return;
+    }
+    const wanted = unrankedBoards(match.session.results, HUMAN);
+    if (wanted.length === 0) {
+      return;
+    }
+    let live = true;
+    void (async () => {
+      for (const board of wanted) {
+        const first = await fetchFieldEntries(board.ids[HUMAN]!);
+        const found = first ?? (await flush().then(() => fetchFieldEntries(board.ids[HUMAN]!)));
+        if (!live || found === null) {
+          continue;
+        }
+        setMatch((current) =>
+          current.kind === "field"
+            ? { kind: "field", session: withField(current.session, board.ids[HUMAN]!, HUMAN, found) }
+            : current,
+        );
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [match]);
 
   // Reported the moment the match is decided rather than when the player taps
   // on, because tapping on is optional: closing the tab on a won rubber is a

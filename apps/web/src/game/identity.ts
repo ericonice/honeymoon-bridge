@@ -81,7 +81,7 @@ export function preferredFormat(): MatchFormat {
   // returned `"rubber"`, and the match played was a rubber that would not end at a
   // hundred below the line because a rubber takes two games. The row said Mirror and
   // the game was not one.
-  if (stored === "game" || stored === "duplicate" || stored === "mirror") {
+  if (stored === "game" || stored === "duplicate" || stored === "field" || stored === "mirror") {
     return stored;
   }
   return "rubber";
@@ -114,7 +114,14 @@ export function setPreferredFormat(format: MatchFormat): void {
  */
 export function queueFormat(): MatchFormat | null {
   const stored = readStored(QUEUE_FORMAT_KEY);
-  return stored === "game" || stored === "duplicate" || stored === "mirror" || stored === "rubber"
+  // Doop is here now that a table can deal one — §1.8a's head-to-head, each seat
+  // ranked against its own stream's field and the two percentages compared. It is
+  // last in the server's precedence, so in practice it still takes both seats.
+  return stored === "game" ||
+    stored === "duplicate" ||
+    stored === "field" ||
+    stored === "mirror" ||
+    stored === "rubber"
     ? stored
     : null;
 }

@@ -58,6 +58,22 @@ function ordinal(place: number): string {
 }
 
 /** A signed points figure, with the minus sign that reads as one rather than a hyphen. */
+/**
+ * The mean placing across a player's Doop sessions, or null for a format that has a
+ * points margin to give instead.
+ *
+ * `pointsFor` is the sum of each session's percentage, so the mean is that over the
+ * matches played — `won + lost + drawn`, and deliberately not the length of any list:
+ * the matches a record carries are capped for the panel, so counting those would
+ * divide by the wrong number the moment somebody passes the cap.
+ */
+function meanPlacing(record: OpponentRecord): number | null {
+  const matches = record.won + record.lost + record.drawn;
+  return record.format === "field" && matches > 0
+    ? Math.round(record.pointsFor / matches)
+    : null;
+}
+
 function signed(points: number, digits = 0): string {
   const size = Math.abs(points).toLocaleString(undefined, {
     maximumFractionDigits: digits,
@@ -265,6 +281,7 @@ function OpponentLine({
   readonly record: OpponentRecord;
 }): React.JSX.Element {
   const margin = record.pointsFor - record.pointsAgainst;
+  const placing = meanPlacing(record);
 
   return (
     <button
@@ -276,10 +293,22 @@ function OpponentLine({
       <span className="flex items-baseline justify-between gap-2">
         <span className="truncate text-[0.7rem] text-white/55">{formatPlural(record.format)}</span>
         <span className="flex shrink-0 items-baseline gap-1.5">
+          {/* **A Doop session settles in matchpoints, so its figure is a placing.**
+              The stored points are a percentage and its complement, which makes the
+              margin beside every other format `2p − 100` — a real number about
+              nothing. 58% is what the session actually said. */}
           <span
-            className={`text-right font-mono text-sm tabular-nums ${margin >= 0 ? "text-emerald-300" : "text-amber-200"}`}
+            className={`text-right font-mono text-sm tabular-nums ${
+              placing === null
+                ? margin >= 0
+                  ? "text-emerald-300"
+                  : "text-amber-200"
+                : placing >= 50
+                  ? "text-emerald-300"
+                  : "text-amber-200"
+            }`}
           >
-            {signed(margin)}
+            {placing === null ? signed(margin) : `${placing}%`}
           </span>
           <Chevron open={open} />
         </span>
@@ -323,6 +352,7 @@ function OpponentLine({
  */
 function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.JSX.Element {
   const margin = record.pointsFor - record.pointsAgainst;
+  const placing = meanPlacing(record);
   // Every match, drawn ones included — this is what the panel compares its
   // truncated match list against to say how much it is not showing, so leaving
   // draws out would understate the history by exactly the sessions that ended level.
@@ -333,14 +363,24 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
   return (
     <div className="border-b border-white/7 bg-white/5 px-0.5 pt-1 pb-3">
       <dl className="grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 pb-2">
-        <Fact detail={<>{record.pointsAgainst.toLocaleString()} against</>} label="Points">
-          {record.pointsFor.toLocaleString()} for
-        </Fact>
+        {/* A session has no points to total — it has a placing, and it is on the row
+            above. What the panel can add is the count the placing is a mean of. */}
+        {placing === null ? (
+          <Fact detail={<>{record.pointsAgainst.toLocaleString()} against</>} label="Points">
+            {record.pointsFor.toLocaleString()} for
+          </Fact>
+        ) : (
+          <Fact detail={<>over {played} {played === 1 ? "session" : "sessions"}</>} label="Score">
+            {placing}%
+          </Fact>
+        )}
+        {placing !== null ? null : (
         <Fact detail={`${rate(margin, record.deals)} a deal`} label="Margin">
           <span className={margin >= 0 ? "text-emerald-300" : "text-amber-200"}>
             {signed(margin)}
           </span>
         </Fact>
+        )}
         <Fact
           detail={
             <>
@@ -395,8 +435,12 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
                 >
                   {match.won ? "Won" : "Lost"}
                 </span>
+                {/* A session's figure is where it placed, not a pair of totals —
+                    `58–42` reads as points and is a percentage and its complement. */}
                 <span className="font-mono text-[0.75rem] tabular-nums text-white/80">
-                  {match.pointsFor.toLocaleString()}–{match.pointsAgainst.toLocaleString()}
+                  {match.format === "field"
+                    ? `${Math.round(match.pointsFor)}%`
+                    : `${match.pointsFor.toLocaleString()}–${match.pointsAgainst.toLocaleString()}`}
                 </span>
               </span>
               <span className="flex items-baseline justify-between gap-2 font-mono text-[0.65rem] text-white/40">
@@ -545,7 +589,12 @@ function combinedOf(group: OpponentGroup): CombinedRecord {
       deals: total.deals + record.deals,
       drawn: total.drawn + record.drawn,
       lost: total.lost + record.lost,
-      margin: total.margin + (record.pointsFor - record.pointsAgainst),
+      // **A Doop session's points are a percentage and its complement, so they are
+      // not points and cannot be added to any.** Summing them into an opponent's
+      // margin mixes two currencies into one figure that describes neither — the
+      // same mistake as pooling a rubber with a session, one level down. The
+      // sessions still count in `won`/`lost`; only their "points" are excluded.
+      margin: total.margin + (record.format === "field" ? 0 : record.pointsFor - record.pointsAgainst),
       won: total.won + record.won,
     }),
     { deals: 0, drawn: 0, lost: 0, margin: 0, won: 0 },

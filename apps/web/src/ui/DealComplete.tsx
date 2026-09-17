@@ -12,6 +12,7 @@ import { matchNoun } from "../game/labels.js";
 import { ratingChange } from "../game/records.js";
 import { Columns, DealResultHeadline, Row } from "./ScoreRows.js";
 import { Scorepad } from "./Scorepad.js";
+import { FieldPad } from "./FieldPad.js";
 import { SessionPad } from "./SessionPad.js";
 
 export interface DealCompleteProps {
@@ -111,12 +112,50 @@ export function DealComplete({
   // the two ways a deal happened to finish decided whether "detailed
   // scoring" meant one screen or two.
   const [showingStanding, setShowingStanding] = useState(false);
+  /**
+   * The match-end screen has moved on from the board just played to the sitting.
+   *
+   * Its own state rather than `showingStanding`, which belongs to the claimed-finish
+   * path and is about a different pair of stages on a different screen.
+   */
+  const [showingSession, setShowingSession] = useState(false);
 
-  // The two pads are the one place the formats genuinely differ, and this screen
+  /**
+   * **Whether the *match* is over, which a two-game match's standing cannot say.**
+   *
+   * Each half is a real single game whose `rubber.complete` goes true when somebody
+   * reaches a hundred — and deriving the match from that declares a winner at half
+   * time on a format whose entire point is that the first half decides nothing. So it
+   * comes from the session, which knows.
+   */
+  const complete = matchComplete;
+
+  // The pads are the one place the formats genuinely differ, and this screen
   // shows one on all four of its paths — so it is resolved once here rather than
   // branched at each of them.
   const pad =
-    standing.kind === "duplicate" ? (
+    standing.kind === "field" ? (
+      // **Between deals, the board just played with the session behind a tap; at the
+      // end, the session with that board already open.**
+      //
+      // The staging is right while the sitting is under way — a reveal is about the
+      // hand that just finished, and redrawing every earlier board under it buries
+      // that in a scroll. It was wrong on the last one. Every other format's final
+      // screen *is* its whole pad: a rubber ends on its entire scorepad. A session
+      // ended on one board with the result behind a link nobody should have to find,
+      // which made this the one format that asked for an extra tap to see how it went.
+      //
+      // **Every row shut, and the objection that used to answer is answered elsewhere
+      // now.** Showing the session here skips the last board's own traveller — which
+      // was true, and was why that row opened on mount. The reveal stages that
+      // traveller before this screen is reached at all, so opening it again drew the
+      // same thing twice in a row.
+      <FieldPad
+        latest={!complete && !showingSession}
+        me={view.me}
+        summary={standing.summary}
+      />
+    ) : standing.kind === "duplicate" ? (
       <SessionPad summary={standing.summary} view={view} />
     ) : (
       <Scorepad
@@ -129,15 +168,6 @@ export function DealComplete({
         view={view}
       />
     );
-  /**
-   * **Whether the *match* is over, which a two-game match's standing cannot say.**
-   *
-   * Each half is a real single game whose `rubber.complete` goes true when somebody
-   * reaches a hundred — and deriving the match from that, as this did, declares a
-   * winner at half time on a format whose entire point is that the first half decides
-   * nothing. So it comes from the session, which knows.
-   */
-  const complete = matchComplete;
   const pairPoints = pairFigures(standing);
   const noun = matchNoun(format);
 
@@ -259,7 +289,17 @@ export function DealComplete({
     // that used to keep a mirror out too, until it was measured at +17 ± 34
     // rating points and the objection turned out to be about a quantity that
     // is zero. A mirror is rated; "Same boards back" is not.
-    const rating = repeated ? null : ratingChange({ opponent: opponentRating, won });
+    // **Null for a Doop session as well, and for a stronger reason than `repeated`.**
+    // §1.8a leaves rating open, so the server excludes the format from the walk
+    // entirely — a figure here would be a number that never arrives. Worse, a
+    // session's stored points are a *matchpoint percentage and its complement*
+    // rather than a total, so "beat the computer" is not what the result says.
+    // Blank rather than a guess, for the reason `botAnchor` returns null: nobody
+    // checks a figure that looks right.
+    const rating =
+      repeated || standing.kind === "field"
+        ? null
+        : ratingChange({ opponent: opponentRating, won });
 
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4">
@@ -275,7 +315,11 @@ export function DealComplete({
               is noise. The margin that means something there is the score. A
               session says how many boards it took, since that is not fixed by the
               format the way a rubber's two games are. */}
-          {standing.kind === "duplicate" ? (
+          {standing.kind === "field" ? (
+            <p className="mt-1 text-sm text-white/60">
+              {standing.summary.boardsPlayed} boards, {standing.summary.boardsRanked} ranked
+            </p>
+          ) : standing.kind === "duplicate" ? (
             <p className="mt-1 text-sm text-white/60">
               {standing.summary.boards.length} boards, {standing.summary.dealsPlayed} deals
             </p>
@@ -286,7 +330,7 @@ export function DealComplete({
             </p>
           ) : null}
         </div>
-        {standing.kind === "duplicate" ? null : (
+        {standing.kind === "duplicate" || standing.kind === "field" ? null : (
           <div className="w-full max-w-sm text-sm">
             <Columns opponentName={opponentName} />
             {/* **A mirror ends on the same three rows the strip carried all match.**
@@ -336,6 +380,21 @@ export function DealComplete({
 
         {pad}
 
+        {/* Only where there is a session still to reveal. A rubber's pad is already the
+            whole rubber, and a *finished* session is showing all of itself — so the
+            link would either do nothing or offer what is already on screen. */}
+        {standing.kind === "field" && !complete && !showingSession ? (
+          <button
+            type="button"
+            className="text-sm text-white/55 underline decoration-white/30 underline-offset-4"
+            onClick={() => {
+              setShowingSession(true);
+            }}
+          >
+            See the whole session
+          </button>
+        ) : null}
+
         {button}
       </div>
     );
@@ -345,10 +404,23 @@ export function DealComplete({
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4 text-center">
         <h2 className="text-2xl font-semibold">Passed out</h2>
+        {/* **A board is not a deal, and Doop was being told a rubber's rule.** This
+            read "duplicate, or else the rubber sentence", so a passed-out Doop board
+            was described as thrown in and redealt — `nextFieldDeal` advances
+            unconditionally and does no such thing. Fourth time a conditional of that
+            shape has swallowed this format; the two board formats agree about the rule
+            and differ about what the board is then worth, which is why they are two
+            sentences rather than one.
+            
+            Doop says what it costs, because there a passed-out board is not merely a
+            zero: §1.8a ranks it against everybody who bid something on the same cards,
+            and it will place near the bottom of them. */}
         <p className="max-w-xs text-sm text-white/60">
-          {standing.kind === "duplicate"
-            ? "Neither of you bid, so nothing is scored — and the board is not redealt. A passed-out run is a result: whatever the other run comes to is the whole of what the board is worth."
-            : "Neither of you bid, so the deal is thrown in and redealt with the same player drawing first. Nothing is scored."}
+          {standing.kind === "field"
+            ? "Neither of you bid, so nothing is scored — and the board is not redealt. It still counts: it is ranked against everybody else who has played these cards, and they bid something."
+            : standing.kind === "duplicate"
+              ? "Neither of you bid, so nothing is scored — and the board is not redealt. A passed-out run is a result: whatever the other run comes to is the whole of what the board is worth."
+              : "Neither of you bid, so the deal is thrown in and redealt with the same player drawing first. Nothing is scored."}
         </p>
         {pad}
         {button}

@@ -346,10 +346,19 @@ describe("a session's scorepad", () => {
   });
 
   /**
-   * The two feet, which are the reason the columns are what they are. Duplication hands
-   * each player both sides of every board, so what you made across every first play
-   * against what you made across every replay is a comparison with the luck already
-   * cancelled — organised by *when*, the same axis mirror's own two halves use.
+   * The two feet: what you made the first time you met these boards, against what you
+   * made when they came back. The gap between them is the memory advantage a replay
+   * hands you, which is the comparison §1.8 builds the format around.
+   *
+   * **Grouped by side of the stock for one release and put back.** The argument for the
+   * change was that `starter` alternates, so a run-order column holds different streams
+   * on different boards — true, and not a reason: the chronology is what the column is
+   * *for*, and the stream split's stated justification (luck cancelled) was already known
+   * to be false.
+   *
+   * The fixture still separates the two groupings, which is what lets this say which one
+   * is drawn: board 0 is started by ME and board 1 by THEM, so the two disagree on board
+   * 1. With both boards started by the same seat they agree and this passes either way.
    */
   it("foots first play and replay separately", () => {
     show(
@@ -365,8 +374,8 @@ describe("a session's scorepad", () => {
           board({
             board: 1,
             margin: -60,
-            // They drew first here, so this board's first play is *their* run —
-            // the column is about when a run happened, not which side you held.
+            // They drew first here, so this board's first play is *their* run — the case
+            // that separates a column-per-pass from a column-per-stock-side.
             starter: THEM,
             played: [
               run({ board: 1, contract: contract(2, "S", THEM), points: 110 }),
@@ -378,9 +387,12 @@ describe("a session's scorepad", () => {
       ),
     );
 
-    // First play: +420 on board 1, −110 on board 2 (their run, so negated to you).
-    // Replay: −170 on board 1, +50 on board 2 (your run there). The two feet are
-    // those sums and nothing else.
+    // First play: +420 on board 1, −110 on board 2 (their run there, so negated to you).
+    // Replay: −170 and +50. Those sums, and they add to the +190 margin.
+    //
+    // The stream split reads +470 / −280 over this same fixture, so this pins *which*
+    // grouping is drawn rather than merely that the halves add up — summing to the margin
+    // is true of both and cannot tell them apart.
     expect(feet()).toEqual(["+310", "−120"]);
   });
 

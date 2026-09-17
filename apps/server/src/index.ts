@@ -18,7 +18,14 @@ import {
 } from "./auth.js";
 import { inviteCode, isInviteCode } from "./codes.js";
 import type { Env } from "./env.js";
+import {
+  fieldBoardsFor,
+  fieldFor,
+  fieldResultFrom,
+  recordFieldResult,
+} from "./field.js";
 import { handLogsFor, recordHandLog } from "./handLogs.js";
+import { isMatchFormat, storedFormat } from "./matchFormatRead.js";
 import type { HandLog } from "./handLogs.js";
 import { botAnchors } from "./ratings.js";
 import {
@@ -31,6 +38,17 @@ import {
   ROBOT_TOKEN,
 } from "./results.js";
 import { standingsFor } from "./standings.js";
+
+/**
+ * How many boards a field session asks for when a client does not say, and the most
+ * it may ask for.
+ *
+ * The ceiling is not about cost — the query is cheap — but about a client being able
+ * to drain the corpus for one player in a single request. Boards are the scarce
+ * thing here: each one a person meets is one they can never be offered again.
+ */
+const FIELD_BOARDS = 8;
+const FIELD_MAX_BOARDS = 32;
 
 export { Lobby } from "./lobby.js";
 export { Table } from "./table.js";
@@ -190,10 +208,7 @@ function robotRubberFrom(body: unknown): RobotRubber | null {
     // terms as an unrecognised difficulty rung: keep what the client said, so
     // `ratings.ts` can come out right by itself once it learns what to do with
     // it, rather than flattening it to something it is not.
-    format:
-      value.format === "game" || value.format === "duplicate" || value.format === "mirror"
-        ? value.format
-        : "rubber",
+    format: storedFormat(value.format),
     nickname: nickname === "" ? "Player" : nickname,
     points,
     pointsAgainst,
@@ -656,9 +671,7 @@ function handLogFrom(body: unknown): { dealJson: string; log: HandLog } | null {
     // load-bearing rather than a label: `objectiveFor` reads it to decide what the
     // bidder was pricing in, and a session's call replayed as a rubber's is a
     // different decision with the same auction in front of it.
-    ...(value.format === "duplicate" || value.format === "game" || value.format === "mirror"
-      ? { format: value.format }
-      : {}),
+    ...(isMatchFormat(value.format) ? { format: value.format } : {}),
     ...(rules === undefined ? {} : { rules }),
     ...(seed === null ? {} : { seed }),
     ...(standing === undefined ? {} : { standing }),
@@ -947,6 +960,60 @@ export default {
         return json(request, { error: "Not signed in" }, 401);
       }
       return json(request, await standingsFor(env, accountId));
+    }
+
+    // Boards for a field session — §1.8a. Behind a session because which boards
+    // somebody is offered depends on which they have already met, so there is no
+    // answer to give a device that is nobody.
+    //
+    // **What goes out is a stock and its terms, and never the history.** A board's
+    // recorded results name the contract and say how it went, which is the largest
+    // hint anybody could be handed about a deal they are about to bid — so the
+    // history has its own route below and that route checks the deal was played.
+    if (url.pathname === "/api/field/boards" && request.method === "GET") {
+      const accountId = await accountFromRequest(request, env, Date.now());
+      if (accountId === null) {
+        return json(request, { error: "Not signed in" }, 401);
+      }
+      const asked = Number(url.searchParams.get("count") ?? FIELD_BOARDS);
+      const count = Number.isFinite(asked) ? Math.min(Math.max(1, asked), FIELD_MAX_BOARDS) : FIELD_BOARDS;
+      return json(request, { boards: await fieldBoardsFor(env, accountId, count) });
+    }
+
+    // What somebody made of a board, which becomes part of what the next player is
+    // measured against. Only a first encounter counts — see `recordFieldResult`,
+    // which drops a repeat rather than refusing it, because `outbox.ts` treats a
+    // 4xx as permanent and a duplicate is not a malformed body.
+    if (url.pathname === "/api/field/result" && request.method === "POST") {
+      const parsed = fieldResultFrom(await request.json().catch(() => null));
+      if (parsed === null) {
+        return json(request, { error: "Not a field result" }, 400);
+      }
+      const accountId = await accountFromRequest(request, env, Date.now());
+      if (accountId === null) {
+        return json(request, { error: "Not signed in" }, 401);
+      }
+      await recordFieldResult(env, parsed, accountId, Date.now());
+      return json(request, { ok: true }, 201);
+    }
+
+    // Every other result on a board, for somebody who has played it.
+    //
+    // A 404 rather than a 403 for anyone who has not: the rule being enforced is
+    // §1.8a's — the comparison is not available until the board has been played —
+    // and a route that says "not yet" has told a player something about a deal they
+    // may be about to bid.
+    if (url.pathname === "/api/field/reference" && request.method === "GET") {
+      const accountId = await accountFromRequest(request, env, Date.now());
+      if (accountId === null) {
+        return json(request, { error: "Not signed in" }, 401);
+      }
+      const board = url.searchParams.get("board") ?? "";
+      const field = await fieldFor(env, board, accountId);
+      if (field === null) {
+        return json(request, { error: "No such board" }, 404);
+      }
+      return json(request, { field });
     }
 
     // The individual matches behind that record, newest first — the record

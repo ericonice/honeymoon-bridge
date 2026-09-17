@@ -26,6 +26,7 @@ import { createHeuristicBot } from "../src/bot/heuristicBot.js";
 import { createSamplingBot } from "../src/bot/samplingBot.js";
 import type { Bot } from "../src/bot/types.js";
 import { botActionFor } from "../src/game/botTurn.js";
+import { oracleDouble } from "./oracle.js";
 
 /**
  * What a standing is worth, measured rather than reasoned.
@@ -138,17 +139,30 @@ function playRubber(bots: Pair<Bot>, seed: number, format: RubberFormat): readon
 
   for (let deals = 0; deals < MAX_DEALS; deals++) {
     standings.push(table.rubberBefore);
+    // **Both seats double off the solver, and this bench had no doubling at all.**
+    // The table fitted here is what prices a standing, so it was learnt from rubbers
+    // in which nobody was ever punished for overreaching — the same shape of mistake
+    // as fitting it under heuristic card play and learning to stretch in a world
+    // where stretching was safe. Both seats rather than one, so the fit sees a
+    // symmetric game: an oracle on a single seat is worth about 144 points a rubber
+    // and would bias every standing toward whichever side happened to hold it.
+    //
+    // The cache is per deal because it is keyed by declarer and strain only — the
+    // hands are what change between deals, and nothing in the key says so.
+    const solved = new Map<string, number>();
     while (table.deal.phase !== "complete") {
       const seat = table.deal.toAct;
+      const forced = oracleDouble(table.deal, seat, solved);
       table = applyTableAction(
         table,
         seat,
-        botActionFor({
-          bot: bots[seat],
-          seat,
-          standing: { rubber: table.rubberBefore, vulnerable: vulnerability(table.rubberBefore) },
-          state: table.deal,
-        }),
+        forced ??
+          botActionFor({
+            bot: bots[seat],
+            seat,
+            standing: { rubber: table.rubberBefore, vulnerable: vulnerability(table.rubberBefore) },
+            state: table.deal,
+          }),
       );
     }
     const summary = summarize(table);
@@ -223,12 +237,18 @@ function playMirror(bots: Pair<Bot>, seed: number, halfFormat: RubberFormat): re
       });
     }
 
+    // Doubled the same way the rubber fit is — see `playRubber`. A mirror's halves are
+    // real games and a bidder that overreaches in one is punished in it, so a table
+    // fitted here without a doubler would be learnt from a different game again.
+    const solved = new Map<string, number>();
     while (dealOf(match).phase !== "complete") {
       const seat = dealOf(match).toAct;
+      const forced = oracleDouble(dealOf(match), seat, solved);
       match = actOn(
         match,
         seat,
-        botActionFor({ bot: bots[seat], seat, standing: before.botStanding, state: dealOf(match) }),
+        forced ??
+          botActionFor({ bot: bots[seat], seat, standing: before.botStanding, state: dealOf(match) }),
       );
     }
 
@@ -289,8 +309,25 @@ function untouched(rubber: RubberState): boolean {
 }
 
 function rebuildFromLog(path: string): Rebuilt {
+  // **Rubbers only, and the filter is load-bearing rather than defensive.** This was
+  // written when the log held nothing else, and it crashed the first time it met the
+  // log as it is now: `HandLogStanding.rubber` is *optional*, and a duplicate or field
+  // deal omits it entirely — not a partial standing but the whole of the one that deal
+  // was bid at, since what a session prices a call against is vulnerability and nothing
+  // else. A mirror half carries a rubber and still does not belong here: it is a single
+  // game inside a pair, which the `format=mirror` fit is for.
+  //
+  // Of 1,766 logged hands only a few hundred are rubbers, so what this drops is most of
+  // the file. That is the honest answer rather than a shortfall in the filter.
+  const isRubber = (hand: any): boolean =>
+    hand.format === undefined || hand.format === null || hand.format === "rubber";
   const logged = (JSON.parse(readFileSync(path, "utf8")) as any[])
-    .filter((hand) => hand.deal?.standing !== undefined && hand.deal?.contract !== null)
+    .filter(
+      (hand) =>
+        isRubber(hand.deal ?? hand) &&
+        hand.deal?.standing?.rubber !== undefined &&
+        hand.deal?.contract !== null,
+    )
     .sort((one, two) => one.playedAt - two.playedAt);
 
   const samples: Sample[] = [];

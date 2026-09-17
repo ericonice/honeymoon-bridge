@@ -65,7 +65,14 @@ export interface Agreed {
  * rubber's own length, so the wrong end of this is one player in one pairing rather
  * than a category of them.
  */
-const PRECEDENCE: readonly MatchFormat[] = ["mirror", "rubber", "game", "duplicate"];
+/**
+ * **Field is last**, below duplicate, and the ordering is by how far each is from the
+ * game everyone else came for. A field board has already been played by other people,
+ * so being handed one unasked means meeting a stock somebody may remember — a worse
+ * thing to be dropped into than a session of fresh ones. Nothing outranks a seat that
+ * did not ask for it, so in practice it still takes both.
+ */
+const PRECEDENCE: readonly MatchFormat[] = ["mirror", "rubber", "game", "duplicate", "field"];
 
 /** A rubber and a single game are one format at two lengths, and resolve as one. */
 function isRubberish(format: MatchFormat): boolean {
@@ -157,7 +164,7 @@ export function formatFor(first: Asked, second: Asked): Agreed {
   const decided = hostAsk(first, second);
   if (decided !== null) {
     return {
-      boards: decided.format === "duplicate" ? boardsForDeals(decided.deals) : 0,
+      boards: boardsAsked(decided.format, decided.deals),
       format: decided.format,
       halfFormat: decided.halfFormat,
       order: decided.order,
@@ -199,5 +206,30 @@ export function formatFor(first: Asked, second: Asked): Agreed {
     };
   }
 
-  return { boards: 0, format, halfFormat, order: "halves", scoring: "points" };
+  return {
+    boards: boardsAsked(format, Math.min(first.deals, second.deals)),
+    format,
+    halfFormat,
+    order: "halves",
+    scoring: "points",
+  };
+}
+
+/**
+ * How many boards a format wants for a given number of deals.
+ *
+ * **A field board is one deal and a replay board is two**, which is the whole of it —
+ * and the reason this is a function rather than a ternary is that it was one, reading
+ * "duplicate, or else nothing". Field fell into the "or else" and a table asked for
+ * **zero** boards, so every head-to-head silently fell back to a rubber with nothing
+ * erroring anywhere. The same shape as the validating readers that lost the format on
+ * the way in.
+ */
+function boardsAsked(format: MatchFormat, deals: number): number {
+  if (format === "duplicate") {
+    // Compared in deals because that is what the player chose; `boardsForDeals` is
+    // the one place the two units meet.
+    return boardsForDeals(deals);
+  }
+  return format === "field" ? Math.max(1, deals) : 0;
 }

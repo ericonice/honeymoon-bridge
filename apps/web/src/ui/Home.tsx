@@ -119,7 +119,30 @@ function Secondary({
  * re-modelling of them. That matters because `ratings.ts` pools the formats and a
  * match recorded under a new name would quietly leave the pool.
  */
-const CELLS = ["rubber", "mirror", "duplicate"] as const;
+const CELLS = ["rubber", "mirror", "duplicate", "field"] as const;
+
+/**
+ * The row is two families, and each gets its own container.
+ *
+ * **The split is by how a deal is scored**, which is the honest reason for it rather
+ * than the two duplicate formats merely having neighbouring names. Rubber and Mirror
+ * settle above and below a line with a race to a game; Replay and Doop settle each
+ * board where it is played.
+ *
+ * **A wider gutter was tried first and read as nothing** on a real phone — four
+ * pixels between cells that already sit four apart is a difference the eye does not
+ * find. Two grounds is the same idea at a strength that works: each pair is visibly a
+ * thing, and the boundary needs no mark of its own. It still costs **no height**,
+ * which is the constraint that ruled out the obvious answer of a caption over each
+ * pair — this is the one screen that must not scroll.
+ *
+ * The cost is about twelve pixels of width in extra padding, which the labels absorb
+ * because they were already chosen short enough for four cells.
+ */
+const FAMILIES = [
+  { cells: ["rubber", "mirror"], label: "Games" },
+  { cells: ["duplicate", "field"], label: "Duplicate" },
+] as const;
 
 function Format({
   format,
@@ -128,29 +151,69 @@ function Format({
   readonly format: MatchFormat;
   onChange(format: MatchFormat): void;
 }): React.JSX.Element {
-  const labels = { duplicate: "Duplicate", mirror: "Mirror", rubber: "Rubber" } as const;
+  // Short because they have to be: four cells in a phone's column leave about seventy
+  // pixels each, which is roughly seven characters — see §3.6a. "Duplicate" does not
+  // fit in a cell, which is why it is the *group's* name rather than a format's.
+  const labels = {
+    duplicate: "Replay",
+    // Doop is the name real bridge gives this: a board you play once, scored against
+    // the results already recorded on it. Four characters, so the seven-character cell
+    // budget is not close to binding — see `labels.ts` for why the stored value is
+    // still `"field"`, and `HelpOverlay`'s Doop section for what the word means.
+    field: "Doop",
+    mirror: "Mirror",
+    rubber: "Rubber",
+  } as const;
   // A single game is the rubber cell at a length of one, so both live under it.
-  const chosen = format === "duplicate" || format === "mirror" ? format : "rubber";
+  const chosen =
+    format === "duplicate" || format === "field" || format === "mirror" ? format : "rubber";
 
   return (
-    <div className="flex gap-1 rounded-xl bg-white/5 p-1">
-      {CELLS.map((cell) => (
-        <button
-          key={cell}
-          type="button"
-          aria-pressed={chosen === cell}
-          className={`flex-1 rounded-lg px-2 py-2 text-sm font-medium ${
-            chosen === cell ? "bg-white/15 text-white" : "text-white/55"
-          }`}
-          onClick={() => {
-            // Coming back to Rubber restores the length last chosen for it, rather
-            // than defaulting to two — which is what a trip through Duplicate used to
-            // do, silently promoting a single game to a full rubber.
-            onChange(cell === "rubber" ? rubberFormatFor(rubberGames()) : cell);
-          }}
+    <div className="flex gap-2">
+      {FAMILIES.map((family) => (
+        /* **A real `fieldset` and `legend`, which is what this actually is.** A named
+           group of related controls is the element's own job, so the browser cuts the
+           border for the label — no patch behind the notch, which matters on a ground
+           that is a gradient — and a screen reader announces "Duplicate, Doop,
+           selected" rather than "Doop, selected". Four other shapes were drawn and
+           compared; the rest were two anonymous divs that merely looked grouped.
+
+           **It costs about eight pixels** against the eighteen a label sitting above
+           costs, because the label straddles the edge instead of stacking on it. That
+           is the whole reason it wins on the one screen that must not scroll.
+
+           **Games and Duplicate, asymmetric on purpose.** The mirror of "Duplicate"
+           is "Rubber", which collides with the cell called Rubber inside that very
+           box; "Games" is what the family is made of and what its own length line
+           already says — "first to 2 games". */
+        <fieldset
+          key={family.label}
+          className="min-w-0 flex-1 rounded-xl border border-white/15 p-1"
         >
-          {labels[cell]}
-        </button>
+          <legend className="ms-2 px-1.5 text-[0.65rem] tracking-wide text-white/40 uppercase">
+            {family.label}
+          </legend>
+          <div className="flex gap-1">
+            {family.cells.map((cell) => (
+              <button
+                key={cell}
+                type="button"
+                aria-pressed={chosen === cell}
+                className={`flex-1 rounded-lg px-1.5 py-2 text-sm font-medium ${
+                  chosen === cell ? "bg-white/15 text-white" : "text-white/55"
+                }`}
+                onClick={() => {
+                  // Coming back to Rubber restores the length last chosen for it,
+                  // rather than defaulting to two — which is what a trip through
+                  // Duplicate used to do, silently promoting a single game to a rubber.
+                  onChange(cell === "rubber" ? rubberFormatFor(rubberGames()) : cell);
+                }}
+              >
+                {labels[cell]}
+              </button>
+            ))}
+          </div>
+        </fieldset>
       ))}
     </div>
   );
@@ -270,6 +333,43 @@ function FormatNote({
           &rsaquo;
         </Step>
         <span>{games === 1 ? "game" : "games"}</span>
+      </div>
+    );
+  }
+
+  if (format === "field") {
+    // **Boards, and every one of them is played.** Sharing the rubber's line here
+    // said "First to 2 games" under Doop, which is wrong twice over: a Doop session
+    // has no games in it at all, and nothing about it is a race — the length is the
+    // number of boards you will meet, not a target somebody reaches first.
+    //
+    // The same stored preference as a session, because it answers the same question:
+    // how long is this, in deals. §1.8 spends two deals a board and §1.8a spends one,
+    // so the same count is five boards there and ten here — and the word changes with
+    // it rather than the number meaning two different things.
+    return (
+      <div className={`${NOTE_HEIGHT} ${lean} gap-1 px-1 text-xs text-white/45`}>
+        <span>Ranked over</span>
+        <Step
+          label="Fewer boards"
+          disabled={deals <= MIN_SESSION_DEALS}
+          onClick={() => {
+            onDealsChange(cleanSessionDeals(deals - SESSION_DEALS_STEP));
+          }}
+        >
+          &lsaquo;
+        </Step>
+        <output className="w-6 text-center font-semibold tabular-nums text-white/90">{deals}</output>
+        <Step
+          label="More boards"
+          disabled={deals >= MAX_SESSION_DEALS}
+          onClick={() => {
+            onDealsChange(cleanSessionDeals(deals + SESSION_DEALS_STEP));
+          }}
+        >
+          &rsaquo;
+        </Step>
+        <span>{deals === 1 ? "board" : "boards"}</span>
       </div>
     );
   }

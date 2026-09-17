@@ -51,6 +51,8 @@ npm run bench:strain    --workspace @hb/web -- "S:AK4 H:AK4 D:A43 C:AK32"
 npm run bench:draw      --workspace @hb/web -- 300      # draw policies against each other
 npm run bench:equity    --workspace @hb/web -- 1500      # what a standing is worth, as a win chance
 npx vite-node bench/honors.ts -- 300 0                  # whether honors decide anything
+npx vite-node bench/field.ts -- 12 8                    # how much the bot varies on one stock
+npx vite-node bench/field.ts -- generate 200 8          # write a field corpus — §1.8a, hours
 # What remembering a board is worth. Ten minutes; needs a sample count to do anything.
 npm run bench:rubber --workspace @hb/web -- 60 8 format=duplicate control nodouble memory
 
@@ -456,6 +458,10 @@ from ordinary bridge:
   game; a duplicate session prescribes it by board and pays for a game on the spot. Not Chicago.
   `MatchFormat` is the wide vocabulary and `RubberFormat` is the narrow one the rubber machinery
   keeps, so nothing has to invent a meaning for a rubber that is a duplicate.
+- **Duplicate is two formats: Replay and Doop.** Replay plays a board twice and settles the
+  difference in points or IMPs; Doop plays it once and ranks you among the results already recorded
+  on it, in matchpoints. Same board, same prescribed vulnerability, same deal settled where it is
+  played — only the source of the comparison differs. §1.8 and §1.8a.
 
 ## Conventions
 
@@ -760,6 +766,26 @@ That test also needed `vitest.config.ts` to carry `define` values for `__APP_VER
 so any component that prints one throws a bare `ReferenceError` under the runner — which is why no
 test had rendered this screen before.
 
+**The trick count is back, inside the ring, and that reverses a decision recorded here.** A numeral in
+the middle was drawn and dropped on the argument that a discrete ring already carries its own number, so
+the two together said one thing twice. **That is true of the information and false of the reading**:
+counting nine lit segments out of ten, at a glance, mid-trick, is work — and the count had meanwhile
+left `ContractBar`, so there was nowhere else to look. Reported as wanting to know the tricks taken from
+time to time, which is evidence about the reading that the original argument could not have had.
+
+It costs a bigger ring — **44px against 32** — because a numeral inside a 32px ring is about eleven
+pixels of type. Affordable here and nowhere else on this screen: the rings are absolutely positioned
+beside the trick slots, so they take no room from the cards, which §1.5 does not trade for anything. The
+offset grew with them, to `-right-[3.25rem]`, keeping the same eight pixels clear of the card — left at
+40 a wider ring would have crept back over the thing it sits beside.
+
+**The numeral needs no new state and cannot disagree with the ring**: `target - need` already *is* the
+tricks that seat has taken, and it saturates at the target exactly when the ring is replaced by the
+decided disc — so the one position where the two could differ is the one where the numeral is not drawn.
+`test/trickRing.test.ts` checks it against the engine on every trick of a whole deal rather than at one
+position, and counts both the live and the decided readings so a walk that never reached either fails
+instead of passing.
+
 **The ring has one live colour, and two escalating ramps were built and deleted to get there.**
 White resting with amber at the edge, then amber resting with orange one trick out and white at the
 edge itself. Both were a colour on one ring restating what the *other* ring was already saying in
@@ -768,11 +794,25 @@ state and the `slack` field they were cut from on the way back out. **If a third
 this is the argument against it**: with both seats' counts on screen, "you are in trouble" is already
 drawn.
 
-**Only one ring ever wears the check**, because a seat being out of reach and its opponent arriving
-are the same event: the targets sum to fourteen against thirteen tricks. It is green on either ring —
-it marks that side reaching its own target, the same mark for a contract made and a contract set —
-which is why `TrickRing` does not know whose ring it is at all. `trickRingLabel` still takes `mine`,
+**Reaching the target turns the whole ring green and keeps the count**, and it was a green disc with a
+check until the numeral came back. The disc was argued for here on the grounds that a ring is live and a
+disc is decided — a green disc cannot be misread as progress where a nearly-complete green ring could.
+That held while the ring carried no number, and it **cost the number**, because the disc covered it
+exactly when overtricks become the interesting part.
+
+The ambiguity it guarded against does not arise: `lit` reaches `target` only when the target is reached,
+so **a full ring is a decided ring** and there is no nearly-complete green one to confuse it with. The
+numeral turns green with the segments rather than staying white, so the mark reads as one thing.
+
+**Only one ring can ever be green**, because a seat reaching its target and its opponent being out of
+reach are the same event: the targets sum to fourteen against thirteen tricks. It is green on either
+ring — it marks that side reaching its own target, the same mark for a contract made and a contract set
+— which is why `TrickRing` does not know whose ring it is at all. `trickRingLabel` still takes `mine`,
 because a sentence has to name somebody where a shape does not.
+
+**The numeral is passed in rather than derived, and that is what the change forced.** `target - need`
+saturates — `need` is zero once the target is reached — so a declarer who made an overtrick would have
+read as the contract exactly. Harmless while a disc covered the number; wrong the moment it stays.
 
 **The outcome sound moved from scoring to the deciding trick, and that gave the verdict two possible
 sources.** So it is a latch, not a rising edge — whichever of the deciding trick and the score
@@ -1915,7 +1955,8 @@ was converted only for `"equity"`; a mirror objective is a probability on the sa
 raw would have been a landslide rather than a nudge. It converts through the mirror table, since what
 200 points is worth depends on where the pair stands.
 
-**Scoring is points, and `impsFor` is written and unused.** IMPs was the first proposal, on the
+**Scoring is points, and `impsFor` is written and unused.** (True of Replay, and overtaken for Doop
+— see below, which is matchpointed and reaches this setting not at all.) IMPs was the first proposal, on the
 grounds that a concave scale stops one doubled disaster deciding a session. What weakened it is that
 duplication has *already* cancelled the deal, so a duplicate margin is far better behaved than a
 rubber margin to begin with. It cannot be a setting either — a session can be won on points and lost
@@ -1924,6 +1965,299 @@ maximise. So it is settled by measurement: a session records its board seeds, it
 both runs' scores, so any played session can be re-scored the other way and the two answers compared.
 Honors stay in, against duplicate bridge's own practice, because here a hand is built over 26
 decisions and four aces is something a player did.
+
+**Duplicate is two formats now — Replay and Doop — and the second is the one that is duplicate in
+the ordinary sense.** §1.8a. A board is played **once** and ranked against the results already
+recorded on it, where §1.8 manufactures its comparison by having you play the stock twice yourself.
+The screen calls the old one **Replay** and the new one **Doop**; nothing stored moved, so recorded
+sessions stay `"duplicate"` and stay in the same rating pool — a relabelling of one value rather than
+a re-modelling of it, the same constraint the one-game length respected. The names are forced by
+width as much as by meaning: four cells in a phone's column leave about seventy pixels each, or
+roughly seven characters, so nothing on that row can be as long as "Duplicate".
+
+**It was called Field first, and the rename is the better name rather than a nicer one.** Doop is what
+real bridge calls this — duplicate's comparison at a single table, by playing boards that have already
+been played and scoring against what the people before you made of them, which is §1.8a exactly.
+"Field" named the *yardstick* rather than the game, and it is still the right word inside the format:
+`FieldEntry`, `fieldBoardsFor`, "the field is hidden until you have played". **So the rename is UI-only
+and deliberately shallow.** The stored value stays `"field"`, because `ratings.ts` keys on the string
+and renaming it would move every recorded session out of its pool — the same constraint the one-game
+length respected, taken for the second time.
+
+**Help said nothing about it at all, through shipping, playing, a rename and a deploy.** Help is the
+one surface with nothing that breaks when it falls behind: no test fails, no type complains, and the
+format worked perfectly while the screen explaining the game did not mention it existed. It has a
+section now, and `test/helpOverlay.test.ts` holds it there with a `Record<MatchFormat, string>` of
+which heading explains which format — **so adding a format fails to compile rather than shipping
+undocumented**, the same guard `preferredFormat.test.ts` uses on the union it validates.
+
+Two stale claims went with it, both found by reading Help against this file rather than by anything
+failing. The Replay section said duplicate was "against the computer only for now", which stopped being
+true when a table could deal one. And the Mirror section said the computer's recall was "worth almost
+nothing here" — which rested on 52.5% ± 4.9, the null this file has since recorded as **wrong and
+load-bearing**; it is 56.7% at 2.9σ re-measured. The rating treatment has not changed, so that sentence
+stayed; the claim about the measurement did not. **A help screen quoting a number this file has
+retracted is the one kind of help worth less than none**, which is the objection `ScoringOverlay` was
+built to answer and the same objection applies to prose.
+
+**Scoring is matchpoints, and that overturned the entry above about `impsFor`.** A replay compares
+two runs, so a board can only say a *margin* and the argument is about how to scale one. A field of
+eight says *where you came*. Compressing eight real results into a datum and taking a difference from
+it throws the distribution away and then needs a concave scale to undo the damage. So a board is two
+matchpoints for every result beaten and one for every tie, as a percentage; the session is the **mean
+of its ranked boards** rather than a total, so a board whose field has not come back is not quietly
+dragging the figure down. The points-or-IMPs setting governs Replay alone.
+
+**A percentage rather than a count of results beaten, because fields differ in size.** Boards fill
+unevenly — one three people have played holds more results than an untouched one — and a count is not
+comparable across two boards where a percentage is. `test/field.test.ts` pins exactly that.
+
+**The bot's run-to-run variation started as a defect and became the feature, which is the most useful
+reversal in this whole thread.** Generating a board's yardstick as a *single figure* made the spread
+across runs error: `bench/field.ts` measured a board where 4♥ makes on some runs and fails on others
+swinging +100 to +520, which would have sat permanently in a number everybody is measured against.
+Ranked instead, those eight outcomes **are** the field and the spread is the board saying the contract
+is on a knife edge. **The awkward case inverted with it**: a board whose runs all agree — 4 of 12
+measured — now gives a traveller with no resolution, where any result either beats everything or loses
+to everything. Kept anyway. A hand where solid play always reaches the same contract for the same
+tricks is a *flat board*, which is a real thing in duplicate, and filtering them out would bias the
+corpus toward hands with something in them.
+
+**Along the way an arm was run to make the runs agree, and it says the opposite.** The hypothesis was
+that the disagreement was bid-search sampling error waiting to be averaged down, so the search was
+pinned to its sample count and the count quadrupled. Over the same 12 boards × 8 runs:
+
+| | 25 samples | 100 samples |
+| --- | --- | --- |
+| boards whose runs all scored alike | 4 of 12 | **3 of 12** |
+| mean spread across runs | 101 points | **114 points** |
+| cost of a run | 7.9s | **26.5s** |
+
+Four times the sampling, three and a half times the cost, and *more* variation. Whatever makes the
+bidder say 2♠ on one run and 3♠ on the next is not short of samples. It also settles the generator's
+configuration by cost alone: eight runs across 200 seeds is about 3.5 hours at 25 samples and roughly
+12 at 100.
+
+**The corpus is generated by `bench/field.ts generate <seeds> <runs>`, and one deal fills both of a
+stock's boards.** A board is a seed *and one side of it*; a single run scores both seats, so the run
+played with `starter: 0` gives the starter-0 board seat 0's score and the starter-1 board seat 1's.
+**The second board's entry has to be turned round and that is the trap**: a person playing the
+starter-1 board sits in seat 0 and draws *second*, which is the seat the generated deal called 1 — so
+its declarer, tricks and score are read with the seats exchanged. Stored as they came, every
+second-stream board in the corpus would name the wrong declarer and credit the wrong side.
+
+**Human results displace the computer's, oldest first, and "oldest" is unbiased rather than
+arbitrary.** Choosing which machine run to drop looks like it needs care — drop the median and the
+field widens, drop an extreme and it narrows — but the generated runs are **exchangeable by
+construction**: they differ only in a derived seed and nothing distinguishes them. So oldest is
+exactly as unbiased as a coin flip and is deterministic where a coin flip is not. Once they are gone
+nothing is retired: people are not dropped to preserve a shape that existed for the machine's benefit.
+
+**Three kinds of result sit on a board and the traveller says which** — computer against computer,
+human against computer, human against human. They are not the same evidence: a score made across the
+table from a person was shaped by that person where a solo one was made against the opposition
+everybody else faced. All three count. Derived rather than stored, because they already are: a
+generated row has no account and a table result is one recorded with an opponent
+(`0014_field_opponent.sql`, where **null means the computer rather than "unknown"** — every row
+written before that column existed was solo play).
+
+**A passed-out Doop board was told a rubber's rule, which is the fourth time this shape has bitten.**
+The sentence branched on `standing.kind === "duplicate"` and fell through to the rubber wording for
+everything else — so Doop said the deal was "thrown in and redealt with the same player drawing first",
+where `nextFieldDeal` advances unconditionally and does no such thing. **Neither board format redeals**:
+the board is spent and the pass is the result.
+
+The two board formats now say so separately, because they agree about the rule and differ about what
+the board is then worth. Doop's says what it *costs* — §1.8a ranks a passed-out board against everybody
+who bid something on the same cards, so it is not a private zero but a near-bottom placing.
+
+`test/fieldScreens.test.ts` pins it **per standing kind rather than by asserting a wording**, so the
+guard is against a format falling through rather than against a particular sentence. Its anti-vacuity
+half asserts a rubber *does* still promise a redeal — without it, deleting the sentence outright would
+pass. Checked by reverting.
+
+**The running score moved before the screen that explains it, and in Doop it grew a line while doing
+so.** The engine settles a deal the instant its thirteenth card lands, so the strip's total stepped
+while the player was still looking at the trick — and a Doop session additionally printed **"1 board not
+back yet"** underneath the placing for the length of a field fetch and then took it away again, because
+§1.8a fetches a board's field *after* the deal. Reported as a line appearing below Placing that was gone
+before it could be read, and as jitter. Both, and the same moment causes both.
+
+Two fixes, and neither is a delay. **The strip holds the standing until the pad is on screen** — keyed on `revealedHands`, so a
+*passed-out* deal never holds at all, there being no reveal to wait for and a passed-out field board
+still moving the placing.
+
+**Releasing at the reveal was the first attempt and was not enough**, which is worth recording because
+the reason is specific to this format: a Doop placing does not move when the board is committed. The
+session figure is the **mean of its ranked boards**, so it moves when the **field fetch lands** — around
+or after the reveal, at a moment network timing picks. Reported a second time as the score still
+updating too early. The hold now runs through the reveal's first stage and releases at the second, which
+is the stage that draws the pad and so the moment those figures are meant to be read. The ref is
+written during render rather than in an effect, which is the rule `useShownPhase` already states: a hold
+is a pure function of the transition, and an effect runs after the commit it would correct. Only the
+strip takes the held value — the reveal's own pad and `DealComplete` are reached after it releases, so
+no two surfaces ever disagree.
+
+And **`waitingFor` is silent about the board just played**. One board outstanding is the ordinary state
+the moment a deal ends and says nothing; two or more means a field that went out earlier has not come
+back, which is what the row was written for. Its height is reserved either way, since suppressing the
+text alone would leave the same shift the first time it did have something to say.
+
+**`test/standingHold.test.ts` drives the real board to its last card and reads the strip**, rather than
+calling the hook: what is being checked is *when a number reaches the screen*, and a hook test would
+assert the hold against the same expression that implements it. It compares the Total row alone — the
+whole strip is too broad, since the contract label arrives on its own schedule — and asserts that figure
+is non-empty first, or both comparisons would hold trivially. Checked by reverting the hold.
+
+**The last hand of a match skipped the stage every other hand gets, in every format.** `PlayPhase`'s
+reveal stages twice when `matchDetail` is on — the hand's own breakdown, then the pad — and the second
+stage was gated on `onContinue !== null`, which is false **exactly** when the deal also finishes the
+match. So the final hand went straight from the reveal to the result, and the board just played was the
+one board of a Doop session you never saw on its own. Reported as jumping to the final screen.
+
+The argument for skipping it is in the code and is half right: `DealComplete` shows the standing
+anyway, so staging here would be the same figure twice. True of a rubber, where both places draw the
+same `Scorepad` — and **false of a Doop session**, where this stage draws the *board just played* and
+the final screen draws the whole session. Even where it does repeat, one tap is what makes the last
+hand end like the others.
+
+**`test/finalHorn.test.ts` documented the old behaviour in its own comment** — "Only one tap: this deal
+also finishes the match, so the reveal never stages the match pad of its own" — and failed on the
+change, which is what that walk is for. It taps twice now.
+
+**A finished session shows the whole session, and for a while it was the one format that made you
+ask.** `FieldPad` has two modes — the board just played, and a row a board opening into its traveller —
+and the deal-complete screen used the first on *every* deal including the last, with the session behind
+a "See the whole session" link. Between deals that staging is right: a reveal is about the hand that
+just finished, and redrawing every earlier board under it buries that in a scroll. On the last one it
+was wrong, because **every other format's final screen is its entire pad** — a rubber ends on its whole
+scorepad — so this was the only sitting whose result took an extra tap to find. Reported as exactly
+that.
+
+**`openLast` made that free rather than a trade, and then stopped being needed.** The staging existed
+for a real reason, written in the component: showing the session at the end skipped the last board's
+own traveller, making it the one deal of the sitting whose result you never saw. Opening that board's
+row answered the objection instead of accepting it. The link went at the same time, since a finished
+session is already showing all of itself and the control would offer what is on screen.
+
+**The row is shut again now that the reveal stages that traveller on its own** — see the last-hand
+staging above. With both, the same traveller was drawn twice in consecutive screens. `openLast` is gone
+rather than left as an unused prop: the objection it answered is answered a screen earlier.
+
+**Both replaced tests pinned the old behaviour and one of them is worth copying.** "Opens the last
+board's traveller" asserts that board 1 is `aria-expanded="false"` as well as that the last is `"true"` —
+without the negative it passes against a pad that opens every row, which is a different screen with the
+same assertion. Checked by reverting both props.
+
+**A board's field is withheld until the board has been played, and it is enforced server-side.** It
+names the contract and says how it went, which is the largest hint anybody could be handed about a
+deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told
+a player something. `test/field.test.ts` checks it as **not asking the second question at all** rather
+than as a null return — a version that fetched the rows and then declined to send them would pass a
+weaker test and would still have read the answer. Checked by reverting the gate.
+
+**Verified against a real `wrangler dev`, and that is what found the bug reading the code had not.**
+`fieldBoardsFor` excluded seeds played in *earlier* sessions and nothing stopped one fetch handing
+over **both ends of the same stock** — three seeds came back as six boards, so a session would have
+dealt a board and then its mirror image, the second played knowing every card. Fixed with a
+`ROW_NUMBER() OVER (PARTITION BY seed)`.
+
+**Within a seed the *shallower* stream wins, and the obvious choice starves the other permanently.**
+Taking the deeper side means whoever meets the seed plays it, which excludes the seed from them
+entirely, and the next player faces the same choice and makes the same one — so one stream of every
+stock would never be played by anybody.
+
+The rest of the probe: 404 before playing, 201 on the report, a generated run retired **through the
+route** rather than through hand-written SQL, and each player's own result excluded from what they
+are shown — checked from both sides at once, with Ada seeing Computer 240 and Noah 170 while Noah saw
+Computer 240 and Ada 420.
+
+**The corpus load exhausted D1's free daily row-read limit, and it was one statement rather than the
+volume.** Loading 999 boards is about 18,000 inserted rows, which is nothing. What cost five million
+reads was `NUMBER_BOARDS`, the statement that numbers each board by its seed: the first version was a
+correlated `COUNT(DISTINCT seed) WHERE other.seed <= this one`, so the plan is a scan of the table with
+a **range scan of the seed index per row** — about 2 million rows over 1,998 boards. And it was appended
+to *every worker's* boards file, so it ran six times against a growing table.
+
+| | rows read |
+| --- | --- |
+| modelled, six loads of a growing table | 5,045,450 |
+| Cloudflare's `rows_read_24h` | **5,032,772** |
+| the free-tier daily limit | 5,000,000 |
+
+**Its own doc comment sold the repetition as a virtue** — "it can be run after any load, or twice, and
+gives the same answer". Idempotent it is; quadratic nobody priced. The `UPDATE ... FROM` window-function
+form does one pass over the distinct seeds and one index seek per seed — **about 5,000 rows**, checked
+as producing identical numbers on all 1,998 rows — and it is now its own file, run once after every part
+is loaded.
+
+**The diagnosis is worth more than the fix, because the first guess was wrong.** The obvious suspect was
+the app: `ratingsFor` scans the whole `results` table on every Record read and this file has an open
+thread saying so. `npx wrangler d1 insights` settles it in one command — the app's top five queries total
+**163,371 rows over seven days**, and `ratingsFor` is 7,254 of them. `wrangler d1 info` gives the other
+half: **433 read queries** producing five million rows, which can only be a handful of enormous ones. A
+quota is an arithmetic question, and both numbers are a command away rather than a guess.
+
+**One number from that run to watch rather than act on**: `fieldBoardsFor` averages **7,075 rows a call**
+and grows linearly with the corpus, since it aggregates every board to rank them before the `LIMIT`
+applies. Seventeen calls is nothing; ten thousand boards would make it ~35,000 a call.
+
+**Two local-D1 facts that cost an hour and do not announce themselves.** Foreign keys **are** enforced
+in local D1. And `wrangler d1 execute --file` does **not** reliably apply statements in the order they
+are written — a results insert referencing a board created higher in the same file fails on a foreign
+key, while the identical statements run separately succeed. The generator therefore writes two files
+and prints the two commands in order.
+
+**Two bugs the engine's own tests found rather than review.** `fieldMarginOf` multiplied by
+`Math.sign` on top of `impsFor`, which already carries the sign, so a board lost by 500 came back as
+**+11 IMPs** — dead since the move to matchpoints, but the shape is worth keeping: a redundant guard
+that is actually a double negation. And a board was committed when the *next* one was dealt, copying
+the session's arrangement — which meant the **last** board of a session was never committed, so its
+field could never attach and it was the one board that could never be ranked. The commit moved onto
+the action that completes the deal.
+
+**Still open, and the first one is a correctness gap rather than a preference.** The generator pins
+the bid search to its sample count with no deadline, so an entry is reproducible; the bot you play
+carries Championship's `searchBudgetMs: 250`. **Those are not the same opponent**, and §1.8a's central
+rule is that they are. Four shapes were costed and none is free: both sides on the shipped deadline
+makes the corpus unreproducible and set by whichever machine generated it (and at ~7ms a solve here
+against 2.6ms on a phone, *this* machine is the slow one); both sides pinned costs what `bidTiming.ts`
+already measured, median 956ms and p90 3,286ms a call, because the cost is hand shape rather than
+hardware; a generous finite budget binds on more than one call in ten and so is reproducible only on
+the easy hands; turning the search off is worth about 108 rating points the wrong way. The remaining
+candidate is a **low** pinned count — eight samples over the two or three strains in contention —
+which is bounded without a deadline and is plausibly close to what a phone completes today, since the
+shipped bidder does not finish its 25 samples on anybody's device. It wants the testing panel's "Time
+a bid search" row run on a real phone before it ships.
+
+**The head-to-head is built, and the probe is what found the bug.** §1.8a makes a Doop board playable
+at a table — each seat ranked against its own stream's field, the two percentages compared, which is
+ordinary pairs scoring and is what makes two seats holding opposite streams comparable at all. The
+Durable Object deals from the corpus now: `pairedStocks` folds the two rows of a seed into one board so
+both seats hold opposite streams of the same shuffle, and `#applyField` files both results and folds
+both fields in, wrapped so it cannot cost the move.
+
+**Verified against a real `wrangler dev`, two sockets, a whole four-board session.** Format negotiated
+as `field`, both seats ranked 4 of 4, and the two placings came back **complementary** — 21% against
+79%, then 100% against 0% on an earlier run — which is the property the format rests on and the one
+thing no unit test can assert, since it is about two clients rather than one. `winner` came back as the
+seat with the higher placing.
+
+**And §1.4 was checked rather than assumed: four seeds crossed for four boards played.** A seed
+reconstructs a stock, so the only boards whose seeds may reach a client are the ones already played out
+— where both hands are face up anyway. Nothing upcoming leaked.
+
+**What the probe found that reading had not**: `formatFor` computed its board count as "duplicate, or
+else zero", so a Doop table asked for **zero** boards, found none, and fell back to a rubber with
+nothing erroring anywhere. `boardsAsked` is that ternary as a named function — a field board is one
+deal and a replay board is two. **Third time in one day that a conditional reading "this format, or
+else nothing" swallowed the new one**, after the two validating readers; the shape is worth recognising
+on sight.
+
+Three of the four bugs in that session were in the probe rather than the server, and they are the ones
+worth writing down because the next probe will hit them: the message type is `state` and not
+`snapshot`, `join` needs `protocol: 1`, and **each socket needs its own `token`** — a seat is held by
+token, so two sockets sending none both reclaim seat 0 and the table never fills.
 
 **`game/match.ts` is the abstraction both formats satisfy**, as a tagged union with free functions
 rather than a common base — there is no common base. `MatchSummary` is shaped so almost nothing needs
@@ -1937,17 +2271,38 @@ comparison was on screen and the comparison was still *vertical*, which is the a
 cell carries the contract, who declared, the result in bridge's notation and your net — so the board's
 worth is two adjacent figures added up rather than a third number claiming it.
 
-**The columns are which side of the stock you held, not the order the runs were played**, which is the
-one place this deliberately does *not* copy the mirror pad's chronological halves. The reason was
-already written in the component: "replay" names when a deal happened, and that is the single thing
-about a pair of runs that does not matter — the same stock offered the other way round is what
-differs. It also costs nothing per row, since which side you held is fixed for a whole column, so no
-cell needs a marker and nobody has to learn a key.
+**The columns are which pass through the boards this was — first play and replay — and that survived
+being changed and changed back.** "Replay" names when a deal happened, and for a *cell* that is the one
+thing about a pair of runs that does not matter; what a *column* is for is the chronology, because the
+gap between the two feet is **how you did meeting a board against how you did when it came back**. That
+is the memory advantage §1.8 builds the format around, and it is the one comparison on the pad a player
+can act on.
 
-**And it is what makes the two feet worth having.** Duplication hands each player both sides of every
-board, so *what I made holding the first draw* against *what I made holding the second* is a comparison
-with the luck already cancelled out — the direct analogue of a mirror's two half-totals, and a figure
-that sat inside the old pad's numbers without ever being added up.
+**It was grouped by side of the stock for one release, on an argument that was wrong twice over.** The
+case: `board.starter` alternates, so a run-order column holds the first-draw stream on some boards and
+the second-draw stream on others; and a control session — two identical players, every board exactly
+flat — reads **±2270** split by run against **±70** split by stream. Both facts are true and neither is
+a reason. **±70 is not "less wrong", it is a smaller number measuring a different thing** — in a control
+that split is *entirely* about which side of these boards was the better one to hold, which is luck
+rather than play. And the justification quoted for the change, that the stream split is the comparison
+"with the luck already cancelled out", was a claim **this file had already retracted** in the same
+breath as making it: what has the luck cancelled is the sum, not the split.
+
+**Reported from real play as the scoring looking off**, which is the sharper symptom: with a stream
+column, a board's *replay* sits in column one whenever the opponent started it, so reading down the pad
+is no longer chronological and two adjacent rows show runs from opposite passes.
+
+**The lesson is about which document to believe.** `SessionPad`'s own comment said run order; this file
+said side of the stock; they had contradicted each other for a release and the code agreed with the
+component. Changing the code to match the prose was backwards — **the component is the account with
+something at stake**, and a note here that disagrees with it is the thing to fix. Both now say the same
+thing, and the engine's stream helpers are deleted rather than left exported and unused.
+
+**And the engine test could not have caught either direction**, which is worth keeping: splitting the
+margin by run and splitting it by stream *both* sum to the whole, since both partition the same runs. It
+pins an invariant that survives the change, so the grouping is pinned in `test/sessionPad.test.ts`
+instead — over a fixture whose two boards are started by different seats, which is what makes the two
+groupings disagree at all.
 
 Two things went. The per-board margin, because side by side the sum is a glance and the width buys more
 elsewhere. And **"still to come round"**, because an empty cell beside a played one says it without
@@ -2182,6 +2537,37 @@ the mirror by swapping the board's own `starter` instead of asking for the repla
 hypothetical rather than the call the game makes. **A control only tests what its driver exercises**,
 and this file has now recorded four vacuous tests found by reverting the fix rather than by reading
 them.
+
+**A duplicate session shows its own figure and a running points one, and getting there took four
+attempts and two reverts.** The report was that there is no clear way of knowing how you are doing
+early — no score until both halves are played. **That is literally true under IMPs and only loosely
+true under points**, which is the distinction the first three attempts missed: `impsFor` converts a
+board's *margin*, an open board has none, so an IMPs session's figure counts closed boards only and
+cannot move until a stock repeats. Under `shuffled`, which puts no floor on the gap, that is most of
+the first half. Nobody established which scoring was being played before building.
+
+What ships is one row of each: **Settled**, the boards both runs of which are in and the luck
+cancelled, and **Points**, the running total in points — real rather than invented, since every deal is
+scored in points and only *converted* at the board. The points row is drawn when it says something the
+other does not: **always under IMPs**, where the two are different units, and under points only while a
+board is open, since there the two are the same quantity and converge exactly when the last one comes
+back. Printing one number twice is what kept IMPs to a single row originally, and this is that rule
+read from the other side.
+
+**Three attempts that failed, kept because each failed for its own reason.** A *still out* figure
+beside Settled, which argued against itself: a board's margin is your net in both runs added, so a
+board played once carries the luck of the stream you held, and a large figure there usually means you
+are about to hand the good cards back — drawn as a credit it read as money in the bank and was a
+warning. Its count was redundant too, since `Settled 1/5` already says four are out. Then replacing
+Settled with Points entirely until a board came back, which threw away the fraction — the one thing
+saying how far you are from anything being decided. Then a revert to Settled alone, which under IMPs
+was **a rename and nothing more**: the net effect of the whole sequence, at that point, was one figure
+removed and one relabelled.
+
+**The lesson is the cheap one and it was skipped twice.** The report named a symptom that two formats
+produce for different reasons, and the first question — *which scoring were you playing* — was not
+asked until after three deploys. `bench/` exists because almost every claim about the bot in this file
+was wrong the first time it was measured; the same discipline applies to a report about a screen.
 
 **The score runs now rather than waiting for a board to close.** It totalled closed boards only,
 which on a short session left it at nil for most of the way. Summing every deal played agrees with
@@ -2747,6 +3133,175 @@ auction.
 
 ### Open threads
 
+- **The recorded Doop boards are a paired instrument against a human bidder, and nothing reads them
+  yet.** 18 sessions, 148 boards, **mean placing 59.1%** against a corpus calibrated to 50 — so the
+  person beats the bidder that generated the field. Each board is the sharpest comparison this project
+  has: *same stock, same opposition, same field*, a human bidder instead of the bot. That is exactly
+  what `bench/field.ts compare` does for two bots, and the deal cancels outright.
+
+  | over 148 boards | boards | mean placing | tops | bottoms |
+  | --- | --- | --- | --- | --- |
+  | **they declared** | 58 | **66.8%** | 22 | 10 |
+  | **you declared** | 88 | **54.1%** | 26 | 24 |
+
+  **The person's edge is almost entirely on defence**, and that is the exact inverse of the bot's own
+  hand-log split — it gains on contracts it declares and bleeds on the ones it lets the other seat buy.
+  Two independent measurements pointing at the same asymmetry from opposite ends.
+
+  And the level table is a direct target for the `TRICK_SPREAD` thread: the person opens at the one
+  level on 12 boards where the field averages **1.99**, placing 49.4% — their worst bracket — and takes
+  59.3% at the four level on their largest sample. Since both contracts sit against the same field, "how
+  does the bot's level compare with a human's on identical cards" is a query rather than a simulation.
+
+  **What to build when there are more: a `compare` mode that ranks the *recorded* boards instead of a
+  second bot.** What not to build is an equity fit off this — a rubber-indexed table needs rubbers, and
+  a session has no standing at all.
+
+  **The sample is the thing to wait on.** 148 boards is about ±4 points on an aggregate: enough for the
+  13-point defence gap, not enough per hand shape. The four-level row is already worth believing; the
+  one-level row at 12 boards is not.
+
+
+- **The equity table has now been re-fitted under two doubling regimes and lost both times, which
+  exonerates it.** The shipped table was fitted from rubbers where **nothing ever doubles** —
+  `bench/equity.ts` had no doubler at all until `bench/oracle.ts` was extracted and shared — so it
+  learnt what a standing is worth in a world where overreach is free. That looked like the explanation
+  for the one thing the hand log still blames v3 for: it bids **half a level above par** where v2 bid
+  at par, and 273 doubled deals carry the whole remaining deficit.
+
+  | 320 plays each, `table=refit oracle=both`, 8-sample card play | rubbers won | **points margin** | down 2+ |
+  | --- | --- | --- | --- |
+  | re-fit at **down 2** | 51.3% ± 2.8 (0.5σ) | **−1491 ± 394, 3.8σ** | 17% of deals, 2225 a rubber |
+  | re-fit at **down 3** | 48.3% ± 2.8 (0.6σ) | **−587 ± 282, 2.1σ** | 8% of deals, 1174 a rubber |
+
+  **Null on rubbers both times and worse on points both times**, which is coherent rather than
+  contradictory: doubled penalties go *above* the line, so they bleed points without changing the race
+  to a hundred below it.
+
+  **The calibration step was right about the first failure and did not rescue the second.** Down-2
+  doubles **42%** of v3's deals against a person's **19%** over 1,449 logged deals; down-3 gives 22%,
+  which is the matched rate. Re-fitting there cut the damage by about two thirds — and left it the wrong
+  side of zero. `ORACLE_FROM_DOWN` is a flag now (`from=N`, default 2) and is read from the command line
+  inside the shared module, so the two benches cannot be run at different thresholds by accident.
+
+  **So the conclusion is about where overreach is *not*.** Two re-fits, two regimes, both producing more
+  sensible-looking coefficients than the shipped table — `level.part` came out **positive under both**,
+  where every no-doubling fit made it negative — and neither beat it. **How a standing is priced is not
+  what makes v3 stretch.** `EQUITY_DOUBLED` stays beside `EQUITY` as a rejected candidate so the numbers
+  sit next to the result they got.
+
+  **What `level.part` now has is a mechanism rather than a fourth value.** The shipped −0.2204 says a
+  part-score at level makes you *less* likely to take the rubber, and `equity.ts` flags it as not
+  understood across four fits. Under both doubling regimes it is positive. The reading: with no doubler,
+  a seat merely holding a part-score is disproportionately one that **settled** when it should have
+  stretched, so the fit reads "part-scores lose" as causal. Punishment removes the selection effect.
+  That is worth keeping even though the tables carrying it lost.
+
+  **Next suspect, and it is not the objective.** The estimate is unbiased — declaring bias +0.07 tricks
+  over 2,380 hand-strain pairs — so a bidder that bids half a level over par with an unbiased centre is
+  being pushed there by the *width*. `TRICK_SPREAD` is one fitted number applied to every hand, and an
+  over-wide distribution stretches: with a game bonus in reach the upside tail is worth more than the
+  downside costs, so the bidder buys a contract the centre does not support. That is testable against
+  the searched spread, which measures 1.11 tricks against the fitted 1.54 — and it predicts the shipped
+  bidder should overreach *less* on hands where the search completes, which the hand log can be asked
+  about directly.
+
+  **One read-out lie found while checking this, and it is the reason the run was checked at all.** The
+  `oracle=both` header printed "from down 2" as a literal while the `reference` branch interpolated
+  `ORACLE_FROM_DOWN`, so the log could not say which threshold had run. The flag was verified to work by
+  importing the constant directly rather than by trusting the header. **A read-out that states a
+  constant it does not read is not a read-out** — this directory has now recorded that failure in the
+  census, in the error bar, and in a header.
+
+- **`bench/field.ts compare` is the most sensitive instrument in here, and the reason is the
+  pairing.** Two bidders over the same corpus boards, each ranked against the field already on them:
+  same stock, same opposition, same field, only the bidder differs, so the deal cancels outright —
+  duplication doing for a measurement what §1.8 does for a game. Every other bench fights the deal,
+  which is why `bench/rubber.ts` needs hundreds of rubbers to separate two similar bidders.
+
+  **And it calibrates itself, which no other bench here does.** The field was generated by the bot at
+  a known configuration, so a bidder that plays like the corpus scores **50% by construction** — no
+  reference opponent to choose and no anchor to invent. That matters because `bench/rubber.ts` has
+  twice been caught by a reference quietly handicapping one side. Measured: the corpus's own
+  configuration came back at **48.9% over 200 boards**, which is the null holding.
+
+  **It has to be seeded outside the corpus's own range**, and getting that wrong is silent. Generation
+  derives its runs as `seed ^ (run * 2 + 1)`, so 1 through 16 are taken; seeding the bidder under test
+  at `seed ^ 1` makes it a byte-for-byte replay of corpus run 0, which ties with itself on every board
+  and is dragged toward 50% however it bids. Caught only because the first run returned exactly 50.0%.
+
+- **The field bidder was inheriting the rubber's objective, and it cost five points of placing.**
+  `objectiveFor` had no case for `"field"`, so under v3 a session was priced by the change in its
+  chance of taking a rubber it could never have. Measured against the same bidder pricing as a
+  duplicate board:
+
+  | | mean placing |
+  | --- | --- |
+  | duplicate objective | **48.9%** |
+  | rubber equity objective | 44.0% |
+  | difference | **+4.9 ± 1.9 over 200 boards**, 2.6σ |
+
+  Five points of placing is a large effect in matchpoint terms, and it was live. Same shape as the bug
+  `botTuning.ts` already records — a function written so two callers could not disagree, with a case
+  missing rather than a caller missing.
+
+- **Duplicate's own objective and plain points are indistinguishable in a field session, measured
+  rather than assumed.** At 200 boards points was ahead by 1.5 ± 1.9, which was 0.8σ and was written
+  down here as a hypothesis: what `points` adds and `duplicate` does not is `positionalValue`, a credit
+  for part-scores and games a session can never bank — plainly wrong for the reason it exists, and yet
+  under **matchpoints** competing hard for a part-score is *correct*, since a part-score that beats the
+  field is a top. So the wrong credit might have been producing roughly right behaviour, which would
+  have been the second pair of errors in here that happen to cancel.
+
+  | over 500 boards | mean placing |
+  | --- | --- |
+  | duplicate objective | **48.7%** |
+  | the same bidder pricing in points | **48.6%** |
+  | difference | **+0.1 ± 1.2** |
+
+  **The sign flipped and the gap vanished**, so there was nothing to explain: the credit is not
+  compensating for anything, it simply does not reach far enough to change a call. Both arms sit about
+  a point under the 50% self-calibration mark, which is the corpus null holding — neither pricing beats
+  the bidder that generated the field.
+
+  Worth keeping as an instrument note rather than a finding: **0.8σ is a coin flip and this file
+  treated it as a direction long enough to build a mechanism for it.** The error bar said so at the
+  time. Same lesson as the +0.01 ± 0.02 margin coefficient that got written down as "points that are
+  not progress toward a game do not bring the rubber closer" and turned out to be +0.08.
+
+- **The bot maximises points in a format scored on placement, and that is the same mispricing this
+  file has already recorded twice.** `objectiveFor` gives Doop the `"duplicate"` objective, on the
+  argument that a field board *is* a duplicate board — no rubber, prescribed vulnerability, the deal
+  settled where it is played. That is right about how the **deal** is scored and wrong about how the
+  **format** is: §1.8a settles a board in *matchpoints*, and duplicate settles it in points.
+
+  In bridge those are different games and the difference is not a nuance. Under matchpoints what a
+  result is worth is its **rank**, not its size: an overtrick that lifts you past one more entry is
+  worth exactly what a slam bonus is, and going down 100 to beat a part-score the field is making is a
+  top rather than a loss. Expected points and expected rank agree often enough to hide the gap and
+  diverge precisely on **risk** — points favour the best average, matchpoints favour the likeliest
+  outcome. A bidder pricing in points will take a line that is worth more on average and places worse.
+
+  The proper objective converts the bidder's own sampled outcome distribution into **expected
+  matchpoints against a plausible field** rather than into points. Two things make that tractable:
+  `searchTricks` already produces a *distribution* rather than a point estimate — which is the thing
+  that made searching worth 65% of rubbers, since "the whole distribution wins" and handing the bidder
+  only its centre came out level — and the corpus is a real field to price against.
+
+  **Three warnings, and the first is the one that would ruin it.** The bot must never be handed the
+  board's actual traveller: the player is not given it until the deal is over (§1.8a enforces that
+  server-side), and a bidder that had it would be playing a different game from the person it is being
+  compared with. It has to price against a *modelled* field, not the real one. Second, the same
+  circularity that bit the equity table twice applies — a field fitted from the points bidder's own
+  results is an opponent model of that bidder. And third, `bench/rubber.ts` has no field mode, so
+  nothing can currently play one objective against the other; building that instrument comes before
+  building the objective, on this file's own repeated evidence that the instrument is what is usually
+  wrong.
+
+  Worth stating what is *not* suspect: the deal-level pricing is sound. A field deal really is scored
+  by `scoreDuplicateDeal` with vulnerability prescribed and no standing, so the objective is correct
+  about everything except the currency the result is finally read in.
+
 - **The ladder was spaced on its one inert lever, and measuring one lever at a time is what fixed
   it.** The first ladder guessed four rungs varying recall 3/6/10/13, samples 6/15/30/60 and bid search
   0/40/120/250ms together. Three of the four turned out to be **the same opponent**: Tournament against
@@ -3288,6 +3843,31 @@ safety check: **`index.html` on the domain already naming the asset does not mea
 propagated.** It named it, the asset path still returned HTML, and the request I made to "verify"
 cached that HTML under the exact URL every visitor was about to load. The app was broken until the
 next deploy.
+
+**That order was followed on the next deploy and it happened anyway, so it is not the rule.** Alias
+returned JS, `?v=` returned JS, the plain path returned `text/html` — and `cf-cache-status: HIT` with a
+`last-modified` matching that very request says the request itself created the cache entry. **`?v=` and
+the plain path are different cache keys**, so the buster proving the origin has the file proves nothing
+about what the plain path will get; the window is between the upload finishing and the *custom domain*
+switching to the new deployment, and a request landing inside it caches the fallback for a year.
+
+The rule that actually held, on the recovery deploy: **wait until the domain's own `index.html` names
+the new hash before requesting any plain asset path.** Polled with a buster, six times ten seconds
+apart; the plain path then came back `application/javascript` with `cf-cache-status: MISS`. Note this
+contradicts the older lesson above — that index naming the asset is not proof — so neither check is
+sufficient alone and the honest summary is that **every plain-path request from the CLI is a gamble,
+and the only reason to take it is to confirm a recovery.**
+
+**The real fault is in `_headers` and it is structural.** `/assets/*` carries
+`max-age=31536000, immutable`, and Pages matches header rules **by path**, so the SPA fallback served
+for a *missing* `/assets/*` file inherits a one-year immutable cache. A transient miss is therefore
+permanent. The fix worth testing is a `_redirects` rule making an unknown `/assets/*` **404 instead of
+falling back to the shell** — a hashed asset that does not exist is not a route and should never render
+the app. It is untested because getting Pages' precedence wrong would break every asset request, and it
+should be proved on a *preview* branch deploy before it goes near `main`.
+
+Recovery is unchanged and it works: rebuild — the build stamp changes, so the content hash changes —
+and redeploy, which orphans the poisoned path.
 
 The order that is actually safe: deploy, verify on the `*.pages.dev` alias, then probe the domain
 with `?v=<timestamp>` and check `content-type`, and only then touch the plain path. Recovery is a

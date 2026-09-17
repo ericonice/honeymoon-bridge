@@ -18,6 +18,7 @@ import {
   nextDuplicateDeal,
   replayOf,
   replayTotal,
+  sessionSplit,
   scheduleFor,
   scheduleKindOf,
   scoreDuplicateDeal,
@@ -909,6 +910,14 @@ describe("a session", () => {
     }
   });
 
+  /**
+   * **What this could not see, and the reason it is worth saying out loud.** Splitting
+   * the margin by first play and replay sums to the whole — and so does splitting it by
+   * which side of the stock this seat held, since both partition the same runs. The
+   * invariant survives either grouping, so it cannot say which one `SessionPad` draws.
+   * That is the pad's question and `test/sessionPad.test.ts` is where it is pinned, over
+   * a fixture whose two boards are started by different seats so the groupings disagree.
+   */
   it("reads first play and replay as null before either has happened", () => {
     const summary = summarizeDuplicate(startDuplicate({ ...options, boards: 2, minGap: 2 }));
 

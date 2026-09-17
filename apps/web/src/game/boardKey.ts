@@ -31,5 +31,14 @@ export function boardKeyOf(match: MatchState): number | null {
   if (match.kind === "duplicate") {
     return match.session.boards[currentDeal(match.session).board]?.seed ?? null;
   }
+  // **Always null for a Doop session, and that is the format rather than an
+  // omission.** Every board is met once, so there is never a second run for a
+  // remembered pairing to help with — and a board the player has met before is one
+  // whose cards they may remember, which is a fact about the *person* and not
+  // something the computer is entitled to. Handing it a key here would give it
+  // recall on a board it has no history of playing.
+  if (match.kind === "field") {
+    return null;
+  }
   return match.table.dealt[match.table.dealt.length - 1]?.seed ?? null;
 }
