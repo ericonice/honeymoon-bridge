@@ -70,8 +70,10 @@ function segments(mine: boolean): {
     dim: count(`path[class~="stroke-white/20"]`),
     lit: count(`path[class~="stroke-amber-400"]`),
     // The check mark's own stroke is not a segment, so it is excluded by name.
+    // Green is the decided ring rather than a third live ink, so it is named here
+    // alongside the two rather than counted as an escalation creeping back in.
     other: count(
-      `path[class]:not([class~="stroke-white/20"]):not([class~="stroke-amber-400"]):not([class~="stroke-table-dark"])`,
+      `path[class]:not([class~="stroke-white/20"]):not([class~="stroke-amber-400"]):not([class~="stroke-emerald-400"]):not([class~="stroke-table-dark"])`,
     ),
   };
 }
@@ -88,10 +90,16 @@ function numeral(mine: boolean): string | null {
   return text === null || text === undefined ? null : (text.textContent ?? "");
 }
 
-/** Whether this seat's ring wears the check that says its target was reached. */
+/**
+ * Whether this seat's ring has gone green, which is what says its target was reached.
+ *
+ * It was a green disc with a check over the middle, and became a green *ring* with the
+ * count still in it — the disc covered the numeral exactly when overtricks start being
+ * the interesting part. So this looks for green segments rather than a filled circle.
+ */
 function checked(mine: boolean): boolean {
   return ringsFor(mine).some(
-    (svg) => svg.querySelector(`circle[class~="fill-emerald-400"]`) !== null,
+    (svg) => svg.querySelector(`path[class~="stroke-emerald-400"]`) !== null,
   );
 }
 
@@ -245,7 +253,7 @@ test("each seat's ring counts down that seat's own target", () => {
  * cards still in hand. With two rings this needs no signal of its own — the side
  * that got there wears the check, and that *is* the other side being out of reach.
  */
-test("a deal decided early checks the side that got there, and only that side", () => {
+test("a deal decided early turns green on the side that got there, and only that side", () => {
   let checkedEarly = false;
 
   for (let seed = 1; seed <= 40 && !checkedEarly; seed += 1) {
@@ -369,7 +377,7 @@ test("turning the count off leaves the play screen with no rings at all", () => 
  * check. The screen goes on showing the play for the trick's hold and its sweep,
  * so there is a real beat to draw it in, and nothing was drawn in it.
  */
-test("a contract settled on the last trick still shows the check", () => {
+test("a contract settled on the last trick still turns its ring green", () => {
   driveToPlay(0, 7);
   expect(outlookNow(0), "the auction never settled into a contract").not.toBeNull();
 
@@ -382,7 +390,7 @@ test("a contract settled on the last trick still shows the check", () => {
 
   const iGotThere = mine.state === "reached";
   expect(theirs.state).toBe(iGotThere ? "gone" : "reached");
-  expect(checked(iGotThere), "the deciding trick drew no check").toBe(true);
+  expect(checked(iGotThere), "the deciding trick left the ring ungreened").toBe(true);
   expect(checked(!iGotThere)).toBe(false);
 });
 
@@ -426,7 +434,7 @@ test("the last trick sits undisturbed before the result appears", () => {
  * the numeral could disagree with the tricks actually taken is the one where it is not
  * drawn.
  */
-test("the ring carries the tricks that seat has taken, until its target is reached", () => {
+test("the ring carries the tricks that seat has taken, decided or not", () => {
   const seat: PlayerId = 0;
   driveToPlay(seat, 7);
   let live = 0;
@@ -438,13 +446,17 @@ test("the ring carries the tricks that seat has taken, until its target is reach
       if (outlook === null) {
         continue;
       }
+      // The numeral is the tricks actually taken in both states — which is the whole
+      // reason it is passed in rather than derived from `need`, since that saturates at
+      // the target and would read an overtrick as the contract exactly.
+      expect(numeral(mine)).toBe(String(board.state.deal.tricksWon[mine ? seat : ((1 - seat) as PlayerId)]));
       if (outlook.state === "reached") {
         decided += 1;
-        expect(numeral(mine)).toBeNull();
+        expect(checked(mine)).toBe(true);
         continue;
       }
       live += 1;
-      expect(numeral(mine)).toBe(String(outlook.target - outlook.need));
+      expect(checked(mine)).toBe(false);
     }
     playOne();
   }

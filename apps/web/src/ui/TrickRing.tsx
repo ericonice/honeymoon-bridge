@@ -43,18 +43,25 @@ import type { TrickOutlook } from "@hb/engine";
  * restating something the opponent's ring was already saying in tricks, which is
  * the clearer of the two channels and the one that cannot be misread at 24px.
  *
- * **Reaching the target is the only thing that changes the drawing**: a green disc
- * with a check, on whichever ring got there. It marks that side achieving its own
- * goal, so it is the same mark for a contract made and a contract set — which is
- * why this component no longer needs to know whose ring it is. From your seat a
- * check on theirs is bad news, and it is still the true statement about them; the
- * news about *you* is carried by the sound, which is per-device where the rings are
- * per-seat.
+ * **Reaching the target is the only thing that changes the drawing**: the whole ring
+ * turns green, and the count stays. It marks that side achieving its own goal, so it is
+ * the same mark for a contract made and a contract set — which is why this component
+ * does not know whose ring it is. From your seat a green ring opposite is bad news, and
+ * it is still the true statement about them; the news about *you* is carried by the
+ * sound, which is per-device where the rings are per-seat.
  *
- * A ring is live and a disc is decided, which is what lets the check borrow a hue
- * without ambiguity: a green disc cannot be misread as progress, where a
- * nearly-complete green ring could be. **Only one of the pair can ever wear it**,
- * because the two targets sum to one more than the tricks in a deal.
+ * **It was a green disc with a check, and the count is why that changed.** The disc was
+ * argued for on the grounds that a ring is live and a disc is decided, so a green disc
+ * cannot be misread as progress where a nearly-complete green ring could. That reasoning
+ * held while the ring carried no number — and it cost the number, because the disc
+ * covered it, exactly when overtricks become the interesting part. The ambiguity it
+ * guarded against does not arise: `lit` reaches `target` only when the target is
+ * reached, so **a full ring is a decided ring** and there is no nearly-complete green one
+ * to confuse it with. The numeral turns green with it rather than staying white, so the
+ * mark reads as one thing.
+ *
+ * **Only one of the pair can ever be green**, because the two targets sum to one more
+ * than the tricks in a deal.
  *
  * **Under trial: lit segments shade from amber toward green as they fill**, in
  * place of the single flat colour the paragraphs above argue for. Asked for
@@ -72,6 +79,16 @@ function colorAt(t: number): string {
 }
 export interface TrickRingProps {
   readonly outlook: TrickOutlook;
+  /**
+   * Tricks this seat has actually taken.
+   *
+   * Passed rather than derived, because `target - need` saturates: `need` is zero once
+   * the target is reached, so a declarer who has made an overtrick would read as the
+   * contract exactly. That did not matter while the decided ring was a disc with a check
+   * over the numeral; it does now that the number stays on screen past the moment the
+   * deal is decided, which is exactly when overtricks start being the interesting part.
+   */
+  readonly taken: number;
   /** Edge length in pixels. Scales the whole drawing; nothing here is fixed. */
   readonly size?: number;
 }
@@ -100,11 +117,10 @@ function gapFor(target: number): number {
   return Math.min(0.05, 0.18 / target);
 }
 
-export function TrickRing({ outlook, size = 44 }: TrickRingProps): React.JSX.Element {
+export function TrickRing({ outlook, size = 44, taken }: TrickRingProps): React.JSX.Element {
   const centre = size / 2;
   const radius = size * 0.36;
   const width = size * 0.1;
-  const reach = size * 0.15;
   const decided = outlook.state === "reached";
 
   const lit = decided ? outlook.target : outlook.target - outlook.need;
@@ -128,8 +144,14 @@ export function TrickRing({ outlook, size = 44 }: TrickRingProps): React.JSX.Ele
             // The class stays even while the trial overrides its colour inline —
             // it is still what identifies a lit segment as one, to this file and
             // to `test/trickRing.test.ts`, whichever colour it actually paints.
-            className={isLit ? "stroke-amber-400" : "stroke-white/20"}
-            style={isLit ? { stroke: colorAt(index / Math.max(1, outlook.target - 1)) } : undefined}
+            className={
+              decided ? "stroke-emerald-400" : isLit ? "stroke-amber-400" : "stroke-white/20"
+            }
+            style={
+              isLit && !decided
+                ? { stroke: colorAt(index / Math.max(1, outlook.target - 1)) }
+                : undefined
+            }
             d={arc(centre, radius, index * slot + gap / 2, (index + 1) * slot - gap / 2)}
             strokeLinecap="butt"
             strokeWidth={width}
@@ -137,37 +159,17 @@ export function TrickRing({ outlook, size = 44 }: TrickRingProps): React.JSX.Ele
         );
       })}
 
-      {decided ? null : (
-        <text
-          className="fill-white/85"
-          dominantBaseline="central"
-          fontSize={size * 0.34}
-          fontWeight={600}
-          textAnchor="middle"
-          x={centre}
-          y={centre}
-        >
-          {lit}
-        </text>
-      )}
-
-      {decided ? (
-        <>
-          <circle
-            className="fill-emerald-400"
-            cx={centre}
-            cy={centre}
-            r={radius + width / 2}
-          />
-          <path
-            className="stroke-table-dark"
-            d={`M ${centre - reach} ${centre} L ${centre - reach * 0.2} ${centre + reach * 0.75} L ${centre + reach} ${centre - reach * 0.7}`}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={width * 1.3}
-          />
-        </>
-      ) : null}
+      <text
+        className={decided ? "fill-emerald-400" : "fill-white/85"}
+        dominantBaseline="central"
+        fontSize={size * 0.34}
+        fontWeight={600}
+        textAnchor="middle"
+        x={centre}
+        y={centre}
+      >
+        {taken}
+      </text>
     </svg>
   );
 }

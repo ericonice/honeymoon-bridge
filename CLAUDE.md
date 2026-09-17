@@ -794,11 +794,25 @@ state and the `slack` field they were cut from on the way back out. **If a third
 this is the argument against it**: with both seats' counts on screen, "you are in trouble" is already
 drawn.
 
-**Only one ring ever wears the check**, because a seat being out of reach and its opponent arriving
-are the same event: the targets sum to fourteen against thirteen tricks. It is green on either ring —
-it marks that side reaching its own target, the same mark for a contract made and a contract set —
-which is why `TrickRing` does not know whose ring it is at all. `trickRingLabel` still takes `mine`,
+**Reaching the target turns the whole ring green and keeps the count**, and it was a green disc with a
+check until the numeral came back. The disc was argued for here on the grounds that a ring is live and a
+disc is decided — a green disc cannot be misread as progress where a nearly-complete green ring could.
+That held while the ring carried no number, and it **cost the number**, because the disc covered it
+exactly when overtricks become the interesting part.
+
+The ambiguity it guarded against does not arise: `lit` reaches `target` only when the target is reached,
+so **a full ring is a decided ring** and there is no nearly-complete green one to confuse it with. The
+numeral turns green with the segments rather than staying white, so the mark reads as one thing.
+
+**Only one ring can ever be green**, because a seat reaching its target and its opponent being out of
+reach are the same event: the targets sum to fourteen against thirteen tricks. It is green on either
+ring — it marks that side reaching its own target, the same mark for a contract made and a contract set
+— which is why `TrickRing` does not know whose ring it is at all. `trickRingLabel` still takes `mine`,
 because a sentence has to name somebody where a shape does not.
+
+**The numeral is passed in rather than derived, and that is what the change forced.** `target - need`
+saturates — `need` is zero once the target is reached — so a declarer who made an overtrick would have
+read as the contract exactly. Harmless while a disc covered the number; wrong the moment it stays.
 
 **The outcome sound moved from scoring to the deciding trick, and that gave the verdict two possible
 sources.** So it is a latch, not a rising edge — whichever of the deciding trick and the score

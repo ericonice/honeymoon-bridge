@@ -449,7 +449,7 @@ export function PlayPhase({
     }
     return (
       <>
-        <TrickRing outlook={outlook} />
+        <TrickRing outlook={outlook} taken={view.tricksWon[seat]} />
         <span className="sr-only">
           {trickRingLabel({
             declaring: declaringIn(view, seat),
