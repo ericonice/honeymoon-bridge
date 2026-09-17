@@ -217,8 +217,8 @@ test("an opponent played in both formats names them, on a line each", () => {
 
   expect(lines()).toEqual([
     "Computer 1200 cpu +731 15–8 · 155 hands",
-    "rubbers +641 13–7 · 146 hands",
-    "mirror matches +90 2–1 · 9 hands",
+    "rubbers – standard +641 13–7 · 146 hands",
+    "rubbers – mirror +90 2–1 · 9 hands",
   ]);
 });
 
@@ -233,7 +233,7 @@ test("an opponent played in one format is still a single line", () => {
 
   expect(lines()).toHaveLength(1);
   expect(lines()[0]).toContain("Christopher");
-  expect(rowText()).not.toContain("rubbers");
+  expect(rowText()).not.toContain("rubbers – standard");
 });
 
 /**
@@ -289,8 +289,8 @@ test("a third format lands on the list rather than falling off it", () => {
 
   expect(lines()).toEqual([
     "Computer 1200 cpu +1,071 16–9 · 175 hands",
-    "rubbers +641 13–7 · 146 hands",
-    "mirror matches +90 2–1 · 9 hands",
+    "rubbers – standard +641 13–7 · 146 hands",
+    "rubbers – mirror +90 2–1 · 9 hands",
     "duplicate – replay +340 1–1 · 20 hands",
   ]);
 });
@@ -640,10 +640,10 @@ test("a recent match says which format it was", () => {
 
   const text = rowText();
   for (const named of [
-    "Mirror · 8 deals",
+    "Rubbers – Mirror · 8 deals",
     "Duplicate – Replay · 8 deals",
     "Single game · 8 deals",
-    "Rubber · 8 deals",
+    "Rubbers – Standard · 8 deals",
   ]) {
     expect(text, `no row reads "${named}"`).toContain(named);
   }

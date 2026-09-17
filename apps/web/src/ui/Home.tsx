@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { DuplicateSchedule, MatchFormat } from "@hb/engine";
 import type { TableRole } from "@hb/protocol";
 import type { Account } from "../game/account.js";
@@ -207,23 +207,34 @@ function Format({
             {family.label}
           </legend>
           <div className="flex gap-1">
-            {family.cells.map((cell) => (
-              <button
-                key={cell}
-                type="button"
-                aria-pressed={chosen === cell}
-                className={`flex-1 rounded-lg px-1.5 py-2 text-sm font-medium ${
-                  chosen === cell ? "bg-white/15 text-white" : "text-white/55"
-                }`}
-                onClick={() => {
-                  // Coming back to Rubber restores the length last chosen for it,
-                  // rather than defaulting to two — which is what a trip through
-                  // Duplicate used to do, silently promoting a single game to a rubber.
-                  onChange(cell === "rubber" ? rubberFormatFor(rubberGames()) : cell);
-                }}
-              >
-                {labels[cell]}
-              </button>
+            {family.cells.map((cell, at) => (
+              <Fragment key={cell}>
+                {/* **A rule between the two cells, because a box of two needs one.**
+                    Without it the pair reads as one wide control with a highlight
+                    somewhere in it — the selected cell carries a background and the
+                    other carries nothing, so on the unselected side there is no edge at
+                    all. Inset top and bottom rather than full height: a rule meeting the
+                    box's own border makes a grid of four boxes out of two, which is the
+                    thing the `fieldset` is there to avoid saying. */}
+                {at === 0 ? null : (
+                  <span aria-hidden="true" className="my-1.5 w-px shrink-0 bg-white/15" />
+                )}
+                <button
+                  type="button"
+                  aria-pressed={chosen === cell}
+                  className={`flex-1 rounded-lg px-1.5 py-2 text-sm font-medium ${
+                    chosen === cell ? "bg-white/15 text-white" : "text-white/55"
+                  }`}
+                  onClick={() => {
+                    // Coming back to Standard restores the length last chosen for it,
+                    // rather than defaulting to two — which is what a trip through
+                    // Duplicate used to do, silently promoting a single game to a rubber.
+                    onChange(cell === "rubber" ? rubberFormatFor(rubberGames()) : cell);
+                  }}
+                >
+                  {labels[cell]}
+                </button>
+              </Fragment>
             ))}
           </div>
         </fieldset>

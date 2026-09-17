@@ -44,11 +44,20 @@ export function formatPlural(format: MatchFormat): string {
 }
 
 const FORMAT_NAMES: Record<MatchFormat, { readonly many: string; readonly one: string }> = {
-  // **Both duplicate formats name the family here, where the row does not.**
-  // On Home the two sit inside a box captioned Duplicate, so the cells say only what
-  // distinguishes them. A record has no such box: a row reading "Doop sessions" next
-  // to one reading "rubbers" gives a reader no way to know the first two are the same
-  // family, and these names are read far more often than the cells are.
+  // **Every format names its family here, where Home's row does not.**
+  // On Home a format sits inside a box captioned Rubbers or Duplicate, so the cell says
+  // only what distinguishes it. A record has no such box: a row reading "Doop sessions"
+  // beside one reading "mirror matches" gives a reader no way to know which of them are
+  // scored the same way, and these names are read far more often than the cells are.
+  //
+  // So all four are `family – variant`, which also makes the record's own ordering
+  // legible: `FORMAT_ORDER` lists the rubber-scored formats before the board ones, and
+  // with these names that grouping is visible rather than merely true.
+  //
+  // **A single game is the exception and stays "Single game".** It is not a third
+  // rubber variant — it is the standard rubber at a length of one, which is what
+  // `RubberFormat`'s two values already say — so naming it as a sibling of Standard and
+  // Mirror would invent a distinction the stored data does not have.
   //
   // **`"field"` is the stored value and `Doop` is the name**, which is a relabelling
   // rather than a re-modelling — the same constraint the one-game length respected, and
@@ -58,8 +67,8 @@ const FORMAT_NAMES: Record<MatchFormat, { readonly many: string; readonly one: s
   duplicate: { many: "duplicate – replay", one: "Duplicate – Replay" },
   field: { many: "duplicate – doop", one: "Duplicate – Doop" },
   game: { many: "single games", one: "Single game" },
-  mirror: { many: "mirror matches", one: "Mirror" },
-  rubber: { many: "rubbers", one: "Rubber" },
+  mirror: { many: "rubbers – mirror", one: "Rubbers – Mirror" },
+  rubber: { many: "rubbers – standard", one: "Rubbers – Standard" },
 };
 
 const RANK_LABELS: Record<Rank, string> = {

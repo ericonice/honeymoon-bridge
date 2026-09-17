@@ -2758,6 +2758,24 @@ is an exception to it. Renaming the cell removes the collision rather than overr
 boxes then name the thing that actually separates them: **rubber scoring against a board settled where
 it is played**. "Games" named a *length*, which the line underneath already says.
 
+**A rule sits between the two cells of each box**, inset top and bottom. Without it the pair reads as
+one wide control with a highlight somewhere in it: the selected cell carries a background and the other
+carries nothing, so on the unselected side there is no edge at all. Inset rather than full height,
+because a rule meeting the box's own border makes a grid of four boxes out of two — which is the thing
+the `fieldset` exists to avoid saying.
+
+**And every format now names its family on the record**: `Rubbers – Standard`, `Rubbers – Mirror`,
+`Duplicate – Replay`, `Duplicate – Doop`. Home can leave the family to the box a cell sits in; a record
+row has no box, so a line reading "Doop sessions" beside one reading "mirror matches" gave a reader no
+way to tell which of them are scored the same way. It also makes the ordering legible rather than merely
+true — `FORMAT_ORDER` puts the rubber-scored formats first, and with these names that grouping is
+visible.
+
+**A single game stays "Single game", which is the one asymmetry and is deliberate.** It is not a third
+rubber variant — it is the standard rubber at a length of one, which is exactly what `RubberFormat`'s
+two values say — so naming it as a sibling of Standard and Mirror would invent a distinction the stored
+data does not have.
+
 **And the record breakdown sorted Doop first, because `FORMAT_ORDER` never got `"field"`.** `indexOf`
 answers −1 for a format it does not know, which sorts ahead of `rubber` at 0 — so the newest format
 silently led every opponent's list. **Fifth time a list of formats has failed to be widened**, after the
