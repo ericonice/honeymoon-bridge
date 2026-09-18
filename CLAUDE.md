@@ -3186,6 +3186,46 @@ auction.
 
 ### Open threads
 
+- **Searching the position the opponent declares is built, measured twice, and worth nothing in either
+  currency.** `searchTricks` had always solved with the opponent on lead, which answers what *this* seat
+  takes declaring; the branch pricing a pass, a raise or a double against a contract **they** would
+  declare went on counting. `SearchOptions.defending` is a second solve of the same guessed hands with
+  this seat leading — not the first read backwards, since `13 − x` is what they take *while this seat
+  declares*, a position nobody is in. Gated on `BotTuning.searchDefending`, **off**.
+
+  | | rubbers, `bench/rubber.ts 160 8 defend=500` | matchpoints, `bench/field.ts compare 200 defend` |
+  | --- | --- | --- |
+  | result | 46.6% ± 2.8, 320 plays | 47.9% against 48.9%, 200 boards |
+  | from even | 1.2σ | **+1.0 ± 1.0 to counting** |
+
+  **The second run was the one currency left to try, and it was my prediction.** A recorded Doop board
+  went **−810 where the field went −780**: 30 points of score and **50 percentage points** of placing, so
+  matchpoints price a defensive trick enormously higher and the rubber bench looked like it was diluting
+  the effect away. Wrong, and instructively: the currency changes what a **trick** is worth, not what a
+  **better estimate** is worth. An estimate only pays if it changes a call *for the better*, and the
+  census says it already changes **a third** of the calls where their contract stands — the capability
+  fires, and the changed calls simply are not better ones.
+
+  **The baseline arm is the control and it held exactly.** A is the generator's own configuration and
+  came back at **48.9%**, the same figure this file records for the corpus self-calibration null. An
+  instrument reproducing its own known null to the tenth is one whose other arm can be believed.
+
+  **What is still untested is the premise, and it is now the only candidate left.** The 1.04-against-1.54
+  accuracy figure behind all of this is a **declaring** number. Nobody has measured whether a searched
+  estimate beats a counted one when the *opponent* declares — and there is a specific reason to doubt it:
+  the search guesses their hand from the sampler, and `impliedByTheirBid` exists precisely because this
+  seat's read of a hand they have bid is weak. A par measurement in tricks costs about a minute and
+  should have been run first. If the searched estimate is no more accurate, `searchDefending` should be
+  deleted rather than left gated off, and the **−135 a deal** the hand log once blamed on defence wants a
+  different explanation — the doubling threshold, or pricing a pass against a contract they may improve.
+
+  **This thread was recorded once and I deleted it**, with a range edit that replaced everything between
+  two other threads while writing up a later result. The code stayed, the finding did not, and it was
+  only noticed because the same measurement came round again. **A range replacement over a list of
+  findings is a delete of whatever happened to sit between the anchors** — this file is a record before
+  it is a document, and edits to it want the same care as edits to the bench.
+
+
 - **The recorded Doop boards are a paired instrument against a human bidder, and nothing reads them
   yet.** 18 sessions, 148 boards, **mean placing 59.1%** against a corpus calibrated to 50 — so the
   person beats the bidder that generated the field. Each board is the sharpest comparison this project
