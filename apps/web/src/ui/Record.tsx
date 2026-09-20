@@ -378,6 +378,32 @@ function recentForm(record: OpponentRecord): { over: number; text: string } | nu
   };
 }
 
+/**
+ * The best and worst a Doop session has placed, over the matches the record carries.
+ *
+ * **What a mean cannot say.** A 58% average is the same figure whether every session
+ * came in near it or they ran from 33 to 73 — and in matchpoints the second is the
+ * ordinary case, because a board is scored by *rank* and a session of eight boards is a
+ * short sample of ranks.
+ *
+ * Over `record.matches`, which is capped — so on a long history this is the best and
+ * worst of the recent ones rather than of all time, and the caller says which.
+ *
+ * Null for any other format, where `pointsFor` is a points total and a "best" would be
+ * the highest-scoring match rather than the best-played one. And null below two, where
+ * a best and a worst are the same session named twice.
+ */
+function bestAndWorst(record: OpponentRecord): { best: number; over: number; worst: number } | null {
+  if (record.format !== "field" || record.matches.length < 2) {
+    return null;
+  }
+  const placings = record.matches.map((one) => one.pointsFor);
+  const best = Math.max(...placings);
+  const worst = Math.min(...placings);
+  // Every session placing the same is a real answer rather than a range.
+  return best === worst ? null : { best, over: placings.length, worst };
+}
+
 function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.JSX.Element {
   const margin = record.pointsFor - record.pointsAgainst;
   const placing = meanPlacing(record);
@@ -388,6 +414,7 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
   const rate = (value: number, per: number): string => (per === 0 ? "—" : signed(value / per, 1));
   const older = played - record.matches.length;
   const form = recentForm(record);
+  const range = bestAndWorst(record);
 
   return (
     <div className="border-b border-white/7 bg-white/5 px-0.5 pt-1 pb-3">
@@ -399,7 +426,24 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
             {record.pointsFor.toLocaleString()} for
           </Fact>
         ) : (
-          <Fact detail={<>over {played} {played === 1 ? "session" : "sessions"}</>} label="Score">
+          /* **The range rather than the count.** This said "over 31 sessions", which
+             the Matches row directly below already says — the same number twice, on a
+             panel whose whole job is to fit a history into a few lines. What a mean
+             cannot say is how far the sessions spread, and in matchpoints that is most
+             of what a record is like. */
+          <Fact
+            detail={
+              range === null ? (
+                <>over {played} {played === 1 ? "session" : "sessions"}</>
+              ) : (
+                <>
+                  best {range.best}% · worst {range.worst}%
+                  {range.over < played ? ` of the last ${range.over}` : ""}
+                </>
+              )
+            }
+            label="Score"
+          >
             {placing}%
           </Fact>
         )}
@@ -427,9 +471,16 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
             {form.text}
           </Fact>
         )}
+        {/* **A Doop session's unit is a board, not a hand** — one deal each, played
+            once, ranked against a field. Calling them hands is true and reads as the
+            wrong quantity beside a row of placings. */}
         <Fact
-          detail={played === 0 ? "—" : `${(record.deals / played).toFixed(1)} a match`}
-          label="Hands"
+          detail={
+            played === 0
+              ? "—"
+              : `${(record.deals / played).toFixed(1)} a ${placing === null ? "match" : "session"}`
+          }
+          label={placing === null ? "Hands" : "Boards"}
         >
           {record.deals.toLocaleString()}
         </Fact>

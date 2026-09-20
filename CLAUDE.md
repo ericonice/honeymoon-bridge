@@ -3220,12 +3220,21 @@ arguably a *better* measure than a rubber, since the deal cancels where a rubber
 shuffle — and is deliberately not credited as one, taking duplicate's per-board weight rather than a
 second invented constant.
 
-**The record gained a recent-form line and the session pad a range.** `Recently 8–2` over the last ten,
-because a lifetime tally cannot say how somebody is playing *now*. And `Best and worst`, because a mean
-is the same figure whether every board came in near it or half were tops and half bottoms — which in
-matchpoints is the ordinary case, since a board is scored by rank and unanimous boards are common.
-Absent when every ranked board scored alike, which would be inventing a spread the session does not
-have.
+**The record gained a recent-form line and a range, and the range was briefly on the wrong screen.**
+`Recently 8–2` over the last ten, because a lifetime tally cannot say how somebody is playing *now*.
+
+**Best and worst belongs to the record, not to a session.** It went on the session pad first, where it
+said which *board* of the eight was best — a fact about one sitting, and one already legible from the
+rows above it. On the record it says which *session* was best, which is what a mean over dozens of them
+cannot: a board is scored by rank, so eight boards is a short sample and sessions swing widely around
+their own average. Absent when every session placed alike, which would invent a spread the record does
+not have.
+
+**It replaced a repetition rather than being added beside one.** The Score line read "over 31 sessions"
+directly above a Matches line reading "31 played" — the same number twice, on a panel whose whole job is
+to fit a history into a few lines. And `Hands` became **`Boards`** for this format: a Doop session's unit
+is a board, played once and ranked against a field, so counting hands was true and read as the wrong
+quantity beside a column of placings.
 
 ### Open threads
 

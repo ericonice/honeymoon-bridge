@@ -93,7 +93,7 @@ export function FieldPad({
           }}
         />
       ))}
-      <Foot me={me} summary={summary} />
+      <Foot summary={summary} />
     </div>
   );
 }
@@ -320,56 +320,8 @@ function resultOf(contract: NonNullable<FieldResult["contract"]>, tricks: readon
   return made >= needed ? (made === needed ? "=" : `+${made - needed}`) : `−${needed - made}`;
 }
 
-/**
- * The best and worst boards of a session, as a placing and which board it was.
- *
- * **What a mean cannot say.** A session at 58% is the same figure whether every board
- * came in near 58 or half were tops and half bottoms — and in matchpoints the second is
- * the ordinary case, because a board is scored by *rank*: six of the eight boards in a
- * real session came back unanimous 0% or 100%. The mean is the result; the range is what
- * the session was actually like.
- *
- * Null below two ranked boards, where a best and a worst would be the same board named
- * twice — or one board called both.
- *
- * Ties are broken by the earlier board, which is arbitrary and says so: with unanimous
- * boards common there are frequently several at 100%, and naming the first keeps the
- * pair stable as later boards come back rather than jumping about.
- */
-function extremes(
-  summary: FieldSummary,
-  me: PlayerId,
-): { readonly best: { at: number; pct: number }; readonly worst: { at: number; pct: number } } | null {
-  const ranked = summary.results
-    .map((result, at) => ({ at, pct: boardPercentageOf(result, me) }))
-    .filter((one): one is { at: number; pct: number } => one.pct !== null);
-  if (ranked.length < 2) {
-    return null;
-  }
-  let best = ranked[0]!;
-  let worst = ranked[0]!;
-  for (const one of ranked) {
-    if (one.pct > best.pct) {
-      best = one;
-    }
-    if (one.pct < worst.pct) {
-      worst = one;
-    }
-  }
-  // Every board scoring the same is a real answer and not a range: naming a best and a
-  // worst there would invent a spread the session does not have.
-  return best.pct === worst.pct ? null : { best, worst };
-}
-
-function Foot({
-  me,
-  summary,
-}: {
-  readonly me: PlayerId;
-  readonly summary: FieldSummary;
-}): React.JSX.Element {
+function Foot({ summary }: { readonly summary: FieldSummary }): React.JSX.Element {
   const human = summary.humanPercentage;
-  const range = extremes(summary, me);
   return (
     <div className="border-t border-white/15 pt-2 text-sm">
       <p className="flex items-baseline justify-between">
@@ -393,15 +345,6 @@ function Foot({
         <p className="flex items-baseline justify-between text-white/55">
           <span>Against people</span>
           <span className="tabular-nums">{Math.round(human)}%</span>
-        </p>
-      )}
-      {range === null ? null : (
-        <p className="flex items-baseline justify-between text-white/40">
-          <span>Best and worst</span>
-          <span className="tabular-nums">
-            {Math.round(range.best.pct)}% on {range.best.at + 1} · {Math.round(range.worst.pct)}% on{" "}
-            {range.worst.at + 1}
-          </span>
         </p>
       )}
     </div>

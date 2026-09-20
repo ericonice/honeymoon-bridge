@@ -264,6 +264,60 @@ test("a field session shows how it placed, not a points margin", () => {
 });
 
 /**
+ * **The range rather than the count, which the row below already gives.**
+ *
+ * The Score line used to read "over 31 sessions" directly above a Matches line reading
+ * "31 played" — the same number twice on a panel whose job is to fit a history into a
+ * few lines. A mean cannot say how far the sessions spread, and in matchpoints that is
+ * most of what a record is like: a board is scored by rank, so eight boards is a short
+ * sample and sessions swing widely around their own average.
+ */
+test("a field record says its best and worst session, not how many there were", () => {
+  robot = [
+    record({
+      deals: 24,
+      format: "field",
+      lost: 1,
+      matches: [
+        match({ pointsAgainst: 27, pointsFor: 73, won: true }),
+        match({ pointsAgainst: 42, pointsFor: 58, won: true }),
+        match({ pointsAgainst: 67, pointsFor: 33, won: false }),
+      ],
+      pointsAgainst: 136,
+      pointsFor: 164,
+      won: 2,
+    }),
+  ];
+  show();
+  tap();
+
+  const text = rowText();
+  expect(text).toContain("best 73%");
+  expect(text).toContain("worst 33%");
+  // The count is on the Matches row; saying it here as well was the repetition.
+  expect(text).not.toContain("over 3 sessions");
+});
+
+/** A board is the unit, so the panel counts boards rather than hands. */
+test("a field record counts boards, not hands", () => {
+  robot = [
+    record({
+      deals: 16,
+      format: "field",
+      lost: 0,
+      matches: [match({ pointsAgainst: 40, pointsFor: 60, won: true })],
+      pointsAgainst: 40,
+      pointsFor: 60,
+      won: 1,
+    }),
+  ];
+  show();
+  tap();
+
+  expect(rowText()).toContain("Boards");
+});
+
+/**
  * And it must not be *added* to one either. An opponent's margin is a points total,
  * and a session's stored points are not points — pooling the two describes neither.
  */
