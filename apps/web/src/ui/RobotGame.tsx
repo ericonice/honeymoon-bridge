@@ -35,6 +35,32 @@ export interface RobotGameProps {
  * the table mounts on the first render, exactly as it always did.
  */
 export function RobotGame(props: RobotGameProps): React.JSX.Element {
+  /**
+   * Bumped when a finished Doop session asks for another, which remounts everything
+   * below — the gate, the fetch and the table.
+   *
+   * A remount rather than a reset, because starting a session is exactly what a mount
+   * of this component *is*: `needed` and `boards` are both read once there, and a
+   * second path setting them by hand would be a second definition of "start a session"
+   * to keep in step with the first.
+   */
+  const [generation, setGeneration] = useState(0);
+
+  return (
+    <RobotSession
+      key={generation}
+      {...props}
+      onNewSession={() => {
+        setGeneration((one) => one + 1);
+      }}
+    />
+  );
+}
+
+function RobotSession({
+  onNewSession,
+  ...props
+}: RobotGameProps & { onNewSession(): void }): React.JSX.Element {
   // Read once a mount, like every other setting this screen resolves. A resumed
   // match brings its own boards, so only a *new* Doop session has to wait.
   const [needed] = useState(() => preferredFormat() === "field" && loadRobotMatch() === null);
@@ -137,7 +163,7 @@ export function RobotGame(props: RobotGameProps): React.JSX.Element {
     );
   }
 
-  return <RobotTable {...props} fieldBoards={boards ?? []} />;
+  return <RobotTable {...props} fieldBoards={boards ?? []} onNewSession={onNewSession} />;
 }
 
 /** The match itself, mounted only once there is something for it to play. */
@@ -150,12 +176,16 @@ function RobotTable({
   peeking,
   sound,
   fieldBoards,
+  onNewSession,
   tapToSelect,
   trickCount,
-}: RobotGameProps & { readonly fieldBoards: readonly FieldBoard[] }): React.JSX.Element {
+}: RobotGameProps & {
+  readonly fieldBoards: readonly FieldBoard[];
+  onNewSession(): void;
+}): React.JSX.Element {
   // Read once a mount. It changes only when a match ends, and this screen is one match.
   const cached = knownRatings();
-  const session = useLocalSession({ fieldBoards, peek: peeking });
+  const session = useLocalSession({ fieldBoards, onNewSession, peek: peeking });
   // Which opponent this is: the release, and the rung it is set to play at.
   // Read off the session itself rather than the current setting a second
   // time — `useLocalSession` is what actually pinned these, whether this

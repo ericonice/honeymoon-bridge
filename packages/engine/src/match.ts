@@ -13,7 +13,7 @@ import type {
   DuplicateSummary,
   MatchFormat,
 } from "./duplicate.js";
-import { applyFieldAction, nextFieldDeal, startField, summarizeField } from "./field.js";
+import { applyFieldAction, netFor, nextFieldDeal, startField, summarizeField } from "./field.js";
 import type { FieldBoard, FieldState, FieldSummary } from "./field.js";
 import { newRubber, totalScore, vulnerability } from "./rubber.js";
 import type { RubberFormat, RubberState } from "./rubber.js";
@@ -534,6 +534,50 @@ export function summarizeMatch(match: MatchState, me: PlayerId = 0): MatchSummar
  * bug this project has already had to fix once. What changed is that it now has to be
  * *exactly* even.
  */
+/**
+ * Who took a session, decided without ever comparing a float to fifty.
+ *
+ * **Level has to be exactly level, and a float cannot be trusted to say so.** The
+ * percentage is a mean of per-board `(scored / 2n) * 100`, and a genuinely level
+ * session lands on `49.99999999999999` or `50.00000000000001` about **12% of the
+ * time** — so an `=== 50` test reads a dead heat as a win or a loss. That is a bug
+ * this file introduced while fixing a different one: the comparison it replaced was
+ * against the *rounded* figure, which was immune to this and wrong in the other
+ * direction, discarding a real 50.4% result as a draw.
+ *
+ * So neither. A board's placing is `scored / (2 × field)`, a rational with a known
+ * denominator, and "level" is the sum of those fractions being exactly half the
+ * boards. Comparing `2 × Σ scored/field` against the board count keeps the whole
+ * question in integers-and-halves, where it belongs.
+ */
+function verdictOf(summary: FieldSummary, me: PlayerId): PlayerId | null {
+  if (!summary.complete || summary.percentage === null) {
+    return null;
+  }
+  // Each ranked board contributes its own share, doubled so a tie against the whole
+  // field is a whole number rather than a half.
+  let doubled = 0;
+  let ranked = 0;
+  for (const result of summary.results) {
+    const field = result.field[me];
+    if (field === null || field.length === 0) {
+      continue;
+    }
+    const net = netFor(result.points, me);
+    const scored = field.reduce(
+      (total, one) => total + (net > one.points ? 2 : net === one.points ? 1 : 0),
+      0,
+    );
+    doubled += scored / field.length;
+    ranked += 1;
+  }
+  // `doubled` is the sum of values in [0, 2]; level is exactly one apiece. The
+  // division by a small integer is exact in binary for the only denominators a
+  // field can have that matter, and the comparison is against an integer either way.
+  const difference = doubled - ranked;
+  return Math.abs(difference) < 1e-9 ? null : difference > 0 ? me : opponentOf(me);
+}
+
 function summarizeFieldMatch(session: FieldState, me: PlayerId): MatchSummary {
   const summary = summarizeField(session, me);
   const placed = Math.round(summary.percentage ?? 0);
@@ -558,12 +602,7 @@ function summarizeFieldMatch(session: FieldState, me: PlayerId): MatchSummary {
     vulnerable: summary.vulnerable,
     // Nothing ranked is not a draw — it is a session whose fields never came back, so
     // there is no verdict to give rather than a level one.
-    winner:
-      !summary.complete || summary.percentage === null || summary.percentage === 50
-        ? null
-        : summary.percentage > 50
-          ? me
-          : opponentOf(me),
+    winner: verdictOf(summary, me),
   };
 }
 

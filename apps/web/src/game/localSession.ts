@@ -272,6 +272,18 @@ export interface LocalSessionOptions {
    */
   readonly fieldBoards?: readonly FieldBoard[];
   /**
+   * Start a fresh Doop session, which this hook cannot do for itself.
+   *
+   * **A finished field session has no successor here**: `nextIn` says so in as many
+   * words, because a new one needs boards from the corpus and picking them is a
+   * decision about which this player has already met — a fetch, not a seed. So
+   * "New session" called `advance`, `nextFieldDeal` did nothing on a complete
+   * session, and the button silently did nothing at all. Reported exactly that way.
+   *
+   * Absent for every other format, where `nextIn` really can deal the next thing.
+   */
+  onNewSession?(): void;
+  /**
    * Whether to hand the screens the computer's cards.
    *
    * Was `import.meta.env.DEV`, so the whole thing folded out of any build that
@@ -598,6 +610,12 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
   }, [match]);
 
   const advance = useCallback(() => {
+    // A finished Doop session cannot deal itself another — see `onNewSession`. The
+    // host refetches and remounts, which is what makes the button do what it says.
+    if (summary.format === "field" && summary.complete) {
+      options.onNewSession?.();
+      return;
+    }
     // A finished session is followed by a fresh set of boards, so what the computer
     // remembers of the old ones goes. Not housekeeping: a person does not carry a
     // board across sessions either, and leaving it would make the memory grow for as
@@ -610,7 +628,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
     // inside an updater React may call more than once. A session ignores the
     // seed — it already knows every board it is going to play.
     setMatch(nextIn(match, dealSeed.current));
-  }, [match]);
+  }, [match, options, summary]);
 
   const achievements = useAchievementTracker();
 

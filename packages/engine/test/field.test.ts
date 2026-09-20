@@ -301,6 +301,41 @@ describe("who won a session", () => {
     expect(summary.winner).toBe(ME);
   });
 
+  /**
+   * **A level session that floating point cannot say is level.**
+   *
+   * The percentage is a mean of per-board `(scored / 2n) * 100`, and a genuinely level
+   * session lands on `49.99999999999999` about an eighth of the time — so comparing it
+   * to fifty reads a dead heat as a win or a loss. Two boards, each against a field of
+   * three: beaten 2 of 6 on one and 4 of 6 on the other. Exactly level, and the mean of
+   * the two percentages is not exactly 50.
+   *
+   * Three-result fields are realistic rather than contrived: a board's field shrinks as
+   * human results displace the generated ones.
+   *
+   * The assertion on the float is the point rather than a detail — it pins *why* the
+   * verdict may not be read off it.
+   */
+  it("calls a level session drawn even when its percentage cannot say fifty", () => {
+    const done = playSession(startField({ boards: BOARDS }));
+    const results = summarizeField(done, ME).results;
+    const first = netFor(results[0]!.points, ME);
+    const second = netFor(results[1]!.points, ME);
+    const ranked = withField(
+      withField(done, "b1", ME, [entry(first - 10), entry(first + 10), entry(first + 10)]),
+      "b2",
+      ME,
+      [entry(second - 10), entry(second - 10), entry(second + 10)],
+    );
+
+    const summary = summarizeField(ranked, ME);
+    expect(summary.boardsRanked).toBe(2);
+    expect(summary.percentage).not.toBe(50);
+    expect(summary.percentage).toBeCloseTo(50, 6);
+
+    expect(summarizeMatch({ kind: "field", session: ranked }, ME).winner).toBeNull();
+  });
+
   /** An exactly even split is still a draw, which is a real result in this format. */
   it("calls an exactly even session drawn", () => {
     const done = playSession(startField({ boards: BOARDS }));

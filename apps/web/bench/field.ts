@@ -528,24 +528,7 @@ function compare(boards: number): void {
     console.log("  no corpus on disk — run `generate` first\n");
     return;
   }
-  // **`defend` measures a capability rather than a pricing**, which is why it is its
-  // own flag and not another value of `objective=`. That one asks what a bidder should
-  // maximise; this asks whether searching the position the *opponent* declares is worth
-  // anything — and it is here rather than only in `bench/rubber.ts` because the two
-  // benches settle different currencies. In rubber points it measured a clean null
-  // (46.6% ± 2.8 over 320 plays). Matchpoints price a defensive trick enormously
-  // higher: a recorded board went −810 where the field went −780, which is 30 points of
-  // score and **50 percentage points** of placing. A change that is genuinely inert in
-  // one currency can be real in the other, and this directory has recorded the inverse
-  // of that mistake three times.
-  const defending = process.argv.includes("defend");
   const other = objectiveArg();
-  // **B is always the one thing changed**, A always the corpus bidder — the convention
-  // every result recorded from this bench already reads by, and the reason its 50% self
-  // calibration means anything.
-  const challenger = defending
-    ? { ...generatorTuning(), searchDefending: true }
-    : { ...generatorTuning(), objective: other };
   const progress = createProgress(wanted.length, "boards", 10);
   const differences: number[] = [];
   let mineTotal = 0;
@@ -553,14 +536,12 @@ function compare(boards: number): void {
 
   console.log(
     `${wanted.length} boards, ${LATEST_RELEASE.name} at Championship\n` +
-      (defending
-        ? `  A  the field bidder, counting what they take declaring\n  B  the same bidder searching it\n`
-        : `  A  the field bidder (duplicate)\n  B  the same bidder pricing in ${other}\n`),
+      `  A  the field bidder (duplicate)\n  B  the same bidder pricing in ${other}\n`,
   );
 
   wanted.forEach(([id, board], at) => {
     const mine = placeOf(board, generatorTuning());
-    const theirs = placeOf(board, challenger);
+    const theirs = placeOf(board, { ...generatorTuning(), objective: other });
     mineTotal += mine;
     theirsTotal += theirs;
     differences.push(mine - theirs);
