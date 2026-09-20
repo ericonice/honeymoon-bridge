@@ -3229,6 +3229,51 @@ have.
 
 ### Open threads
 
+- **The bid search is what makes v3 overreach, and the width is most of it.** The estimate's centre is
+  unbiased, so a bidder landing half a level above par had to be pushed there by something else. Three
+  arms over 241 logged deals — a person's own hands, both seats driven by the arm's own bidder, par
+  solved for whatever contract it settles on:
+
+  | arm | centre | width | level bid over par |
+  | --- | --- | --- | --- |
+  | `counted` | counted | fitted 1.3 | **+0.07 ± 0.10** (bid 2.96) |
+  | `mean` | searched | fitted 1.3 | +0.20 ± 0.10 (bid 3.25) |
+  | `odds` | searched | **searched** | **+0.58 ± 0.10** (bid 3.72) |
+  | | | **width alone** | **−0.37 ± 0.07, 5.3σ** |
+
+  **The bidder with no search bids essentially at par.** All of the overreach the hand log blames v3 for
+  is the search: +0.13 from its centre and **+0.37 from its width**. And +0.58 is the same figure the
+  hand log measures independently on played deals (+0.46), from a different direction.
+
+  **My prediction was exactly backwards and the reason is already written down elsewhere in this file.**
+  I expected the searched spread — 1.11 tricks against the fitted 1.3 — to *narrow* the distribution and
+  reduce overreach. But the two numbers are not the same quantity: `TRICK_SPREAD` was fitted against
+  **how far the estimate lands from what happens**, where the search measures **how far par moves across
+  the hands they might hold — no play error in it at all**. `searchTricks`' own doc says this, in the
+  paragraph explaining why widening was rejected; nobody noticed it cut the other way too.
+
+  So the searched distribution prices every contract as though the bot will play it double dummy — and
+  it throws away **0.36 tricks a deal**. With a game bonus in reach the payoff is convex, so a
+  distribution carrying real hand-to-hand variance and no play error captures upside the bot will not
+  realise.
+
+  **The candidate that follows is a shift, not a widening.** Nobody has tried moving the searched
+  distribution *down* by what the bot actually gives away. It is one constant, it is already measured,
+  and it predicts the `odds` arm should fall toward the `counted` arm's +0.07 without giving up what the
+  search is worth — which the ladder prices at about **108 rating points**, so simply turning it off is
+  not the answer.
+
+  **Two cautions before anyone acts on this.** The search was measured at 65% of rubbers when it landed,
+  and overreach is nearly free in a bench where nothing doubles — which is how most of this file's
+  margins were taken. And this bench measures *level against par*, not points won: a bidder that bids at
+  par is not automatically better, which is the whole reason `bench/rubber.ts` exists.
+
+  **`bench/spread.ts` had a bug that only announced itself by printing `NaN`.** It pushed whatever each
+  arm settled on, so a deal one arm passed out and another bid left three arrays of different lengths —
+  and the paired difference subtracted one deal's figure from another's. It requires all three arms to
+  settle now, or drops the deal from all three, and reports how many that excludes (59 of 300).
+
+
 - **Searching the position the opponent declares is built, measured twice, and worth nothing in either
   currency.** `searchTricks` had always solved with the opponent on lead, which answers what *this* seat
   takes declaring; the branch pricing a pass, a raise or a double against a contract **they** would
