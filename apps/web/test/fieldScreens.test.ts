@@ -179,24 +179,26 @@ describe("finishing a field session", () => {
   });
 
   /**
-   * §1.8a leaves rating open and the server excludes the format from the walk, so a
-   * figure here is a number that never arrives. Worse, a session's stored points are
-   * a matchpoint percentage and its complement rather than a total, so "beat the
-   * computer" is not what the result says.
+   * **A Doop session is rated, and this test used to pin the opposite.**
+   *
+   * It was excluded while §1.8a left the question open — what is beating a *field*
+   * worth? The answer is in the format's own construction: the field is the corpus
+   * bidder's own runs, so placing above 50% is beating that bidder, and the bidder is
+   * the fixed opposition the format specifies, whose anchor already exists.
    */
-  it("claims no rating change, since none is coming", () => {
+  it("shows the rating change, now that the server rates a session", () => {
     knowMyRating();
 
-    expect(finish(THREE)).not.toContain("Rating");
+    expect(finish(THREE)).toContain("Rating");
   });
 
   /**
-   * The anti-vacuity half: the same fixture in a format that *is* rated does show
-   * the line. Without this, the assertion above passes whenever the figure happens
-   * to be unavailable for some other reason — which is exactly how it passed against
-   * the bug on the first attempt.
+   * The companion, kept: a rubber shows the line too. It was the anti-vacuity half of
+   * the assertion above when that asserted an *absence*, and now that both assert a
+   * presence it is what stops the pair passing on a fixture that shows the line for
+   * some reason unrelated to the format.
    */
-  it("does show one for a format the server actually rates", () => {
+  it("does show one for a rubber as well", () => {
     knowMyRating();
     render(
       createElement(DealComplete, {

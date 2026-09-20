@@ -289,17 +289,17 @@ export function DealComplete({
     // that used to keep a mirror out too, until it was measured at +17 ± 34
     // rating points and the objection turned out to be about a quantity that
     // is zero. A mirror is rated; "Same boards back" is not.
-    // **Null for a Doop session as well, and for a stronger reason than `repeated`.**
-    // §1.8a leaves rating open, so the server excludes the format from the walk
-    // entirely — a figure here would be a number that never arrives. Worse, a
-    // session's stored points are a *matchpoint percentage and its complement*
-    // rather than a total, so "beat the computer" is not what the result says.
-    // Blank rather than a guess, for the reason `botAnchor` returns null: nobody
-    // checks a figure that looks right.
+    // **A Doop session is rated now, so it draws the line like every other format.**
+    // It was null while §1.8a left rating open, on the argument that the server would
+    // never move a rating for one and a figure here would be inventing a number that
+    // never arrives. The server rates it: the field is the corpus bidder's own runs, so
+    // placing above 50% is beating that bidder, and its anchor already exists.
+    //
+    // A match on repeated boards is still null — that exclusion is about the computer's
+    // perfect recall of a board it has played, which is a different objection and still
+    // stands.
     const rating =
-      repeated || standing.kind === "field"
-        ? null
-        : ratingChange({ opponent: opponentRating, won });
+      repeated ? null : ratingChange({ opponent: opponentRating, won });
 
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-5 py-4">
