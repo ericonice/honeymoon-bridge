@@ -3184,6 +3184,49 @@ Still to decide: whether to switch it on. Doing so changes v3's play materially,
 record reset or a version bump, and the phone cost measured — 200ms a call, two or three calls an
 auction.
 
+**Five reports from real play, and the one that mattered was a race nobody could see.** "New session"
+did nothing at the end of a Doop sitting, because `nextIn` for a finished field session is a documented
+**no-op** — a new one needs boards from the corpus, which is a *fetch* rather than a seed. The session
+asks its host now (`onNewSession`), which remounts: starting a session is exactly what a mount of
+`RobotGame` is, so a second path setting that state by hand would be a second definition of it.
+
+**And a Doop session was recorded before its fields came back.** §1.8a fetches a board's field *after*
+the deal, so at the instant a session completes the last board is still unranked — and the placing is a
+**mean over ranked boards**, so the report stored a figure computed from fewer boards than the screen
+went on to show. Reported as the screen saying a session was level and no tie appearing on the record.
+**Every session in the database predates the fix**, and what they say cannot be recovered: nothing
+recorded which boards were ranked at report time.
+
+The gate is a **ref rather than state**, which is the whole of the fix: both effects belong to the same
+commit and run in declaration order, so a `useState` flag would be read by the report from *this*
+render's closure — still true, and the very race being closed. "Settled" means **done asking**, not "all
+ranked": a field may never come back, and a session waiting forever on one that never arrives is worse
+than one recorded over the boards that did.
+
+**Two wrong answers were given before that one**, and the shape of both is worth keeping. First, that
+ties were simply rare — reasoning from the recorded data without asking whether the recording was
+trustworthy, when the report that the *screen* disagreed was the better evidence. Then a float fix that
+made things worse: the verdict had been read off `Math.round(placing) === 50`, which discards a real
+50.4% result as a draw, so it was changed to an exact `=== 50` — and **about 12% of genuinely level
+sessions land on `49.99999999999999`**, so real ties began reading as wins. The verdict no longer
+touches the percentage: a board's placing is `scored / (2 × field)`, a rational with a known
+denominator, so "level" is those shares summing to exactly one apiece.
+
+**A Doop session is rated now, and the anchor did not have to be invented.** It was excluded while
+§1.8a's open question stood — what is beating a *field* worth? The answer is in the format's own
+construction: the field is the corpus bidder's own runs, so **placing above 50% is beating that
+bidder**, which is the fixed opposition the format specifies and whose anchor already exists. It is
+arguably a *better* measure than a rubber, since the deal cancels where a rubber carries the luck of the
+shuffle — and is deliberately not credited as one, taking duplicate's per-board weight rather than a
+second invented constant.
+
+**The record gained a recent-form line and the session pad a range.** `Recently 8–2` over the last ten,
+because a lifetime tally cannot say how somebody is playing *now*. And `Best and worst`, because a mean
+is the same figure whether every board came in near it or half were tops and half bottoms — which in
+matchpoints is the ordinary case, since a board is scored by rank and unanimous boards are common.
+Absent when every ranked board scored alike, which would be inventing a spread the session does not
+have.
+
 ### Open threads
 
 - **Searching the position the opponent declares is built, measured twice, and worth nothing in either

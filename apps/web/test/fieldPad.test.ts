@@ -147,3 +147,48 @@ describe("the session pad", () => {
     expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();
   });
 });
+
+/**
+ * **What a mean cannot say.** A session's figure is the same whether every board came in
+ * near it or half were tops and half bottoms — and in matchpoints the second is
+ * ordinary, because a board is scored by rank and unanimous boards are common.
+ */
+describe("the range a session covered", () => {
+  it("names the best and worst boards, with which board each was", () => {
+    pad([
+      // Beats both: 100%.
+      result("b1", 620, [entry(170, "Computer"), entry(100, "Computer")]),
+      // Beaten by both: 0%.
+      result("b2", -100, [entry(140, "Computer"), entry(200, "Computer")]),
+      // Splits them: 50%.
+      result("b3", 120, [entry(90, "Computer"), entry(150, "Computer")]),
+    ]);
+
+    const shown = document.body.textContent ?? "";
+    expect(shown).toContain("Best and worst");
+    expect(shown).toContain("100% on 1");
+    expect(shown).toContain("0% on 2");
+  });
+
+  /**
+   * A session where every ranked board scored the same has no range, and naming a best
+   * and a worst there would invent a spread it does not have. Flat boards make this
+   * ordinary rather than theoretical — one bot playing a hand with no decision in it
+   * reaches the same place every run.
+   */
+  it("says nothing when every board scored alike", () => {
+    pad([
+      result("b1", 620, [entry(170, "Computer")]),
+      result("b2", 300, [entry(100, "Computer")]),
+    ]);
+
+    expect(document.body.textContent ?? "").not.toContain("Best and worst");
+  });
+
+  /** One ranked board is a result, not a range. */
+  it("says nothing with a single ranked board", () => {
+    pad([result("b1", 620, [entry(170, "Computer")]), result("b2", -100, null)]);
+
+    expect(document.body.textContent ?? "").not.toContain("Best and worst");
+  });
+});
