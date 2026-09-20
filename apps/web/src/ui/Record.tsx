@@ -350,6 +350,34 @@ function OpponentLine({
  * list as a whole one — and it is empty from a server too old to send it, which
  * reads as a record with no history rather than as an error.
  */
+/**
+ * How the last few matches went — `8–2`, or `6–3–1` where any were drawn.
+ *
+ * **A recent form line, which the lifetime tally cannot be.** `record.won`/`lost` run
+ * from the first match ever played, so somebody who has improved reads as their own
+ * average rather than as how they are playing now. Ten is short enough to move and long
+ * enough not to be one evening's luck.
+ *
+ * Null below a handful, because a `2–1` labelled "last 10" claims a window it does not
+ * have — and `record.matches` is capped for the panel, so this quietly measures fewer
+ * than ten once somebody passes that cap. It says how many it actually counted.
+ */
+const RECENT_MATCHES = 10;
+
+function recentForm(record: OpponentRecord): { over: number; text: string } | null {
+  const recent = record.matches.slice(0, RECENT_MATCHES);
+  if (recent.length < 3) {
+    return null;
+  }
+  const won = recent.filter((one) => one.won).length;
+  const drawn = recent.filter((one) => one.drawn).length;
+  const lost = recent.length - won - drawn;
+  return {
+    over: recent.length,
+    text: drawn > 0 ? `${won}–${lost}–${drawn}` : `${won}–${lost}`,
+  };
+}
+
 function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.JSX.Element {
   const margin = record.pointsFor - record.pointsAgainst;
   const placing = meanPlacing(record);
@@ -359,6 +387,7 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
   const played = record.won + record.lost + record.drawn;
   const rate = (value: number, per: number): string => (per === 0 ? "—" : signed(value / per, 1));
   const older = played - record.matches.length;
+  const form = recentForm(record);
 
   return (
     <div className="border-b border-white/7 bg-white/5 px-0.5 pt-1 pb-3">
@@ -393,6 +422,11 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
         >
           {played} played
         </Fact>
+        {form === null ? null : (
+          <Fact detail={`over the last ${form.over}`} label="Recently">
+            {form.text}
+          </Fact>
+        )}
         <Fact
           detail={played === 0 ? "—" : `${(record.deals / played).toFixed(1)} a match`}
           label="Hands"
