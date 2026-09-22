@@ -264,6 +264,44 @@ test("a field session shows how it placed, not a points margin", () => {
 });
 
 /**
+ * **A drawn match said "Lost", in both match lists, for as long as draws have existed.**
+ *
+ * `won` false with `drawn` true is a draw; `won` false with `drawn` false is a loss —
+ * and both lists read only `won`. Reported as a record showing three losses where the
+ * recent-form line beside it counted two and a draw: the form line was right.
+ *
+ * Asserted together, because that disagreement *is* the failure — one surface counting
+ * a match one way while another labels it the other.
+ */
+test("a drawn match reads as drawn, and agrees with the form line", () => {
+  robot = [
+    record({
+      deals: 24,
+      drawn: 1,
+      format: "field",
+      lost: 1,
+      matches: [
+        match({ finishedAt: 3, pointsAgainst: 27, pointsFor: 73, won: true }),
+        match({ drawn: true, finishedAt: 2, pointsAgainst: 50, pointsFor: 50, won: false }),
+        match({ finishedAt: 1, pointsAgainst: 67, pointsFor: 33, won: false }),
+      ],
+      pointsAgainst: 144,
+      pointsFor: 156,
+      won: 1,
+    }),
+  ];
+  show();
+  tap();
+
+  const text = rowText();
+  expect(text).toContain("Drew");
+  // One of each, so a list calling the draw a loss would show two.
+  expect(text.match(/Lost/g) ?? []).toHaveLength(1);
+  // And the form line agrees: one won, one lost, one drawn.
+  expect(text).toContain("1–1–1");
+});
+
+/**
  * **The range rather than the count, which the row below already gives.**
  *
  * The Score line used to read "over 31 sessions" directly above a Matches line reading

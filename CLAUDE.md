@@ -3220,6 +3220,23 @@ arguably a *better* measure than a rubber, since the deal cancels where a rubber
 shuffle — and is deliberately not credited as one, taking duplicate's per-board weight rather than a
 second invented constant.
 
+**A drawn match read as "Lost" in both match lists, for as long as draws have existed.** `won` false
+with `drawn` true is a draw and `won` false with `drawn` false is a loss — and both lists read only
+`won`. Reported as a record showing three losses beside a recent-form line counting two and a draw: the
+form line was right, because it was written after draws existed and read both fields.
+
+**The server already had this exact rule as a function, with the argument for it written out** —
+`outcomeOf`, kept because "a rule about hidden state should have one testable answer rather than a
+comparison repeated at four call sites". The client had the same rule, two call sites, and no such
+function. It has one now, returning the *kind* rather than a class name: the two lists paint it at
+different weights, and a composed class like `` `${ink}/80` `` is one Tailwind cannot see to emit.
+
+A draw takes neither side's colour, since amber would read as a quiet loss.
+
+**Nothing covered a drawn match in either list**, which is why the change passed 449 tests before a
+test for it existed. The new one asserts the label *and* the form line together, because their
+disagreement is the failure rather than either alone.
+
 **The record gained a recent-form line and a range, and the range was briefly on the wrong screen.**
 `Recently 8–2` over the last ten, because a lifetime tally cannot say how somebody is playing *now*.
 

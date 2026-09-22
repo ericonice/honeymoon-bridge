@@ -404,6 +404,27 @@ function bestAndWorst(record: OpponentRecord): { best: number; over: number; wor
   return best === worst ? null : { best, over: placings.length, worst };
 }
 
+/**
+ * How a finished match came out — the same three answers the server's own `outcomeOf`
+ * gives, and for the same stated reason: a rule about a pair of booleans should have one
+ * testable answer rather than a comparison repeated at each call site.
+ *
+ * **Both match lists read only `won`, so every drawn match was labelled "Lost".**
+ * Reported as a record showing three losses where the form line beside it counted two
+ * and a draw — the form line was right and the lists were not. `won` false with `drawn`
+ * true is a draw; `won` false with `drawn` false is a loss.
+ *
+ * It returns the *kind* rather than a class name because the two lists paint it at
+ * different weights, and because a composed class — `` `${ink}/80` `` — is one Tailwind
+ * cannot see to emit.
+ */
+function outcomeOf(match: { readonly drawn: boolean; readonly won: boolean }): "drawn" | "lost" | "won" {
+  return match.drawn ? "drawn" : match.won ? "won" : "lost";
+}
+
+/** What to call it. Shared so the two lists cannot drift apart in wording either. */
+const OUTCOME_WORD = { drawn: "Drew", lost: "Lost", won: "Won" } as const;
+
 function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.JSX.Element {
   const margin = record.pointsFor - record.pointsAgainst;
   const placing = meanPlacing(record);
@@ -515,10 +536,17 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
               className="flex flex-col gap-0.5 border-t border-white/8 py-1.5 first:border-t-0"
             >
               <span className="flex items-baseline justify-between gap-2">
+                {/* Neither side's colour for a draw: amber would read as a quiet loss. */}
                 <span
-                  className={`font-mono text-[0.65rem] font-semibold tracking-wide uppercase ${match.won ? "text-emerald-300" : "text-amber-200"}`}
+                  className={`font-mono text-[0.65rem] font-semibold tracking-wide uppercase ${
+                    outcomeOf(match) === "won"
+                      ? "text-emerald-300"
+                      : outcomeOf(match) === "drawn"
+                        ? "text-white/60"
+                        : "text-amber-200"
+                  }`}
                 >
-                  {match.won ? "Won" : "Lost"}
+                  {OUTCOME_WORD[outcomeOf(match)]}
                 </span>
                 {/* A session's figure is where it placed, not a pair of totals —
                     `58–42` reads as points and is a percentage and its complement. */}
@@ -869,8 +897,16 @@ function MatchRow({ match }: { readonly match: MatchRecord }): React.JSX.Element
     <div className="border-t border-white/10 py-2 first:border-t-0">
       <div className="flex items-baseline justify-between gap-3">
         <span className="min-w-0 flex-1 truncate">
-          <span className={match.won ? "text-emerald-300/80" : "text-amber-200/70"}>
-            {match.won ? "Won" : "Lost"}
+          <span
+            className={
+              outcomeOf(match) === "won"
+                ? "text-emerald-300/80"
+                : outcomeOf(match) === "drawn"
+                  ? "text-white/50"
+                  : "text-amber-200/70"
+            }
+          >
+            {OUTCOME_WORD[outcomeOf(match)]}
           </span>{" "}
           vs {match.opponentName}
         </span>
