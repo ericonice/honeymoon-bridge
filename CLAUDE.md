@@ -3268,23 +3268,50 @@ quantity beside a column of placings.
   placing. The bot also doubles *less* often — 5.2% of its results against the person's 11.5% — so it is
   not that it doubles too much: **the ones it picks are wrong.**
 
-  **The mechanism is a threshold sitting on an estimate that cannot support it.** `DOUBLED_FROM_DOWN` is
-  2, so the bot doubles when it reckons a contract is going down two or more — and the estimate it
-  reckons with is the *counted defending* one, which `bench/defendpar.ts` measures at **1.10 tricks of
-  mean absolute error**. A threshold two tricks wide, read off a number wrong by one, is a coin flip
-  dressed as a judgement. The searched estimate is not the fix: it measures 1.14, which is why
-  `searchDefending` was removed.
+  **That was first blamed on `DOUBLED_FROM_DOWN` and that was wrong twice over.** It is not the bot's
+  doubling rule — it is the bot's model of when *it* will be doubled, used to price its own contracts, so
+  raising it would make the bot **less** cautious about overreaching. And there is no rule to tune:
+  `doubleCandidate` prices a double through `expectedValue`, playing the deal out at every plausible
+  trick count and scoring each through the engine's own `scoreDeal`. Level and vulnerability are already
+  in it. **A flat threshold is not the problem, because there is not one.**
 
-  **This file already records `DOUBLED_FROM_DOWN` being tested and found not to matter** — "+633 against
-  +635, both inside noise", and the constant was left at 2 on the principle that a constant changed on
-  noise is worse than one left alone. That measurement was points per rubber in **bot-against-bot**
-  self-play, where both sides share the same blind spots and a bad double is met by an opponent who
-  would have made the same one. These 565 boards are the first time the decision has been priced against
-  somebody who doubles *well*.
+  **The fault is in the distribution, and the level split says so.** Of the bot's own doubles:
 
-  The cheap arm is `from=3` — the threshold already shown to match a human's doubling *rate* when
-  `bench/oracle.ts` was calibrated. What is missing is a bench that scores the doubling decision itself;
-  `bench/field.ts compare` can, since the corpus is the population the loss was measured in.
+  | level | doubles | set them | set rate |
+  | --- | --- | --- | --- |
+  | 1–2 | 35 | 26 | **74%** |
+  | 4–5 | 268 | 152 | 57% |
+  | **6–7** | **96** | **52** | **54% — a coin flip** |
+
+  Its doubling judgement is sound at the levels where it is cheap to be wrong and **random at slam
+  level, where it is ruinous**. A doubled grand slam that makes is catastrophic; setting one pays a
+  hundred. Fifty-fifty is a losing bet at those odds.
+
+  **The mechanism is the one a person named from play: two aces against a void.** `defendingTricks` sums
+  `winners()` over the four suits and applies an affine calibration — it takes **the hand and the strain
+  and nothing else**. Two aces count two tricks whether they bid 2♣ or 7♣. But the higher they bid the
+  more distributional their hand must be, and a side-suit ace against a high trump contract does not
+  cash, it gets **ruffed**. At the seven level the opponent is nearly announcing a void.
+
+  **The declaring half of the same model already knows this.** `rawTricks` gives side suits under a
+  trump contract "winners and no length credit at all, because length only cashes if nobody ruffs it."
+  The defending half never got the equivalent.
+
+  So the shape of the fix is to **discount defensive side-suit winners by the level they bid** — level
+  being the best available proxy for their shortness, and already in hand since the estimate blends
+  their bid at weight 0.75. **Not in no-trump**, where an ace always cashes, which is the same asymmetry
+  `rawTricks` already draws for declaring. Trump honours are untouched: a trump ace cannot be ruffed.
+
+  **Why self-play could never have found this.** Bot against bot, both sides share the blind spot: the
+  seat bidding the slam and the seat doubling it hold the same model, so a double taken on a mis-valued
+  ace is met by an opponent who would have mis-valued it the same way. These 565 boards are the first
+  time the decision has been priced against somebody who doubles *well* — and against hands a person
+  bid to seven.
+
+  **One caution before building it.** The −469 and −1071 a board at the six and seven levels are the
+  cost of *conceding a slam*, most of which is not the double's doing; the honest figure for the
+  doubling decision alone is the difference against the same board undoubled, which nothing has computed
+  yet. The **set rate** is the signal that does not need that correction, and it is the one above.
 
 - **The defence-versus-declaring gap has gone, and it was noise.** At 148 boards it read 66.8%
   defending against 54.1% declaring — a 13-point split recorded here as "the person's edge is almost
