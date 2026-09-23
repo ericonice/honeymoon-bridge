@@ -211,6 +211,11 @@ export interface BotTuning {
    */
   readonly defendingRuff?: number;
   /**
+   * Points a double must beat the alternative by before it is taken — see
+   * `DOUBLE_MARGIN`, which is what absent means.
+   */
+  readonly doubleMargin?: number;
+  /**
    * How far to trust their bid level over this hand's own read, when pricing a contract
    * *they* would declare — see `THEIR_BID_WEIGHT`, which is what absent means.
    *
@@ -648,6 +653,8 @@ interface CallContext extends LastTimeContext {
   readonly objective: Objective;
   /** How hard a high bid discounts this hand's side-suit winners — see `BotTuning`. */
   readonly defendingRuff: number | undefined;
+  /** What a double must win by before it is taken — see `DOUBLE_MARGIN`. */
+  readonly doubleMargin: number | undefined;
   /** How far their bid outweighs this hand, defending — see `BotTuning.theirBidWeight`. */
   readonly theirBidWeight: number | undefined;
   /** Which equity table prices a standing — see `BotTuning.equityTable`. */
@@ -742,17 +749,47 @@ function bidCandidates(context: CallContext, disguiseCredit: number): Candidate[
  * double is simply the same contract worth more in both directions. It stops
  * being a special case at the moment the bot can estimate what it beats them by.
  */
+/**
+ * Points a double must beat the alternative by before it is taken.
+ *
+ * **Because the bot doubles exactly when its estimate errs optimistically.** A double is
+ * chosen by comparing two expected values, and that comparison is made with an estimate
+ * carrying about a trick of error — so on the hands where the two are genuinely close,
+ * which is most of them, the coin that decides is the *error*. The doubles that get
+ * taken are therefore a biased sample: the ones where the bot happened to be wrong in
+ * the direction of beating the contract. Winner's curse, and no amount of improving the
+ * estimate's centre removes it — three measurements in `CLAUDE.md` say so.
+ *
+ * What removes it is refusing the marginal cases. A double taken only when it wins by
+ * more than the estimate's own error is one the error could not have manufactured.
+ *
+ * **The evidence it is aimed at, from 565 boards a person played**: the bot's doubles
+ * net **−121 a board** where theirs net **+327**, and its judgement is sound at the one
+ * and two levels (74% set) and a coin flip at six and seven (54%) — exactly where a
+ * close call is ruinous rather than cheap.
+ *
+ * In points, converted through `creditIn` like every other constant that has to exist
+ * in more than one currency — a probability objective cannot take a hundred raw.
+ *
+ * **Zero by default**, so this changes nothing until a measurement says what it is
+ * worth. The same terms `searchBudgetMs` and `defendingRuff` ship on.
+ */
+const DOUBLE_MARGIN = 0;
+
 function doubleCandidate(context: CallContext): Candidate[] {
-  const { equityTable, gameEquity, objective, standing, view } = context;
+  const { doubleMargin, equityTable, gameEquity, objective, standing, view } = context;
   const contract = standingContract(view);
   if (contract === null || !callsFor(view).some((call) => call.type === "double")) {
     return [];
   }
   const doubled: Contract = { ...contract, doubling: "doubled" };
+  const margin = creditIn(objective, standing, view.me, doubleMargin ?? DOUBLE_MARGIN);
   return [
     {
       call: { type: "double" },
-      value: expectedValue({
+      value:
+        -margin +
+        expectedValue({
         contract: doubled,
         estimate: estimateFor(doubled, context),
         exposedToDouble: false,
@@ -760,10 +797,10 @@ function doubleCandidate(context: CallContext): Candidate[] {
         equityTable,
         objective,
         odds: oddsFor(context, doubled),
-        hand: view.hand,
-        me: view.me,
-        standing,
-      }),
+          hand: view.hand,
+          me: view.me,
+          standing,
+        }),
     },
   ];
 }
@@ -835,6 +872,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
   // Undefined means the shipped table, which `equityOf` defaults to.
   const equityTable = tuning.equityTable;
   const defendingRuff = tuning.defendingRuff;
+  const doubleMargin = tuning.doubleMargin;
   const theirBidWeight = tuning.theirBidWeight;
   const theirBidOnOwnWeight = tuning.theirBidOnOwnWeight ?? THEIR_BID_ON_OWN_WEIGHT;
 
@@ -872,6 +910,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
       return bestCall({
         defendingRuff,
         disguiseCredit,
+        doubleMargin,
         equityTable,
         gameEquity,
         lastTimeWeight,

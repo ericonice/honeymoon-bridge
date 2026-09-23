@@ -540,6 +540,12 @@ function compare(boards: number): void {
   // both, which is what this flag is for.
   const weightArg = process.argv.find((one) => one.startsWith("weight="));
   const weight = weightArg === undefined ? null : Number(weightArg.slice("weight=".length));
+  // **`dmargin=N` prices refusing the marginal doubles.** A double is chosen by
+  // comparing two expected values computed from an estimate with a trick of error, so
+  // the close calls are decided by that error — and the doubles taken are the ones it
+  // erred optimistically on. This is the knob that declines them; see `DOUBLE_MARGIN`.
+  const marginArg = process.argv.find((one) => one.startsWith("dmargin="));
+  const dmargin = marginArg === undefined ? null : Number(marginArg.slice("dmargin=".length));
   const other = objectiveArg();
   const progress = createProgress(wanted.length, "boards", 10);
   const differences: number[] = [];
@@ -548,7 +554,10 @@ function compare(boards: number): void {
 
   console.log(
     `${wanted.length} boards, ${LATEST_RELEASE.name} at Championship\n` +
-      (weight !== null
+      (dmargin !== null
+        ? `  A  the bidder that made the corpus\n` +
+          `  B  the same bidder, doubling only when it wins by ${dmargin}\n`
+        : weight !== null
         ? `  A  the bidder that made the corpus — flat ace, their bid at 0.75\n` +
           `  B  the discount, with their bid at ${weight}\n`
         : ruff
@@ -561,12 +570,16 @@ function compare(boards: number): void {
     // A is the bidder that made the corpus: flat own-hand term, shipped weight.
     const mine = placeOf(
       board,
-      ruff || weight !== null
-        ? { ...generatorTuning(), defendingRuff: 0 }
-        : generatorTuning(),
+      dmargin !== null
+        ? generatorTuning()
+        : ruff || weight !== null
+          ? { ...generatorTuning(), defendingRuff: 0 }
+          : generatorTuning(),
     );
     const theirs =
-      weight !== null
+      dmargin !== null
+        ? { ...generatorTuning(), doubleMargin: dmargin }
+        : weight !== null
         ? { ...generatorTuning(), theirBidWeight: weight }
         : ruff
           ? generatorTuning()

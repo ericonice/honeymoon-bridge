@@ -3323,6 +3323,34 @@ with 5♥ where it had doubled 5♦.
 
 ### Open threads
 
+- **A doubling margin is built, and the corpus bench structurally cannot measure it.** The mechanism it
+  targets is the **winner's curse**: a double is chosen by comparing two expected values computed from
+  an estimate carrying about a trick of error, so on the hands where those values are close — most of
+  them — the coin that decides is the *error*, and the doubles taken are the ones it erred optimistically
+  on. That is a selection effect in the *comparison*, which is why three improvements to the estimate's
+  *centre* bought nothing. `DOUBLE_MARGIN` declines the marginal cases; a double that wins by more than
+  the estimate's own error is not one the error could have manufactured. In points, through `creditIn`,
+  and **zero by default**.
+
+  **The census says it works and that nothing can measure it here.** With the margin impossibly high the
+  bot makes **0 doubles over 60 deals**; with it off, **1**. The knob reaches the code — and the bot
+  doubles on roughly **2% of deals at love all and 5% of corpus board-runs**, so 240 boards carry about
+  a dozen doubles. `compare` read **+0.0 ± 0.0** at `dmargin=150` and again at `dmargin=999999`, which
+  is not a null but an instrument with nothing in it.
+
+  Scaling the board count does not fix it: a thousand boards is five hours for perhaps fifty doubles,
+  against an effect that has to clear ±1 point of session placing. **The unit is wrong.** A session
+  placing averages over eight boards of which one might be doubled, so the decision is diluted twice —
+  once into the board, once into the session.
+
+  **What it wants is a bench of the decision, not of the sitting** — `bench/defendpar.ts`'s shape
+  applied to doubles. Every position where a double is legal is a case; score the contract doubled and
+  undoubled against the hands as they actually lie, and ask which the bot chose. Every opportunity is a
+  data point rather than every board, which is the difference between a dozen and thousands. It can also
+  price what the hand log measures and no session figure can: not whether the double was *right* but
+  **what being wrong cost**, which is where the −121 against a person's +327 lives.
+
+
 - **The defending estimate's accuracy and its points value disagree, and points wins. Three
   measurements now say the same thing.** The blend pricing a contract *they* declare is
   `(1 − w) × this hand's read + w × their bid level`, shipping at **w = 0.75**. Against double-dummy par
