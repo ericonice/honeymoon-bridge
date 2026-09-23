@@ -280,8 +280,105 @@ export function defenseFromRaw(raw: number): number {
 }
 
 /** Tricks this hand expects to take defending against a contract in this strain. */
-export function defendingTricks(hand: readonly Card[], strain: Strain): number {
-  return defenseFromRaw(rawTricks({ hand, strain }));
+/**
+ * The level at which the defending calibration already prices an ordinary amount of
+ * ruffing, so only the excess above it is a reason to discount anything.
+ *
+ * `DEFENSE_CALIBRATION` was fitted against par across whatever levels the bidder
+ * actually reaches, which cluster at two to four — so the average contract's worth of
+ * declarer shortness is **already inside the fitted intercept**. Subtracting from every
+ * level would be charging twice for it and would invalidate the fit.
+ *
+ * The same rule `RACE_FREE` states for the declaring side: never the level of a
+ * quantity, always the departure from what an ordinary hand holds.
+ */
+const RUFF_FREE_LEVEL = 3;
+
+/**
+ * What one defensive side-suit winner is discounted by, per level of excess.
+ *
+ * **Because a side-suit ace is only a trick if nobody ruffs it**, and the higher they
+ * bid the shorter their side suits must be. At the seven level the opponent is nearly
+ * announcing a void; two aces are not two tricks against it.
+ *
+ * `rawTricks` has said the declaring half of this from the beginning — side suits under
+ * a trump contract get "winners and no length credit at all, because length only cashes
+ * if nobody ruffs it". The defending half counted winners flat, whatever the auction
+ * said, which is what this corrects.
+ *
+ * **Measured from played boards rather than reasoned about.** Of the bot's own doubles
+ * across 565 human-played Doop boards, it set the contract **74% of the time at the one
+ * and two levels and 54% at six and seven** — sound where being wrong is cheap, a coin
+ * flip where it is ruinous. A doubled grand slam that makes is catastrophic and setting
+ * one pays a hundred, so fifty-fifty is a losing bet at those odds.
+ *
+ * **Fitted rather than reasoned about, and 0.12 was my guess.** Swept against par over
+ * 417 real auction positions where the opponent's contract stands:
+ *
+ * | per level | error against par |
+ * | --- | --- |
+ * | 0 — as shipped | 1.08 ± 0.03 |
+ * | 0.12 | 1.01 |
+ * | 0.18 | 0.99 |
+ * | **0.25** | **0.97 ± 0.03** |
+ * | 0.35 | 1.00 |
+ *
+ * **The turn at 0.35 is the point, not the minimum.** A sweep that improved all the way
+ * to the edge of its range would only have said the optimum lay past where I stopped
+ * looking, and picking that endpoint is fitting to the range rather than to the data —
+ * which this file has a standing objection to. Worse either side is what makes 0.25 a
+ * fitted value.
+ *
+ * At four levels of excess and two side winners that is two tricks off the estimate,
+ * which is the order the slam-level errors were: the bot read "down one" on hands that
+ * were making.
+ */
+export const RUFF_PER_LEVEL = 0.25;
+
+/**
+ * Tricks this hand takes defending a contract in `strain` at `level`.
+ *
+ * **No discount in no-trump**, where an ace always cashes — the same asymmetry
+ * `rawTricks` already draws for declaring, and the reason a balanced hand can prefer
+ * no-trump at all. And none on the trump suit's own winners: a trump ace cannot be
+ * ruffed.
+ *
+ * `level` defaults to `RUFF_FREE_LEVEL`, so a caller with no contract in hand gets
+ * exactly what this returned before — which is what keeps the fitted calibration
+ * meaning what it meant.
+ *
+ * **`perLevel` is per release and defaults to nothing**, which is what lets this reach
+ * v3 without touching v2. A superseded release is most useful as a *fixed reference*,
+ * and `botRelease.test.ts` pins what one does — so a shared correction here would
+ * silently re-cut v2 as well and spend the one thing keeping it worth having.
+ *
+ * **Zero rather than `RUFF_PER_LEVEL` is the default, and the first version had it the
+ * other way.** An absent `defendingRuff` on v2's tuning arrives here as `undefined`,
+ * which fires a parameter default — so defaulting to the fitted value handed the
+ * correction to every release that had not asked for it, which is the exact mistake
+ * `searchBudgetMs: 0` is spelled out for on the difficulty rungs. Absent means off.
+ */
+export function defendingTricks(
+  hand: readonly Card[],
+  strain: Strain,
+  level: number = RUFF_FREE_LEVEL,
+  perLevel = 0,
+): number {
+  const base = defenseFromRaw(rawTricks({ hand, strain }));
+  if (strain === "NT") {
+    return base;
+  }
+  const excess = Math.max(0, level - RUFF_FREE_LEVEL);
+  if (excess === 0 || perLevel === 0) {
+    return base;
+  }
+  const sideWinners = SUITS.filter((suit) => suit !== strain).reduce(
+    (total, suit) => total + quickTricks(cardsIn(hand, suit)),
+    0,
+  );
+  // Never below nothing: a hand with no defence left cannot be discounted into
+  // owing tricks, and the estimate this feeds is a count.
+  return Math.max(0, base - perLevel * excess * sideWinners);
 }
 
 type Winners = (cards: readonly Card[]) => number;

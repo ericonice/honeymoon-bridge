@@ -3253,6 +3253,46 @@ to fit a history into a few lines. And `Hands` became **`Boards`** for this form
 is a board, played once and ranked against a field, so counting hands was true and read as the wrong
 quantity beside a column of placings.
 
+**A defensive ace is discounted by how high they bid, which is the first thing to improve that
+estimate.** `defendingTricks` summed winners over the four suits and took **the hand and the strain and
+nothing else** — two aces counted two tricks whether they bid 2♣ or 7♣. But the higher they bid the
+shorter their side suits must be, and a side-suit ace against a high trump contract does not cash, it
+gets **ruffed**. `rawTricks` has said the declaring half of this from the start; the defending half
+never got it.
+
+| swept against par, 417 real auction positions | error |
+| --- | --- |
+| 0 — as shipped | 1.08 ± 0.03 |
+| 0.12 — my guess | 1.01 |
+| **0.25 — fitted** | **0.97 ± 0.03** |
+| 0.35 | 1.00 |
+
+**The turn at 0.35 is the point rather than the minimum.** A sweep improving to the edge of its range
+would only say the optimum lies past where the looking stopped, and picking that endpoint is fitting to
+the range. Worse either side is what makes 0.25 a fitted value. Ten percent off an estimate nothing had
+improved before — the searched version measured 1.14, which is why it was removed.
+
+**No discount in no-trump**, where an ace always cashes, which is the same asymmetry `rawTricks` draws
+for declaring; **none on trump honours**, since a trump ace cannot be ruffed; and it is keyed on the
+**excess above level three**, because `DEFENSE_CALIBRATION` was fitted across the levels the bidder
+reaches and an ordinary contract's ruffing is already inside its intercept. The rule `RACE_FREE` states:
+never the level of a quantity, always the departure from what an ordinary hand holds.
+
+**It is a v3 correction rather than a v4, which was asked for and is a real trade.** This file's own
+threshold says a release with a real history cannot be corrected in place, and v3 now has 68 sessions,
+1,449 logged deals and a rating line — so **recorded v3 results now span two slightly different
+opponents**, and that cannot be undone. What the change buys is a bot that stops doubling slams it
+cannot set; what it costs is the exactness of that history.
+
+**v2 is spared, and the first attempt did not spare it.** `defendingRuff` is per release, so a
+superseded release stays the fixed reference it exists to be. But the parameter defaulted to the fitted
+value, and an absent field arrives as `undefined` — which fires a default, so the correction reached
+every release that had not asked for it. **Absent has to mean off**, which is exactly what
+`searchBudgetMs: 0` is spelled out for on the difficulty rungs, one file away.
+
+**One call moved across the eight pinned deals**, and it is the case this was built for: v3 competed
+with 5♥ where it had doubled 5♦.
+
 ### Open threads
 
 - **The bot's doubles lose money and the person's make it, measured on the same boards.** 68 Doop

@@ -206,6 +206,11 @@ export interface BotTuning {
    * alone, which is the only way to tell those apart.
    */
   /**
+   * How much a level of excess discounts a defensive side-suit winner — see
+   * `defendingTricks`. Zero, and absent, is the flat count every release before v3 used.
+   */
+  readonly defendingRuff?: number;
+  /**
    * The equity table to price a standing with — for playing a re-fit against the table
    * it would replace, which is the only thing that has ever settled one of these.
    */
@@ -485,7 +490,8 @@ function estimateFor(contract: Contract, context: CallContext): number {
   // this seat's read of a hand the opponent has *bid* is the weak one. That is why the
   // term below carries a weight of 0.75 and this one 0.25. See `bench/defendpar.ts`.
   const fromMyHand = blendLastTime(
-    TRICKS - defendingTricks(view.hand, contract.strain),
+    // The level is what says how short they must be — see `defendingTricks`.
+    TRICKS - defendingTricks(view.hand, contract.strain, contract.level, context.defendingRuff),
     lastTime,
     context.lastTimeWeight,
   );
@@ -630,6 +636,8 @@ interface CallContext extends LastTimeContext {
   readonly lastTimeWeight: number;
   readonly gameEquity: number;
   readonly objective: Objective;
+  /** How hard a high bid discounts this hand's side-suit winners — see `BotTuning`. */
+  readonly defendingRuff: number | undefined;
   /** Which equity table prices a standing — see `BotTuning.equityTable`. */
   readonly equityTable: EquityTable | undefined;
   readonly searchMode: "mean" | "odds";
@@ -814,6 +822,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
   const searchMode = tuning.searchMode ?? "odds";
   // Undefined means the shipped table, which `equityOf` defaults to.
   const equityTable = tuning.equityTable;
+  const defendingRuff = tuning.defendingRuff;
   const theirBidOnOwnWeight = tuning.theirBidOnOwnWeight ?? THEIR_BID_ON_OWN_WEIGHT;
 
   return {
@@ -848,6 +857,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
             })
           : null;
       return bestCall({
+        defendingRuff,
         disguiseCredit,
         equityTable,
         gameEquity,

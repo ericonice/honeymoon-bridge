@@ -48,12 +48,12 @@ const countedErrors: number[] = [];
 const searchedErrors: number[] = [];
 let cases = 0;
 
-function lastBid(view: ReturnType<typeof viewFor>): { by: PlayerId; strain: Strain } | null {
+function lastBid(view: ReturnType<typeof viewFor>): { by: PlayerId; level: number; strain: Strain } | null {
   const bids = view.auction.filter((one) => one.call.type === "bid");
   const last = bids[bids.length - 1];
   return last === undefined || last.call.type !== "bid"
     ? null
-    : { by: last.by, strain: last.call.bid.strain };
+    : { by: last.by, level: last.call.bid.level, strain: last.call.bid.strain };
 }
 
 const progress = createProgress(deals, "deals", 10);
@@ -76,7 +76,7 @@ for (let seed = 1; seed <= deals; seed += 1) {
 
       // What the counted model says they take declaring — `estimateFor`'s own
       // expression, before the blend with their bid level.
-      const counted = TRICKS - defendingTricks(view.hand, strain);
+      const counted = TRICKS - defendingTricks(view.hand, strain, standingBid.level);
 
       // **The searched estimate, sampled and solved here rather than through
       // `searchTricks`.** That function searches one position — what *this* seat takes
