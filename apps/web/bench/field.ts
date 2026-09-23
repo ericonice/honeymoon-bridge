@@ -533,6 +533,13 @@ function compare(boards: number): void {
   // uncorrected bidder — which makes A the thing that built it and B the correction,
   // both ranked against the same results on the same stocks.
   const ruff = process.argv.includes("ruff");
+  // **`weight=W` prices the defending blend, and pairs with `ruff`.** The two interact:
+  // the discount corrects the own-hand term, and the weight decides how much of that
+  // term reaches the estimate at all. Measured alone at the shipped 0.75 the discount
+  // was a null, because it carried a quarter weight — so the run worth making moves
+  // both, which is what this flag is for.
+  const weightArg = process.argv.find((one) => one.startsWith("weight="));
+  const weight = weightArg === undefined ? null : Number(weightArg.slice("weight=".length));
   const other = objectiveArg();
   const progress = createProgress(wanted.length, "boards", 10);
   const differences: number[] = [];
@@ -541,17 +548,29 @@ function compare(boards: number): void {
 
   console.log(
     `${wanted.length} boards, ${LATEST_RELEASE.name} at Championship\n` +
-      (ruff
+      (weight !== null
+        ? `  A  the bidder that made the corpus — flat ace, their bid at 0.75\n` +
+          `  B  the discount, with their bid at ${weight}\n`
+        : ruff
         ? `  A  the bidder that made the corpus, counting a defensive ace flat\n` +
           `  B  the same bidder discounting it by how high they bid\n`
         : `  A  the field bidder (duplicate)\n  B  the same bidder pricing in ${other}\n`),
   );
 
   wanted.forEach(([id, board], at) => {
-    const mine = placeOf(board, ruff ? { ...generatorTuning(), defendingRuff: 0 } : generatorTuning());
-    const theirs = ruff
-      ? generatorTuning()
-      : { ...generatorTuning(), objective: other };
+    // A is the bidder that made the corpus: flat own-hand term, shipped weight.
+    const mine = placeOf(
+      board,
+      ruff || weight !== null
+        ? { ...generatorTuning(), defendingRuff: 0 }
+        : generatorTuning(),
+    );
+    const theirs =
+      weight !== null
+        ? { ...generatorTuning(), theirBidWeight: weight }
+        : ruff
+          ? generatorTuning()
+          : { ...generatorTuning(), objective: other };
     const theirsPlace = placeOf(board, theirs);
     mineTotal += mine;
     theirsTotal += theirsPlace;

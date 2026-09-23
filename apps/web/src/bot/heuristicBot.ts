@@ -211,6 +211,15 @@ export interface BotTuning {
    */
   readonly defendingRuff?: number;
   /**
+   * How far to trust their bid level over this hand's own read, when pricing a contract
+   * *they* would declare — see `THEIR_BID_WEIGHT`, which is what absent means.
+   *
+   * A field so the weight can be *played* at two settings rather than argued about:
+   * accuracy against par puts the optimum near 0.25, the original fit put it at 0.75 on
+   * a rubber margin, and those disagree by more than either's error bar.
+   */
+  readonly theirBidWeight?: number;
+  /**
    * The equity table to price a standing with — for playing a re-fit against the table
    * it would replace, which is the only thing that has ever settled one of these.
    */
@@ -496,7 +505,8 @@ function estimateFor(contract: Contract, context: CallContext): number {
     context.lastTimeWeight,
   );
   const fromTheirBid = contract.level + BOOK;
-  return (1 - THEIR_BID_WEIGHT) * fromMyHand + THEIR_BID_WEIGHT * fromTheirBid;
+  const weight = context.theirBidWeight ?? THEIR_BID_WEIGHT;
+  return (1 - weight) * fromMyHand + weight * fromTheirBid;
 }
 
 function blendLastTime(counted: number, lastTime: number | null, weight: number): number {
@@ -638,6 +648,8 @@ interface CallContext extends LastTimeContext {
   readonly objective: Objective;
   /** How hard a high bid discounts this hand's side-suit winners — see `BotTuning`. */
   readonly defendingRuff: number | undefined;
+  /** How far their bid outweighs this hand, defending — see `BotTuning.theirBidWeight`. */
+  readonly theirBidWeight: number | undefined;
   /** Which equity table prices a standing — see `BotTuning.equityTable`. */
   readonly equityTable: EquityTable | undefined;
   readonly searchMode: "mean" | "odds";
@@ -823,6 +835,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
   // Undefined means the shipped table, which `equityOf` defaults to.
   const equityTable = tuning.equityTable;
   const defendingRuff = tuning.defendingRuff;
+  const theirBidWeight = tuning.theirBidWeight;
   const theirBidOnOwnWeight = tuning.theirBidOnOwnWeight ?? THEIR_BID_ON_OWN_WEIGHT;
 
   return {
@@ -868,6 +881,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
         spreads: searched?.spreads ?? null,
         standing,
         theirBidOnOwnWeight,
+        theirBidWeight,
         view,
       });
     },
