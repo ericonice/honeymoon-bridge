@@ -3255,6 +3255,49 @@ quantity beside a column of placings.
 
 ### Open threads
 
+- **The bot's doubles lose money and the person's make it, measured on the same boards.** 68 Doop
+  sessions, 565 human boards against 15,424 generated ones — and because a board fixes the stock, the
+  two sides' doubling decisions are directly comparable:
+
+  | doubling a contract they defended | boards | net per board |
+  | --- | --- | --- |
+  | **the person** | 29 | **+327** |
+  | **the bot** | 399 | **−121** |
+
+  A 448-point swing on the decision, in a format where a single trick can be worth fifty points of
+  placing. The bot also doubles *less* often — 5.2% of its results against the person's 11.5% — so it is
+  not that it doubles too much: **the ones it picks are wrong.**
+
+  **The mechanism is a threshold sitting on an estimate that cannot support it.** `DOUBLED_FROM_DOWN` is
+  2, so the bot doubles when it reckons a contract is going down two or more — and the estimate it
+  reckons with is the *counted defending* one, which `bench/defendpar.ts` measures at **1.10 tricks of
+  mean absolute error**. A threshold two tricks wide, read off a number wrong by one, is a coin flip
+  dressed as a judgement. The searched estimate is not the fix: it measures 1.14, which is why
+  `searchDefending` was removed.
+
+  **This file already records `DOUBLED_FROM_DOWN` being tested and found not to matter** — "+633 against
+  +635, both inside noise", and the constant was left at 2 on the principle that a constant changed on
+  noise is worse than one left alone. That measurement was points per rubber in **bot-against-bot**
+  self-play, where both sides share the same blind spots and a bad double is met by an opponent who
+  would have made the same one. These 565 boards are the first time the decision has been priced against
+  somebody who doubles *well*.
+
+  The cheap arm is `from=3` — the threshold already shown to match a human's doubling *rate* when
+  `bench/oracle.ts` was calibrated. What is missing is a bench that scores the doubling decision itself;
+  `bench/field.ts compare` can, since the corpus is the population the loss was measured in.
+
+- **The defence-versus-declaring gap has gone, and it was noise.** At 148 boards it read 66.8%
+  defending against 54.1% declaring — a 13-point split recorded here as "the person's edge is almost
+  entirely on defence", and as the mirror image of the bot's own hand-log asymmetry. At 565 boards it is
+  **60.1% against 58.1%, a gap of 2.0 ± 3.3**: nothing.
+
+  Both halves moved toward each other, which is what regression to the mean looks like rather than a
+  change in how anybody plays. **The narrative built on it was wrong and the error bar said so at the
+  time** — the same mistake this file has now recorded three times, after the +0.01 ± 0.02 margin
+  coefficient and the 0.8σ objective difference. An asymmetry worth acting on has to survive its own
+  sample growing.
+
+
 - **The bid search is what makes v3 overreach, and the width is most of it.** The estimate's centre is
   unbiased, so a bidder landing half a level above par had to be pushed there by something else. Three
   arms over 241 logged deals — a person's own hands, both seats driven by the arm's own bidder, par
