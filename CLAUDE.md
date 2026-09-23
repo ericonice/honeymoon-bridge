@@ -3323,49 +3323,50 @@ with 5♥ where it had doubled 5♦.
 
 ### Open threads
 
-- **`THEIR_BID_WEIGHT` looks substantially mis-set, and the evidence is accuracy rather than points —
-  which is exactly why it has not been changed.** The blend that prices a contract *they* declare is
-  `(1 − w) × this hand's read + w × their bid level`, shipping at **w = 0.75**. Swept against
-  double-dummy par over ~830 real auction positions, with the own-hand term both as v2 has it and as v3
-  now does:
+- **The defending estimate's accuracy and its points value disagree, and points wins. Three
+  measurements now say the same thing.** The blend pricing a contract *they* declare is
+  `(1 − w) × this hand's read + w × their bid level`, shipping at **w = 0.75**. Against double-dummy par
+  over ~830 real auction positions it is plainly off the minimum:
 
   | w on their bid | flat own-hand term | with `defendingRuff` |
   | --- | --- | --- |
-  | 0.00 | 1.082 | 0.989 |
   | 0.25 | 0.986 | **0.946 ± 0.025** |
   | 0.50 | **0.975 ± 0.025** | 0.979 |
   | **0.75 — shipped** | 1.045 | 1.061 |
-  | 1.00 | 1.158 | 1.160 |
 
-  **Bracketed in both columns, and 0.75 is on the wrong side of the minimum in both.** The best
-  combination — the corrected term at w = 0.25 — is **0.946 against the shipped 1.061, about 11%.**
+  Bracketed in both columns, 0.75 on the wrong side in both, and the best combination **11% more
+  accurate** than what ships. The optimum also moved from 0.50 to 0.25 once the own-hand term improved —
+  the one prediction in this stretch that came out right.
 
-  **The optimum also moved, in the predicted direction.** Without the correction it sits at 0.50; with
-  it, at 0.25. A better own-hand term earns more trust, which is the first prediction in this stretch of
-  work to come out right.
+  **And taking it loses.** Played on 240 corpus boards, the discount *and* w = 0.25 against the bidder
+  that made the field:
 
-  **But accuracy is not what fitted 0.75, and that is the whole difficulty.** This file records the
-  original fit as a *rubber margin*: blending their bid level "is worth **+651 a rubber against +467**,
-  weight fitted at 0.75 on a plateau from 0.6 to 0.9". That is a large, real, points-measured effect,
-  and it disagrees with par accuracy by a wide margin.
+  | 240 boards | mean placing |
+  | --- | --- |
+  | the corpus bidder — flat ace, w = 0.75 | **49.5%** |
+  | 11% more accurate — discount, w = 0.25 | **48.7%** |
+  | difference | **+0.8 ± 1.1 to the shipped bidder** |
 
-  **The disagreement is probably not an error in either.** Trusting their bid more makes the bot readier
-  to believe a contract will make, so it competes and doubles less — which costs accuracy and may buy
-  points, because the payoff is asymmetric: a wrong double at the slam level is ruinous where a missed
-  one is cheap. This file has the same shape recorded in the other direction, where an unbiased centre
-  with an over-wide distribution still overreached.
+  Not significant, and the *sign is against the accurate bidder* — while the accuracy gap that produced
+  it is eight standard errors. So this is not a null waiting on a bigger sample; it is accuracy failing
+  to convert, for the third time after the defending search and the discount alone.
 
-  So the change is **not** to take the accuracy optimum. It is to measure w in matchpoints, where the
-  two candidates interact: the `defendingRuff` correction measured **+0.2 ± 0.7 — a null — at w = 0.75**,
-  and at w = 0.25 it carries three times the influence. Testing them together is the run worth making;
-  testing either alone is what has already produced two nulls.
+  **The reason is asymmetry, and it is why the original fit is not wrong.** This file records
+  `THEIR_BID_WEIGHT` being fitted as a *rubber margin* — "+651 a rubber against +467, on a plateau from
+  0.6 to 0.9". Trusting their bid makes the bot slower to believe it can beat a contract, so it competes
+  and doubles less. That costs accuracy and buys points, because the payoff is not symmetric: **a wrong
+  double at the slam level is ruinous where a missed one is cheap.** An estimator is scored on distance
+  from the truth; a bidder is scored on what its errors cost, and those are different objectives.
 
-  **One trap, which caught the first sweep silently.** `defendingRuff` is per release and defaults to
-  *off*, so a bench omitting the argument measures the flat term while appearing to measure the shipped
-  bidder. `bench/defendpar.ts` takes `ruff=` and prints it in the header now — the same read-out rule
-  this directory has already recorded for the census, the error bar and the oracle's threshold.
+  **So the standing rule earns another entry: measure in the currency the game is settled in.** This
+  file already carries it three ways — card play in tricks rather than points, the bidder over whole
+  rubbers rather than deals at love all, a mirror on matches won rather than points. Par accuracy is the
+  fourth instrument to be right about its own question and wrong about the game.
 
-
+  **What is left open is not the weight but the payoff.** Nothing prices a *wrong* double against a
+  right one; both estimators are fitted to sit near the truth on average, and the loss the hand log
+  records — the bot's doubles at **−121 a board against a person's +327** — is a loss in the tails, not
+  the centre. A better estimate cannot fix that. A cost model for doubling might.
 - **The bot's doubles lose money and the person's make it, measured on the same boards.** 68 Doop
   sessions, 565 human boards against 15,424 generated ones — and because a board fixes the stock, the
   two sides' doubling decisions are directly comparable:
