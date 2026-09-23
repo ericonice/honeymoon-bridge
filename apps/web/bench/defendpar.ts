@@ -35,6 +35,7 @@ import { createProgress } from "./progress.js";
 
 const TRICKS = 13;
 const deals = Number(process.argv[2] ?? 120);
+const ruff = Number(process.argv.find((one) => one.startsWith("ruff="))?.slice("ruff=".length) ?? 0);
 const level = levelFor("championship");
 const tuning = botTuningFor({
   disguise: true,
@@ -43,6 +44,22 @@ const tuning = botTuningFor({
   level,
   release: LATEST_RELEASE,
 });
+
+/**
+ * How much the blend leans on their bid rather than on this hand.
+ *
+ * `THEIR_BID_WEIGHT` ships at 0.75 and was fitted when the own-hand term carried about
+ * 1.5 tricks of error. That term is better now, so the optimum should have moved — and
+ * because the correction to it measured as a **matchpoint null** purely through
+ * dilution at 0.25, the weight is the thing that decides whether any of it can pay.
+ *
+ * Swept here rather than in `bench/rubber.ts` because accuracy against par is minutes
+ * where a rubber margin is hours, and a weight is exactly the kind of constant accuracy
+ * can locate. Whatever wins still has to be confirmed in matchpoints: this file has
+ * three findings where a better estimate bought nothing.
+ */
+const WEIGHTS = [0, 0.25, 0.5, 0.75, 1] as const;
+const blendErrors = new Map<number, number[]>(WEIGHTS.map((one) => [one, []]));
 
 const countedErrors: number[] = [];
 const searchedErrors: number[] = [];
@@ -76,7 +93,11 @@ for (let seed = 1; seed <= deals; seed += 1) {
 
       // What the counted model says they take declaring — `estimateFor`'s own
       // expression, before the blend with their bid level.
-      const counted = TRICKS - defendingTricks(view.hand, strain, standingBid.level);
+      // **The discount is passed explicitly, because absent means off.** `defendingRuff`
+      // is per release and defaults to nothing, so a bench omitting it measures the
+      // flat count — which is what the first weight sweep did without saying so.
+      // `ruff=0` measures the term as v2 has it, `ruff=0.25` as v3 does.
+      const counted = TRICKS - defendingTricks(view.hand, strain, standingBid.level, ruff);
 
       // **The searched estimate, sampled and solved here rather than through
       // `searchTricks`.** That function searches one position — what *this* seat takes
@@ -108,6 +129,13 @@ for (let seed = 1; seed <= deals; seed += 1) {
         trick: [],
       }).tricks[them];
 
+      // The other half of the blend: what their own bid claims they hold. `estimateFor`
+      // reads it exactly this way — level plus book, taken as a claim about tricks.
+      const fromTheirBid = standingBid.level + 6;
+      for (const weight of WEIGHTS) {
+        blendErrors.get(weight)!.push(Math.abs((1 - weight) * counted + weight * fromTheirBid - par));
+      }
+
       if (searched.samples > 0) {
         cases += 1;
         countedErrors.push(Math.abs(counted - par));
@@ -130,10 +158,21 @@ const error = (values: readonly number[]): number => {
 const paired = countedErrors.map((one, at) => one - searchedErrors[at]!);
 
 console.log(
-  `\n  ${cases} positions over ${deals} deals, ${LATEST_RELEASE.name} at Championship\n` +
+  `\n  ${cases} positions over ${deals} deals, ${LATEST_RELEASE.name} at Championship` +
+    `, defendingRuff ${ruff}\n` +
     `\n  mean absolute error against double-dummy par, in tricks\n` +
     `    counting   ${mean(countedErrors).toFixed(2)} ± ${error(countedErrors).toFixed(2)}\n` +
     `    searching  ${mean(searchedErrors).toFixed(2)} ± ${error(searchedErrors).toFixed(2)}\n` +
     `\n  paired difference  ${mean(paired) >= 0 ? "+" : ""}${mean(paired).toFixed(2)}` +
     ` ± ${error(paired).toFixed(2)}  (positive means searching is more accurate)\n`,
 );
+
+console.log("  the blend, by how much it leans on their bid\n");
+for (const weight of WEIGHTS) {
+  const one = blendErrors.get(weight)!;
+  console.log(
+    `    ${weight.toFixed(2)}${weight === 0.75 ? " (shipped)" : "         "}  ` +
+      `${mean(one).toFixed(3)} ± ${error(one).toFixed(3)}`,
+  );
+}
+console.log();

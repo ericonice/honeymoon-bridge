@@ -3323,6 +3323,49 @@ with 5♥ where it had doubled 5♦.
 
 ### Open threads
 
+- **`THEIR_BID_WEIGHT` looks substantially mis-set, and the evidence is accuracy rather than points —
+  which is exactly why it has not been changed.** The blend that prices a contract *they* declare is
+  `(1 − w) × this hand's read + w × their bid level`, shipping at **w = 0.75**. Swept against
+  double-dummy par over ~830 real auction positions, with the own-hand term both as v2 has it and as v3
+  now does:
+
+  | w on their bid | flat own-hand term | with `defendingRuff` |
+  | --- | --- | --- |
+  | 0.00 | 1.082 | 0.989 |
+  | 0.25 | 0.986 | **0.946 ± 0.025** |
+  | 0.50 | **0.975 ± 0.025** | 0.979 |
+  | **0.75 — shipped** | 1.045 | 1.061 |
+  | 1.00 | 1.158 | 1.160 |
+
+  **Bracketed in both columns, and 0.75 is on the wrong side of the minimum in both.** The best
+  combination — the corrected term at w = 0.25 — is **0.946 against the shipped 1.061, about 11%.**
+
+  **The optimum also moved, in the predicted direction.** Without the correction it sits at 0.50; with
+  it, at 0.25. A better own-hand term earns more trust, which is the first prediction in this stretch of
+  work to come out right.
+
+  **But accuracy is not what fitted 0.75, and that is the whole difficulty.** This file records the
+  original fit as a *rubber margin*: blending their bid level "is worth **+651 a rubber against +467**,
+  weight fitted at 0.75 on a plateau from 0.6 to 0.9". That is a large, real, points-measured effect,
+  and it disagrees with par accuracy by a wide margin.
+
+  **The disagreement is probably not an error in either.** Trusting their bid more makes the bot readier
+  to believe a contract will make, so it competes and doubles less — which costs accuracy and may buy
+  points, because the payoff is asymmetric: a wrong double at the slam level is ruinous where a missed
+  one is cheap. This file has the same shape recorded in the other direction, where an unbiased centre
+  with an over-wide distribution still overreached.
+
+  So the change is **not** to take the accuracy optimum. It is to measure w in matchpoints, where the
+  two candidates interact: the `defendingRuff` correction measured **+0.2 ± 0.7 — a null — at w = 0.75**,
+  and at w = 0.25 it carries three times the influence. Testing them together is the run worth making;
+  testing either alone is what has already produced two nulls.
+
+  **One trap, which caught the first sweep silently.** `defendingRuff` is per release and defaults to
+  *off*, so a bench omitting the argument measures the flat term while appearing to measure the shipped
+  bidder. `bench/defendpar.ts` takes `ruff=` and prints it in the header now — the same read-out rule
+  this directory has already recorded for the census, the error bar and the oracle's threshold.
+
+
 - **The bot's doubles lose money and the person's make it, measured on the same boards.** 68 Doop
   sessions, 565 human boards against 15,424 generated ones — and because a board fixes the stock, the
   two sides' doubling decisions are directly comparable:
