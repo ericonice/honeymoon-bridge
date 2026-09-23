@@ -528,6 +528,11 @@ function compare(boards: number): void {
     console.log("  no corpus on disk — run `generate` first\n");
     return;
   }
+  // **`ruff` prices the defensive-ace discount, which the corpus predates.** Every
+  // generated run was made before `defendingRuff` existed, so the field *is* the
+  // uncorrected bidder — which makes A the thing that built it and B the correction,
+  // both ranked against the same results on the same stocks.
+  const ruff = process.argv.includes("ruff");
   const other = objectiveArg();
   const progress = createProgress(wanted.length, "boards", 10);
   const differences: number[] = [];
@@ -536,16 +541,22 @@ function compare(boards: number): void {
 
   console.log(
     `${wanted.length} boards, ${LATEST_RELEASE.name} at Championship\n` +
-      `  A  the field bidder (duplicate)\n  B  the same bidder pricing in ${other}\n`,
+      (ruff
+        ? `  A  the bidder that made the corpus, counting a defensive ace flat\n` +
+          `  B  the same bidder discounting it by how high they bid\n`
+        : `  A  the field bidder (duplicate)\n  B  the same bidder pricing in ${other}\n`),
   );
 
   wanted.forEach(([id, board], at) => {
-    const mine = placeOf(board, generatorTuning());
-    const theirs = placeOf(board, { ...generatorTuning(), objective: other });
+    const mine = placeOf(board, ruff ? { ...generatorTuning(), defendingRuff: 0 } : generatorTuning());
+    const theirs = ruff
+      ? generatorTuning()
+      : { ...generatorTuning(), objective: other };
+    const theirsPlace = placeOf(board, theirs);
     mineTotal += mine;
-    theirsTotal += theirs;
-    differences.push(mine - theirs);
-    progress(at + 1, `${id} ${mine.toFixed(0)}% / ${theirs.toFixed(0)}%`);
+    theirsTotal += theirsPlace;
+    differences.push(mine - theirsPlace);
+    progress(at + 1, `${id} ${mine.toFixed(0)}% / ${theirsPlace.toFixed(0)}%`);
   });
 
   const spread = standardError(differences);

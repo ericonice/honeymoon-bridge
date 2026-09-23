@@ -3278,6 +3278,34 @@ for declaring; **none on trump honours**, since a trump ace cannot be ruffed; an
 reaches and an ordinary contract's ruffing is already inside its intercept. The rule `RACE_FREE` states:
 never the level of a quantity, always the departure from what an ordinary hand holds.
 
+**And it buys nothing in matchpoints, which is the third time an estimate has improved without
+converting.** 240 corpus boards, the same bidder either side with only the discount differing — and
+because every generated run predates `defendingRuff`, the field is the uncorrected bidder and the
+comparison is exactly paired:
+
+| 240 boards | mean placing |
+| --- | --- |
+| counting a defensive ace flat | **49.5%** |
+| discounting it by how high they bid | **49.2%** |
+| difference | **+0.2 ± 0.7 — 0.3σ** |
+
+**The reason is dilution, and I had already proved it for the previous change.** `estimateFor` blends
+this hand's read with their bid level at `THEIR_BID_WEIGHT = 0.75`, so the term this corrects carries
+**0.25**. Eleven hundredths of a trick of accuracy becomes **under three hundredths** in the blend —
+present and inert, the same threshold `LAST_TIME_WEIGHT` at 0.20 is recorded as failing at. Having
+argued exactly this to explain the defending search's null, I then built another correction to the same
+quarter-weighted term and expected a different answer.
+
+**So the structural finding is the useful one: the own-hand term cannot pay, at this weight, however
+good it gets.** Which makes the follow-up a *weight* rather than another estimate. `THEIR_BID_WEIGHT`
+was fitted against a counted defending estimate carrying ~1.5 tricks of error; the term is now
+measurably better, so the optimal trust in their bid should have moved down. That sweep has been named
+in this file since the defending search and never run.
+
+**What is not excluded is a small benefit**: ±0.7 leaves anything from −1.2 to +1.6 on the table. What
+is excluded is the multi-point win the doubling split suggested — the bot's doubles losing 121 a board
+against a person is not fixed by this.
+
 **It is a v3 correction rather than a v4, which was asked for and is a real trade.** This file's own
 threshold says a release with a real history cannot be corrected in place, and v3 now has 68 sessions,
 1,449 logged deals and a rating line — so **recorded v3 results now span two slightly different
