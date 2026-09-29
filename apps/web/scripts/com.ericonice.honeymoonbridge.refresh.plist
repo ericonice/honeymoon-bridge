@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Runs `refresh-ios.sh` once a day.
+
+  Daily rather than weekly on purpose: the refresh needs the phone reachable, and
+  a weekly job that happened to fire while the phone was out would miss its only
+  chance before the seven-day profile lapsed. The script itself does nothing on
+  the days there is nothing to do, so the cost of a daily run is one file read.
+
+  `StartCalendarInterval` rather than `StartInterval`, so a Mac that was asleep at
+  13:00 runs this once on wake instead of drifting an hour later every day.
+
+  `PATH` is set explicitly because launchd starts with a minimal one that has no
+  /usr/local/bin — so `npm` is not found, and the failure looks like the build
+  breaking rather than the environment being different.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ericonice.honeymoonbridge.refresh</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/eric/Projects/honeymoon-bridge/apps/web/scripts/refresh-ios.sh</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>13</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/eric/Library/Logs/honeymoon-bridge-ios-refresh.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/eric/Library/Logs/honeymoon-bridge-ios-refresh.log</string>
+</dict>
+</plist>

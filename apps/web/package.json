@@ -20,6 +20,7 @@
     "dev": "vite",
     "dev:lan": "vite --host",
     "preview": "vite preview",
+    "refresh:ios": "bash scripts/refresh-ios.sh",
     "sync:ios": "vite build && cap sync ios",
     "test": "vitest run",
     "test:watch": "vitest",
