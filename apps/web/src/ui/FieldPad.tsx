@@ -134,16 +134,24 @@ function BoardRow({
       }}
     >
       <span className="w-16 shrink-0 text-xs text-white/45">Board {at + 1}</span>
-      <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-1.5">
-        {mine.contract === null ? (
-          <span className="text-xs text-white/45">passed out</span>
-        ) : (
-          <>
-            <Declarer name={mine.declarer} />
-            <ContractText contract={mine.contract} on="dark" />
-            <span className="text-xs text-white/45">{mine.mark}</span>
+      {/* Chips against the right edge rather than trailing the contract — see
+          `Traveller`'s `Row`, which does the same and says why. */}
+      <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="flex min-w-0 items-baseline gap-1.5">
+          {mine.contract === null ? (
+            <span className="text-xs text-white/45">passed out</span>
+          ) : (
+            <>
+              <Declarer name={mine.declarer} />
+              <ContractText contract={mine.contract} on="dark" />
+              <span className="text-xs text-white/45">{mine.mark}</span>
+            </>
+          )}
+        </span>
+        {mine.tags.length === 0 ? null : (
+          <span className="ml-auto flex shrink-0 items-baseline gap-1.5">
             <Tags tags={mine.tags} />
-          </>
+          </span>
         )}
       </span>
       <span className="shrink-0 tabular-nums text-white/60">{signed(mine.points)}</span>

@@ -172,6 +172,25 @@ describe("a board's traveller", () => {
   });
 
   /**
+   * **The chips sit against the right edge, not on the contract's tail.**
+   *
+   * Contracts vary in width, so chips that follow them start somewhere different on
+   * every row. Pushed to the end they line up down the column and land beside the
+   * figure they explain. Asserted on the class that does it rather than on a
+   * measurement, which jsdom has no opinion about — the same reason `suitInk`
+   * names a class rather than an opacity.
+   */
+  it("groups the chips against the right edge, apart from the contract", () => {
+    traveller(result(620 + 100, [], [true, false]));
+
+    const group = screen.getByText("vul").parentElement;
+    expect(group?.className).toContain("ml-auto");
+    // Both of them in that group, and the contract outside it.
+    expect(group?.textContent).toBe("vulh100");
+    expect(group?.textContent).not.toContain("us");
+  });
+
+  /**
    * **One hue, on the mark that earns it.** Red on `vul` is borrowed from every
    * bridge scorecard rather than invented, and it is on the chip's ground rather
    * than its letters so it cannot be read as a red suit. Colouring the second chip

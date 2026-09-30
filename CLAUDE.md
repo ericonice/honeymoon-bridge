@@ -2617,6 +2617,29 @@ is the only place a resume is honored at all. Its anti-vacuity half is that a *r
 left alone — a listener resuming on every tap regardless would pass the interruption test while
 noticing nothing. Checked by restoring both halves of the fault: two of its five fail.
 
+**The chips are pushed to the right edge rather than trailing the contract, and the measurement is
+what chose that over the better answer.** Asked whether they should line up vertically: they should,
+and there is no room to do it properly. A board row at 390px leaves roughly **100px** for the
+contract, the mark and the chips once `Board 3` (64), the By field (36), the net (~44), the placing
+(48), the chevron (14) and five gaps are taken — and `4♥ =` plus `VUL` plus `H100` wants about 115.
+**The busiest rows were already wrapping before anything was aligned.** Reserving a slot per chip,
+which is the only thing that aligns them exactly, needs ~73px on every row including the ones with
+nothing to say, and would leave 27px for the contract.
+
+So the free version: contract and mark on the left, chips flush right. The group's edge lines up down
+the column, rows carrying the same chips align exactly, and the chips land beside **the figure they
+explain** rather than beside the contract, which needs no explaining. Wrapping moved onto the *group*
+so a tight row drops both chips whole to a second line rather than splitting them.
+
+**The traveller is a different shape and mostly did not need it**: its rows are usually the same
+contract eight times over, so they aligned by accident, and it has ~40px more to play with having no
+board label or chevron. It takes the same treatment for consistency rather than out of need.
+
+**If the list still reads as crowded, the answer is not alignment.** It is dropping the chips from the
+list and keeping them on the board page — where there is room — against the argument that put them
+there in the first place: the list is exactly where `+110` and `+720` sit in one column with nothing
+to explain either. That trade is now measured rather than guessed at.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told

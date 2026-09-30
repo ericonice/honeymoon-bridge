@@ -162,21 +162,37 @@ function Row({ contract, declarer, mark, mine, note, points, tags, who }: Line):
         {who}
       </td>
       <td className="py-1.5 pr-2">
-        <span className="flex flex-wrap items-baseline gap-1.5">
-          {contract === null ? (
-            <span className="text-xs text-white/45">passed out</span>
-          ) : (
-            <>
-              <Declarer name={declarer} />
-              <ContractText contract={contract} on="dark" />
-              <span className="text-xs text-white/45">{mark}</span>
-              <Tags tags={tags} />
-            </>
+        {/* **The chips are pushed to the end rather than trailing the contract.**
+            Contracts vary in width — `4♥` against `5♣ X` — so chips that follow them
+            start at a different place on every row and read as debris on the end of
+            each one. Against the right edge they line up down the column, and they
+            land beside the figure they are there to explain rather than beside the
+            contract, which needs no explaining. It costs nothing: a reserved slot per
+            chip would align them exactly and there is no room for one.
+
+            Wrapping is on the *group*, so a row too tight for both drops the chips
+            whole to a second line, still flush, rather than splitting them. */}
+        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            {contract === null ? (
+              <span className="text-xs text-white/45">passed out</span>
+            ) : (
+              <>
+                <Declarer name={declarer} />
+                <ContractText contract={contract} on="dark" />
+                <span className="text-xs text-white/45">{mark}</span>
+              </>
+            )}
+          </span>
+          {tags.length === 0 && note === null ? null : (
+            <span className="ml-auto flex shrink-0 items-baseline gap-1.5">
+              {contract === null ? null : <Tags tags={tags} />}
+              {/* Provenance rather than a property of the contract, but it is the same
+                  kind of mark and belongs in the same group — faint prose beside three
+                  chips reads as something half-finished. */}
+              {note === null ? null : <Tags tags={[{ label: note, tone: "plain" }]} />}
+            </span>
           )}
-          {/* Provenance rather than a property of the contract, but it sits in the
-              same slot and is the same kind of mark, so it takes the same chip —
-              faint prose beside three chips reads as something half-finished. */}
-          {note === null ? null : <Tags tags={[{ label: note, tone: "plain" }]} />}
         </span>
       </td>
       <td className={`py-1.5 text-right tabular-nums ${mine ? "font-semibold" : ""}`}>
