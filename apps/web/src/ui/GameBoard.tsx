@@ -4,7 +4,7 @@ import type {
   Card,
   DealPhase,
   DrawReveal,
-  FieldSummary,
+  FieldResult,
   Pair,
   PlayerId,
   PlayerView,
@@ -541,11 +541,26 @@ export function GameBoard({
   // nested in whichever of those it happened to be drawn in. Here it is a sibling of
   // every other overlay, which is what all of them already are.
   const { close: closeReview, reviewing: reviews, showing: reviewingBoard } = useBoardReviews(session);
-  // Resolved once rather than at each of the two places that ask, so the panel and
-  // the decision to hide the Score panel behind it cannot disagree about whether
-  // there is a board to show.
+  /**
+   * The board whose panel is open, **resolved once rather than at each of the two
+   * places that ask**.
+   *
+   * They asked separately and could disagree, which is the whole of a fault reported
+   * from real play: one decided to hide the Score panel and the other decided there
+   * was nothing to draw, so a tap on certain rows left the screen with neither — and
+   * because nothing was on screen there was nothing to close, so the open board
+   * stayed set and every later tap on the score strip did nothing at all. A dead tap
+   * made the score unreachable for the rest of the sitting.
+   *
+   * One value now, and it is the *result* rather than the index: the panel needs a
+   * board to describe, and whether there is one is exactly the question both sides
+   * were answering differently.
+   */
   const reviewedSummary = session.standing.kind === "field" ? session.standing.summary : null;
-  const reviewedBoard = reviewedSummary === null ? null : reviewingBoard;
+  const reviewedBoard =
+    reviewedSummary === null || reviewingBoard === null
+      ? null
+      : (reviewedSummary.results[reviewingBoard] ?? null);
   // `PlayPhase` unmounts the instant the shown phase leaves "play" — into
   // `DealComplete` on a match or half finishing, or straight into the next
   // deal's draw or auction — and an unmount fires none of its own effects, so
@@ -822,13 +837,13 @@ export function GameBoard({
         />
       ) : null}
 
-      {reviewedBoard === null ? null : (
+      {reviewedBoard === null || reviewingBoard === null ? null : (
         <ReviewedBoard
-          at={reviewedBoard}
+          at={reviewingBoard}
           me={view.me}
           opponentName={session.opponentName}
+          result={reviewedBoard}
           reviews={reviews}
-          summary={reviewedSummary!}
           // Back to the score where that is what it was pushed from; ✕ always leaves
           // the lot, which is what the two controls are for.
           onBack={showingScore ? closeReview : null}
@@ -906,14 +921,21 @@ export function GameBoard({
 }
 
 /** The review panel for one board, or nothing when that board has none kept. */
+/**
+ * The review panel for one board.
+ *
+ * **Never null**, which is the point: the caller has already established there is a
+ * board, and a board always has a field. What this device kept of the deal may be
+ * missing, and `BoardReview` says so rather than declining to open.
+ */
 function ReviewedBoard({
   at,
   me,
   onBack,
   onClose,
   opponentName,
+  result,
   reviews,
-  summary,
 }: {
   readonly at: number;
   readonly me: PlayerId;
@@ -921,21 +943,16 @@ function ReviewedBoard({
   readonly onBack: (() => void) | null;
   onClose(): void;
   readonly opponentName: string;
+  readonly result: FieldResult;
   readonly reviews: BoardReviewing;
-  readonly summary: FieldSummary;
-}): React.JSX.Element | null {
-  const result = summary.results[at];
-  const review = result === undefined ? undefined : reviews.kept.get(reviewKeyOf(result.board, me));
-  if (result === undefined || review === undefined) {
-    return null;
-  }
+}): React.JSX.Element {
   return (
     <BoardReview
       at={at}
       me={me}
       opponentName={opponentName}
       result={result}
-      review={review}
+      review={reviews.kept.get(reviewKeyOf(result.board, me)) ?? null}
       onBack={onBack}
       onClose={onClose}
     />

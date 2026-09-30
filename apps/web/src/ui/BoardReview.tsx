@@ -22,7 +22,15 @@ export interface BoardReviewProps {
   readonly onBack?: (() => void) | null;
   readonly opponentName: string;
   readonly result: FieldResult;
-  readonly review: Review;
+  /**
+   * What this device kept of the board, or null where it kept nothing.
+   *
+   * Null for a board finished by a claim, a board passed out, and every board of a
+   * session carried across a reload — see `useBoardReviews`. **The panel still opens
+   * on all of them**, because the field is what a row was tapped for and a
+   * `FieldResult` always has one; only the deal is missing, and it says so.
+   */
+  readonly review: Review | null;
   onClose(): void;
 }
 
@@ -59,6 +67,14 @@ export interface BoardReviewProps {
  * **The header sits above the tabs** rather than inside either, because what the
  * contract was and what it came to is the answer to "what happened" — wanted
  * whichever tab you are on, and what makes the two labels mean anything.
+ *
+ * **It opens for a board it kept nothing of, and that is a fix rather than a
+ * nicety.** A row used to open nothing at all in that case: the Score panel is
+ * suppressed while a board is showing, so a board with no review left *neither* on
+ * screen — and the open board was never cleared, so every later tap on the score
+ * strip did nothing either. One dead tap made the score unreachable for the rest of
+ * the sitting. The field needs only a `FieldResult`, which a played board always
+ * has, so there is always something to draw and always something to close.
  *
  * **The hands are card faces rather than a written record**, which is the one thing
  * about this that was chosen against a good alternative. Four suit lines a hand is
@@ -120,19 +136,30 @@ export function BoardReview({
           </span>
         </div>
 
-        <Segmented<Tab>
-          options={[
-            { label: "The field", value: "field" },
-            { label: "The deal", value: "deal" },
-          ]}
-          value={tab}
-          onChange={setTab}
-        />
+        {review === null ? null : (
+          <Segmented<Tab>
+            options={[
+              { label: "The field", value: "field" },
+              { label: "The deal", value: "deal" },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+        )}
 
-        {tab === "field" ? (
-          // No caption: the tab that is pressed already says what this is, and a
-          // heading repeating it would be the only thing on the panel said twice.
-          <Traveller at={at} caption={false} me={me} result={result} />
+        {review === null || tab === "field" ? (
+          <>
+            {/* No caption: the tab that is pressed already says what this is, and a
+                heading repeating it would be the only thing on the panel said twice.
+                With no deal to switch to there is no tab either, and the panel's own
+                title is what names it. */}
+            <Traveller at={at} caption={false} me={me} result={result} />
+            {review !== null || contract === null ? null : (
+              <p className="text-xs text-white/35">
+                The hands and the bidding are not kept for this board.
+              </p>
+            )}
+          </>
         ) : (
           <>
             <div>

@@ -73,6 +73,38 @@ function tapTable(): void {
 }
 
 /**
+ * Passes board 1 out and carries on to board 2.
+ *
+ * A passed-out board is the honest way to reach a board this device kept nothing of
+ * — no card is played, so there is no full thirteen and `finishedHandsFor` answers
+ * null. The same state a claim leaves, and the same state every board of a session
+ * restored from storage is in.
+ */
+function passFirstBoardAndMoveOn(): void {
+  renderBoard({ fieldBoards: BOARDS, format: "field", seat: ME, seed: 1 });
+  // The draw runs first — twenty-six turns of it — and only then is there an
+  // auction to pass out.
+  for (let step = 0; step < 200; step += 1) {
+    const onTable = board.deal;
+    if (onTable.phase === "complete") {
+      break;
+    }
+    const actor = onTable.toAct;
+    const view = snapshotFor(board.match, actor).view;
+    const legal = legalActionsForView(view).filter((one) => one.type !== "claim");
+    const pass =
+      onTable.phase === "auction"
+        ? legal.find((one) => one.type === "call" && one.call.type === "pass")
+        : undefined;
+    board.apply(actor, pass ?? legal[0]!);
+    settle(4000);
+  }
+  settle(6000);
+  tap("Next deal");
+  settle(4000);
+}
+
+/**
  * Plays board 1 out and carries on to board 2, which is where the score is
  * reachable from: the bar offers no way in on the screen that ends a deal, because
  * that screen is already showing the pad.
@@ -132,6 +164,39 @@ describe("a Doop board on the real screen", () => {
 
     expect(screen.getByRole("heading", { name: "Score" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Board 1/ })).toBeTruthy();
+  });
+
+  /**
+   * **A board this device kept nothing of still opens, and the score survives it.**
+   *
+   * Reported from real play as the chevron working sometimes and not others, and as
+   * going into a board sometimes doing nothing. It was one fault with two faces: the
+   * Score panel is suppressed while a board is showing, so a board with no kept
+   * review left *neither* on screen — and with nothing on screen there was nothing
+   * to close, so the open board stayed set and every later tap on the strip did
+   * nothing at all. One dead tap made the score unreachable for the rest of the
+   * sitting.
+   *
+   * Driven by throwing away what was kept, which is what a reload does to a session
+   * restored from storage, and what a claim and a passed-out board do on their own.
+   */
+  it("opens a board it kept nothing of, and leaves the score reachable", () => {
+    passFirstBoardAndMoveOn();
+
+    tap("Show the score");
+    tap(/Board 1/);
+
+    // The panel is there rather than the screen left blank, and it is the field —
+    // which needs only the board's own result, never the kept hands.
+    expect(screen.getByRole("heading", { name: "Board 1" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "The deal" })).toBeNull();
+
+    // And the way out works, which is the half that made the strip go dead: with
+    // nothing drawn there was nothing to close, so the open board stayed set and
+    // every later tap did nothing.
+    tap("Close");
+    tap("Show the score");
+    expect(screen.getByRole("heading", { name: "Score" })).toBeTruthy();
   });
 
   /**

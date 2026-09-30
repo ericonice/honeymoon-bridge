@@ -2376,6 +2376,32 @@ not look like a button, the same fault the board rows had until they grew one. I
 when `onShowScore` is non-null, so it also answers "is this tappable *here*", which it is not on the
 screen that already shows the pad.
 
+**The chevron worked sometimes and a board opened sometimes, and it was one fault wearing two faces.**
+Reported from real play exactly that way, which is what made it look like flakiness rather than a
+condition. It was a condition: **two places asked the same question and could answer differently.**
+`GameBoard` suppressed the Score panel whenever a board was open, and the panel itself declined to
+draw when this device had kept nothing of that board — so tapping such a row left the screen with
+*neither*. And with nothing drawn there was nothing to close, so the open board stayed set and every
+later tap on the score strip did nothing at all. **One dead tap made the score unreachable for the
+rest of the sitting.**
+
+Which boards? A **passed-out** one, a board finished by a **claim**, and every board of a session
+carried across a **reload** — so it depends on how the sitting went, which is the shape of the report.
+
+Two changes, and the second is the one that matters. The panel **always opens**: the field needs only
+a `FieldResult`, which a played board always has, and only the deal is missing — so there is always
+something to draw and always something to close. With no deal there are no tabs, and a line says why
+rather than leaving an absence a reader has to interpret. And the two conditions became **one value**:
+`GameBoard` resolves the board's own `FieldResult` once, and both the suppression and the render read
+it, so they cannot disagree. **Suppressing one surface on a condition that another surface answers
+separately is a dead screen waiting to happen** — this file now has it as the second bug of the same
+evening, after the reveal's tap firing a control *and* continuing.
+
+The end-to-end test drives a **passed-out** board rather than reaching into the hook for the kept map:
+it is one of the three real causes, it needs no internals, and it exercises the state a reload leaves.
+Checked by restoring the decline — the walk fails, and the component-level case has its anti-vacuity
+half in the panel that *does* have a deal.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told

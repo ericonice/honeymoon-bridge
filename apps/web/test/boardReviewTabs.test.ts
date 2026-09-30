@@ -46,7 +46,7 @@ const RESULT: FieldResult = {
   tricks: [10, 3],
 };
 
-function panel(): void {
+function panel(review: Review | null = REVIEW): void {
   render(
     createElement(BoardReview, {
       at: 6,
@@ -55,7 +55,7 @@ function panel(): void {
       onClose: () => {},
       opponentName: "Computer",
       result: RESULT,
-      review: REVIEW,
+      review,
     }),
   );
 }
@@ -125,5 +125,48 @@ describe("a board's two tabs", () => {
       expect(text).toContain("by you");
       expect(text).toContain("+420");
     }
+  });
+});
+
+/**
+ * A board this device kept nothing of — a claim, a pass-out, or any board of a
+ * session carried across a reload.
+ *
+ * It still opens, which is the fix rather than a nicety: the panel declining to
+ * draw left the screen with neither it nor the Score panel behind it, and with
+ * nothing on screen there was nothing to close, so the score went dead for the rest
+ * of the sitting.
+ */
+describe("a board with no kept deal", () => {
+  it("still opens, on the field", () => {
+    panel(null);
+
+    expect(screen.getByText("Computer")).toBeTruthy();
+    expect(screen.getByText("you")).toBeTruthy();
+  });
+
+  it("offers no tabs, there being nothing to switch to", () => {
+    panel(null);
+
+    expect(screen.queryByRole("button", { name: "The deal" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "The field" })).toBeNull();
+  });
+
+  /** Said rather than left as an absence, since a board that *was* played looks the same. */
+  it("says why the deal is missing", () => {
+    panel(null);
+
+    expect(screen.getByText("The hands and the bidding are not kept for this board.")).toBeTruthy();
+  });
+
+  /**
+   * The anti-vacuity half: with a deal kept, the note is not there and the tabs
+   * are — otherwise the three above pass against a panel that never draws a deal.
+   */
+  it("says nothing of the sort when the deal is kept", () => {
+    panel();
+
+    expect(screen.queryByText(/not kept for this board/)).toBeNull();
+    expect(screen.getByRole("button", { name: "The deal" })).toBeTruthy();
   });
 });
