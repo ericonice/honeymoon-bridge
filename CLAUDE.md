@@ -2590,6 +2590,33 @@ that way.
 from first principles will not notice that the choice already exists somewhere else in the file tree.
 `grep` for the token before writing the paragraph.
 
+**The sound stopped coming back, and the cause is a state the spec does not have.** Reported as it
+just stopping mid-session with nothing to do but restart the app. `AudioContextState` names three
+values and WebKit has a fourth: an `AudioContext` on iOS goes to **`"interrupted"`** when something
+else takes the audio — a call, Siri, an alarm, another app, the phone locking. `soundEffects.ts`
+tested for `"suspended"`, which that is not, so it never resumed and every cue afterwards did
+nothing.
+
+**Testing `!== "running"` is the fix and is better than naming the state**, which TypeScript's own
+type does not contain — and it covers whatever WebKit adds next. A **closed** context is replaced
+rather than resumed, since `resume` throws on one and iOS closes the context of a page it has
+evicted.
+
+**The second half is the one that made it permanent.** The gesture listener that unlocks audio was
+`{ once: true }`, on the reasoning that unlocking is a one-time thing. True of the *first* unlock and
+false for the rest of a session: an interruption arrives long afterwards, and by then the only
+listener that could revive it had removed itself — and WebKit honors a `resume` **only** inside a
+gesture handler, so there was no remaining moment in the app's life when the resume could legally
+happen. It stays attached now; the cost is a state comparison per tap.
+
+**`{ once: true }` deserves suspicion wherever the thing it guards can be undone.** It is right for a
+one-way unlock and wrong for a condition that can recur, and the two look identical at the call site.
+
+`test/soundRevival.test.ts` drives the listener rather than playing anything, because that listener
+is the only place a resume is honored at all. Its anti-vacuity half is that a *running* context is
+left alone — a listener resuming on every tap regardless would pass the interruption test while
+noticing nothing. Checked by restoring both halves of the fault: two of its five fail.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told
