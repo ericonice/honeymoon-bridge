@@ -62,9 +62,11 @@ describe("a board's traveller", () => {
       ]),
     );
 
-    // Both, one per row: the defender's line and your own declaring one.
-    expect(screen.getByText("def")).toBeTruthy();
-    expect(screen.getByText("bid")).toBeTruthy();
+    // Who bought it, per row: the recorded line's own player defended, so `opp`;
+    // yours declared, so your own name — which is the name beside it, because a By
+    // column repeating a pair column is the reading rather than a fault.
+    expect(screen.getByText("opp")).toBeTruthy();
+    expect(screen.getAllByText("you").length).toBe(2);
     expect(screen.queryByText("by them")).toBeNull();
   });
 
@@ -155,7 +157,9 @@ describe("a board's traveller", () => {
 
     // The role is not among them: it is always one or the other, so it is a field
     // before the contract rather than a note about it.
-    expect(screen.getAllByText("bid")[0]?.className).not.toContain("rounded");
+    for (const cell of screen.getAllByText("you")) {
+      expect(cell.className).not.toContain("rounded");
+    }
 
     for (const tag of ["vul", "vs person"]) {
       const chips = screen.getAllByText(tag);

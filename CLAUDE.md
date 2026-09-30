@@ -2530,24 +2530,40 @@ with both tinted they compete, and the red stops meaning "look at this" and star
 tag". `test/traveller.test.ts` pins both halves — the ground is red, the letters are not, and honors
 carries no red at all.
 
-**The role takes weight rather than a hue, and for a different reason.** There is nothing to borrow:
-bridge has a red for vulnerability and no convention whatever for declarer against defender, so any
-colour there would be invented. What brightness *can* say without a key is whose contract it was —
-`bid` at white/55 and `def` at white/30, the contract being yours when you bid it and somebody else's
-when you did not. It is also on **every** row, and a mark that never varies in whether it appears
+**The By field takes weight rather than a hue, and for a different reason.** There is nothing to
+borrow: bridge has a red for vulnerability and no convention whatever for marking declarer, so any
+colour there would be invented. What brightness *can* say without a key is which contracts were
+yours — your own name at white/55 and everything else at white/30, so a glance down the column finds
+them. It is also on **every** row, and a mark that never varies in whether it appears
 must not compete with the ones that do.
 
-**A tag is for what might not apply, and that ruled the role out of being one.** `bid`/`def` is
-*always* one or the other — a chip that never varies in whether it is there is not marking an
-exception, and three chips of which one is always present is noise around the two that mean
-something. Reported exactly that way: it is not really a tag, since there will always be a bidder or
-a defender.
+**A tag is for what might not apply, and that ruled the role out of being one.** A chip that never
+varies in whether it is there is not marking an exception, and three chips of which one is always
+present is noise around the two that mean something. Reported exactly that way: it is not really a
+tag, since there will always be a bidder or a defender.
 
 So it is a **field**: fixed width, quiet, immediately before the contract, which aligns it down a
-column and turns something always-present from repetition into something scannable. It also lands on
-the most natural reading available — `bid 4♥` and `def 4♥` are what a player would say out loud, so
-the word is a verb governing the contract rather than a label stuck beside it. **The pair still
-teaches itself** for the reason it was paired in the first place.
+column and turns something always-present from repetition into something scannable.
+
+**And it names who bought the contract rather than what this line's player did.** `bid`/`def` shipped
+first and said the same thing the long way round — it told you the *role* and left you to work out
+who that implied had bid it, so on a board where everybody defends it was a column of `def`
+answering a question nobody asked. The field is the row's own player where they bought it and `opp`
+where the other side did, which is duplicate's own **By** column.
+
+**`opp` is not the shifting "them" this file rejected once before.** That objection was that "them"
+named a different person on every line; on a Doop board every entry faced the same computer, so
+`opp` names the same party throughout. A result made across the table is the one exception and says
+`a person` instead.
+
+**It repeats the name beside it on a traveller, and that is the reading rather than a fault** — a By
+column next to a pair column always does. What varies down the column is whether the two *match*.
+Three tests had to move to `getAllByText` because of it, which is the honest cost written down.
+
+**The reserve differs by surface**, which is the one piece of layout knowledge the component carries:
+a traveller's rows belong to different people so the field must hold any of their names, where a
+board list is all your own results and can only ever read `you` or `opp`. Reserving the traveller's
+width in the list would push the tags onto a second line for nothing.
 
 **Honors lost their sign, and the trade is worth stating because it is a real loss.** `h100` says a
 figure has honors in it, which is the question — honors being the one component a contract cannot

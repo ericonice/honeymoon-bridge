@@ -66,7 +66,7 @@ describe("a board's two tabs", () => {
   it("opens on the field, with the deal not drawn behind it", () => {
     panel();
 
-    expect(screen.getByText("Computer")).toBeTruthy();
+    expect(screen.getAllByText("Computer").length).toBeGreaterThan(0);
     expect(screen.queryByText("The hands")).toBeNull();
     expect(document.querySelectorAll(".card-face")).toHaveLength(0);
   });
@@ -110,7 +110,7 @@ describe("a board's two tabs", () => {
     tab("The deal");
     tab("The field");
 
-    expect(screen.getByText("Computer")).toBeTruthy();
+    expect(screen.getAllByText("Computer").length).toBeGreaterThan(0);
     expect(screen.queryByText("The hands")).toBeNull();
   });
 
@@ -145,8 +145,8 @@ describe("a board with no kept deal", () => {
   it("still opens, on the field", () => {
     panel(null);
 
-    expect(screen.getByText("Computer")).toBeTruthy();
-    expect(screen.getByText("you")).toBeTruthy();
+    expect(screen.getAllByText("Computer").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("you").length).toBeGreaterThan(0);
   });
 
   it("offers no tabs, there being nothing to switch to", () => {

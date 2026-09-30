@@ -143,7 +143,9 @@ describe("the session pad", () => {
       }),
     );
 
-    expect(screen.getByText("Noah")).toBeTruthy();
+    // Twice on Noah's line: the row's own player, and the By field saying they
+    // bought it.
+    expect(screen.getAllByText("Noah").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();
   });
 });
@@ -166,13 +168,14 @@ describe("what a contract is tagged with", () => {
   });
 
   /**
-   * **Both halves, because the pair is what teaches itself.** A lone `def` is only
-   * legible to somebody who already knows that its absence means the other thing.
+   * **Who, rather than what this seat did.** `bid`/`def` made the reader work out
+   * who that implied had bought it; on a board where everybody defends, a column of
+   * `def` answers a question nobody asked.
    */
-  it("says whether this seat declared the contract or defended it", () => {
+  it("says who bought the contract, you or the other side", () => {
     pad([result("b1", PLAIN, [])]);
-    expect(screen.getByText("bid")).toBeTruthy();
-    expect(screen.queryByText("def")).toBeNull();
+    expect(screen.getByText("you")).toBeTruthy();
+    expect(screen.queryByText("opp")).toBeNull();
 
     cleanup();
     pad([
@@ -181,8 +184,8 @@ describe("what a contract is tagged with", () => {
         contract: { declarer: 1, doubling: "none", level: 2, strain: "H" },
       },
     ]);
-    expect(screen.getByText("def")).toBeTruthy();
-    expect(screen.queryByText("bid")).toBeNull();
+    expect(screen.getByText("opp")).toBeTruthy();
+    expect(screen.queryByText("you")).toBeNull();
   });
 
   /**
@@ -257,6 +260,6 @@ describe("looking back at a board", () => {
     expect(screen.getByRole("button", { name: "The field" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "The deal" })).toBeTruthy();
     // The traveller outright, not behind a tap.
-    expect(screen.getByText("you")).toBeTruthy();
+    expect(screen.getAllByText("you").length).toBeGreaterThan(0);
   });
 });

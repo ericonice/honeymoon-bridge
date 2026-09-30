@@ -119,16 +119,31 @@ export interface Described {
   readonly mark: string;
   readonly points: number;
   /**
-   * What this line's own player did with the contract, or null where there is none.
+   * **Who bought the contract**, named, or null where there is none to name.
    *
-   * **A field rather than a tag**, because it is always one or the other — a chip
-   * that never varies in *whether* it is there is not marking an exception, and
-   * three chips of which one is always present reads as noise around the two that
-   * mean something. Drawn immediately before the contract, fixed width so it aligns
-   * down the column, where it also happens to read as plain English: `bid 4♥` and
-   * `def 4♥` are what a player would say.
+   * A field rather than a tag, because it is always somebody — a chip that never
+   * varies in *whether* it is there is not marking an exception, and one that is
+   * always present reads as noise around the ones that mean something. Drawn
+   * immediately before the contract, fixed width so it aligns down the column,
+   * where it reads as what it is: `you 4♥`, `Computer 4♥`.
+   *
+   * **Who rather than `bid`/`def`, which said the same thing the long way round.**
+   * Those told you what *this line's player* did and left you to work out who that
+   * implied had bid it; on a board where everybody defends, a column of `def`
+   * answers a question nobody asked, twice over. This is duplicate's own By column.
+   *
+   * **It only has to separate you from not-you**, which is what keeps it narrow: the
+   * row's own player where they bought it, and `opp` where the other side did. On a
+   * Doop board that is not the shifting "them" this file rejected once before —
+   * every entry faced the same computer, so `opp` names the same party on every row
+   * rather than a different one per line. A result made across the table is the
+   * exception and says so.
+   *
+   * On a traveller it repeats the name beside it whenever that player declared,
+   * which is what a real By column does next to a pair column — the repetition *is*
+   * the reading, because what varies down the column is whether the two match.
    */
-  readonly role: "bid" | "def" | null;
+  readonly declarer: string | null;
   /** Everything the contract alone cannot explain — see `contractTags`. */
   readonly tags: readonly ContractTag[];
 }
@@ -146,20 +161,22 @@ export interface Described {
  */
 export function describe(options: {
   readonly contract: Contract | null;
+  /** What to call this line's own player, and what to call whoever sat opposite. */
+  readonly names: { readonly mine: string; readonly theirs: string };
   readonly net: number;
   readonly seat: PlayerId;
   readonly tricks: Pair<number> | null;
   readonly vulnerable: Pair<boolean>;
 }): Described {
-  const { contract, net, seat, tricks, vulnerable } = options;
+  const { contract, names, net, seat, tricks, vulnerable } = options;
   if (contract === null) {
-    return { contract: null, mark: "", points: net, role: null, tags: [] };
+    return { contract: null, declarer: null, mark: "", points: net, tags: [] };
   }
   return {
     contract,
+    declarer: contract.declarer === seat ? names.mine : names.theirs,
     mark: resultOf(contract, tricks),
     points: net,
-    role: contract.declarer === seat ? "bid" : "def",
     tags: contractTags({
       // Honors need the tricks to score the contract without them — an entry from an
       // older server carries a score and no tricks, and that is a row this cannot
@@ -174,6 +191,7 @@ export function describe(options: {
 export function mineOn(result: FieldResult, me: PlayerId): Described {
   return describe({
     contract: result.contract,
+    names: { mine: "you", theirs: "opp" },
     net: netFor(result.points, me),
     seat: me,
     tricks: result.tricks,

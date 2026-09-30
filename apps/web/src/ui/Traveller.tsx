@@ -45,6 +45,13 @@ export function Traveller({
   const others: readonly Line[] = (result.field[me] ?? []).map((entry) => ({
     ...describe({
       contract: entry.contract,
+      // Every entry on a Doop board faced the same opposition this seat did — the
+      // one exception being a result made across the table, where the person
+      // opposite is not somebody this board can name.
+      // `opp` rather than a name: on a Doop board every entry faced the same
+      // opposition, so it is the same party on every row. A table result is the one
+      // exception, and the person opposite is not somebody this board can name.
+      names: { mine: entry.who, theirs: entry.kind === "table" ? "a person" : "opp" },
       net: entry.points,
       seat: 0,
       tricks: entry.tricks,
@@ -152,7 +159,7 @@ export function Tags({ tags }: { readonly tags: readonly ContractTag[] }): React
  * `suitInk.test.ts` for why naming a class beats naming an opacity, and this is one
  * better again.
  */
-function Row({ contract, mark, mine, note, points, role, tags, who }: Line): React.JSX.Element {
+function Row({ contract, declarer, mark, mine, note, points, tags, who }: Line): React.JSX.Element {
   return (
     <tr
       aria-current={mine ? "true" : undefined}
@@ -169,7 +176,7 @@ function Row({ contract, mark, mine, note, points, role, tags, who }: Line): Rea
             <span className="text-xs text-white/45">passed out</span>
           ) : (
             <>
-              <Role role={role} />
+              <Declarer name={declarer} wide />
               <ContractText contract={contract} on="dark" />
               <span className="text-xs text-white/45">{mark}</span>
               <Tags tags={tags} />
@@ -189,34 +196,47 @@ function Row({ contract, mark, mine, note, points, role, tags, who }: Line): Rea
 }
 
 /**
- * What this line's player did with the contract, drawn as a field rather than a tag.
+ * Who bought the contract, drawn as a field rather than a tag — see `Described`.
  *
- * Fixed width so it aligns down a column of rows, which is what turns a value that
- * is always present into something scannable instead of repetition. Placed
- * immediately before the contract, where it reads as the verb it is: `bid 4♥`,
- * `def 4♥`.
+ * Fixed width and truncating, so it aligns down a column of rows: what varies there
+ * is whether the name matches the one beside it, and that only reads as a column if
+ * the contracts start in the same place.
  *
  * **Weight rather than a hue, and that is a decision rather than a leftover.**
- * Colour was asked for here too, and there is nothing to borrow: bridge has a red
- * for vulnerability and no convention at all for declarer against defender, so any
- * hue would be invented — the exact thing that turns a palette into decoration. What
- * it does instead is say whose contract it was, which is a real difference and maps
- * onto brightness without a key: the contract is yours when you bid it, and dimmer
- * when it is somebody else's.
+ * Colour was asked for here too and there is nothing to borrow — bridge has a red
+ * for vulnerability and no convention at all for marking declarer — so any hue
+ * would be invented, which is what turns a palette into decoration. Brightness says
+ * the one thing that matters without a key: **your own name is brighter**, so a
+ * glance down the column finds the contracts that were yours.
  *
- * It is also on **every** row, so it must not be the loudest thing there. A mark
- * that never varies in whether it appears cannot also compete for attention with
- * the ones that do.
+ * It is on **every** row, so it must not be the loudest thing there. A mark that
+ * never varies in whether it appears cannot also compete with the ones that do.
  */
-export function Role({ role }: { readonly role: "bid" | "def" | null }): React.JSX.Element | null {
-  if (role === null) {
+export function Declarer({
+  name,
+  wide = false,
+}: {
+  readonly name: string | null;
+  /**
+   * Room for a player's name as well as `you` and `opp`.
+   *
+   * A traveller's rows belong to different people, so the field has to hold
+   * whatever any of them is called; a board list is all your own results, where the
+   * only two values it can ever take are three characters each. Reserving the
+   * traveller's width there would push the tags onto a second line for nothing.
+   */
+  readonly wide?: boolean;
+}): React.JSX.Element | null {
+  if (name === null) {
     return null;
   }
   return (
     <span
-      className={`w-7 shrink-0 text-[0.65rem] ${role === "bid" ? "text-white/55" : "text-white/30"}`}
+      className={`${wide ? "w-14" : "w-8"} shrink-0 truncate text-[0.65rem] ${
+        name === "you" ? "text-white/55" : "text-white/30"
+      }`}
     >
-      {role}
+      {name}
     </span>
   );
 }
