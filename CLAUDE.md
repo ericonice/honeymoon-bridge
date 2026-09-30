@@ -2218,6 +2218,27 @@ is the identity. `contractForSeat` is the fix and the honors derivation would ha
 that copy taken down to one, taking the calls rather than a `PlayerView` — which is what lets a board
 already played draw its own auction from what was kept of it.
 
+**The reveal is tap-to-continue and the pad inside it grew a button, so the two fought.** Reported from
+real play: tapping "Hands and bidding" opened the board *and* went on to the next deal in one gesture,
+so what had been asked for appeared over a screen already left behind. `PlayPhase` wraps the whole
+region — pad included — in `onClick`, which was fine for as long as a pad was only ever figures.
+
+**`handleTap` now ignores a tap that landed on a control**, checked with `closest("button, a")` rather
+than by making each control stop its own propagation: that is a rule the next control added to a pad
+would have to remember, where this one is true of every control there will ever be. Safe because the
+hand and the toolbar are `GameBoard`'s and sit outside this element, so nothing else in it is a button.
+
+**And the panel moved out of the pad, which is the fault underneath the fault.** A pad is drawn in
+three places — inside the Score overlay, inside `DealComplete`, and inside that tap-to-continue region —
+so a modal owned by the pad is nested in whichever of them it happened to be drawn in: inside another
+overlay's scrolling content in one case, inside a tap handler in another. `useBoardReviews` holds which
+board is open and `GameBoard` draws it, which makes it a sibling of every other overlay — what all of
+them already were. The pad is handed a `BoardReviewing` and only asks.
+
+`test/revealControls.test.ts` drives a real board to its thirteenth trick and taps the button, and its
+anti-vacuity half taps the table as well: a test finding that a tap did not continue says nothing unless
+a tap elsewhere does. Checked by reverting the guard.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told

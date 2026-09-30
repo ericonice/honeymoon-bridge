@@ -12,7 +12,7 @@ import { matchNoun } from "../game/labels.js";
 import { ratingChange } from "../game/records.js";
 import { Columns, DealResultHeadline, Row } from "./ScoreRows.js";
 import { Scorepad } from "./Scorepad.js";
-import type { BoardReviews } from "../game/boardReview.js";
+import type { BoardReviewing } from "../game/boardReview.js";
 import { FieldPad } from "./FieldPad.js";
 import { SessionPad } from "./SessionPad.js";
 
@@ -34,8 +34,8 @@ export interface DealCompleteProps {
   readonly opponentRating: number | null;
   /** Played back on boards from an earlier match, which the server will not rate. */
   readonly repeated: boolean;
-  /** Boards of this sitting that can be looked at again — see `useBoardReviews`. */
-  readonly reviews: BoardReviews;
+  /** Looking a board up again — see `useBoardReviews`. */
+  readonly reviews: BoardReviewing;
   readonly standing: MatchStanding;
   readonly score: DealScore | null;
   readonly view: PlayerView;

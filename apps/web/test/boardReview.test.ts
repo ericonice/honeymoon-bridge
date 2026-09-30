@@ -11,6 +11,7 @@ import {
 import type { DealAction, FieldBoard, FieldState, PlayerId, PlayerView } from "@hb/engine";
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import type { BoardReviews } from "../src/game/boardReview.js";
 import { reviewKeyOf, useBoardReviews } from "../src/game/boardReview.js";
 import type { GameSession } from "../src/game/session.js";
 
@@ -93,8 +94,9 @@ function sessionOf(state: FieldState): GameSession {
   } as unknown as GameSession;
 }
 
-function keptFrom(state: FieldState): ReturnType<typeof useBoardReviews> {
-  return renderHook(() => useBoardReviews(sessionOf(state))).result.current;
+/** The boards a fresh mount at this state would keep. */
+function keptFrom(state: FieldState): BoardReviews {
+  return renderHook(() => useBoardReviews(sessionOf(state))).result.current.reviewing.kept;
 }
 
 describe("keeping a board to look at again", () => {
@@ -148,7 +150,10 @@ describe("keeping a board to look at again", () => {
     });
     rerender({ at: state });
 
-    expect([...result.current.keys()]).toEqual([reviewKeyOf(ONE, ME), reviewKeyOf(TWO, ME)]);
+    expect([...result.current.reviewing.kept.keys()]).toEqual([
+      reviewKeyOf(ONE, ME),
+      reviewKeyOf(TWO, ME),
+    ]);
   });
 
   /**
@@ -194,6 +199,6 @@ describe("keeping a board to look at again", () => {
   });
 });
 
-function useBoardReviewsIn(session: GameSession): ReturnType<typeof useBoardReviews> {
-  return renderHook(() => useBoardReviews(session)).result.current;
+function useBoardReviewsIn(session: GameSession): BoardReviews {
+  return renderHook(() => useBoardReviews(session)).result.current.reviewing.kept;
 }

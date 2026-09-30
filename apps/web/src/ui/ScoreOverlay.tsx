@@ -1,5 +1,5 @@
 import type { MatchFormat, MatchStanding, Pair, PlayerView } from "@hb/engine";
-import type { BoardReviews } from "../game/boardReview.js";
+import type { BoardReviewing } from "../game/boardReview.js";
 import { FieldPad } from "./FieldPad.js";
 import { Overlay } from "./Overlay.js";
 import { Scorepad } from "./Scorepad.js";
@@ -9,8 +9,8 @@ export interface ScoreOverlayProps {
   /** What is being played, which the standing cannot say for a two-game match. */
   readonly format: MatchFormat;
   readonly opponentName: string;
-  /** Boards of this sitting that can be looked at again — see `useBoardReviews`. */
-  readonly reviews: BoardReviews;
+  /** Looking a board up again — see `useBoardReviews`. */
+  readonly reviews: BoardReviewing;
   readonly standing: MatchStanding;
   readonly view: PlayerView;
   readonly vulnerable: Pair<boolean>;

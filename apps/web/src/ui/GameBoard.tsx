@@ -1,5 +1,14 @@
 import { cardId, finishedHandsFor, legalActionsForView } from "@hb/engine";
-import type { Call, Card, DealPhase, DrawReveal, Pair, PlayerId, PlayerView } from "@hb/engine";
+import type {
+  Call,
+  Card,
+  DealPhase,
+  DrawReveal,
+  FieldSummary,
+  Pair,
+  PlayerId,
+  PlayerView,
+} from "@hb/engine";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { drawPlayout } from "../game/timing.js";
 import type { Density } from "../game/identity.js";
@@ -8,8 +17,9 @@ import { useGameFeedback } from "../game/useGameFeedback.js";
 import { useWakeLock } from "../game/wakeLock.js";
 import { AchievementToast } from "./AchievementToast.js";
 import { AuctionPhase } from "./AuctionPhase.js";
-import type { BoardReviews } from "../game/boardReview.js";
-import { useBoardReviews } from "../game/boardReview.js";
+import type { BoardReviewing } from "../game/boardReview.js";
+import { reviewKeyOf, useBoardReviews } from "../game/boardReview.js";
+import { BoardReview } from "./BoardReview.js";
 import { BiddingOverlay } from "./BiddingOverlay.js";
 import { ClaimConfirm } from "./ClaimConfirm.js";
 import { ClaimReveal } from "./ClaimReveal.js";
@@ -118,7 +128,7 @@ function CurrentPhase({
   /** See `PlayPhase`'s own prop of the same name. */
   readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
   /** See `PlayPhase`'s own prop of the same name. */
-  readonly reviews: BoardReviews;
+  readonly reviews: BoardReviewing;
   /** See `PlayPhase`'s own prop of the same name. */
   readonly revealedHands: Pair<readonly Card[]> | null;
   readonly session: GameSession;
@@ -524,7 +534,13 @@ export function GameBoard({
   // Every board of this sitting that can be looked at again — see `useBoardReviews`
   // for why the client keeps this rather than the wire carrying it. Empty in every
   // format but Doop, where the question does not arise.
-  const reviews = useBoardReviews(session);
+  //
+  // **Drawn here rather than by the pad that offers it**, because a pad appears in
+  // three places — inside the Score overlay, inside `DealComplete`, and inside the
+  // reveal's own tap-to-continue area — and a panel owned by the pad is a modal
+  // nested in whichever of those it happened to be drawn in. Here it is a sibling of
+  // every other overlay, which is what all of them already are.
+  const { close: closeReview, reviewing: reviews, showing: reviewingBoard } = useBoardReviews(session);
   // `PlayPhase` unmounts the instant the shown phase leaves "play" — into
   // `DealComplete` on a match or half finishing, or straight into the next
   // deal's draw or auction — and an unmount fires none of its own effects, so
@@ -796,6 +812,19 @@ export function GameBoard({
         />
       ) : null}
 
+      {/* On top of the Score overlay when it was opened from there, which is what
+          being a later sibling gets: closing it returns to the pad it came from. */}
+      {reviewingBoard === null || session.standing.kind !== "field" ? null : (
+        <ReviewedBoard
+          at={reviewingBoard}
+          me={view.me}
+          opponentName={session.opponentName}
+          reviews={reviews}
+          summary={session.standing.summary}
+          onClose={closeReview}
+        />
+      )}
+
       {showingBidding ? (
         <BiddingOverlay
           opponentName={session.opponentName}
@@ -859,5 +888,38 @@ export function GameBoard({
         />
       ) : null}
     </>
+  );
+}
+
+/** The review panel for one board, or nothing when that board has none kept. */
+function ReviewedBoard({
+  at,
+  me,
+  onClose,
+  opponentName,
+  reviews,
+  summary,
+}: {
+  readonly at: number;
+  readonly me: PlayerId;
+  onClose(): void;
+  readonly opponentName: string;
+  readonly reviews: BoardReviewing;
+  readonly summary: FieldSummary;
+}): React.JSX.Element | null {
+  const result = summary.results[at];
+  const review = result === undefined ? undefined : reviews.kept.get(reviewKeyOf(result.board, me));
+  if (result === undefined || review === undefined) {
+    return null;
+  }
+  return (
+    <BoardReview
+      at={at}
+      me={me}
+      opponentName={opponentName}
+      result={result}
+      review={review}
+      onClose={onClose}
+    />
   );
 }

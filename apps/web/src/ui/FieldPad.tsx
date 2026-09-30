@@ -1,9 +1,8 @@
 import { boardPercentageOf, honorsOn, humanPercentageOf, netFor } from "@hb/engine";
 import type { Contract, FieldResult, FieldSummary, Pair, PlayerId } from "@hb/engine";
 import { useState } from "react";
-import type { BoardReviews } from "../game/boardReview.js";
+import type { BoardReviewing } from "../game/boardReview.js";
 import { reviewKeyOf } from "../game/boardReview.js";
-import { BoardReview } from "./BoardReview.js";
 import { ContractText } from "./CardText.js";
 import { contractTags, resultOf, signed, vulnerableFrom } from "./fieldText.js";
 
@@ -47,8 +46,8 @@ export function FieldPad({
   readonly latest?: boolean;
   readonly me: PlayerId;
   readonly opponentName: string;
-  /** Boards of this sitting that can be looked at again — see `useBoardReviews`. */
-  readonly reviews: BoardReviews;
+  /** Looking a board up again — see `useBoardReviews`. */
+  readonly reviews: BoardReviewing;
   readonly summary: FieldSummary;
 }): React.JSX.Element {
   // **Every row shut, including the one just played.** Opening the last board on mount
@@ -57,23 +56,6 @@ export function FieldPad({
   // reveal stages that traveller on its own now, so having it open here as well drew
   // the same thing twice in consecutive screens.
   const [open, setOpen] = useState<string | null>(null);
-  // Which board's hands are being looked at, by its position in the session. Held
-  // here rather than by the caller because the panel is an overlay over the whole
-  // frame wherever this pad happens to be drawn, so there is nothing for a caller to
-  // place and nothing for it to decide.
-  const [reviewing, setReviewing] = useState<number | null>(null);
-
-  const panel =
-    reviewing === null ? null : <Reviewed
-      at={reviewing}
-      me={me}
-      opponentName={opponentName}
-      reviews={reviews}
-      summary={summary}
-      onClose={() => {
-        setReviewing(null);
-      }}
-    />;
 
   // The reveal is about the board that just finished, so it draws that one traveller
   // outright — there is nothing to choose between and nothing to open.
@@ -90,16 +72,9 @@ export function FieldPad({
             <Traveller at={at} me={me} result={result} />
             {/* The board just played is exactly the one somebody asks this of — the
                 placing has just landed and the hands are a tap behind it. */}
-            <ReviewButton
-              at={at}
-              me={me}
-              result={result}
-              reviews={reviews}
-              onOpen={setReviewing}
-            />
+            <ReviewButton at={at} me={me} result={result} reviews={reviews} />
           </>
         )}
-        {panel}
       </div>
     );
   }
@@ -133,7 +108,6 @@ export function FieldPad({
           open={open === reviewKeyOf(result.board, me)}
           result={result}
           reviews={reviews}
-          onOpen={setReviewing}
           onToggle={() => {
             const key = reviewKeyOf(result.board, me);
             setOpen(open === key ? null : key);
@@ -141,41 +115,7 @@ export function FieldPad({
         />
       ))}
       <Foot summary={summary} />
-      {panel}
     </div>
-  );
-}
-
-/** The review panel for one board, or nothing when that board has none kept. */
-function Reviewed({
-  at,
-  me,
-  onClose,
-  opponentName,
-  reviews,
-  summary,
-}: {
-  readonly at: number;
-  readonly me: PlayerId;
-  onClose(): void;
-  readonly opponentName: string;
-  readonly reviews: BoardReviews;
-  readonly summary: FieldSummary;
-}): React.JSX.Element | null {
-  const result = summary.results[at];
-  const review = result === undefined ? undefined : reviews.get(reviewKeyOf(result.board, me));
-  if (result === undefined || review === undefined) {
-    return null;
-  }
-  return (
-    <BoardReview
-      at={at}
-      me={me}
-      opponentName={opponentName}
-      result={result}
-      review={review}
-      onClose={onClose}
-    />
   );
 }
 
@@ -191,17 +131,15 @@ function Reviewed({
 function ReviewButton({
   at,
   me,
-  onOpen,
   result,
   reviews,
 }: {
   readonly at: number;
   readonly me: PlayerId;
-  onOpen(at: number): void;
   readonly result: FieldResult;
-  readonly reviews: BoardReviews;
+  readonly reviews: BoardReviewing;
 }): React.JSX.Element | null {
-  if (!reviews.has(reviewKeyOf(result.board, me))) {
+  if (!reviews.kept.has(reviewKeyOf(result.board, me))) {
     return null;
   }
   return (
@@ -209,7 +147,7 @@ function ReviewButton({
       type="button"
       className="mt-2.5 block w-full rounded-lg border border-white/25 py-2 text-center text-[0.8rem] text-white/80"
       onClick={() => {
-        onOpen(at);
+        reviews.open(at);
       }}
     >
       Hands and bidding
@@ -221,7 +159,6 @@ function ReviewButton({
 function BoardRow({
   at,
   me,
-  onOpen,
   onToggle,
   open,
   result,
@@ -229,11 +166,10 @@ function BoardRow({
 }: {
   readonly at: number;
   readonly me: PlayerId;
-  onOpen(at: number): void;
   onToggle(): void;
   readonly open: boolean;
   readonly result: FieldResult;
-  readonly reviews: BoardReviews;
+  readonly reviews: BoardReviewing;
 }): React.JSX.Element {
   const placed = boardPercentageOf(result, me);
   const mine = mineOn(result, me);
@@ -267,7 +203,7 @@ function BoardRow({
       {open ? (
         <div className="border-b border-white/7 bg-white/5 px-2 pb-3">
           <Traveller at={at} me={me} result={result} />
-          <ReviewButton at={at} me={me} result={result} reviews={reviews} onOpen={onOpen} />
+          <ReviewButton at={at} me={me} result={result} reviews={reviews} />
         </div>
       ) : null}
     </>

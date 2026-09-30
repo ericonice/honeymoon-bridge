@@ -18,7 +18,7 @@ import { paced, TRICK_TIMING } from "../game/timing.js";
 import { CardBack, CardFace, CardSlot } from "./CardFace.js";
 import { CardFlight, centerIn, centerInFromRect } from "./CardFlight.js";
 import type { Flight } from "./CardFlight.js";
-import type { BoardReviews } from "../game/boardReview.js";
+import type { BoardReviewing } from "../game/boardReview.js";
 import { FieldPad } from "./FieldPad.js";
 import { CARD_WIDTHS, Hand, MINI_MIN_STEP, spreadStep, useRowRoom } from "./Hand.js";
 import { Scorepad } from "./Scorepad.js";
@@ -99,8 +99,8 @@ export interface PlayPhaseProps {
    * whenever it is on offer — see its own doc comment for when it is not.
    */
   readonly release: (() => void) | null;
-  /** Boards of this sitting that can be looked at again — see `useBoardReviews`. */
-  readonly reviews: BoardReviews;
+  /** Looking a board up again — see `useBoardReviews`. */
+  readonly reviews: BoardReviewing;
   /**
    * Both hands as they stood for this deal, once the last one is known —
    * see `finishedHandsFor`. Null until then, and always null for a claimed
@@ -618,7 +618,24 @@ export function PlayPhase({
   // draws the *board just played* and the final screen draws the whole session. Even
   // where it does repeat, one tap is what makes the last hand end like the others,
   // which is what was actually asked for.
-  function handleTap(): void {
+  /**
+   * **A tap that landed on a control is that control's, not the screen's.**
+   *
+   * This whole region is tap-to-continue, and the reveal's second stage draws a pad
+   * inside it — which was fine while a pad was only ever figures, and stopped being
+   * fine the moment one grew a button. Reported as the two fighting: tapping "Hands
+   * and bidding" opened the board and continued to the next deal in the same gesture,
+   * so what you asked for appeared over a screen you had already left.
+   *
+   * Checked structurally rather than by making each control stop its own propagation,
+   * because that is a rule the next control added to a pad has to remember, and this
+   * one is true of every control there will ever be. The hand and the toolbar are
+   * `GameBoard`'s, outside this element, so nothing else here is a `button`.
+   */
+  function handleTap(event: React.MouseEvent): void {
+    if (event.target instanceof Element && event.target.closest("button, a") !== null) {
+      return;
+    }
     if (revealedHands !== null && swept) {
       if (waitingToContinue) {
         return;

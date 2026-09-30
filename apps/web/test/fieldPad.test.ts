@@ -3,7 +3,7 @@ import { startDeal, summarizeField } from "@hb/engine";
 import type { Card, FieldEntry, FieldResult, FieldState, Pair, PlayerId } from "@hb/engine";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { BoardReview, BoardReviews } from "../src/game/boardReview.js";
 import { FieldPad } from "../src/ui/FieldPad.js";
 import { stubBrowser } from "./support/board.js";
@@ -61,7 +61,7 @@ const REVIEW: BoardReview = {
   tricks: [10, 3],
 };
 
-function pad(results: readonly FieldResult[], reviews?: BoardReviews): void {
+function pad(results: readonly FieldResult[], kept?: BoardReviews): void {
   const state: FieldState = {
     at: results.length,
     boards: results.map((one) => one.board),
@@ -72,7 +72,7 @@ function pad(results: readonly FieldResult[], reviews?: BoardReviews): void {
     createElement(FieldPad, {
       me: ME,
       opponentName: "Computer",
-      reviews: reviews ?? new Map(),
+      reviews: { kept: kept ?? new Map(), open: opened },
       summary: summarizeField(state, ME),
     }),
   );
@@ -80,6 +80,17 @@ function pad(results: readonly FieldResult[], reviews?: BoardReviews): void {
 
 // A review draws real hands, and a row of cards measures itself — see `useRowRoom`.
 beforeAll(stubBrowser);
+
+/** Which board the pad last asked to have opened — the panel itself is `GameBoard`'s. */
+let opened: (at: number) => void;
+let asked: number[];
+
+beforeEach(() => {
+  asked = [];
+  opened = (at) => {
+    asked.push(at);
+  };
+});
 
 afterEach(cleanup);
 
@@ -181,7 +192,7 @@ describe("the session pad", () => {
         latest: true,
         me: ME,
         opponentName: "Computer",
-        reviews: new Map(),
+        reviews: { kept: new Map(), open: opened },
         summary: summarizeField(state, ME),
       }),
     );
@@ -261,16 +272,17 @@ describe("looking back at a board", () => {
     expect(screen.queryByRole("button", { name: "Hands and bidding" })).toBeNull();
   });
 
-  it("opens the hands and the auction of the board it was asked about", () => {
-    pad([result("b1", 420, [])], new Map([["b1", REVIEW]]));
-    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
+  /**
+   * The pad asks; `GameBoard` draws. A panel owned here would be a modal nested in
+   * whichever of the pad's three homes it happened to be drawn in — one of them the
+   * Score overlay, another the reveal's own tap-to-continue area.
+   */
+  it("asks for the board it was tapped on", () => {
+    pad([result("b1", 420, []), result("b2", 130, [])], new Map([["b2", REVIEW]]));
+    fireEvent.click(screen.getByRole("button", { name: /Board 2/ }));
     fireEvent.click(screen.getByRole("button", { name: "Hands and bidding" }));
 
-    expect(screen.getByRole("heading", { name: "Board 1" })).toBeTruthy();
-    expect(screen.getByText("The hands")).toBeTruthy();
-    expect(screen.getByText("The bidding")).toBeTruthy();
-    // Both thirteens, drawn as cards — twenty-six faces and nothing left out.
-    expect(document.querySelectorAll(".card-face")).toHaveLength(26);
+    expect(asked).toEqual([1]);
   });
 
   /**
@@ -291,7 +303,7 @@ describe("looking back at a board", () => {
         latest: true,
         me: ME,
         opponentName: "Computer",
-        reviews: new Map([["b1", REVIEW]]),
+        reviews: { kept: new Map([["b1", REVIEW]]), open: opened },
         summary: summarizeField(state, ME),
       }),
     );

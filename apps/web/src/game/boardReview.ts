@@ -1,6 +1,6 @@
 import { finishedHandsFor } from "@hb/engine";
 import type { AuctionEntry, Card, FieldBoard, Pair, PlayerId } from "@hb/engine";
-import { useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { GameSession } from "./session.js";
 
 /**
@@ -30,6 +30,19 @@ export interface BoardReview {
 }
 
 export type BoardReviews = ReadonlyMap<string, BoardReview>;
+
+/**
+ * What a pad needs in order to offer a way back into a board.
+ *
+ * One object rather than a map and a callback threaded separately, because every
+ * screen that draws a pad has to carry both and neither means anything alone.
+ */
+export interface BoardReviewing {
+  /** Boards of this sitting that were kept — a pad offers nothing for the rest. */
+  readonly kept: BoardReviews;
+  /** Opens the panel on a board, by its place in the session. */
+  open(at: number): void;
+}
 
 /**
  * What identifies one side of a stock, for a review to be filed and found under.
@@ -73,9 +86,22 @@ export function reviewKeyOf(board: FieldBoard, me: PlayerId): string {
  * It lives and dies with the mount, which is exactly the life of a sitting: starting
  * a new session remounts, and a board is never worth reviewing after the session it
  * was played in.
+ *
+ * **Which panel is open is held here too, and drawn by `GameBoard` rather than by the
+ * pad.** A pad is drawn in three places, one of which is already inside an overlay
+ * and another inside the reveal's own tap-to-continue area — so a panel owned by the
+ * pad is a modal nested in whatever happens to be around it. Owned at the top it is a
+ * sibling of every other overlay, which is what all of them already are.
  */
-export function useBoardReviews(session: GameSession): BoardReviews {
+export function useBoardReviews(session: GameSession): {
+  /** What to hand a pad. */
+  readonly reviewing: BoardReviewing;
+  /** Which board's panel is open, or null. Read by whoever draws it. */
+  readonly showing: number | null;
+  close(): void;
+} {
   const kept = useRef<Map<string, BoardReview>>(new Map());
+  const [showing, setShowing] = useState<number | null>(null);
   const { standing, view } = session;
 
   if (standing.kind === "field") {
@@ -91,5 +117,11 @@ export function useBoardReviews(session: GameSession): BoardReviews {
     }
   }
 
-  return kept.current;
+  return {
+    close: useCallback(() => {
+      setShowing(null);
+    }, []),
+    reviewing: { kept: kept.current, open: setShowing },
+    showing,
+  };
 }
