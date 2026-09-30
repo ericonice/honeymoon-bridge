@@ -2,7 +2,7 @@
 import { legalActionsForView } from "@hb/engine";
 import type { FieldBoard, PlayerId } from "@hb/engine";
 import { snapshotFor } from "@hb/protocol";
-import { act, cleanup, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { board, renderBoard, settle, stubBrowser } from "./support/board.js";
 
@@ -61,6 +61,21 @@ function playOut(): void {
 function tap(name: string | RegExp): void {
   act(() => {
     screen.getByRole("button", { name }).click();
+  });
+}
+
+/**
+ * The edge swipe, which is how a page is left — and the only unambiguous way to say
+ * *which* page while two are mounted, since both carry a Back control.
+ *
+ * It is also the thing worth driving: every mounted screen hears this gesture, and
+ * only the top one may answer.
+ */
+function swipeBack(): void {
+  act(() => {
+    fireEvent.touchStart(document, { touches: [{ clientX: 6, clientY: 300 }] });
+    fireEvent.touchMove(document, { touches: [{ clientX: 140, clientY: 304 }] });
+    fireEvent.touchEnd(document, { changedTouches: [{ clientX: 140, clientY: 304 }] });
   });
 }
 
@@ -152,18 +167,26 @@ describe("a Doop board on the real screen", () => {
     tap(/Board 1/);
 
     expect(screen.getByRole("heading", { name: "Board 1" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Back/ })).toBeTruthy();
-    // Still there underneath rather than torn down and rebuilt on the way back.
+    // Still there underneath rather than torn down and rebuilt on the way back —
+    // which is also why there are two Back controls and a swipe is how a test says
+    // which page it means.
     expect(screen.getByRole("heading", { name: "Score" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /Back/ })).toHaveLength(2);
   });
 
-  it("goes back to the score, with the list still there", () => {
+  /**
+   * **One gesture, one page.** Both are mounted and both are listening, so this is
+   * the case that used to go back twice — landing on the table with the score
+   * skipped past. See `useSwipeBack`.
+   */
+  it("swipes back to the score rather than past it", () => {
     playFirstBoardAndMoveOn();
 
     tap("Show the score");
     tap(/Board 1/);
-    tap("Back");
+    swipeBack();
 
+    expect(screen.queryByRole("heading", { name: "Board 1" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Score" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Board 1/ })).toBeTruthy();
   });
@@ -196,26 +219,28 @@ describe("a Doop board on the real screen", () => {
     // And the way out works, which is the half that made the strip go dead: with
     // nothing drawn there was nothing to close, so the open board stayed set and
     // every later tap did nothing.
-    tap("Close");
+    swipeBack();
+    swipeBack();
     tap("Show the score");
     expect(screen.getByRole("heading", { name: "Score" })).toBeTruthy();
   });
 
   /**
-   * Back leaves the board and not the sheet — the two were one control when this
-   * was a panel, and separating them is the point of it being a page.
+   * Back leaves one page at a time — the board, then the score. They were one
+   * control when the board lived inside the score's panel, and separating them is
+   * the point of both being pages.
    */
-  it("comes back to the score, which then closes on its own cross", () => {
+  it("leaves one page at a time", () => {
     playFirstBoardAndMoveOn();
 
     tap("Show the score");
     tap(/Board 1/);
-    tap(/Back/);
 
+    swipeBack();
     expect(screen.queryByRole("heading", { name: "Board 1" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Score" })).toBeTruthy();
 
-    tap("Close");
+    swipeBack();
     expect(screen.queryByRole("heading", { name: "Score" })).toBeNull();
   });
 });

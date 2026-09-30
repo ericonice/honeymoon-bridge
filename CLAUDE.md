@@ -2433,6 +2433,35 @@ the control there is the tab row now, which is a better case — switching to th
 do *while* reading the reveal, so a tap that also continued would take the screen away at the exact
 moment it was asked for. Still checked by reverting the guard.
 
+**The score is a page too, and a panel that opened a page was the inconsistency.** Reported exactly
+that way: the board is a full page you can swipe out of and the score it was opened from is a dialog.
+`ScoreOverlay`'s doc defends being reachable *mid-deal* — a part-score decides what you should be
+bidding several deals before the auction where it matters — and every word of that survives, because
+a page is reached from the same tap. None of it was ever an argument for the table staying visible
+behind.
+
+**Where the line now falls**: `BiddingOverlay` and `LastTrickOverlay` stay panels, because they are
+what `Overlay` describes — a glance, a few lines, with what you were doing still behind. A scorepad,
+or a list of a session's boards, is a page of the same kind as the record screen.
+
+**Making it a page turned up a shipped bug in `useSwipeBack`, which is the part worth keeping.** It
+listens on `document`, so *every mounted caller hears the same gesture* — and that was already wrong
+before anything deliberately stacked: `HelpOverlay` calls it and **then returns** `ScoringOverlay`,
+which calls it too, and hooks do not care what a component returned. Swiping back from Scoring went
+back past Help as well, two screens for one gesture. Nobody had reported it because nobody swipes out
+of the scoring page much.
+
+**Only the topmost screen answers now, and topmost is decided by first render rather than by
+mounting.** The difference is not academic: React runs effects **child-first**, so a page that opens
+straight into a sub-page registers the *inner* one first and would hand the gesture to the outer —
+which is exactly what the first attempt did, and what its test caught. Render order is the other way
+round: a parent renders before its child, and a page opened later renders later, so a token taken on
+the first render puts the innermost, newest screen highest in both cases.
+
+The walk drives the **gesture** rather than tapping Back, and that is not incidental: with two pages
+mounted there are two Back controls, so a swipe is the only unambiguous way for a test to say which
+page it means — and it is the case that used to go back twice. Checked by reverting: four tests fail.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told
