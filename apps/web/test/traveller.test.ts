@@ -62,11 +62,11 @@ describe("a board's traveller", () => {
       ]),
     );
 
-    // Who bought it, per row: the recorded line's own player defended, so `opp`;
-    // yours declared, so your own name — which is the name beside it, because a By
-    // column repeating a pair column is the reading rather than a fault.
-    expect(screen.getByText("opp")).toBeTruthy();
-    expect(screen.getAllByText("you").length).toBe(2);
+    // Who bought it, per row, relative to that row: the recorded line defended so
+    // `them`, and yours declared so `us`. The same two words on every row, which
+    // is what stops the opposition being named twice under two names.
+    expect(screen.getByText("them")).toBeTruthy();
+    expect(screen.getByText("us")).toBeTruthy();
     expect(screen.queryByText("by them")).toBeNull();
   });
 
@@ -155,9 +155,9 @@ describe("a board's traveller", () => {
   it("draws every mark on a row as a tag, the provenance one included", () => {
     traveller(result(620, [entry(140, "Ada", { kind: "table" })], [true, false]));
 
-    // The role is not among them: it is always one or the other, so it is a field
-    // before the contract rather than a note about it.
-    for (const cell of screen.getAllByText("you")) {
+    // The By field is not among them: it is always one or the other, so it is a
+    // field before the contract rather than a note about it. Both rows carry one.
+    for (const cell of screen.getAllByText("us")) {
       expect(cell.className).not.toContain("rounded");
     }
 
@@ -184,7 +184,7 @@ describe("a board's traveller", () => {
     expect(vul.className).toContain("red");
     // On the ground, never on the letters, which is where `text-red-400` means
     // "this is a red suit".
-    expect(vul.className).toContain("bg-red-400/12");
+    expect(vul.className).toContain("bg-red-500/20");
     expect(vul.className).not.toContain("text-red-400");
 
     const honors = screen.getByText("h100");

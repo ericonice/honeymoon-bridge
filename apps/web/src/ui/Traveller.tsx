@@ -1,6 +1,7 @@
 import { boardPercentageOf } from "@hb/engine";
 import type { FieldResult, PlayerId } from "@hb/engine";
 import { ContractText } from "./CardText.js";
+import { Chip } from "./Chip.js";
 import { describe, mineOn, signed, vulnerableFrom } from "./fieldText.js";
 import type { ContractTag, Described } from "./fieldText.js";
 
@@ -48,10 +49,10 @@ export function Traveller({
       // Every entry on a Doop board faced the same opposition this seat did — the
       // one exception being a result made across the table, where the person
       // opposite is not somebody this board can name.
-      // `opp` rather than a name: on a Doop board every entry faced the same
-      // opposition, so it is the same party on every row. A table result is the one
-      // exception, and the person opposite is not somebody this board can name.
-      names: { mine: entry.who, theirs: entry.kind === "table" ? "a person" : "opp" },
+      // Relative to the line, not to the reader — see `Described.declarer`. The
+      // same two words on every row, including this seat's own, which is what
+      // stops a party being named twice under two names.
+      names: { mine: "us", theirs: "them" },
       net: entry.points,
       seat: 0,
       tricks: entry.tricks,
@@ -113,27 +114,17 @@ interface Line extends Described {
  * border are what say "this is a label on that", and small caps say it again —
  * `VUL` is not a word in the sentence, it is a mark.
  *
- * **One of them is coloured and the rest are not** — see `contractTags` for which
- * and why. The short version: red on `vul` is borrowed from every bridge scorecard
- * ever printed rather than invented, the tint is on the chip rather than the
- * letters so it cannot be taken for a red suit, and colouring the second one would
- * cost the first its meaning.
+ * **One of them is coloured and the rest are not** — see `Chip` for the red and
+ * `contractTags` for why only `vul` gets it. Colouring the second would cost the
+ * first its meaning.
  */
-const TONE: Record<ContractTag["tone"], string> = {
-  plain: "border-white/10 bg-white/8 text-white/60",
-  vulnerable: "border-red-400/30 bg-red-400/12 text-red-200/90",
-};
-
 export function Tags({ tags }: { readonly tags: readonly ContractTag[] }): React.JSX.Element {
   return (
     <>
       {tags.map((tag) => (
-        <span
-          key={tag.label}
-          className={`rounded border px-1 py-px text-[0.6rem] leading-[1.35] font-medium tracking-wide uppercase ${TONE[tag.tone]}`}
-        >
+        <Chip key={tag.label} tone={tag.tone}>
           {tag.label}
-        </span>
+        </Chip>
       ))}
     </>
   );
@@ -176,7 +167,7 @@ function Row({ contract, declarer, mark, mine, note, points, tags, who }: Line):
             <span className="text-xs text-white/45">passed out</span>
           ) : (
             <>
-              <Declarer name={declarer} wide />
+              <Declarer name={declarer} />
               <ContractText contract={contract} on="dark" />
               <span className="text-xs text-white/45">{mark}</span>
               <Tags tags={tags} />
@@ -198,43 +189,27 @@ function Row({ contract, declarer, mark, mine, note, points, tags, who }: Line):
 /**
  * Who bought the contract, drawn as a field rather than a tag — see `Described`.
  *
- * Fixed width and truncating, so it aligns down a column of rows: what varies there
- * is whether the name matches the one beside it, and that only reads as a column if
- * the contracts start in the same place.
+ * Fixed width, so it aligns down a column of rows and the contracts all start in
+ * the same place — which is what makes a column of two repeating words scannable
+ * rather than repetitive.
  *
  * **Weight rather than a hue, and that is a decision rather than a leftover.**
  * Colour was asked for here too and there is nothing to borrow — bridge has a red
  * for vulnerability and no convention at all for marking declarer — so any hue
  * would be invented, which is what turns a palette into decoration. Brightness says
- * the one thing that matters without a key: **your own name is brighter**, so a
- * glance down the column finds the contracts that were yours.
+ * the one thing that matters without a key: **`us` is brighter**, so a glance down
+ * the column finds the lines that bought their own contract.
  *
  * It is on **every** row, so it must not be the loudest thing there. A mark that
  * never varies in whether it appears cannot also compete with the ones that do.
  */
-export function Declarer({
-  name,
-  wide = false,
-}: {
-  readonly name: string | null;
-  /**
-   * Room for a player's name as well as `you` and `opp`.
-   *
-   * A traveller's rows belong to different people, so the field has to hold
-   * whatever any of them is called; a board list is all your own results, where the
-   * only two values it can ever take are three characters each. Reserving the
-   * traveller's width there would push the tags onto a second line for nothing.
-   */
-  readonly wide?: boolean;
-}): React.JSX.Element | null {
+export function Declarer({ name }: { readonly name: string | null }): React.JSX.Element | null {
   if (name === null) {
     return null;
   }
   return (
     <span
-      className={`${wide ? "w-14" : "w-8"} shrink-0 truncate text-[0.65rem] ${
-        name === "you" ? "text-white/55" : "text-white/30"
-      }`}
+      className={`w-9 shrink-0 text-[0.65rem] ${name === "us" ? "text-white/55" : "text-white/30"}`}
     >
       {name}
     </span>

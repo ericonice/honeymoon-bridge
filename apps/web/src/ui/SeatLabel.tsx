@@ -1,3 +1,4 @@
+import { Chip } from "./Chip.js";
 export interface SeatLabelProps {
   readonly active: boolean;
   readonly name: string;
@@ -99,9 +100,12 @@ export function SeatLabel({
         // Stays at full strength on a dimmed label: whose turn it is changes
         // every few seconds, but vulnerability holds for the rest of the rubber
         // and is worth as much to the player who is waiting.
-        <span className="shrink-0 rounded bg-red-500/25 px-1 py-px text-[0.6rem] font-semibold tracking-wide text-red-200 uppercase">
-          vul
-        </span>
+        //
+        // The same `Chip` a traveller row puts beside a contract, because it is the
+        // same fact from two sides — there it says the contract was played
+        // vulnerable, here it says which player that was. Two reds drifting apart
+        // is what sharing it fixes.
+        <Chip tone="vulnerable">vul</Chip>
       ) : null}
     </p>
   );

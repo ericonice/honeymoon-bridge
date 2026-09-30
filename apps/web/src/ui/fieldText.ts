@@ -132,16 +132,20 @@ export interface Described {
    * implied had bid it; on a board where everybody defends, a column of `def`
    * answers a question nobody asked, twice over. This is duplicate's own By column.
    *
-   * **It only has to separate you from not-you**, which is what keeps it narrow: the
-   * row's own player where they bought it, and `opp` where the other side did. On a
-   * Doop board that is not the shifting "them" this file rejected once before —
-   * every entry faced the same computer, so `opp` names the same party on every row
-   * rather than a different one per line. A result made across the table is the
-   * exception and says so.
+   * **`us` and `them`, relative to the line rather than to the reader**: on any row,
+   * `us` is that row's own side and `them` is whoever sat opposite it.
    *
-   * On a traveller it repeats the name beside it whenever that player declared,
-   * which is what a real By column does next to a pair column — the repetition *is*
-   * the reading, because what varies down the column is whether the two match.
+   * Naming the parties outright was tried and cannot work here. A traveller's rows
+   * are named — `you`, `Ada`, **`Computer`** — and the opposition on a Doop board is
+   * also the computer, so a row could read `Computer` in its own column and `opp`
+   * beside the contract with both meaning the same machine. Nothing distinguishes
+   * two names for one party. Repeating the row's own name instead removed the
+   * collision and stuttered: `you | you 4♠`.
+   *
+   * **The pair is what makes "them" safe**, which a lone `by them` was not: that
+   * named a different person on every line with nothing saying so, and on somebody
+   * else's row it read as *your* opponent. Two symmetric tokens carry their own
+   * frame — whatever `us` is on a line, `them` is the other one.
    */
   readonly declarer: string | null;
   /** Everything the contract alone cannot explain — see `contractTags`. */
@@ -191,7 +195,7 @@ export function describe(options: {
 export function mineOn(result: FieldResult, me: PlayerId): Described {
   return describe({
     contract: result.contract,
-    names: { mine: "you", theirs: "opp" },
+    names: { mine: "us", theirs: "them" },
     net: netFor(result.points, me),
     seat: me,
     tricks: result.tricks,

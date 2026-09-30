@@ -2532,9 +2532,8 @@ carries no red at all.
 
 **The By field takes weight rather than a hue, and for a different reason.** There is nothing to
 borrow: bridge has a red for vulnerability and no convention whatever for marking declarer, so any
-colour there would be invented. What brightness *can* say without a key is which contracts were
-yours — your own name at white/55 and everything else at white/30, so a glance down the column finds
-them. It is also on **every** row, and a mark that never varies in whether it appears
+colour there would be invented. What brightness *can* say without a key is `us` at white/55 against
+`them` at white/30, so a glance down the column finds the lines that bought their own contract. It is also on **every** row, and a mark that never varies in whether it appears
 must not compete with the ones that do.
 
 **A tag is for what might not apply, and that ruled the role out of being one.** A chip that never
@@ -2548,22 +2547,20 @@ column and turns something always-present from repetition into something scannab
 **And it names who bought the contract rather than what this line's player did.** `bid`/`def` shipped
 first and said the same thing the long way round — it told you the *role* and left you to work out
 who that implied had bid it, so on a board where everybody defends it was a column of `def`
-answering a question nobody asked. The field is the row's own player where they bought it and `opp`
-where the other side did, which is duplicate's own **By** column.
+answering a question nobody asked. This is duplicate's own **By** column.
 
-**`opp` is not the shifting "them" this file rejected once before.** That objection was that "them"
-named a different person on every line; on a Doop board every entry faced the same computer, so
-`opp` names the same party throughout. A result made across the table is the one exception and says
-`a person` instead.
+**`us` and `them`, relative to the line rather than to the reader**, and the two attempts it took to
+get there are the useful part. Naming the parties outright cannot work: a traveller's rows are named
+`you`, `Ada` and **`Computer`**, and the opposition on a Doop board *is* the computer — so a row read
+`Computer` in its own column and `opp` beside the contract, both meaning the same machine, with
+nothing to say they were the same. Repeating the row's own name instead removed the collision and
+stuttered: `you | you 4♠`, which three tests noticed before a person did.
 
-**It repeats the name beside it on a traveller, and that is the reading rather than a fault** — a By
-column next to a pair column always does. What varies down the column is whether the two *match*.
-Three tests had to move to `getAllByText` because of it, which is the honest cost written down.
-
-**The reserve differs by surface**, which is the one piece of layout knowledge the component carries:
-a traveller's rows belong to different people so the field must hold any of their names, where a
-board list is all your own results and can only ever read `you` or `opp`. Reserving the traveller's
-width in the list would push the tags onto a second line for nothing.
+**The pair is what makes "them" safe**, and this file rejected a lone "them" once before for good
+reason: `by them` named a different person on every line with nothing saying so, and on somebody
+else's row it read as *your* opponent. Two symmetric tokens carry their own frame — whatever `us` is
+on a line, `them` is the other one — which is the same argument that paired `bid` with `def` rather
+than showing one of them.
 
 **Honors lost their sign, and the trade is worth stating because it is a real loss.** `h100` says a
 figure has honors in it, which is the question — honors being the one component a contract cannot
@@ -2575,6 +2572,23 @@ the terms beside it — but not at a glance, and that is the cost.
 **And the bidding sits above the hands**, because the auction is what produced the contract and the
 holding is what it was made on. The reveal already reads that way round; this was the one surface
 where the two were the other way about.
+
+**The red `VUL` badge was already in the app, and "borrowing" it re-invented it.** `SeatLabel` has
+drawn one beside a vulnerable player's name since long before any of this — so the traveller's chip,
+written an hour earlier and reasoned about at length as *borrowing bridge's convention*, was in fact
+a second copy of the app's own, with different values: `bg-red-500/25` on one and `bg-red-400/12`
+plus a border on the other. Drifting a few hours after the second was written, and only spotted
+because a screenshot of the **draw** screen happened to show the first.
+
+`Chip` is the one badge now. The thing worth keeping is *why* it can be one: **the mark means
+"vulnerable" and its subject is whatever it sits beside** — a player on a seat label, a contract on a
+traveller row. Those look like two meanings and are the same fact from two sides, which is what
+makes sharing it correct rather than merely tidy. Raised as an ambiguity worth settling and settled
+that way.
+
+**The lesson is about the reasoning, not the chip.** An argument that carefully justifies a choice
+from first principles will not notice that the choice already exists somewhere else in the file tree.
+`grep` for the token before writing the paragraph.
 
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a

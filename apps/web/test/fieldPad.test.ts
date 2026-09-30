@@ -170,12 +170,13 @@ describe("what a contract is tagged with", () => {
   /**
    * **Who, rather than what this seat did.** `bid`/`def` made the reader work out
    * who that implied had bought it; on a board where everybody defends, a column of
-   * `def` answers a question nobody asked.
+   * `def` answers a question nobody asked. Relative to the line rather than named,
+   * because a traveller's rows can themselves be called `Computer`.
    */
-  it("says who bought the contract, you or the other side", () => {
+  it("says who bought the contract, this side or the other", () => {
     pad([result("b1", PLAIN, [])]);
-    expect(screen.getByText("you")).toBeTruthy();
-    expect(screen.queryByText("opp")).toBeNull();
+    expect(screen.getByText("us")).toBeTruthy();
+    expect(screen.queryByText("them")).toBeNull();
 
     cleanup();
     pad([
@@ -184,8 +185,8 @@ describe("what a contract is tagged with", () => {
         contract: { declarer: 1, doubling: "none", level: 2, strain: "H" },
       },
     ]);
-    expect(screen.getByText("opp")).toBeTruthy();
-    expect(screen.queryByText("you")).toBeNull();
+    expect(screen.getByText("them")).toBeTruthy();
+    expect(screen.queryByText("us")).toBeNull();
   });
 
   /**
