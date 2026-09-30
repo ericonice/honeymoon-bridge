@@ -2239,6 +2239,40 @@ them already were. The pad is handed a `BoardReviewing` and only asks.
 anti-vacuity half taps the table as well: a test finding that a tap did not continue says nothing unless
 a tap elsewhere does. Checked by reverting the guard.
 
+**A board dealt from the second end gave its two seats each other's terms, and the tags are what
+exposed it.** Reported as a scoring bug from a screenshot: the same 4♥ +2 read **−480** on the row a
+person had played and **−680** on every recorded row beside it — which is not an arithmetic error but
+the duplicate game bonus at one vulnerability against the other, 300 against 500.
+
+**The fault is in the corpus, not in `scoreDeal`.** §1.8a reads the vulnerability cycle against the
+stock's two *streams*, and a stock makes two boards dealt from either end. The generator computed one
+pair per seed and wrote it against **both** boards — so on the board whose `starter` is 1, where the
+person draws second and holds the second stream, seat 0 was handed the first stream's terms. The
+generated results were right: each was scored against the stream that actually made it. The board row
+was wrong, so everybody who played it afterwards was given terms nobody else on it had.
+
+`fieldVulnerableFor(seed, starter)` is the rule, in the engine rather than in `bench/`, because it says
+what a `FieldBoard` *is* and because a rule that lives only in a bench is a rule `npm test` never
+checks. **Its test's anti-vacuity half is the whole of it**: half the cycle gives both streams the same
+answer, so a rule that ignored the starter entirely would pass every assertion on half the seeds. The
+swap is asserted where the two streams differ.
+
+**Confirmed against the live corpus before anything was changed, and the numbers are why it stayed
+hidden.** All 1,998 boards stored the stream-indexed pair; 999 of them are starter-1 and half of those
+are on a cycle where it matters. `0018_field_board_terms.sql` swaps the two columns for `starter = 1`,
+which is **not idempotent** — running it twice puts the fault back — and is a migration rather than a
+read-time repair for exactly that reason. The simultaneous-swap semantics were checked against real
+local D1 rather than assumed.
+
+**Why now, when the corpus is months old: `starter` only recently started alternating.** A dead
+tie-break had pinned every dealt board to the player's own stream, so a starter-1 board had barely been
+played — 70 human results against 767. Fixing that tie-break is what put anybody on the affected
+boards. **A latent data fault becomes a bug report the day a selector stops avoiding it.**
+
+**33 human results were recorded on affected boards and they stay wrong**, which is the part this
+cannot repair: they are real scores made at the wrong vulnerability, and re-deriving them would mean
+rewriting results somebody played. They sit in those boards' fields as slightly-off comparisons.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told

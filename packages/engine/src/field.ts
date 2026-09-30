@@ -126,6 +126,37 @@ export function netFor(points: Pair<number>, me: PlayerId): number {
 }
 
 /**
+ * What a board prescribes, **by seat**, from the stock it is dealt from.
+ *
+ * §1.8a fixes vulnerability per board so that every result on it was made on the
+ * same terms. The cycle is keyed off the **seed** rather than off a position in a
+ * batch, so regenerating a stock gives it the terms it had before — and it is read
+ * against the *streams* of that stock rather than against the seats: the first-draw
+ * stream takes the first of the pair and the second-draw stream the second.
+ *
+ * **The swap is the whole point of this taking a starter**, and leaving it out is
+ * how the corpus came to disagree with itself. A stock makes two boards, one dealt
+ * from either end, and a person always sits in seat 0 — so on the board whose
+ * `starter` is 1 they draw *second* and hold the second-draw stream, while seat 1
+ * holds the first-draw one. A generator that stored one pair against both boards
+ * gave that board's two seats each other's terms, and the results recorded on it
+ * were then made on terms nobody playing it afterwards would be given. Half of those
+ * boards are unaffected, since half the cycle gives both streams the same answer,
+ * which is exactly the kind of bug that hides.
+ *
+ * Reported from real play as a scoring bug: the same 4♥ +2 read −480 on the row a
+ * person played and −680 on every recorded one beside it, which is the game bonus at
+ * one vulnerability against the other.
+ */
+export function fieldVulnerableFor(seed: number, starter: PlayerId): Pair<boolean> {
+  const phase = seed % 4;
+  const streams: Pair<boolean> = [phase === 1 || phase === 3, phase === 2 || phase === 3];
+  // `starter` is the seat that draws first, so it is the seat holding the first
+  // stream — and on a board where that is seat 1, the pair is read the other way.
+  return starter === 0 ? streams : [streams[1], streams[0]];
+}
+
+/**
  * A holding of `count` of a suit's honors, for asking `honorsFor` what it pays.
  *
  * Built rather than stated, so the awards below come from the scoring rule itself

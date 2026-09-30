@@ -2,6 +2,7 @@ import {
   applyAction,
   createRng,
   duplicateScoreFor,
+  fieldVulnerableFor,
   matchpointsOf,
   newRubber,
   startDeal,
@@ -91,20 +92,6 @@ function generatorTuning(): ReturnType<typeof botTuningFor> {
   // generated on two machines would carry two different benchmarks. Removing the
   // deadline leaves the sample count, which is the same search run to completion.
   return { ...searched, searchBudgetMs: Number.MAX_SAFE_INTEGER };
-}
-
-/**
- * Vulnerability as the board prescribes it, by position rather than by player.
- *
- * A field board is played once, so there is no replay to resolve against — the
- * first-draw stream is seat 0 and the cycle is read against it. Stored with the
- * board in the corpus rather than derived at the point of play, so nothing can drift
- * it; keyed off the **seed** rather than off a position in a batch, so regenerating
- * a board gives it the same terms it had before.
- */
-function vulnerableFor(seed: number): Pair<boolean> {
-  const phase = seed % 4;
-  return [phase === 1 || phase === 3, phase === 2 || phase === 3];
 }
 
 interface Run {
@@ -218,7 +205,7 @@ function run(boards: number, runs: number): void {
 
   for (let index = 0; index < boards; index += 1) {
     const seed = (base + index * 7919) >>> 0;
-    const vulnerable = vulnerableFor(seed);
+    const vulnerable = fieldVulnerableFor(seed, 0);
     const played = Array.from({ length: runs }, (_, at) => playBoard(seed, at, vulnerable));
 
     // Both seats, because a board is two entries and either can move on its own —
@@ -295,15 +282,20 @@ function generate(seeds: number, runs: number): void {
 
   for (let index = 0; index < seeds; index += 1) {
     const seed = (base + index * 7919) >>> 0;
-    const vulnerable = vulnerableFor(seed);
+    // **Per board, not per stock.** `playBoard` deals the stock with seat 0 drawing
+    // first, so its own scoring takes the starter-0 reading; a board dealt from the
+    // other end hands its two seats the other way round, and writing one pair
+    // against both is what once gave a person terms nobody else on that board had.
+    const vulnerable = fieldVulnerableFor(seed, 0);
     for (const starter of [0, 1] as const) {
+      const terms = fieldVulnerableFor(seed, starter);
       // **Distinct per board, in the order they are made.** Stamping a whole batch
       // with one timestamp leaves the selector's "oldest first" with nothing to sort
       // on, so play scatters across the pool instead of working through it — and a
       // pool played thin is a pool whose boards never gather a field.
       boards.push(
-        `('f${seed}-${starter}', ${seed}, ${starter}, ${vulnerable[0] ? 1 : 0}, ` +
-          `${vulnerable[1] ? 1 : 0}, ${LATEST_RELEASE.version}, 'championship', ` +
+        `('f${seed}-${starter}', ${seed}, ${starter}, ${terms[0] ? 1 : 0}, ` +
+          `${terms[1] ? 1 : 0}, ${LATEST_RELEASE.version}, 'championship', ` +
           `${now + index * 2 + starter})`,
       );
     }
