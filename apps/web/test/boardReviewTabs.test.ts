@@ -71,12 +71,18 @@ describe("a board's two tabs", () => {
     expect(document.querySelectorAll(".card-face")).toHaveLength(0);
   });
 
-  it("swaps to the hands and the bidding, and takes the field away", () => {
+  it("swaps to the bidding and the hands, and takes the field away", () => {
     panel();
     tab("The deal");
 
-    expect(screen.getByText("The hands")).toBeTruthy();
     expect(screen.getByText("The bidding")).toBeTruthy();
+    expect(screen.getByText("The hands")).toBeTruthy();
+    // The auction is what produced the contract, so it is read before the holding
+    // it was made on rather than after it.
+    const order = [...document.querySelectorAll("p")]
+      .map((one) => one.textContent ?? "")
+      .filter((text) => text === "The bidding" || text === "The hands");
+    expect(order).toEqual(["The bidding", "The hands"]);
     // Both thirteens, drawn as cards — twenty-six faces and nothing left out.
     expect(document.querySelectorAll(".card-face")).toHaveLength(26);
     // The traveller is gone rather than scrolled past: no table, and no row of
@@ -94,8 +100,8 @@ describe("a board's two tabs", () => {
     panel();
     tab("The deal");
 
-    const deal = screen.getByText("The hands").closest("div")?.parentElement;
-    expect(deal?.textContent).toContain("The bidding");
+    const deal = screen.getByText("The bidding").closest("div")?.parentElement;
+    expect(deal?.textContent).toContain("The hands");
     expect(document.querySelectorAll(".card-face").length).toBeGreaterThan(0);
   });
 

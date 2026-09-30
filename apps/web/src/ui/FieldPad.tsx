@@ -4,7 +4,7 @@ import type { BoardReviewing } from "../game/boardReview.js";
 import { reviewKeyOf } from "../game/boardReview.js";
 import { BoardDetail } from "./BoardDetail.js";
 import { ContractText } from "./CardText.js";
-import { Tags } from "./Traveller.js";
+import { Role, Tags } from "./Traveller.js";
 import { mineOn, signed } from "./fieldText.js";
 import { ChevronRightIcon } from "./icons.js";
 
@@ -139,6 +139,7 @@ function BoardRow({
           <span className="text-xs text-white/45">passed out</span>
         ) : (
           <>
+            <Role role={mine.role} />
             <ContractText contract={mine.contract} on="dark" />
             <span className="text-xs text-white/45">{mine.mark}</span>
             <Tags tags={mine.tags} />

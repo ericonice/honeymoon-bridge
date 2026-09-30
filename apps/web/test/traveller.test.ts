@@ -62,7 +62,7 @@ describe("a board's traveller", () => {
       ]),
     );
 
-    // Both tags, one per row: the defender's line and your own declaring one.
+    // Both, one per row: the defender's line and your own declaring one.
     expect(screen.getByText("def")).toBeTruthy();
     expect(screen.getByText("bid")).toBeTruthy();
     expect(screen.queryByText("by them")).toBeNull();
@@ -86,17 +86,18 @@ describe("a board's traveller", () => {
   });
 
   /**
-   * Honors go to whoever *holds* them, so a recorded row can perfectly well have
-   * been paid for them by the side it was playing against — and signed the way the
-   * figure beside it is, or the reader has to work out which side gained.
+   * **Flagged, not accounted for.** Honors are the one component a contract cannot
+   * explain, so the tag says a figure has them in it — whichever side was paid, and
+   * a row whose *opponent* held them is as much in need of saying so as one that
+   * held them itself.
    */
-  it("signs a recorded row's honors toward that row's own player", () => {
+  it("flags honors on a recorded row whichever side was paid", () => {
     // 3♥ made exactly pays 90 and a 50 part-score bonus at neither vulnerable, so a
     // recorded 240 is that plus a hundred and 40 is that less one.
     traveller(result(620, [entry(240, "Computer"), entry(40, "Computer")]));
 
-    expect(screen.getByText("h+100")).toBeTruthy();
-    expect(screen.getByText("h−100")).toBeTruthy();
+    expect(screen.getAllByText("h100")).toHaveLength(2);
+    expect(screen.queryByText(/h[+−]/)).toBeNull();
   });
 
   /**
@@ -152,7 +153,11 @@ describe("a board's traveller", () => {
   it("draws every mark on a row as a tag, the provenance one included", () => {
     traveller(result(620, [entry(140, "Ada", { kind: "table" })], [true, false]));
 
-    for (const tag of ["vul", "bid", "vs person"]) {
+    // The role is not among them: it is always one or the other, so it is a field
+    // before the contract rather than a note about it.
+    expect(screen.getAllByText("bid")[0]?.className).not.toContain("rounded");
+
+    for (const tag of ["vul", "vs person"]) {
       const chips = screen.getAllByText(tag);
       expect(chips.length).toBeGreaterThan(0);
       for (const chip of chips) {

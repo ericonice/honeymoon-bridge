@@ -2480,8 +2480,7 @@ is not a class. `suitInk.test.ts` argues for naming a class rather than an opaci
 tunes it can move; an attribute that carries the *meaning* is one better again, and the whole visual
 treatment can change without touching the test.
 
-**The tags are short now — `vul`, `bid`/`def`, `h+100` — and one of the three is a better change than
-a shorter one.** They have to sit three abreast on a row that gives the contract about 164px at a
+**The tags are short now — `vul` and `h100` — and getting there settled what a tag is for.** They have to sit three abreast on a row that gives the contract about 164px at a
 phone's width and already holds a level, a strain and a result; "vulnerable", "defending" and
 "honors +100" wrapped.
 
@@ -2519,6 +2518,29 @@ fourth vocabulary would have to collide with one of those or be a colour picked 
 which is how a palette stops meaning anything. Weight, ground and small caps carry it instead. **If
 the chips still do not separate enough from the contract beside them, the next move is contrast
 within the neutral — not a hue.**
+
+**A tag is for what might not apply, and that ruled the role out of being one.** `bid`/`def` is
+*always* one or the other — a chip that never varies in whether it is there is not marking an
+exception, and three chips of which one is always present is noise around the two that mean
+something. Reported exactly that way: it is not really a tag, since there will always be a bidder or
+a defender.
+
+So it is a **field**: fixed width, quiet, immediately before the contract, which aligns it down a
+column and turns something always-present from repetition into something scannable. It also lands on
+the most natural reading available — `bid 4♥` and `def 4♥` are what a player would say out loud, so
+the word is a verb governing the contract rather than a label stuck beside it. **The pair still
+teaches itself** for the reason it was paired in the first place.
+
+**Honors lost their sign, and the trade is worth stating because it is a real loss.** `h100` says a
+figure has honors in it, which is the question — honors being the one component a contract cannot
+explain. A sign turned a mark into a ledger entry, which is the wrong amount of precision for a chip.
+What goes with it: a line paid 100 and a line whose *opponent* was paid 100 now look the same, and
+those differ by two hundred. The arithmetic is still recoverable from the contract, the result and
+the terms beside it — but not at a glance, and that is the cost.
+
+**And the bidding sits above the hands**, because the auction is what produced the contract and the
+holding is what it was made on. The reveal already reads that way round; this was the one surface
+where the two were the other way about.
 
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a

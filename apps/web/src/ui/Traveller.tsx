@@ -149,7 +149,7 @@ export function Tags({ tags }: { readonly tags: readonly string[] }): React.JSX.
  * `suitInk.test.ts` for why naming a class beats naming an opacity, and this is one
  * better again.
  */
-function Row({ contract, mark, mine, note, points, tags, who }: Line): React.JSX.Element {
+function Row({ contract, mark, mine, note, points, role, tags, who }: Line): React.JSX.Element {
   return (
     <tr
       aria-current={mine ? "true" : undefined}
@@ -166,6 +166,7 @@ function Row({ contract, mark, mine, note, points, tags, who }: Line): React.JSX
             <span className="text-xs text-white/45">passed out</span>
           ) : (
             <>
+              <Role role={role} />
               <ContractText contract={contract} on="dark" />
               <span className="text-xs text-white/45">{mark}</span>
               <Tags tags={tags} />
@@ -182,4 +183,19 @@ function Row({ contract, mark, mine, note, points, tags, who }: Line): React.JSX
       </td>
     </tr>
   );
+}
+
+/**
+ * What this line's player did with the contract, drawn as a field rather than a tag.
+ *
+ * Fixed width so it aligns down a column of rows, which is what turns a value that
+ * is always present into something scannable instead of repetition. Quiet, because
+ * it is the least surprising thing on the row — and placed immediately before the
+ * contract, where it reads as the verb it is: `bid 4♥`, `def 4♥`.
+ */
+export function Role({ role }: { readonly role: "bid" | "def" | null }): React.JSX.Element | null {
+  if (role === null) {
+    return null;
+  }
+  return <span className="w-7 shrink-0 text-[0.65rem] text-white/40">{role}</span>;
 }

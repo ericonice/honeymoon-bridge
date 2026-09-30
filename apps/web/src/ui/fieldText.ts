@@ -14,10 +14,11 @@ import type { Contract, FieldResult, Pair, PlayerId } from "@hb/engine";
 /**
  * Why a figure is the size it is, when the contract alone cannot say.
  *
- * **Short enough to sit three abreast**, because they do: a board row gives the
- * contract about 164px at a phone's width and it already holds a level, a strain
- * and a result. `vul`, `bid`/`def` and `h+100` fit where "vulnerable", "defending"
- * and "honors +100" wrapped to a second line.
+ * **Only what might not apply.** A tag is a note about an exception — this board was
+ * vulnerable, this line was paid honors, this score was made across the table from a
+ * person. Whether a line declared or defended is *always* one or the other, so it is
+ * not a note at all; it reads as a field and is drawn as one, immediately before the
+ * contract it governs. See `Described.role`.
  *
  * **Vulnerability qualifies the contract, not the reader.** `4♥ = vul` means that
  * contract was played vulnerable, which is the whole difference between 620 and 420
@@ -29,29 +30,18 @@ import type { Contract, FieldResult, Pair, PlayerId } from "@hb/engine";
  * do: the collapsed list is boards each at their own prescribed vulnerability, with
  * +110 and +720 in the same column and nothing above them to explain either.
  *
- * **Declaring is marked as well as defending, and the pair is the point.** `def`
- * alone is only legible to somebody who knows that its absence means the other
- * thing — an unstated rule. Two tags that always appear together teach each other
- * on sight, which is worth the three characters. Passing `null` suppresses both, for
- * a surface with room to name the declarer outright.
- *
- * **`bid` rather than `dec`, because `dec` and `def` are the same tag at a glance.**
- * Two three-letter words sharing their first two letters are told apart by reading
- * them, which is exactly what a tag is for not doing. `bid` and `def` differ in
- * shape from the first character — and "bid it" is what a player says about a
- * contract that was theirs.
- *
- * **Honors carry their figure, signed toward this line's own player**, like the
- * points beside it — honors go to whoever *holds* them, defender included, so a line
- * can perfectly well be paid for them by the other side, and that is the case the
- * tag exists for.
+ * **Honors are flagged rather than accounted for.** `h100` says this figure has
+ * honors in it — which is the question, because honors are the one component a
+ * contract cannot explain. It carried a sign for a while and the sign was the wrong
+ * amount of precision for a tag: it turned a mark into a ledger entry, and a reader
+ * wanting the arithmetic has the contract, the result and the terms beside it. What
+ * is given up is real and worth stating — a line paid 100 and a line whose opponent
+ * was paid 100 now look the same, and those differ by two hundred.
  *
  * `h` is the one abbreviation here a reader has to learn, and the two-column
  * `Scorepad` deliberately spells the word out for exactly that reason. The two are
  * not in conflict: that pad has a column to put a figure in and prose to label it,
- * where this is a row of tags in which `vul` is already short. **If `h+100` reads as
- * a key rather than a fact, it is the tag vocabulary that is wrong, not this one
- * member of it.**
+ * where this is a row of chips in which `vul` is already short.
  *
  * Nothing here is red, though bridge draws vulnerability red everywhere: red means
  * "this is a red suit" in this app, and a red `vul` would sit two characters from a
@@ -60,8 +50,6 @@ import type { Contract, FieldResult, Pair, PlayerId } from "@hb/engine";
 export function contractTags(options: {
   /** Net honors toward this line's player, or null when there are none to name. */
   readonly honors: number | null;
-  /** What this line's own player did, or null on a surface that says so in words. */
-  readonly role: "declaring" | "defending" | null;
   /** The *declaring* side was vulnerable, which is what the figures turn on. */
   readonly vulnerable: boolean;
 }): readonly string[] {
@@ -69,11 +57,8 @@ export function contractTags(options: {
   if (options.vulnerable) {
     tags.push("vul");
   }
-  if (options.role !== null) {
-    tags.push(options.role === "declaring" ? "bid" : "def");
-  }
   if (options.honors !== null && options.honors !== 0) {
-    tags.push(`h${signed(options.honors)}`);
+    tags.push(`h${Math.abs(options.honors)}`);
   }
   return tags;
 }
@@ -117,6 +102,17 @@ export interface Described {
   /** How it went, in bridge's notation. */
   readonly mark: string;
   readonly points: number;
+  /**
+   * What this line's own player did with the contract, or null where there is none.
+   *
+   * **A field rather than a tag**, because it is always one or the other — a chip
+   * that never varies in *whether* it is there is not marking an exception, and
+   * three chips of which one is always present reads as noise around the two that
+   * mean something. Drawn immediately before the contract, fixed width so it aligns
+   * down the column, where it also happens to read as plain English: `bid 4♥` and
+   * `def 4♥` are what a player would say.
+   */
+  readonly role: "bid" | "def" | null;
   /** Everything the contract alone cannot explain — see `contractTags`. */
   readonly tags: readonly string[];
 }
@@ -141,18 +137,18 @@ export function describe(options: {
 }): Described {
   const { contract, net, seat, tricks, vulnerable } = options;
   if (contract === null) {
-    return { contract: null, mark: "", points: net, tags: [] };
+    return { contract: null, mark: "", points: net, role: null, tags: [] };
   }
   return {
     contract,
     mark: resultOf(contract, tricks),
     points: net,
+    role: contract.declarer === seat ? "bid" : "def",
     tags: contractTags({
       // Honors need the tricks to score the contract without them — an entry from an
       // older server carries a score and no tricks, and that is a row this cannot
       // explain rather than one with no honors on it.
       honors: tricks === null ? null : honorsOn({ contract, net, seat, tricks, vulnerable }),
-      role: contract.declarer === seat ? "declaring" : "defending",
       vulnerable: vulnerable[contract.declarer],
     }),
   };

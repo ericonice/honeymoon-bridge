@@ -203,25 +203,25 @@ describe("what a contract is tagged with", () => {
   it("names honors, with the figure, where the score needs them to add up", () => {
     pad([result("b1", VULNERABLE + 100, [], [true, false])]);
 
-    expect(screen.getAllByText("h+100").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("h100").length).toBeGreaterThan(0);
   });
 
   it("says nothing about honors when the contract already accounts for the score", () => {
     pad([result("b1", VULNERABLE, [], [true, false])]);
 
-    expect(screen.queryByText(/^h[+−]/)).toBeNull();
+    expect(screen.queryByText(/^h\d/)).toBeNull();
   });
 
   /**
    * Signed the way the points beside it are, because the other side holding them is
    * exactly the case that makes a row baffling.
    */
-  it("signs honors toward the side that was paid", () => {
+  it("flags honors even where the other side was paid them", () => {
     // 4♠ made exactly pays 120 and a 300 game bonus at neither vulnerable, so a
     // recorded 320 is that less the hundred the other side took.
     pad([result("b1", PLAIN - 100, [])]);
 
-    expect(screen.getByText("h−100")).toBeTruthy();
+    expect(screen.getByText("h100")).toBeTruthy();
   });
 });
 

@@ -80,13 +80,13 @@ export function BoardDetail({
     contract === null
       ? null
       : honorsOn({ contract, net, seat: me, tricks: result.tricks, vulnerable });
-  // No `dec`/`def` here: this header names the declarer outright — there is room for
-  // "by Computer" where a traveller row has only a tag, and the tag and the phrase
-  // would say one thing twice.
+  // No role here: this header names the declarer outright — there is room for
+  // "by Computer" where a row has only three characters, and the two would say one
+  // thing twice.
   const tags =
     contract === null
       ? []
-      : contractTags({ honors, role: null, vulnerable: vulnerable[contract.declarer] });
+      : contractTags({ honors, vulnerable: vulnerable[contract.declarer] });
 
   return (
     <div className="flex w-full flex-col gap-3 text-sm">
@@ -141,6 +141,15 @@ export function BoardDetail({
       ) : (
         <>
           <div>
+            <Caption>The bidding</Caption>
+            <AuctionRecord auction={review.auction} me={me} opponentName={opponentName}>
+              {contract === null ? null : (
+                <ContractLine contract={contract} me={me} opponentName={opponentName} />
+              )}
+            </AuctionRecord>
+          </div>
+
+          <div>
             <Caption>The hands</Caption>
             {/* Their row above yours, which is where the two have sat on every
                 screen that draws both — the table's own geometry rather than a
@@ -149,15 +158,6 @@ export function BoardDetail({
             <HandRow cards={review.hands[me === 0 ? 1 : 0]} />
             <p className="pt-3 pb-1 text-xs text-white/55">You</p>
             <HandRow cards={review.hands[me]} />
-          </div>
-
-          <div>
-            <Caption>The bidding</Caption>
-            <AuctionRecord auction={review.auction} me={me} opponentName={opponentName}>
-              {contract === null ? null : (
-                <ContractLine contract={contract} me={me} opponentName={opponentName} />
-              )}
-            </AuctionRecord>
           </div>
 
           {/* The tricks as a count rather than trick by trick. Thirteen pairs of
