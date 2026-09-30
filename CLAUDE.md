@@ -2149,6 +2149,75 @@ board's traveller" asserts that board 1 is `aria-expanded="false"` as well as th
 without the negative it passes against a pad that opens every row, which is a different screen with the
 same assertion. Checked by reverting both props.
 
+**A traveller says why a figure is the size it is, and it took tags rather than a sentence.** A Doop
+board's rows are the same deal at four figures — 420, 620, 720, 750 — and nothing on them accounted for
+the differences. Vulnerability and honors are what the contract cannot say, so `contractTags` puts both
+beside it in the slot `defending` already used: `vul` and `honors +100`, faint, in the same white.
+
+**The tag qualifies the *contract*, which is what makes it per row rather than per board.** `4♥ = vul`
+means that contract was played vulnerable, and `defending` sits next to it so the pair reads "4♠ played
+vulnerable, and I was defending it". The first design said it once in the traveller's caption, on the
+argument the pad already makes about the opposition — and a caption **structurally cannot reach the
+collapsed list**, which is five boards each at their own prescribed vulnerability with +110 and +720 in
+the same column. Not red, though bridge draws vulnerability red everywhere: red means "this is a red
+suit" in this app and a red `vul` would sit two characters from a red pip.
+
+**Honors are derived from the recorded score rather than stored, and they can be because
+`scoreDeal` reads the hands for exactly one purpose.** Scoring the same contract and tricks with *empty*
+hands gives what that contract pays with no honors in it, and the recorded figure less that is the
+honors — so `honorsOn` puts back what `honorsFor` took out, and every one of the 15,000 entries already
+in the corpus can say so with no column to add and nothing to backfill. **It is self-checking**, which
+is what makes a derivation allowable here: honors pay 100 or 150 to at most one side, so a sound row
+lands on 0, ±100 or ±150 and anything else comes back null. A row this code has misread says nothing
+rather than blaming honors for a gap it cannot explain. The awards themselves come from `honorsFor` on a
+constructed holding rather than being typed out, the same discipline `scoringFacts.ts` applies.
+
+**A finished board can be looked at again, and Doop is the one format where that costs nothing.** A
+placing says how a board went and nothing about why; the why is what was held and what was bid.
+`BoardReview` is that, behind a tap on the traveller — and the rule is about the format rather than the
+screen: a board here is played once and `fieldBoardsFor` excludes seeds met in earlier sessions, so
+nothing learnt from looking back can be spent on a board still to come. In Replay, a mirror or a return
+match the same panel would hand over the second run.
+
+**Kept by the client rather than carried on the wire.** The tempting version hangs the hands off
+`FieldResult`, which puts them inside `snapshotFor` and re-introduces the conditional permission in
+`packages/protocol/test/snapshot.test.ts` that withdrawing the open discard removed. `useBoardReviews`
+files what this device saw, so the projection keeps having no exceptions — and it lives and dies with
+the mount, which is exactly the life of a sitting.
+
+**The hands are card faces rather than a written hand record**, which was chosen against a good
+alternative: four suit lines a hand is the idiom for looking a deal up and is more compact. Cards win on
+continuity — they are how a hand has looked on every screen up to now, and a review that asks you to
+re-read your own hand in another notation is a second thing to learn at the moment you are trying to
+remember the first. The tricks are a count rather than thirteen pairs of cards: that is the expensive
+half of the screen and the least often wanted.
+
+**Discards are not in it**, and their absence is a rule rather than an omission — §1 omits them from
+`PlayerView` because remembering what you threw is part of the game, and this would have been the back
+door to a decision taken at the front.
+
+**A test here was vacuous and reverting the fix is what found it, for the fifth time in this file.** The
+hook guarded on `view.phase === "complete"` *and* on `finishedHandsFor`, and the second implies the
+first — thirteen completed tricks is what completes a deal. So the test aimed at the phase guard passed
+against a hook with it removed, and it was passing for a third reason besides: it stopped one action
+short of the end, where nothing has been committed yet and there is no result to file a review against
+at all. **The state that actually needed guarding is a board in progress with a finished one behind
+it**, where a hook filing whatever the view held would put the board being played under the finished
+board's key — and it has to be rendered *fresh* at that moment, as opening the Score overlay mid-board
+does, or the "already kept" check hides the fault. The redundant condition is gone rather than kept as
+belt and braces: a second condition that cannot fail independently makes a test look meaningful when it
+is not.
+
+**And it found a real fault at a table on the way in.** `#applyField` read `points` and `tricks` from
+each seat and filed `played.contract` as it stood — so a seat-1 Doop result entered the corpus naming
+seat 1 as declarer beside tricks that said seat 0, and a traveller reading the two together drew the row
+as defending when it had declared. Invisible in solo play, where the person is seat 0 and turning round
+is the identity. `contractForSeat` is the fix and the honors derivation would have inherited the error.
+
+**Three screens drew the auction record and two held their own copy of the markup.** `AuctionRecord` is
+that copy taken down to one, taking the calls rather than a `PlayerView` — which is what lets a board
+already played draw its own auction from what was kept of it.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told

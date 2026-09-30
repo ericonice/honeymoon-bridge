@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { startDeal, summarizeField } from "@hb/engine";
-import type { FieldEntry, FieldResult, FieldState, PlayerId } from "@hb/engine";
+import type { Card, FieldEntry, FieldResult, FieldState, Pair, PlayerId } from "@hb/engine";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import type { BoardReview, BoardReviews } from "../src/game/boardReview.js";
 import { FieldPad } from "../src/ui/FieldPad.js";
+import { stubBrowser } from "./support/board.js";
 
 /**
  * The session pad, which is a row a board opening into its traveller.
@@ -26,9 +28,21 @@ function entry(points: number, who: string, kind: FieldEntry["kind"] = "computer
   };
 }
 
-function result(id: string, mine: number, field: readonly FieldEntry[] | null): FieldResult {
+/**
+ * A board this seat declared 4♠ on and made exactly.
+ *
+ * Its figures are left for the caller to set, because what several tests below turn
+ * on is the gap between the score recorded and the score that contract pays — which
+ * is the whole of how honors are recovered.
+ */
+function result(
+  id: string,
+  mine: number,
+  field: readonly FieldEntry[] | null,
+  vulnerable: Pair<boolean> = [false, false],
+): FieldResult {
   return {
-    board: { ids: [id, null], seed: 1, starter: 0, vulnerable: [false, false] },
+    board: { ids: [id, null], seed: 1, starter: 0, vulnerable },
     contract: { declarer: 0, doubling: "none", level: 4, strain: "S" },
     field: [field, null],
     points: [mine, 0],
@@ -36,15 +50,36 @@ function result(id: string, mine: number, field: readonly FieldEntry[] | null): 
   };
 }
 
-function pad(results: readonly FieldResult[]): void {
+/** Thirteen distinct cards, for a review that only has to be the right shape. */
+function thirteen(suit: Card["suit"]): readonly Card[] {
+  return [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map((rank) => ({ rank, suit }) as Card);
+}
+
+const REVIEW: BoardReview = {
+  auction: [{ by: 0, call: { type: "bid", bid: { level: 4, strain: "S" } } }],
+  hands: [thirteen("S"), thirteen("H")],
+  tricks: [10, 3],
+};
+
+function pad(results: readonly FieldResult[], reviews?: BoardReviews): void {
   const state: FieldState = {
     at: results.length,
     boards: results.map((one) => one.board),
     deal: startDeal({ seed: 1, starter: 0 }),
     results,
   };
-  render(createElement(FieldPad, { me: ME, summary: summarizeField(state, ME) }));
+  render(
+    createElement(FieldPad, {
+      me: ME,
+      opponentName: "Computer",
+      reviews: reviews ?? new Map(),
+      summary: summarizeField(state, ME),
+    }),
+  );
 }
+
+// A review draws real hands, and a row of cards measures itself — see `useRowRoom`.
+beforeAll(stubBrowser);
 
 afterEach(cleanup);
 
@@ -141,9 +176,126 @@ describe("the session pad", () => {
       deal: startDeal({ seed: 1, starter: 0 }),
         results: BOARDS,
     };
-    render(createElement(FieldPad, { latest: true, me: ME, summary: summarizeField(state, ME) }));
+    render(
+      createElement(FieldPad, {
+        latest: true,
+        me: ME,
+        opponentName: "Computer",
+        reviews: new Map(),
+        summary: summarizeField(state, ME),
+      }),
+    );
 
     expect(screen.getByText("Noah")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();
+  });
+});
+
+/**
+ * **Why a figure is the size it is, when the contract alone cannot say it.** A
+ * traveller's rows are the same deal at four figures — 420, 620, 720 — and nothing
+ * on them used to account for the differences.
+ */
+describe("what a contract is tagged with", () => {
+  // 4♠ made exactly pays 120 below the line and a game bonus: 300 at neither
+  // vulnerable, 500 vulnerable. Everything above that has to be honors.
+  const PLAIN = 420;
+  const VULNERABLE = 620;
+
+  it("says when the contract was played vulnerable", () => {
+    pad([result("b1", VULNERABLE, [], [true, false])]);
+
+    expect(screen.getAllByText("vul").length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The anti-vacuity half: without it a pad that tagged every contract would pass
+   * the test above, and the tag would say nothing at all.
+   */
+  it("says nothing about vulnerability when neither side was", () => {
+    pad([result("b1", PLAIN, [])]);
+
+    expect(screen.queryByText("vul")).toBeNull();
+  });
+
+  /**
+   * Honors are the one component of a score the contract cannot explain: they go to
+   * whoever *holds* them, so a figure can be surprising with nothing beside it to
+   * account for the surprise.
+   */
+  it("names honors, with the figure, where the score needs them to add up", () => {
+    pad([result("b1", VULNERABLE + 100, [], [true, false])]);
+
+    expect(screen.getAllByText("honors +100").length).toBeGreaterThan(0);
+  });
+
+  it("says nothing about honors when the contract already accounts for the score", () => {
+    pad([result("b1", VULNERABLE, [], [true, false])]);
+
+    expect(screen.queryByText(/honors/)).toBeNull();
+  });
+
+  /**
+   * Signed the way the points beside it are, because the other side holding them is
+   * exactly the case that makes a row baffling.
+   */
+  it("signs honors toward the side that was paid", () => {
+    // 3♥ made exactly pays 90 and a 50 part-score bonus at neither vulnerable, so a
+    // recorded 40 is that less the hundred the other side took.
+    pad([result("b1", PLAIN, [entry(40, "Noah", "solo")])]);
+    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
+
+    expect(screen.getByText("honors −100")).toBeTruthy();
+  });
+});
+
+/**
+ * Going back to the hands of a board already played — the placing says how it went
+ * and nothing about why, and the why is what was held and what was bid.
+ */
+describe("looking back at a board", () => {
+  it("offers nothing where the board was not kept", () => {
+    pad([result("b1", 420, [])]);
+    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
+
+    expect(screen.queryByRole("button", { name: "Hands and bidding" })).toBeNull();
+  });
+
+  it("opens the hands and the auction of the board it was asked about", () => {
+    pad([result("b1", 420, [])], new Map([["b1", REVIEW]]));
+    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Hands and bidding" }));
+
+    expect(screen.getByRole("heading", { name: "Board 1" })).toBeTruthy();
+    expect(screen.getByText("The hands")).toBeTruthy();
+    expect(screen.getByText("The bidding")).toBeTruthy();
+    // Both thirteens, drawn as cards — twenty-six faces and nothing left out.
+    expect(document.querySelectorAll(".card-face")).toHaveLength(26);
+  });
+
+  /**
+   * The board just played is the one somebody asks this of: the placing has just
+   * landed and the hands are a tap behind it. That screen has no row to expand, so
+   * without its own button there would be no way back at all.
+   */
+  it("offers it on the board just played, which has no row to open", () => {
+    const boards = [result("b1", 420, [])];
+    const state: FieldState = {
+      at: boards.length,
+      boards: boards.map((one) => one.board),
+      deal: startDeal({ seed: 1, starter: 0 }),
+      results: boards,
+    };
+    render(
+      createElement(FieldPad, {
+        latest: true,
+        me: ME,
+        opponentName: "Computer",
+        reviews: new Map([["b1", REVIEW]]),
+        summary: summarizeField(state, ME),
+      }),
+    );
+
+    expect(screen.getByRole("button", { name: "Hands and bidding" })).toBeTruthy();
   });
 });

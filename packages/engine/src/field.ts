@@ -1,6 +1,7 @@
 import { applyAction, startDeal } from "./deal.js";
-import { duplicateScoreFor } from "./duplicate.js";
-import type { Contract, DealAction, DealState, Pair, PlayerId } from "./types.js";
+import { duplicateScoreFor, scoreDuplicateDeal } from "./duplicate.js";
+import { honorsFor } from "./scoring.js";
+import type { Card, Contract, DealAction, DealState, Pair, PlayerId } from "./types.js";
 
 /**
  * Duplicate against the field — §1.8a.
@@ -122,6 +123,65 @@ export interface FieldResult {
  */
 export function netFor(points: Pair<number>, me: PlayerId): number {
   return points[me] - points[me === 0 ? 1 : 0];
+}
+
+/**
+ * A holding of `count` of a suit's honors, for asking `honorsFor` what it pays.
+ *
+ * Built rather than stated, so the awards below come from the scoring rule itself
+ * — the same discipline `scoringFacts.ts` applies to the help screen, and it
+ * matters more here because the whole point of this derivation is that nothing
+ * else is allowed to restate a scoring rule.
+ */
+function honorHolding(count: number): readonly Card[] {
+  return [14, 13, 12, 11, 10].slice(0, count).map((rank) => ({ rank, suit: "S" }) as Card);
+}
+
+/** Every figure honors can pay one side, which is 100 or 150 and nothing else. */
+const HONOR_AWARDS: readonly number[] = [honorsFor(honorHolding(4), "S"), honorsFor(honorHolding(5), "S")];
+
+/**
+ * What honors must have been paid on a recorded result, signed toward one seat.
+ *
+ * **Derived rather than stored, and it can be, because honors are the only thing a
+ * deal's score takes from the *hands*.** `scoreDeal` reads `hands` for exactly one
+ * purpose, so scoring the same contract and tricks with empty hands gives the score
+ * that contract would have paid with no honors in it at all, and whatever the
+ * recorded figure has over that is the honors. That means every entry already in the
+ * corpus can say so, with no column to add and nothing to backfill.
+ *
+ * Which is worth having because honors are **the one component of a score that the
+ * contract cannot explain**. Overtricks, the doubled insult, a slam bonus and the
+ * game bonus all follow from what is written beside the figure; honors go to whoever
+ * *holds* them, defender included, so a score can be surprising with nothing on the
+ * row to account for the surprise. `Scorepad` reached the same conclusion from the
+ * other format.
+ *
+ * **Null whenever there is nothing to say**, which covers two cases deliberately
+ * folded into one: a deal that paid no honors, and a residual that is not a figure
+ * honors could have paid. The second is what keeps this from labelling a discrepancy
+ * it does not understand — a row recorded by an older client, or one this code has
+ * misread, produces some other number, and the honest answer is silence rather than
+ * blaming honors for it. The check is real rather than decorative: honors pay 100 or
+ * 150 to at most one side, so a sound row lands on 0, ±100 or ±150 and nothing else
+ * is reachable.
+ *
+ * `tricks` and `seat` must be indexed the same way `contract.declarer` is — for a
+ * `FieldEntry` that is the stream's own holder as seat 0, and for this session's own
+ * result it is the real seats.
+ */
+export function honorsOn(options: {
+  readonly contract: Contract;
+  /** The recorded net toward `seat`: their score less the other seat's. */
+  readonly net: number;
+  readonly seat: PlayerId;
+  readonly tricks: Pair<number>;
+  readonly vulnerable: Pair<boolean>;
+}): number | null {
+  const { contract, net, seat, tricks, vulnerable } = options;
+  const bare = scoreDuplicateDeal({ contract, hands: [[], []], tricksWon: tricks }, vulnerable);
+  const residual = net - netFor(bare.points, seat);
+  return HONOR_AWARDS.includes(Math.abs(residual)) ? residual : null;
 }
 
 export interface FieldState {

@@ -225,6 +225,7 @@ describe("the final score of a two-half match", () => {
         opponentRating: 1400,
         opponentWaitingToContinue: false,
         repeated,
+        reviews: new Map(),
         score: null,
         standing: standingWith(previousPoints),
         view,
@@ -290,6 +291,7 @@ describe("which finished matches show a rating change", () => {
         opponentRating: 1400,
         opponentWaitingToContinue: false,
         repeated: over.repeated,
+        reviews: new Map(),
         score: null,
         standing: standingWith(over.format === "mirror" ? [420, 130] : null),
         view,
@@ -338,6 +340,7 @@ describe("the screen between the two halves", () => {
         opponentRating: 1400,
         opponentWaitingToContinue: false,
         repeated: false,
+        reviews: new Map(),
         // A real score, because a half **cannot** end on a passed-out deal — nothing
         // is scored, so nobody reaches a hundred — and the passed-out screen returns
         // before the half-time panel. A fixture with no score tests an unreachable

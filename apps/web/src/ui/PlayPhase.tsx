@@ -18,6 +18,7 @@ import { paced, TRICK_TIMING } from "../game/timing.js";
 import { CardBack, CardFace, CardSlot } from "./CardFace.js";
 import { CardFlight, centerIn, centerInFromRect } from "./CardFlight.js";
 import type { Flight } from "./CardFlight.js";
+import type { BoardReviews } from "../game/boardReview.js";
 import { FieldPad } from "./FieldPad.js";
 import { CARD_WIDTHS, Hand, MINI_MIN_STEP, spreadStep, useRowRoom } from "./Hand.js";
 import { Scorepad } from "./Scorepad.js";
@@ -98,6 +99,8 @@ export interface PlayPhaseProps {
    * whenever it is on offer — see its own doc comment for when it is not.
    */
   readonly release: (() => void) | null;
+  /** Boards of this sitting that can be looked at again — see `useBoardReviews`. */
+  readonly reviews: BoardReviews;
   /**
    * Both hands as they stood for this deal, once the last one is known —
    * see `finishedHandsFor`. Null until then, and always null for a claimed
@@ -379,6 +382,7 @@ export function PlayPhase({
   thinking,
   opponentWaitingToContinue,
   release,
+  reviews,
   revealedHands,
   standing,
   trickCount,
@@ -662,7 +666,13 @@ export function PlayPhase({
   // cheap and only ever rendered once the reveal is actually showing.
   const pad =
     standing.kind === "field" ? (
-      <FieldPad latest me={view.me} summary={standing.summary} />
+      <FieldPad
+        latest
+        me={view.me}
+        opponentName={opponentName}
+        reviews={reviews}
+        summary={standing.summary}
+      />
     ) : standing.kind === "duplicate" ? (
       <SessionPad summary={standing.summary} view={view} />
     ) : (

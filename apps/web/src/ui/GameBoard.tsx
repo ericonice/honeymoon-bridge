@@ -8,6 +8,8 @@ import { useGameFeedback } from "../game/useGameFeedback.js";
 import { useWakeLock } from "../game/wakeLock.js";
 import { AchievementToast } from "./AchievementToast.js";
 import { AuctionPhase } from "./AuctionPhase.js";
+import type { BoardReviews } from "../game/boardReview.js";
+import { useBoardReviews } from "../game/boardReview.js";
 import { BiddingOverlay } from "./BiddingOverlay.js";
 import { ClaimConfirm } from "./ClaimConfirm.js";
 import { ClaimReveal } from "./ClaimReveal.js";
@@ -94,6 +96,7 @@ function CurrentPhase({
   peeking,
   phase,
   ratings,
+  reviews,
   revealedHands,
   session,
   trickCount,
@@ -114,6 +117,8 @@ function CurrentPhase({
   readonly phase: DealPhase;
   /** See `PlayPhase`'s own prop of the same name. */
   readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
+  /** See `PlayPhase`'s own prop of the same name. */
+  readonly reviews: BoardReviews;
   /** See `PlayPhase`'s own prop of the same name. */
   readonly revealedHands: Pair<readonly Card[]> | null;
   readonly session: GameSession;
@@ -190,6 +195,7 @@ function CurrentPhase({
           opponentName={session.opponentName}
           opponentWaitingToContinue={session.opponentWaitingToContinue}
           release={onStartPlay}
+          reviews={reviews}
           revealedHands={revealedHands}
           standing={standing}
           trickCount={trickCount}
@@ -215,6 +221,7 @@ function CurrentPhase({
           opponentRating={ratings.opponent}
           opponentWaitingToContinue={session.opponentWaitingToContinue}
           repeated={session.repeated}
+          reviews={reviews}
           score={score}
           standing={standing}
           view={view}
@@ -514,6 +521,10 @@ export function GameBoard({
   const { phase, release } = useShownPhase(session, peeking);
   const claimResult = useClaimResult(view);
   const handsSettled = useHandsSettled(view);
+  // Every board of this sitting that can be looked at again — see `useBoardReviews`
+  // for why the client keeps this rather than the wire carrying it. Empty in every
+  // format but Doop, where the question does not arise.
+  const reviews = useBoardReviews(session);
   // `PlayPhase` unmounts the instant the shown phase leaves "play" — into
   // `DealComplete` on a match or half finishing, or straight into the next
   // deal's draw or auction — and an unmount fires none of its own effects, so
@@ -696,6 +707,7 @@ export function GameBoard({
           peeking={peeking}
           phase={phase}
           ratings={ratings}
+          reviews={reviews}
           revealedHands={revealedHands}
           trickCount={trickCount}
           session={session}
@@ -774,6 +786,7 @@ export function GameBoard({
         <ScoreOverlay
           format={session.format}
           opponentName={session.opponentName}
+          reviews={reviews}
           standing={session.standing}
           view={view}
           vulnerable={session.vulnerable}

@@ -71,6 +71,7 @@ function props(standing: MatchStanding, complete = true) {
       opponentRating: 1400,
       opponentWaitingToContinue: false,
       repeated: false,
+      reviews: new Map(),
       score: null,
       standing,
       view,

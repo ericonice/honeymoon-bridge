@@ -1,7 +1,11 @@
-import { boardPercentageOf, humanPercentageOf, netFor } from "@hb/engine";
-import type { FieldResult, FieldSummary, PlayerId } from "@hb/engine";
+import { boardPercentageOf, honorsOn, humanPercentageOf, netFor } from "@hb/engine";
+import type { Contract, FieldResult, FieldSummary, Pair, PlayerId } from "@hb/engine";
 import { useState } from "react";
+import type { BoardReviews } from "../game/boardReview.js";
+import { reviewKeyOf } from "../game/boardReview.js";
+import { BoardReview } from "./BoardReview.js";
 import { ContractText } from "./CardText.js";
+import { contractTags, resultOf, signed, vulnerableFrom } from "./fieldText.js";
 
 /**
  * The scorepad of a Doop session: a board at a time, you among everybody else.
@@ -16,10 +20,17 @@ import { ContractText } from "./CardText.js";
  * on a board faced the same thing in solo play, so a per-row tag would imply it
  * varies and invite the reader to work out which rows are the comparable ones. What
  * does vary is who held the cards, and that is what each row names.
+ *
+ * **Vulnerability and honors are tagged per row, and that is not a contradiction of
+ * the line above** — see `contractTags`. Both qualify the *contract* rather than the
+ * board: a traveller's rows need not all have declared, so vulnerability really can
+ * differ between them, and honors go to whoever held them.
  */
 export function FieldPad({
   latest = false,
   me,
+  opponentName,
+  reviews,
   summary,
 }: {
   /**
@@ -35,6 +46,9 @@ export function FieldPad({
    */
   readonly latest?: boolean;
   readonly me: PlayerId;
+  readonly opponentName: string;
+  /** Boards of this sitting that can be looked at again — see `useBoardReviews`. */
+  readonly reviews: BoardReviews;
   readonly summary: FieldSummary;
 }): React.JSX.Element {
   // **Every row shut, including the one just played.** Opening the last board on mount
@@ -43,19 +57,49 @@ export function FieldPad({
   // reveal stages that traveller on its own now, so having it open here as well drew
   // the same thing twice in consecutive screens.
   const [open, setOpen] = useState<string | null>(null);
+  // Which board's hands are being looked at, by its position in the session. Held
+  // here rather than by the caller because the panel is an overlay over the whole
+  // frame wherever this pad happens to be drawn, so there is nothing for a caller to
+  // place and nothing for it to decide.
+  const [reviewing, setReviewing] = useState<number | null>(null);
+
+  const panel =
+    reviewing === null ? null : <Reviewed
+      at={reviewing}
+      me={me}
+      opponentName={opponentName}
+      reviews={reviews}
+      summary={summary}
+      onClose={() => {
+        setReviewing(null);
+      }}
+    />;
 
   // The reveal is about the board that just finished, so it draws that one traveller
   // outright — there is nothing to choose between and nothing to open.
   if (latest) {
-    const result = summary.results[summary.results.length - 1];
+    const at = summary.results.length - 1;
+    const result = summary.results[at];
     return (
       <div className="flex flex-col gap-4 text-sm">
         <p className="text-xs text-white/45">
           Everybody here faced the same offers and kept their own cards.
         </p>
         {result === undefined ? null : (
-          <Traveller at={summary.results.length - 1} me={me} result={result} />
+          <>
+            <Traveller at={at} me={me} result={result} />
+            {/* The board just played is exactly the one somebody asks this of — the
+                placing has just landed and the hands are a tap behind it. */}
+            <ReviewButton
+              at={at}
+              me={me}
+              result={result}
+              reviews={reviews}
+              onOpen={setReviewing}
+            />
+          </>
         )}
+        {panel}
       </div>
     );
   }
@@ -83,18 +127,93 @@ export function FieldPad({
       </p>
       {summary.results.map((result, at) => (
         <BoardRow
-          key={result.board.ids[me] ?? at}
+          key={reviewKeyOf(result.board, me)}
           at={at}
           me={me}
-          open={open === result.board.ids[me]}
+          open={open === reviewKeyOf(result.board, me)}
           result={result}
+          reviews={reviews}
+          onOpen={setReviewing}
           onToggle={() => {
-            setOpen(open === result.board.ids[me] ? null : (result.board.ids[me] ?? null));
+            const key = reviewKeyOf(result.board, me);
+            setOpen(open === key ? null : key);
           }}
         />
       ))}
       <Foot summary={summary} />
+      {panel}
     </div>
+  );
+}
+
+/** The review panel for one board, or nothing when that board has none kept. */
+function Reviewed({
+  at,
+  me,
+  onClose,
+  opponentName,
+  reviews,
+  summary,
+}: {
+  readonly at: number;
+  readonly me: PlayerId;
+  onClose(): void;
+  readonly opponentName: string;
+  readonly reviews: BoardReviews;
+  readonly summary: FieldSummary;
+}): React.JSX.Element | null {
+  const result = summary.results[at];
+  const review = result === undefined ? undefined : reviews.get(reviewKeyOf(result.board, me));
+  if (result === undefined || review === undefined) {
+    return null;
+  }
+  return (
+    <BoardReview
+      at={at}
+      me={me}
+      opponentName={opponentName}
+      result={result}
+      review={review}
+      onClose={onClose}
+    />
+  );
+}
+
+/**
+ * The way back into a board's hands, where there are any kept.
+ *
+ * Absent rather than disabled when there are none, which is the honest answer for
+ * the two cases that produce it: a board finished by an accepted **claim** ends with
+ * cards unplayed and never had a full thirteen to show, and a session carried across
+ * a reload has nothing kept from before it. A control that cannot do anything is
+ * worse than no control, because it promises the screen exists.
+ */
+function ReviewButton({
+  at,
+  me,
+  onOpen,
+  result,
+  reviews,
+}: {
+  readonly at: number;
+  readonly me: PlayerId;
+  onOpen(at: number): void;
+  readonly result: FieldResult;
+  readonly reviews: BoardReviews;
+}): React.JSX.Element | null {
+  if (!reviews.has(reviewKeyOf(result.board, me))) {
+    return null;
+  }
+  return (
+    <button
+      type="button"
+      className="mt-2.5 block w-full rounded-lg border border-white/25 py-2 text-center text-[0.8rem] text-white/80"
+      onClick={() => {
+        onOpen(at);
+      }}
+    >
+      Hands and bidding
+    </button>
   );
 }
 
@@ -102,17 +221,22 @@ export function FieldPad({
 function BoardRow({
   at,
   me,
+  onOpen,
   onToggle,
   open,
   result,
+  reviews,
 }: {
   readonly at: number;
   readonly me: PlayerId;
+  onOpen(at: number): void;
   onToggle(): void;
   readonly open: boolean;
   readonly result: FieldResult;
+  readonly reviews: BoardReviews;
 }): React.JSX.Element {
   const placed = boardPercentageOf(result, me);
+  const mine = mineOn(result, me);
   return (
     <>
       <button
@@ -124,24 +248,18 @@ function BoardRow({
         onClick={onToggle}
       >
         <span className="w-16 shrink-0 text-xs text-white/45">Board {at + 1}</span>
-        <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-          {result.contract === null ? (
+        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-1.5">
+          {mine.contract === null ? (
             <span className="text-xs text-white/45">passed out</span>
           ) : (
             <>
-              <ContractText contract={result.contract} on="dark" />
-              <span className="text-xs text-white/45">
-                {resultOf(result.contract, result.tricks)}
-              </span>
-              {result.contract.declarer === me ? null : (
-                <span className="text-[0.65rem] text-white/35">defending</span>
-              )}
+              <ContractText contract={mine.contract} on="dark" />
+              <span className="text-xs text-white/45">{mine.mark}</span>
+              <Tags tags={mine.tags} />
             </>
           )}
         </span>
-        <span className="shrink-0 tabular-nums text-white/60">
-          {signed(netFor(result.points, me))}
-        </span>
+        <span className="shrink-0 tabular-nums text-white/60">{signed(mine.points)}</span>
         <span className="w-12 shrink-0 text-right font-semibold tabular-nums">
           {placed === null ? "—" : `${Math.round(placed)}%`}
         </span>
@@ -149,13 +267,13 @@ function BoardRow({
       {open ? (
         <div className="border-b border-white/7 bg-white/5 px-2 pb-3">
           <Traveller at={at} me={me} result={result} />
+          <ReviewButton at={at} me={me} result={result} reviews={reviews} onOpen={onOpen} />
         </div>
       ) : null}
     </>
   );
 }
 
-/** Everybody's result on one board, yours among them. */
 /**
  * A board's traveller: every result on it, **best first, with yours in its place**.
  *
@@ -179,24 +297,21 @@ function Traveller({
   readonly result: FieldResult;
 }): React.JSX.Element {
   const placed = boardPercentageOf(result, me);
-  const mine: Line = {
-    contract: result.contract,
-    declaredByThem: result.contract !== null && result.contract.declarer !== me,
-    mine: true,
-    note: null,
-    points: netFor(result.points, me),
-    tricks: result.tricks,
-    who: "you",
-  };
+  const mine: Line = { ...mineOn(result, me), mine: true, note: null, who: "you" };
+  // A recorded entry is stored from its own stream's side — its declarer and its
+  // tricks both name that row's own player as 0 — so its terms have to be read the
+  // same way round, which is what `vulnerableFrom` does to a board's own pair.
+  const theirTerms = vulnerableFrom(result.board.vulnerable, me);
   const others: readonly Line[] = (result.field[me] ?? []).map((entry) => ({
-    contract: entry.contract,
-    // A recorded entry's declarer is normalised to the seat holding this board's
-    // stream, so 0 is always that row's own player.
-    declaredByThem: entry.contract !== null && entry.contract.declarer !== 0,
+    ...describe({
+      contract: entry.contract,
+      net: entry.points,
+      seat: 0,
+      tricks: entry.tricks,
+      vulnerable: theirTerms,
+    }),
     mine: false,
     note: entry.kind === "table" ? "played a person" : null,
-    points: entry.points,
-    tricks: entry.tricks,
     who: entry.who,
   }));
   const lines = [mine, ...others].sort((one, two) => two.points - one.points);
@@ -233,67 +348,98 @@ function Traveller({
   );
 }
 
+/** What one line says about its contract, beyond naming it. */
+interface Described {
+  readonly contract: Contract | null;
+  /** How it went, in bridge's notation. */
+  readonly mark: string;
+  readonly points: number;
+  /** Everything the contract alone cannot explain — see `contractTags`. */
+  readonly tags: readonly string[];
+}
+
+/**
+ * One result read into the words a row draws, whoever made it.
+ *
+ * Shared by this seat's own line and every recorded one so the two cannot describe
+ * the same contract differently — and shared by the collapsed board row and the
+ * traveller line under it, which are the same result twice.
+ *
+ * `seat`, `contract.declarer`, `tricks` and `vulnerable` must all be indexed the
+ * same way. They are not the same way for the two callers, which is the whole reason
+ * this takes them rather than reaching for them.
+ */
+function describe(options: {
+  readonly contract: Contract | null;
+  readonly net: number;
+  readonly seat: PlayerId;
+  readonly tricks: Pair<number> | null;
+  readonly vulnerable: Pair<boolean>;
+}): Described {
+  const { contract, net, seat, tricks, vulnerable } = options;
+  if (contract === null) {
+    return { contract: null, mark: "", points: net, tags: [] };
+  }
+  return {
+    contract,
+    mark: resultOf(contract, tricks),
+    points: net,
+    tags: contractTags({
+      defending: contract.declarer !== seat,
+      // Honors need the tricks to score the contract without them — an entry from an
+      // older server carries a score and no tricks, and that is a row this cannot
+      // explain rather than one with no honors on it.
+      honors: tricks === null ? null : honorsOn({ contract, net, seat, tricks, vulnerable }),
+      vulnerable: vulnerable[contract.declarer],
+    }),
+  };
+}
+
+/** This seat's own result on a board, described. */
+function mineOn(result: FieldResult, me: PlayerId): Described {
+  return describe({
+    contract: result.contract,
+    net: netFor(result.points, me),
+    seat: me,
+    tricks: result.tricks,
+    vulnerable: result.board.vulnerable,
+  });
+}
+
 /** One line of a traveller, whoever made it. */
-interface Line {
-  readonly contract: FieldResult["contract"];
-  readonly declaredByThem: boolean;
+interface Line extends Described {
   readonly mine: boolean;
   readonly note: string | null;
-  readonly points: number;
-  readonly tricks: readonly number[] | null;
   readonly who: string;
 }
 
-function Row({
-  contract,
-  declaredByThem,
-  mine,
-  note,
-  points,
-  tricks,
-  who,
-}: {
-  readonly contract: FieldResult["contract"];
-  /**
-   * This row's player was defending, which is the one thing a score cannot say.
-   *
-   * Without it a board where the opposition always declares reads as every line
-   * scoring nothing for no visible reason — a contract, a result, and a zero beside
-   * them.
-   *
-   * **The word rather than "by them", which was a key the reader had to learn.**
-   * "Them" is relative to whoever owns the row, so it named a different person on
-   * every line — and on somebody else's row it reads far more naturally as *your*
-   * opponent. `defending` is true on its own terms wherever it appears, which is the
-   * same argument that had the pad name honors in words rather than mark them.
-   *
-   * It deliberately does not say who they were defending *against*: every entry on a
-   * Doop board faced the same computer, so that belongs to the board and is said
-   * once at the top rather than on every row.
-   */
-  readonly declaredByThem: boolean;
-  readonly mine: boolean;
-  readonly note: string | null;
-  readonly points: number;
-  readonly tricks: readonly number[] | null;
-  readonly who: string;
-}): React.JSX.Element {
+function Tags({ tags }: { readonly tags: readonly string[] }): React.JSX.Element {
+  return (
+    <>
+      {tags.map((tag) => (
+        <span key={tag} className="text-[0.65rem] text-white/35">
+          {tag}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function Row({ contract, mark, mine, note, points, tags, who }: Line): React.JSX.Element {
   return (
     <tr className={`border-t border-white/10 ${mine ? "text-white" : "text-white/70"}`}>
       <td className={`w-20 truncate py-1.5 pr-2 text-xs ${mine ? "font-semibold" : ""}`}>
         {who}
       </td>
       <td className="py-1.5 pr-2">
-        <span className="flex items-baseline gap-1.5">
+        <span className="flex flex-wrap items-baseline gap-1.5">
           {contract === null ? (
             <span className="text-xs text-white/45">passed out</span>
           ) : (
             <>
               <ContractText contract={contract} on="dark" />
-              <span className="text-xs text-white/45">{resultOf(contract, tricks)}</span>
-              {declaredByThem ? (
-                <span className="text-[0.65rem] text-white/35">defending</span>
-              ) : null}
+              <span className="text-xs text-white/45">{mark}</span>
+              <Tags tags={tags} />
             </>
           )}
           {note === null ? null : <span className="text-[0.65rem] text-white/35">{note}</span>}
@@ -302,22 +448,6 @@ function Row({
       <td className="py-1.5 text-right tabular-nums">{signed(points)}</td>
     </tr>
   );
-}
-
-/**
- * How the contract went, in bridge's notation.
- *
- * Blank when the tricks were not recorded rather than guessed at — an entry from an
- * older server may carry a score and a contract and nothing else, and "=" would be a
- * claim about a deal nobody has the record of.
- */
-function resultOf(contract: NonNullable<FieldResult["contract"]>, tricks: readonly number[] | null): string {
-  if (tricks === null) {
-    return "";
-  }
-  const made = tricks[contract.declarer] ?? 0;
-  const needed = contract.level + 6;
-  return made >= needed ? (made === needed ? "=" : `+${made - needed}`) : `−${needed - made}`;
 }
 
 function Foot({ summary }: { readonly summary: FieldSummary }): React.JSX.Element {
@@ -349,9 +479,4 @@ function Foot({ summary }: { readonly summary: FieldSummary }): React.JSX.Elemen
       )}
     </div>
   );
-}
-
-/** U+2212 for the minus, matching every other signed total in the app. */
-function signed(value: number): string {
-  return value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : "0";
 }
