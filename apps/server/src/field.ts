@@ -39,6 +39,28 @@ export interface FieldEntryRow {
   readonly who: string;
 }
 
+/**
+ * A contract as the seat holding this board's stream sees it: that seat is 0.
+ *
+ * §1.8a's corpus stores every entry from its own stream's side, so a board's rows are
+ * comparable with each other and with whoever is ranked against them next. Every
+ * other figure on a result is already read from that seat — the generator turns the
+ * second stream round, and a table reads `points` and `tricks` per seat — and the
+ * declarer is the one field that travels as a *seat* rather than as a number, so it
+ * has to be turned round with them.
+ *
+ * It was not, and the bug is invisible in solo play: there the person is seat 0 and
+ * this is the identity. At a table, seat 1's result went in naming seat 1 as declarer
+ * beside tricks that said seat 0, and a traveller reading the two together drew the
+ * row as defending when it had declared.
+ */
+export function contractForSeat(contract: Contract | null, seat: PlayerId): Contract | null {
+  if (contract === null || seat === 0) {
+    return contract;
+  }
+  return { ...contract, declarer: contract.declarer === 0 ? 1 : 0 };
+}
+
 /** A result being recorded, whether the computer's own or a person's. */
 export interface FieldResultReport {
   readonly boardId: string;

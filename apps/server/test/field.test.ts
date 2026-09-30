@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/env.js";
-import { fieldFor, fieldResultFrom } from "../src/field.js";
+import { contractForSeat, fieldFor, fieldResultFrom } from "../src/field.js";
 
 /**
  * A database that answers a queued list of results in order.
@@ -224,5 +224,32 @@ describe("the field a board carries", () => {
     const { env: stub } = env([{ 1: 1 }, []]);
 
     expect(await fieldFor(stub, "b1", "ada")).toEqual([]);
+  });
+});
+
+/**
+ * The corpus stores every entry from its own stream's side, and the declarer is the
+ * one field on a result that travels as a *seat* rather than as a number — so it has
+ * to turn round with the tricks beside it.
+ */
+describe("a contract read from the stream's own side", () => {
+  const CONTRACT = { declarer: 0, doubling: "none", level: 4, strain: "H" } as const;
+
+  it("leaves seat 0's own reading alone", () => {
+    expect(contractForSeat(CONTRACT, 0)).toEqual(CONTRACT);
+  });
+
+  it("turns the declarer round for seat 1", () => {
+    expect(contractForSeat(CONTRACT, 1)?.declarer).toBe(1);
+    expect(contractForSeat({ ...CONTRACT, declarer: 1 }, 1)?.declarer).toBe(0);
+  });
+
+  it("keeps everything else about the contract", () => {
+    const turned = contractForSeat({ ...CONTRACT, doubling: "doubled" }, 1);
+    expect(turned).toMatchObject({ doubling: "doubled", level: 4, strain: "H" });
+  });
+
+  it("passes a passed-out board through, which has no declarer to turn", () => {
+    expect(contractForSeat(null, 1)).toBeNull();
   });
 });
