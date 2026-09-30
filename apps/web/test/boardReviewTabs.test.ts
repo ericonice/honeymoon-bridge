@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { BoardReview as Review } from "../src/game/boardReview.js";
-import { BoardReview } from "../src/ui/BoardReview.js";
+import { BoardDetail } from "../src/ui/BoardDetail.js";
 import { stubBrowser } from "./support/board.js";
 
 /**
@@ -48,11 +48,9 @@ const RESULT: FieldResult = {
 
 function panel(review: Review | null = REVIEW): void {
   render(
-    createElement(BoardReview, {
+    createElement(BoardDetail, {
       at: 6,
       me: ME,
-      onBack: null,
-      onClose: () => {},
       opponentName: "Computer",
       result: RESULT,
       review,

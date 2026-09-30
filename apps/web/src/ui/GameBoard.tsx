@@ -818,12 +818,12 @@ export function GameBoard({
         </footer>
       )}
 
-      {/* **Pushed, not stacked.** Opened from the Score panel the review *replaces*
-          it and takes a back chevron, because two dimmed grounds with two ✕s is not
-          a phone pattern and there is nothing behind the second one but the first.
-          Opened from the board — the reveal, or the deal-complete screen — it is an
-          ordinary panel over the game and dismisses outright. See `Overlay`. */}
-      {showingScore && reviewedBoard !== null ? null : showingScore ? (
+      {/* **Left mounted under the board's own page**, which is opaque and covers it:
+          Back is then instant and the list keeps its scroll. It used to be suppressed
+          while a board was open, and that was one half of a dead screen — the other
+          half being the panel declining to draw, so certain rows left neither on
+          screen. Two conditions that had to agree; now there are none. */}
+      {showingScore ? (
         <ScoreOverlay
           format={session.format}
           opponentName={session.opponentName}
@@ -844,13 +844,7 @@ export function GameBoard({
           opponentName={session.opponentName}
           result={reviewedBoard}
           reviews={reviews}
-          // Back to the score where that is what it was pushed from; ✕ always leaves
-          // the lot, which is what the two controls are for.
-          onBack={showingScore ? closeReview : null}
-          onClose={() => {
-            closeReview();
-            setShowingScore(false);
-          }}
+          onBack={closeReview}
         />
       )}
 
@@ -932,16 +926,14 @@ function ReviewedBoard({
   at,
   me,
   onBack,
-  onClose,
   opponentName,
   result,
   reviews,
 }: {
   readonly at: number;
   readonly me: PlayerId;
-  /** See `Overlay`: a chevron where this was pushed from a panel, nothing where it was not. */
-  readonly onBack: (() => void) | null;
-  onClose(): void;
+  /** The only way out, because there is only one way in — see `BoardReview`. */
+  onBack(): void;
   readonly opponentName: string;
   readonly result: FieldResult;
   readonly reviews: BoardReviewing;
@@ -954,7 +946,6 @@ function ReviewedBoard({
       result={result}
       review={reviews.kept.get(reviewKeyOf(result.board, me)) ?? null}
       onBack={onBack}
-      onClose={onClose}
     />
   );
 }

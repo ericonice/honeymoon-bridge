@@ -137,22 +137,24 @@ describe("a Doop board on the real screen", () => {
   });
 
   /**
-   * **Pushed, not stacked**, which is the thing no component test can see: both
-   * panels are `Overlay`s, so the fault it replaces looked identical to each of them
-   * on its own and only shows as two of them on screen at once.
+   * **A page over the panel, and the panel left mounted under it.**
+   *
+   * The board is a destination rather than a glance, so it is a full surface with
+   * the platform's own way out. Leaving the score mounted beneath is what makes Back
+   * instant and keeps the list's scroll — and it is pinned here because suppressing
+   * it is precisely what once produced a dead screen: two conditions had to agree
+   * about whether a board was showing, and they could disagree.
    */
-  it("replaces the score panel rather than stacking a second one on it", () => {
+  it("opens as a page over the score, with the score still behind it", () => {
     playFirstBoardAndMoveOn();
 
     tap("Show the score");
-    expect(screen.getByRole("heading", { name: "Score" })).toBeTruthy();
-
     tap(/Board 1/);
-    // One panel, not two: the score's own heading is gone rather than behind it.
-    expect(screen.queryByRole("heading", { name: "Score" })).toBeNull();
-    expect(screen.getAllByRole("heading", { name: /^(Score|Board 1)$/ })).toHaveLength(1);
-    // And exactly one way out of the sheet, rather than one per panel.
-    expect(screen.getAllByRole("button", { name: "Close" })).toHaveLength(1);
+
+    expect(screen.getByRole("heading", { name: "Board 1" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Back/ })).toBeTruthy();
+    // Still there underneath rather than torn down and rebuilt on the way back.
+    expect(screen.getByRole("heading", { name: "Score" })).toBeTruthy();
   });
 
   it("goes back to the score, with the list still there", () => {
@@ -200,17 +202,20 @@ describe("a Doop board on the real screen", () => {
   });
 
   /**
-   * The ✕ leaves the sheet rather than stepping back into it — the two controls are
-   * different intentions, and a test that only used Back would not tell them apart.
+   * Back leaves the board and not the sheet — the two were one control when this
+   * was a panel, and separating them is the point of it being a page.
    */
-  it("leaves the sheet altogether on the cross", () => {
+  it("comes back to the score, which then closes on its own cross", () => {
     playFirstBoardAndMoveOn();
 
     tap("Show the score");
     tap(/Board 1/);
-    tap("Close");
+    tap(/Back/);
 
     expect(screen.queryByRole("heading", { name: "Board 1" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Score" })).toBeTruthy();
+
+    tap("Close");
     expect(screen.queryByRole("heading", { name: "Score" })).toBeNull();
   });
 });

@@ -2273,21 +2273,30 @@ boards. **A latent data fault becomes a bug report the day a selector stops avoi
 cannot repair: they are real scores made at the wrong vulnerability, and re-deriving them would mean
 rewriting results somebody played. They sit in those boards' fields as slightly-off comparisons.
 
-**A panel opened from a panel is pushed, not stacked, and that is a third meaning for a corner.**
-`Overlay` had two: a surface filling the screen says Back, a panel over what you were doing gets a ✕.
-Tapping a board in the Score panel gave you a second panel on the first — two dimmed grounds, two ✕s,
-and nothing saying which one a swipe would dismiss. It also fails the existing rule on its own terms,
-since what sits behind the second ✕ is another panel rather than the game.
+**A board is a page, and it took two wrong answers to get there.** Tapping a board in the Score panel
+first *stacked* a second panel on it — two dimmed grounds, two ✕s, and nothing saying which one a
+swipe would dismiss. The fix for that was to make the second panel *replace* the first and grow a back
+chevron, which is a real phone pattern and was still wrong: what the nesting was telling us is that
+the thing being opened is not a panel at all.
 
-So a review opened from the Score pad **replaces** it and takes `onBack`, a chevron beside the title
-where a screen keeps one; opened from the reveal or from `DealComplete` it is an ordinary panel over
-the board and has none. **The ✕ stays in both**, because back one step and out altogether are different
-intentions and a sheet with a stack in it needs both.
+`Overlay`'s own rule says which: **a panel is for looking something up with what you were doing still
+behind it.** The score mid-auction is that; the last trick is that. A traveller, twenty-six cards and
+an auction, reached by drilling into a list, is a destination — and a phone answers a destination with
+a page you can swipe out of. It was a panel only because it was pushed from one, which is inheritance
+rather than a reason. Reported as exactly that question: why is this a dialog and not a full page.
 
-`test/overlayBack.test.ts` covers the affordance and its anti-vacuity half — no chevron where there is
-nothing to go back to, which is what stops a control promising a step that does not exist. The wiring
-— that the Score panel is *replaced* rather than drawn underneath — is `GameBoard`'s and is covered by
-`test/fieldBoardWalk.test.ts`, which needed the harness taught about sessions first.
+So `BoardReview` is `absolute inset-0` over an opaque ground with `BackButton` and `useSwipeBack`,
+like every other destination in here, and `Overlay`'s third case is **gone rather than kept**. **A
+surface that needs a second way out is usually the wrong kind of surface** — the chevron was the
+symptom, and removing the nesting beat accommodating it.
+
+**One way out, because there is one way in.** The reveal between deals draws `BoardDetail` inline, so
+every board reached through this page was reached from a list, and Back always means the list.
+
+**And the Score panel is left mounted underneath**, which the page covers. That makes Back instant and
+keeps the list's scroll — and it disposes of the suppression that was one half of the dead screen
+above. There are no longer two conditions that have to agree about whether a board is showing; there
+are none.
 
 **The pad had two ways in for one question, and the argument against the first was already written in
 it.** A row expanded a traveller in place and a button inside that expansion pushed a panel for the

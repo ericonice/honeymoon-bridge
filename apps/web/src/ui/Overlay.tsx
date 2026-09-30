@@ -1,14 +1,5 @@
-import { ChevronLeftIcon } from "./icons.js";
-
 export interface OverlayProps {
   readonly children: React.ReactNode;
-  /**
-   * Pops back to the panel this was pushed from, rather than dismissing everything.
-   *
-   * Null — the usual case — for a panel opened over the board, where there is nothing
-   * behind it but the game and ✕ is the whole of what a reader needs.
-   */
-  readonly onBack?: (() => void) | null;
   onClose(): void;
   readonly title: string;
 }
@@ -27,14 +18,13 @@ export interface OverlayProps {
  * filenames, and they said "Close" while the record, the achievements, the account
  * page and the scoring page all said "Back" from the identical position.
  *
- * **There is a third case, and it arrived the day a panel could open another one.**
- * Tapping a board in the Score panel used to stack a second panel on the first: two
- * dimmed grounds, two ✕s and nothing saying which one a swipe would dismiss — not a
- * phone pattern, and against the rule above as well, since what sits behind the
- * second ✕ is another panel rather than the game. A panel *pushed from within* a
- * panel replaces it and takes `onBack`, which is a chevron beside the title exactly
- * where a screen keeps one. The ✕ stays, and dismisses the lot: back one step and
- * out altogether are different intentions and a sheet with a stack in it needs both.
+ * **A third case was added here and then removed, and the removal is the lesson.**
+ * When a board opened from the Score panel it stacked a second panel on the first,
+ * so this grew an `onBack` chevron to make the nesting legible. What the nesting
+ * actually said is that the thing being opened was not a panel at all: a traveller,
+ * twenty-six cards and an auction, reached by drilling into a list, is a page. It is
+ * one now, with the platform's own way back — see `BoardReview`. **A surface that
+ * needs a second way out is usually the wrong kind of surface.**
  */
 
 /**
@@ -46,7 +36,7 @@ export interface OverlayProps {
  * shared by every button in the strip under `ContractBar` so checking the
  * bidding, the last trick or the score all feel like the same kind of glance.
  */
-export function Overlay({ children, onBack = null, onClose, title }: OverlayProps): React.JSX.Element {
+export function Overlay({ children, onClose, title }: OverlayProps): React.JSX.Element {
   return (
     <div
       className="safe-inset absolute inset-0 z-30 flex items-center justify-center bg-black/75 px-5"
@@ -59,19 +49,7 @@ export function Overlay({ children, onBack = null, onClose, title }: OverlayProp
         }}
       >
         <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-1">
-            {onBack == null ? null : (
-              <button
-                type="button"
-                aria-label="Back"
-                className="-ml-1.5 flex items-center rounded-lg px-1 py-1 text-white/70"
-                onClick={onBack}
-              >
-                <ChevronLeftIcon className="h-5 w-5" />
-              </button>
-            )}
-            <h2 className="truncate text-base font-semibold">{title}</h2>
-          </div>
+          <h2 className="truncate text-base font-semibold">{title}</h2>
           <button
             type="button"
             aria-label="Close"
