@@ -2273,6 +2273,24 @@ boards. **A latent data fault becomes a bug report the day a selector stops avoi
 cannot repair: they are real scores made at the wrong vulnerability, and re-deriving them would mean
 rewriting results somebody played. They sit in those boards' fields as slightly-off comparisons.
 
+**A panel opened from a panel is pushed, not stacked, and that is a third meaning for a corner.**
+`Overlay` had two: a surface filling the screen says Back, a panel over what you were doing gets a ✕.
+Tapping a board in the Score panel gave you a second panel on the first — two dimmed grounds, two ✕s,
+and nothing saying which one a swipe would dismiss. It also fails the existing rule on its own terms,
+since what sits behind the second ✕ is another panel rather than the game.
+
+So a review opened from the Score pad **replaces** it and takes `onBack`, a chevron beside the title
+where a screen keeps one; opened from the reveal or from `DealComplete` it is an ordinary panel over
+the board and has none. **The ✕ stays in both**, because back one step and out altogether are different
+intentions and a sheet with a stack in it needs both.
+
+`test/overlayBack.test.ts` covers the affordance and its anti-vacuity half — no chevron where there is
+nothing to go back to, which is what stops a control promising a step that does not exist. **What it
+does not cover is the wiring**, that the Score panel is replaced rather than drawn underneath: that
+lives in `GameBoard`, and `test/support/board.ts` builds a rubber `TableState` and cannot make a Doop
+session. Teaching it `MatchState` and `actOn` would cover this and the reveal walk above properly, and
+is the thing to do before the next change to either.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told

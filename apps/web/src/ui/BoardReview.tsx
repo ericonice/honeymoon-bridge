@@ -12,6 +12,8 @@ export interface BoardReviewProps {
   /** Which board of the session, for the title. */
   readonly at: number;
   readonly me: PlayerId;
+  /** Pops back to the pad this was opened from — see `Overlay`. Null when opened over the board. */
+  readonly onBack?: (() => void) | null;
   readonly opponentName: string;
   readonly result: FieldResult;
   readonly review: Review;
@@ -42,6 +44,7 @@ export interface BoardReviewProps {
 export function BoardReview({
   at,
   me,
+  onBack = null,
   onClose,
   opponentName,
   result,
@@ -64,7 +67,7 @@ export function BoardReview({
       : contractTags({ defending: false, honors, vulnerable: vulnerable[contract.declarer] });
 
   return (
-    <Overlay title={`Board ${at + 1}`} onClose={onClose}>
+    <Overlay title={`Board ${at + 1}`} onBack={onBack} onClose={onClose}>
       <div className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between gap-2 text-sm">
           <span className="flex min-w-0 flex-wrap items-baseline gap-1.5">

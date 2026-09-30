@@ -541,6 +541,11 @@ export function GameBoard({
   // nested in whichever of those it happened to be drawn in. Here it is a sibling of
   // every other overlay, which is what all of them already are.
   const { close: closeReview, reviewing: reviews, showing: reviewingBoard } = useBoardReviews(session);
+  // Resolved once rather than at each of the two places that ask, so the panel and
+  // the decision to hide the Score panel behind it cannot disagree about whether
+  // there is a board to show.
+  const reviewedSummary = session.standing.kind === "field" ? session.standing.summary : null;
+  const reviewedBoard = reviewedSummary === null ? null : reviewingBoard;
   // `PlayPhase` unmounts the instant the shown phase leaves "play" — into
   // `DealComplete` on a match or half finishing, or straight into the next
   // deal's draw or auction — and an unmount fires none of its own effects, so
@@ -798,7 +803,12 @@ export function GameBoard({
         </footer>
       )}
 
-      {showingScore ? (
+      {/* **Pushed, not stacked.** Opened from the Score panel the review *replaces*
+          it and takes a back chevron, because two dimmed grounds with two ✕s is not
+          a phone pattern and there is nothing behind the second one but the first.
+          Opened from the board — the reveal, or the deal-complete screen — it is an
+          ordinary panel over the game and dismisses outright. See `Overlay`. */}
+      {showingScore && reviewedBoard !== null ? null : showingScore ? (
         <ScoreOverlay
           format={session.format}
           opponentName={session.opponentName}
@@ -812,16 +822,20 @@ export function GameBoard({
         />
       ) : null}
 
-      {/* On top of the Score overlay when it was opened from there, which is what
-          being a later sibling gets: closing it returns to the pad it came from. */}
-      {reviewingBoard === null || session.standing.kind !== "field" ? null : (
+      {reviewedBoard === null ? null : (
         <ReviewedBoard
-          at={reviewingBoard}
+          at={reviewedBoard}
           me={view.me}
           opponentName={session.opponentName}
           reviews={reviews}
-          summary={session.standing.summary}
-          onClose={closeReview}
+          summary={reviewedSummary!}
+          // Back to the score where that is what it was pushed from; ✕ always leaves
+          // the lot, which is what the two controls are for.
+          onBack={showingScore ? closeReview : null}
+          onClose={() => {
+            closeReview();
+            setShowingScore(false);
+          }}
         />
       )}
 
@@ -895,6 +909,7 @@ export function GameBoard({
 function ReviewedBoard({
   at,
   me,
+  onBack,
   onClose,
   opponentName,
   reviews,
@@ -902,6 +917,8 @@ function ReviewedBoard({
 }: {
   readonly at: number;
   readonly me: PlayerId;
+  /** See `Overlay`: a chevron where this was pushed from a panel, nothing where it was not. */
+  readonly onBack: (() => void) | null;
   onClose(): void;
   readonly opponentName: string;
   readonly reviews: BoardReviewing;
@@ -919,6 +936,7 @@ function ReviewedBoard({
       opponentName={opponentName}
       result={result}
       review={review}
+      onBack={onBack}
       onClose={onClose}
     />
   );
