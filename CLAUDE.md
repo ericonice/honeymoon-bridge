@@ -2300,11 +2300,9 @@ The file already carried the case against itself, as the reason only one row cou
 *a panel breaks the alignment of the rows around it, and that alignment is what makes the list
 scannable.* Read once more that is not an argument for one panel — it is an argument for none.
 
-**So a row drills straight in, and `BoardReview` carries the whole board**: the traveller first, then
-the hands, then the auction. One gesture in, a chevron out, and the list stays a list. Nothing was lost
-by the traveller leaving it — an expanded row shoved every board below it down the screen, so it was
-never being read beside its neighbours. The reveal between deals keeps its own button, because there is
-no list there to tap a row in.
+**So a row drills straight in, and the board's own surface carries the whole board.** One gesture in, a
+chevron out, and the list stays a list. Nothing was lost by the traveller leaving it — an expanded row
+shoved every board below it down the screen, so it was never being read beside its neighbours.
 
 `Traveller` is its own component now for the ordinary reason: two surfaces draw it. Its rules moved with
 it into `test/traveller.test.ts` rather than being dropped along with the accordion that used to reveal
@@ -2401,6 +2399,30 @@ The end-to-end test drives a **passed-out** board rather than reaching into the 
 it is one of the three real causes, it needs no internals, and it exercises the state a reload leaves.
 Checked by restoring the decline — the walk fails, and the component-level case has its anti-vacuity
 half in the panel that *does* have a deal.
+
+**The board you just played was the one board reached differently from every other, and now it is
+not.** The reveal between deals laid out a traveller with a **"Hands and bidding"** button beneath it,
+and that button opened a panel that *starts on the field* — so it promised the deal and landed you on
+what was already on screen. Two shapes for one thing, and the wrong one on the screen you see most.
+
+`BoardDetail` is the board — header, tabs, both tabs' content — and it is drawn in both places.
+`BoardReview` is reduced to the panel around it, which is all a panel ever was here. The reveal draws
+it inline with no chrome at all, so the board just played and a board opened from the score pad are
+the same screen.
+
+**Keyed on the board, so a new one opens on the field again.** Which tab you left the last board on is
+not a preference; it is where that board's own reading finished.
+
+**The line explaining a traveller moved in with it.** "Everybody here faced the same offers and kept
+their own cards" was drawn only between deals, and what it says — that every line faced the same
+twenty-six — is what makes a traveller comparable at all, which is as worth knowing on a board from
+six deals ago as on the one just played.
+
+**And it sharpened the tap guard's own test rather than costing it one.** `revealControls.test.ts`
+used to tap "Hands and bidding" to prove a control inside the reveal does not also continue the deal;
+the control there is the tab row now, which is a better case — switching to the deal is something you
+do *while* reading the reveal, so a tap that also continued would take the screen away at the exact
+moment it was asked for. Still checked by reverting the guard.
 
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a

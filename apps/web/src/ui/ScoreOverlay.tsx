@@ -78,6 +78,7 @@ export function ScoreOverlay({
       {standing.kind === "field" ? (
         <FieldPad
           me={view.me}
+          opponentName={opponentName}
           reviews={reviews}
           summary={standing.summary}
         />

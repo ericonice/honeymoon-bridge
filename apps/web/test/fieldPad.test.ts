@@ -71,6 +71,7 @@ function pad(results: readonly FieldResult[], kept?: BoardReviews): void {
   render(
     createElement(FieldPad, {
       me: ME,
+      opponentName: "Computer",
       reviews: { kept: kept ?? new Map(), open: opened },
       summary: summarizeField(state, ME),
     }),
@@ -136,6 +137,7 @@ describe("the session pad", () => {
       createElement(FieldPad, {
         latest: true,
         me: ME,
+        opponentName: "Computer",
         reviews: { kept: new Map(), open: opened },
         summary: summarizeField(state, ME),
       }),
@@ -209,11 +211,12 @@ describe("what a contract is tagged with", () => {
  */
 describe("looking back at a board", () => {
   /**
-   * The board just played is the one somebody asks this of: the placing has just
-   * landed and the hands are a tap behind it. That screen has no row to expand, so
-   * without its own button there would be no way back at all.
+   * **Between deals the board is drawn rather than listed**, and it is the same
+   * component the pad opens — a traveller with a "Hands and bidding" button under it
+   * made the board you had just played the one board reached differently from every
+   * other, and that button opened a panel starting on the field anyway.
    */
-  it("offers it on the board just played, which has no row to open", () => {
+  it("draws the board itself between deals, with the deal a tab away", () => {
     const boards = [result("b1", 420, [])];
     const state: FieldState = {
       at: boards.length,
@@ -225,11 +228,15 @@ describe("looking back at a board", () => {
       createElement(FieldPad, {
         latest: true,
         me: ME,
+        opponentName: "Computer",
         reviews: { kept: new Map([["b1", REVIEW]]), open: opened },
         summary: summarizeField(state, ME),
       }),
     );
 
-    expect(screen.getByRole("button", { name: "Hands and bidding" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "The field" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "The deal" })).toBeTruthy();
+    // The traveller outright, not behind a tap.
+    expect(screen.getByText("you")).toBeTruthy();
   });
 });

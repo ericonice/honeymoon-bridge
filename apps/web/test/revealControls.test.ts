@@ -20,9 +20,14 @@ import { stubBrowser } from "./support/board.js";
  *
  * The whole reveal is tap-to-continue, and its second stage draws a pad inside it —
  * which was fine while a pad was only ever figures, and stopped being fine the moment
- * one grew a button. Reported from real play as the two fighting: tapping "Hands and
- * bidding" opened the board *and* went on to the next deal in the same gesture, so
- * what had been asked for appeared over a screen already left behind.
+ * one grew a button. Reported from real play as the two fighting: a tap on the pad's
+ * own control did what it asked *and* went on to the next deal in the same gesture,
+ * so what had been asked for landed on a screen already left behind.
+ *
+ * The control there is the board's own tab row now rather than a button opening a
+ * panel, which makes this sharper: switching to the deal is a thing you do *while*
+ * reading the reveal, so a tap that also continued would take the screen away at the
+ * exact moment it was asked for.
  */
 
 const ME: PlayerId = 0;
@@ -57,13 +62,11 @@ function playedOut(): FieldState {
 }
 
 let continued: number;
-let opened: number[];
 
 beforeEach(() => {
   vi.useFakeTimers();
   stubBrowser();
   continued = 0;
-  opened = [];
 });
 
 afterEach(() => {
@@ -85,9 +88,7 @@ function revealFinishedBoard(kept: boolean): void {
           ],
         ])
       : new Map(),
-    open: (at) => {
-      opened.push(at);
-    },
+    open: () => {},
   };
 
   render(
@@ -136,15 +137,14 @@ function tapTable(): void {
 }
 
 describe("a control inside the reveal", () => {
-  it("opens the board it was tapped on without continuing the deal", () => {
+  it("switches to the deal without continuing", () => {
     revealFinishedBoard(true);
 
-    const button = screen.getByRole("button", { name: "Hands and bidding" });
     act(() => {
-      button.click();
+      screen.getByRole("button", { name: "The deal" }).click();
     });
 
-    expect(opened).toEqual([0]);
+    expect(screen.getByText("The hands")).toBeTruthy();
     expect(continued).toBe(0);
   });
 
@@ -159,9 +159,9 @@ describe("a control inside the reveal", () => {
     expect(continued).toBe(1);
   });
 
-  it("offers nothing for a board that was not kept", () => {
+  it("offers no tabs for a board it kept nothing of", () => {
     revealFinishedBoard(false);
 
-    expect(screen.queryByRole("button", { name: "Hands and bidding" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "The deal" })).toBeNull();
   });
 });

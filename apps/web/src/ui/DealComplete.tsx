@@ -157,6 +157,7 @@ export function DealComplete({
       <FieldPad
         latest={!complete && !showingSession}
         me={view.me}
+        opponentName={opponentName}
         reviews={reviews}
         summary={standing.summary}
       />

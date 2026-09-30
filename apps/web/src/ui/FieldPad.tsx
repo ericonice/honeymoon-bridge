@@ -2,8 +2,9 @@ import { boardPercentageOf } from "@hb/engine";
 import type { FieldResult, FieldSummary, PlayerId } from "@hb/engine";
 import type { BoardReviewing } from "../game/boardReview.js";
 import { reviewKeyOf } from "../game/boardReview.js";
+import { BoardDetail } from "./BoardDetail.js";
 import { ContractText } from "./CardText.js";
-import { Traveller, Tags } from "./Traveller.js";
+import { Tags } from "./Traveller.js";
 import { mineOn, signed } from "./fieldText.js";
 import { ChevronRightIcon } from "./icons.js";
 
@@ -35,6 +36,7 @@ import { ChevronRightIcon } from "./icons.js";
 export function FieldPad({
   latest = false,
   me,
+  opponentName,
   reviews,
   summary,
 }: {
@@ -50,30 +52,36 @@ export function FieldPad({
    */
   readonly latest?: boolean;
   readonly me: PlayerId;
+  /** Needed by the board the reveal draws in full — see `BoardDetail`. */
+  readonly opponentName: string;
   /** Looking a board up again — see `useBoardReviews`. */
   readonly reviews: BoardReviewing;
   readonly summary: FieldSummary;
 }): React.JSX.Element {
-  // The reveal is about the board that just finished, so it draws that one traveller
+  // The reveal is about the board that just finished, so it draws that board
   // outright — there is nothing to choose between and nothing to drill into.
+  //
+  // **The same component the score pad opens**, rather than a traveller with a
+  // "Hands and bidding" button under it. That button opened a panel that starts on
+  // the field, so it promised the deal and landed you on what was already on screen
+  // — and it made the board you just played the one board reached differently from
+  // every other. Keyed on the board so a new one opens on the field again: which tab
+  // you left the last board on is not a preference, it is where that board's own
+  // reading finished.
   if (latest) {
     const at = summary.results.length - 1;
     const result = summary.results[at];
-    return (
-      <div className="flex flex-col gap-4 text-sm">
-        <p className="text-xs text-white/45">
-          Everybody here faced the same offers and kept their own cards.
-        </p>
-        {result === undefined ? null : (
-          <>
-            <Traveller at={at} me={me} result={result} />
-            {/* The board just played is exactly the one somebody asks this of — the
-                placing has just landed and the hands are a tap behind it. There is no
-                list here to drill a row into, so this screen keeps its own way in. */}
-            <ReviewButton at={at} me={me} result={result} reviews={reviews} />
-          </>
-        )}
-      </div>
+    return result === undefined ? (
+      <div />
+    ) : (
+      <BoardDetail
+        key={reviewKeyOf(result.board, me)}
+        at={at}
+        me={me}
+        opponentName={opponentName}
+        result={result}
+        review={reviews.kept.get(reviewKeyOf(result.board, me)) ?? null}
+      />
     );
   }
 
@@ -94,43 +102,6 @@ export function FieldPad({
       ))}
       <Foot summary={summary} />
     </div>
-  );
-}
-
-/**
- * The way into a board's hands, where there are any kept.
- *
- * Absent rather than disabled when there are none, which is the honest answer for
- * the cases that produce it: a board finished by an accepted **claim** ends with
- * cards unplayed and never had a full thirteen to show, a **passed-out** board never
- * had a card played at all, and a session carried across a reload has nothing kept
- * from before it. A control that cannot do anything is worse than no control,
- * because it promises the screen exists.
- */
-function ReviewButton({
-  at,
-  me,
-  result,
-  reviews,
-}: {
-  readonly at: number;
-  readonly me: PlayerId;
-  readonly result: FieldResult;
-  readonly reviews: BoardReviewing;
-}): React.JSX.Element | null {
-  if (!reviews.kept.has(reviewKeyOf(result.board, me))) {
-    return null;
-  }
-  return (
-    <button
-      type="button"
-      className="mt-2.5 block w-full rounded-lg border border-white/25 py-2 text-center text-[0.8rem] text-white/80"
-      onClick={() => {
-        reviews.open(at);
-      }}
-    >
-      Hands and bidding
-    </button>
   );
 }
 
