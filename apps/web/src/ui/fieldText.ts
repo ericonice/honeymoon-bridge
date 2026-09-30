@@ -16,7 +16,7 @@ import type { Contract, FieldResult, Pair, PlayerId } from "@hb/engine";
  *
  * **Short enough to sit three abreast**, because they do: a board row gives the
  * contract about 164px at a phone's width and it already holds a level, a strain
- * and a result. `vul`, `dec`/`def` and `h+100` fit where "vulnerable", "defending"
+ * and a result. `vul`, `bid`/`def` and `h+100` fit where "vulnerable", "defending"
  * and "honors +100" wrapped to a second line.
  *
  * **Vulnerability qualifies the contract, not the reader.** `4♥ = vul` means that
@@ -34,6 +34,12 @@ import type { Contract, FieldResult, Pair, PlayerId } from "@hb/engine";
  * thing — an unstated rule. Two tags that always appear together teach each other
  * on sight, which is worth the three characters. Passing `null` suppresses both, for
  * a surface with room to name the declarer outright.
+ *
+ * **`bid` rather than `dec`, because `dec` and `def` are the same tag at a glance.**
+ * Two three-letter words sharing their first two letters are told apart by reading
+ * them, which is exactly what a tag is for not doing. `bid` and `def` differ in
+ * shape from the first character — and "bid it" is what a player says about a
+ * contract that was theirs.
  *
  * **Honors carry their figure, signed toward this line's own player**, like the
  * points beside it — honors go to whoever *holds* them, defender included, so a line
@@ -64,7 +70,7 @@ export function contractTags(options: {
     tags.push("vul");
   }
   if (options.role !== null) {
-    tags.push(options.role === "declaring" ? "dec" : "def");
+    tags.push(options.role === "declaring" ? "bid" : "def");
   }
   if (options.honors !== null && options.honors !== 0) {
     tags.push(`h${signed(options.honors)}`);

@@ -171,7 +171,7 @@ describe("what a contract is tagged with", () => {
    */
   it("says whether this seat declared the contract or defended it", () => {
     pad([result("b1", PLAIN, [])]);
-    expect(screen.getByText("dec")).toBeTruthy();
+    expect(screen.getByText("bid")).toBeTruthy();
     expect(screen.queryByText("def")).toBeNull();
 
     cleanup();
@@ -182,7 +182,7 @@ describe("what a contract is tagged with", () => {
       },
     ]);
     expect(screen.getByText("def")).toBeTruthy();
-    expect(screen.queryByText("dec")).toBeNull();
+    expect(screen.queryByText("bid")).toBeNull();
   });
 
   /**

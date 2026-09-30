@@ -7,7 +7,7 @@ import { CardFace } from "./CardFace.js";
 import { ContractText } from "./CardText.js";
 import { CARD_WIDTHS, MINI_MIN_STEP, spreadStep, useRowRoom } from "./Hand.js";
 import { Segmented } from "./Segmented.js";
-import { Traveller } from "./Traveller.js";
+import { Tags, Traveller } from "./Traveller.js";
 import { contractTags, resultOf, signed } from "./fieldText.js";
 
 /** The two questions a board raises, which is what the tabs are. */
@@ -99,11 +99,7 @@ export function BoardDetail({
               <ContractText contract={contract} on="dark" />
               <span>{contract.declarer === me ? "by you" : `by ${opponentName}`}</span>
               <span className="text-xs text-white/45">{resultOf(contract, result.tricks)}</span>
-              {tags.map((tag) => (
-                <span key={tag} className="text-[0.65rem] text-white/35">
-                  {tag}
-                </span>
-              ))}
+              <Tags tags={tags} />
             </>
           )}
         </span>

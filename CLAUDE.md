@@ -2480,7 +2480,7 @@ is not a class. `suitInk.test.ts` argues for naming a class rather than an opaci
 tunes it can move; an attribute that carries the *meaning* is one better again, and the whole visual
 treatment can change without touching the test.
 
-**The tags are short now — `vul`, `dec`/`def`, `h+100` — and one of the three is a better change than
+**The tags are short now — `vul`, `bid`/`def`, `h+100` — and one of the three is a better change than
 a shorter one.** They have to sit three abreast on a row that gives the contract about 164px at a
 phone's width and already holds a level, a strain and a result; "vulnerable", "defending" and
 "honors +100" wrapped.
@@ -2491,6 +2491,12 @@ rule the reader has to be told. Two tags that always appear together teach each 
 that is worth three characters. `null` suppresses both, for a surface with room to name the declarer
 outright: the board page says "by Computer" and would otherwise say one thing twice.
 
+**`dec` shipped first and lasted an hour, which is the useful part.** Two three-letter words sharing
+their first two letters are told apart by *reading* them — which is the one thing a tag exists not to
+need. Flagged as a risk when it went in and reported as one immediately, so the lesson is not that it
+was wrong but that the objection was already on the page and shipped anyway. `bid` differs in shape
+from the first character, and "bid it" is what a player says about a contract that was theirs.
+
 **`h` is the one abbreviation here that has to be learnt, and this file already argued the other
 way** — the two-column `Scorepad` names honors in words precisely because "a dot or an 'h' is cheaper
 in width and is a key the reader has to learn". The two are not in conflict: that pad has a column to
@@ -2498,6 +2504,21 @@ put a figure in and prose to label it, where this is a row of tags in which `vul
 The honest statement of the trade is in `contractTags`: **if `h+100` reads as a key rather than a
 fact, it is the tag vocabulary that is wrong rather than that one member of it.** The sign is kept
 either way, because a line paid for honors *by the other side* is the case the tag exists for.
+
+**They are chips now, because faint grey words beside a contract are not tags** — `4♥ = vul bid h+100`
+read as five things of equal weight rather than a contract with three notes attached. A ground, a
+hairline and small caps are what say "this is a label on that": `VUL` is not a word in the sentence,
+it is a mark. The provenance note takes the same chip and shortens to `vs person`, because one of
+these drawn as prose beside three chips reads as something half-finished.
+
+**Colour was asked for and is the one thing withheld, which is worth writing down as a decision rather
+than an omission.** Every hue in this app already means something — amber is "it is your move", red is
+"this is a red suit", the metals are achievement tiers, green is a target reached — and these chips
+sit inches from real cards on the reveal between deals, where the first two readings are live. A
+fourth vocabulary would have to collide with one of those or be a colour picked for being unused,
+which is how a palette stops meaning anything. Weight, ground and small caps carry it instead. **If
+the chips still do not separate enough from the contract beside them, the next move is contrast
+within the neutral — not a hue.**
 
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a

@@ -51,7 +51,7 @@ export function Traveller({
       vulnerable: theirTerms,
     }),
     mine: false,
-    note: entry.kind === "table" ? "played a person" : null,
+    note: entry.kind === "table" ? "vs person" : null,
     who: entry.who,
   }));
   const lines = [mine, ...others].sort((one, two) => two.points - one.points);
@@ -97,12 +97,31 @@ interface Line extends Described {
   readonly who: string;
 }
 
-/** Whatever the contract cannot explain about a figure — see `contractTags`. */
+/**
+ * Whatever the contract cannot explain about a figure — see `contractTags`.
+ *
+ * **Drawn as chips, because faint grey words beside a contract are not tags**, they
+ * are a sentence that ran out of room: `4♥ = vul bid h+100` read as five things of
+ * equal weight rather than a contract with three notes attached. A ground and a
+ * border are what say "this is a label on that", and small caps say it again —
+ * `VUL` is not a word in the sentence, it is a mark.
+ *
+ * **Deliberately no hue, which was asked about and is the one thing withheld.**
+ * Every colour in this app already means something: amber is "it is your move",
+ * red is "this is a red suit" — and these sit inches from real cards on the reveal
+ * between deals, where both of those readings are live. The metals belong to
+ * achievements and green to a target reached. A fourth vocabulary would have to
+ * either collide with one of those or be a colour chosen for being unused, which is
+ * how a palette stops meaning anything. Weight and shape carry it instead.
+ */
 export function Tags({ tags }: { readonly tags: readonly string[] }): React.JSX.Element {
   return (
     <>
       {tags.map((tag) => (
-        <span key={tag} className="text-[0.65rem] text-white/35">
+        <span
+          key={tag}
+          className="rounded border border-white/10 bg-white/8 px-1 py-px text-[0.6rem] leading-[1.35] font-medium tracking-wide text-white/60 uppercase"
+        >
           {tag}
         </span>
       ))}
@@ -152,7 +171,10 @@ function Row({ contract, mark, mine, note, points, tags, who }: Line): React.JSX
               <Tags tags={tags} />
             </>
           )}
-          {note === null ? null : <span className="text-[0.65rem] text-white/35">{note}</span>}
+          {/* Provenance rather than a property of the contract, but it sits in the
+              same slot and is the same kind of mark, so it takes the same chip —
+              faint prose beside three chips reads as something half-finished. */}
+          {note === null ? null : <Tags tags={[note]} />}
         </span>
       </td>
       <td className={`py-1.5 text-right tabular-nums ${mine ? "font-semibold" : ""}`}>

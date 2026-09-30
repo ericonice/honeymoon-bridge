@@ -64,7 +64,7 @@ describe("a board's traveller", () => {
 
     // Both tags, one per row: the defender's line and your own declaring one.
     expect(screen.getByText("def")).toBeTruthy();
-    expect(screen.getByText("dec")).toBeTruthy();
+    expect(screen.getByText("bid")).toBeTruthy();
     expect(screen.queryByText("by them")).toBeNull();
   });
 
@@ -141,6 +141,25 @@ describe("a board's traveller", () => {
     cleanup();
     traveller(result(620, []));
     expect(screen.getByText("nobody else has played this board yet")).toBeTruthy();
+  });
+
+  /**
+   * **Chips, not faint words.** A row read as five things of equal weight —
+   * `4♥ = vul bid h+100` — where it is a contract with three notes attached. The
+   * provenance note takes the same chip for the same reason: one of these drawn as
+   * prose beside three chips reads as something half-finished.
+   */
+  it("draws every mark on a row as a tag, the provenance one included", () => {
+    traveller(result(620, [entry(140, "Ada", { kind: "table" })], [true, false]));
+
+    for (const tag of ["vul", "bid", "vs person"]) {
+      const chips = screen.getAllByText(tag);
+      expect(chips.length).toBeGreaterThan(0);
+      for (const chip of chips) {
+        expect(chip.className).toContain("uppercase");
+        expect(chip.className).toContain("rounded");
+      }
+    }
   });
 
   /** The board's own panel names the board, so the caption would say it twice. */
