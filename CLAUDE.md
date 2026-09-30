@@ -2285,11 +2285,9 @@ the board and has none. **The ✕ stays in both**, because back one step and out
 intentions and a sheet with a stack in it needs both.
 
 `test/overlayBack.test.ts` covers the affordance and its anti-vacuity half — no chevron where there is
-nothing to go back to, which is what stops a control promising a step that does not exist. **What it
-does not cover is the wiring**, that the Score panel is replaced rather than drawn underneath: that
-lives in `GameBoard`, and `test/support/board.ts` builds a rubber `TableState` and cannot make a Doop
-session. Teaching it `MatchState` and `actOn` would cover this and the reveal walk above properly, and
-is the thing to do before the next change to either.
+nothing to go back to, which is what stops a control promising a step that does not exist. The wiring
+— that the Score panel is *replaced* rather than drawn underneath — is `GameBoard`'s and is covered by
+`test/fieldBoardWalk.test.ts`, which needed the harness taught about sessions first.
 
 **The pad had two ways in for one question, and the argument against the first was already written in
 it.** A row expanded a traveller in place and a button inside that expansion pushed a panel for the
@@ -2321,6 +2319,36 @@ sentence directly beneath a list of them reads as a statement about the list, an
 names its subject now: "on this board", or "on this deal" in a rubber. **Named rather than moved**,
 because putting it above the pad would leave the same ambiguity somewhere else — what was missing is
 not where the line sits but what it is about.
+
+**`test/support/board.ts` drives a `MatchState` now, not a `TableState`, and that is what put a Doop
+session on the real screen.** It had built a rubber since it existed, which was fine while every walk
+was about a rubber — and left the one format whose whole screen was being rewritten reachable only by
+rendering components in isolation. The engine already had the general shape: `actOn`, `nextIn` and
+`dealOf` take any match, and `snapshotFor` always did, so the harness had been narrower than anything
+it called.
+
+`board.state` becomes `board.match`, plus a `board.deal` for what most of a walk actually wants — and
+the walks stop rewrapping a table as `{ kind: "rubber", table }` to call `snapshotFor`, which was a
+tell. A rubber's own options survive as a rubber's: `played` and `rubberBefore` are `TableState`'s and
+have nowhere to live in `StartMatchOptions`, so that one format is still assembled by hand and every
+other goes through `startMatch`, which is what the server calls.
+
+**Two things the harness was hardcoding turned out to be answers it should not have been giving.**
+`halfComplete` was false and `winner` null, which is right for a rubber mid-match and wrong for a
+mirror at half time or a session at its end; both come off the snapshot now, for the reason the
+standing already did — the server decides them, and a harness with its own opinion is testing itself.
+
+**What it buys immediately is the rule no component test can see.** Both panels are `Overlay`s, so a
+board's panel stacked on the Score panel looks identical to each of them examined alone; the fault is
+visible only as two of them on screen at once. `fieldBoardWalk.test.ts` plays a board out, carries on
+to the next — the bar offers no way into the score on the screen that ends a deal, which is itself
+worth knowing — opens the score, taps a board, and counts the panels. Checked by restoring the stack:
+two of its four fail.
+
+**The remaining gap is stated rather than closed**: `test/revealControls.test.ts` still renders
+`PlayPhase` directly, because reaching the reveal's second stage through the harness needs the pad on
+screen and the tap sequence to land on a control rather than the table. That is now a smaller job than
+it was, and the harness is no longer the thing in the way.
 
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a

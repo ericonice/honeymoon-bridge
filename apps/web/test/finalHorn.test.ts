@@ -45,14 +45,14 @@ function playToTheEnd(seat: PlayerId, seed: number): boolean {
   settle(4000);
 
   for (let step = 0; step < 200; step += 1) {
-    const state = board.state;
-    if (state.deal.phase === "complete") {
+    const onTable = board.deal;
+    if (onTable.phase === "complete") {
       break;
     }
-    const actor = state.deal.toAct;
-    const view = snapshotFor({ kind: "rubber", table: state }, actor).view;
+    const actor = onTable.toAct;
+    const view = snapshotFor(board.match, actor).view;
     const legal = legalActionsForView(view).filter((action) => action.type !== "claim");
-    const bidding = state.deal.phase === "auction";
+    const bidding = onTable.phase === "auction";
     const action =
       bidding && view.auction.length === 0
         ? (legal.find((call) => call.type === "call" && call.call.type === "bid") ?? legal[0]!)
@@ -81,7 +81,7 @@ function playToTheEnd(seat: PlayerId, seed: number): boolean {
   tap();
   tap();
 
-  return snapshotFor({ kind: "rubber", table: board.state }, seat).matchComplete;
+  return snapshotFor(board.match, seat).matchComplete;
 }
 
 test("the horn for a won match sounds once, not once for every render that reached the score", () => {

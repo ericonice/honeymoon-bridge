@@ -97,9 +97,9 @@ afterEach(() => {
 
 /** Advances the deal by one action from whichever seat is on turn. */
 function step(prefer: "bid" | "pass" | "any"): void {
-  const state = board.state;
-  const actor = state.deal.toAct;
-  const view = snapshotFor({ kind: "rubber", table: state }, actor).view;
+  const onTable = board.deal;
+  const actor = onTable.toAct;
+  const view = snapshotFor(board.match, actor).view;
   const legal = legalActionsForView(view).filter((action) => action.type !== "claim");
   // A red bid on purpose: a printed red is the half of this that can be got
   // wrong quietly, and bidding clubs would walk straight past every one of them.
@@ -124,18 +124,18 @@ function throughADeal(check: (where: string) => void): void {
   settle(4000);
   check("the draw");
 
-  while (board.state.deal.phase === "draw") {
+  while (board.deal.phase === "draw") {
     step("any");
   }
   step("bid");
   check("mid-auction");
 
-  while (board.state.deal.phase === "auction") {
+  while (board.deal.phase === "auction") {
     step("pass");
   }
   check("the settled contract");
 
-  while (board.state.deal.phase === "play") {
+  while (board.deal.phase === "play") {
     step("any");
   }
   check("play");
@@ -179,7 +179,7 @@ test("the auction's strain tiles are printed on paper rather than rimmed", () =>
   // these need no rim — and would look wrong with one, at that size.
   renderBoard({ seat: 0, seed: 7 });
   settle(4000);
-  while (board.state.deal.phase === "draw") {
+  while (board.deal.phase === "draw") {
     step("any");
   }
 

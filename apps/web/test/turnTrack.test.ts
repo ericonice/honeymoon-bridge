@@ -27,7 +27,7 @@ function playDraw(turns: number, take: "first" | "second"): void {
   renderBoard({ seat: 0, seed: 7 });
   settle(4000);
   for (let turn = 0; turn < turns; turn += 1) {
-    board.apply(board.state.deal.toAct, { type: "draw-decide", take });
+    board.apply(board.deal.toAct, { type: "draw-decide", take });
     settle(4000);
   }
 }
@@ -63,9 +63,9 @@ test("the opponent's spent turns are on their own track, not folded into this se
 
   // One turn each way, taking a different card each time, so each track can only
   // account for its own — a single shared count could not tell these apart.
-  board.apply(board.state.deal.toAct, { type: "draw-decide", take: "first" });
+  board.apply(board.deal.toAct, { type: "draw-decide", take: "first" });
   settle(4000);
-  board.apply(board.state.deal.toAct, { type: "draw-decide", take: "second" });
+  board.apply(board.deal.toAct, { type: "draw-decide", take: "second" });
   settle(4000);
 
   expect(dots("bg-sky-300")).toBe(1);

@@ -104,7 +104,7 @@ function checked(mine: boolean): boolean {
 }
 
 function outlookNow(seat: PlayerId): TrickOutlook | null {
-  const { view } = snapshotFor({ kind: "rubber", table: board.state }, seat);
+  const { view } = snapshotFor(board.match, seat);
   if (view.contract === null) {
     return null;
   }
@@ -123,12 +123,12 @@ function driveToPlay(seat: PlayerId, seed: number, trickCount = true): void {
   settle(4000);
 
   for (let step = 0; step < 400; step += 1) {
-    const state = board.state;
-    if (state.deal.phase === "play" || state.deal.phase === "complete") {
+    const onTable = board.deal;
+    if (onTable.phase === "play" || onTable.phase === "complete") {
       break;
     }
-    const actor = state.deal.toAct;
-    const legal = legalActionsForView(snapshotFor({ kind: "rubber", table: state }, actor).view).filter(
+    const actor = onTable.toAct;
+    const legal = legalActionsForView(snapshotFor(board.match, actor).view).filter(
       (action) => action.type !== "claim",
     );
     const spades = legal.find(
@@ -139,7 +139,7 @@ function driveToPlay(seat: PlayerId, seed: number, trickCount = true): void {
         action.call.bid.strain === "S",
     );
     const pass = legal.find((action) => action.type === "call" && action.call.type === "pass");
-    board.apply(actor, (state.deal.phase === "auction" ? (spades ?? pass) : null) ?? legal[0]!);
+    board.apply(actor, (onTable.phase === "auction" ? (spades ?? pass) : null) ?? legal[0]!);
     settle(4000);
   }
 
@@ -166,11 +166,11 @@ function driveToPlay(seat: PlayerId, seed: number, trickCount = true): void {
  * all, are gone on purpose.
  */
 function playOne(ms = 4000): void {
-  const state = board.state;
-  const legal = legalActionsForView(snapshotFor({ kind: "rubber", table: state }, state.deal.toAct).view).filter(
+  const onTable = board.deal;
+  const legal = legalActionsForView(snapshotFor(board.match, onTable.toAct).view).filter(
     (action) => action.type === "play",
   );
-  board.apply(state.deal.toAct, legal[0]!);
+  board.apply(onTable.toAct, legal[0]!);
   settle(ms);
 }
 
@@ -186,10 +186,10 @@ function playOne(ms = 4000): void {
  */
 function playToTheLastTrick(): void {
   const played = (): number => {
-    const { view } = snapshotFor({ kind: "rubber", table: board.state }, 0);
+    const { view } = snapshotFor(board.match, 0);
     return view.completedTricks.length * 2 + view.currentTrick.length;
   };
-  while (board.state.deal.phase === "play") {
+  while (board.deal.phase === "play") {
     playOne(played() === 25 ? 300 : 4000);
   }
 }
@@ -205,7 +205,7 @@ test("each seat's ring counts down that seat's own target", () => {
     // Both rings unmount the instant the deal ends — deliberately, since the
     // result is on screen by then — and the card that ends it is played inside
     // this loop, so there is nothing to read on the pass after the last trick.
-    if (board.state.deal.phase !== "play") {
+    if (board.deal.phase !== "play") {
       return;
     }
     for (const mine of [true, false] as const) {
@@ -235,7 +235,7 @@ test("each seat's ring counts down that seat's own target", () => {
     expect(segments(true)).toEqual({ dim: opening!.target, lit: 0, other: 0 });
     expect(segments(false)).toEqual({ dim: 14 - opening!.target, lit: 0, other: 0 });
 
-    while (board.state.deal.phase === "play") {
+    while (board.deal.phase === "play") {
       playOne();
       check(seat);
     }
@@ -263,7 +263,7 @@ test("a deal decided early turns green on the side that got there, and only that
       continue;
     }
 
-    while (board.state.deal.phase === "play" && !checkedEarly) {
+    while (board.deal.phase === "play" && !checkedEarly) {
       playOne();
       const mine = outlookNow(0)!;
       if (mine.state === "open") {
@@ -314,7 +314,7 @@ test("the deal's outcome sounds once, on the trick that decides it", () => {
     }
 
     let remainingWhenFired: number | null = null;
-    while (board.state.deal.phase === "play") {
+    while (board.deal.phase === "play") {
       playOne();
       const outlook = outlookNow(0)!;
       if (outlook.state !== "gone" && outlook.state !== "reached") {
@@ -360,7 +360,7 @@ test("turning the count off leaves the play screen with no rings at all", () => 
   }
 
   // And the sound is not part of the setting: the deal still announces itself.
-  while (board.state.deal.phase === "play") {
+  while (board.deal.phase === "play") {
     playOne();
   }
   settle(8000);
@@ -410,7 +410,7 @@ test("the last trick sits undisturbed before the result appears", () => {
 
   // Inside the hold: the deal is scored and the hands are known, and none of it
   // is on screen yet.
-  expect(board.state.deal.phase).toBe("complete");
+  expect(board.deal.phase).toBe("complete");
   expect(screen.queryByText("Tap to continue"), "the result arrived over the last trick").toBeNull();
   // Both trick slots are still there. They unmount at the reveal, so counting
   // them is the same question as "is the last trick still on the table".
@@ -440,7 +440,7 @@ test("the ring carries the tricks that seat has taken, decided or not", () => {
   let live = 0;
   let decided = 0;
 
-  while (board.state.deal.phase === "play") {
+  while (board.deal.phase === "play") {
     for (const mine of [true, false] as const) {
       const outlook = outlookNow(mine ? seat : ((1 - seat) as PlayerId));
       if (outlook === null) {
@@ -449,7 +449,7 @@ test("the ring carries the tricks that seat has taken, decided or not", () => {
       // The numeral is the tricks actually taken in both states — which is the whole
       // reason it is passed in rather than derived from `need`, since that saturates at
       // the target and would read an overtrick as the contract exactly.
-      expect(numeral(mine)).toBe(String(board.state.deal.tricksWon[mine ? seat : ((1 - seat) as PlayerId)]));
+      expect(numeral(mine)).toBe(String(board.deal.tricksWon[mine ? seat : ((1 - seat) as PlayerId)]));
       if (outlook.state === "reached") {
         decided += 1;
         expect(checked(mine)).toBe(true);

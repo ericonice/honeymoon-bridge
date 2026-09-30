@@ -60,17 +60,17 @@ function playDeals({
 
   for (let deal = 1; deal <= deals; deal += 1) {
     for (let step = 0; step < 200; step += 1) {
-      const state = board.state;
-      if (state.deal.phase === "complete") {
+      const onTable = board.deal;
+      if (onTable.phase === "complete") {
         break;
       }
-      const actor = state.deal.toAct;
-      const view = snapshotFor({ kind: "rubber", table: state }, actor).view;
+      const actor = onTable.toAct;
+      const view = snapshotFor(board.match, actor).view;
       const legal = legalActionsForView(view).filter((action) => action.type !== "claim");
-      const where = `deal ${deal}, ${state.deal.phase}, trick ${state.deal.completedTricks.length + 1}`;
+      const where = `deal ${deal}, ${onTable.phase}, trick ${onTable.completedTricks.length + 1}`;
       expect(legal.length, `no legal action at ${where}`).toBeGreaterThan(0);
 
-      if (state.deal.phase === "play" && actor === seat) {
+      if (onTable.phase === "play" && actor === seat) {
         // The board holds a closed auction open for the declarer until it is
         // dismissed by hand — that tap is part of playing, not a fault.
         const start = buttonSaying("Start play");
@@ -97,11 +97,11 @@ function playDeals({
           });
         }
         expect(
-          board.state.deal.completedTricks.length * 2 + board.state.deal.currentTrick.length,
+          board.deal.completedTricks.length * 2 + board.deal.currentTrick.length,
           `${where}: tapping ${id} played nothing`,
         ).toBe(view.completedTricks.length * 2 + view.currentTrick.length + 1);
       } else {
-        const bidding = state.deal.phase === "auction";
+        const bidding = onTable.phase === "auction";
         const action =
           bidding && view.auction.length === 0
             ? (legal.find((call) => call.type === "call" && call.call.type === "bid") ?? legal[0]!)
@@ -113,8 +113,8 @@ function playDeals({
       settle(pause);
     }
 
-    expect(board.state.deal.phase, `deal ${deal} never finished`).toBe("complete");
-    expect(board.state.deal.completedTricks.length, `deal ${deal} tricks`).toBe(13);
+    expect(board.deal.phase, `deal ${deal} never finished`).toBe("complete");
+    expect(board.deal.completedTricks.length, `deal ${deal} tricks`).toBe(13);
 
     if (deal < deals) {
       settle(4000);
