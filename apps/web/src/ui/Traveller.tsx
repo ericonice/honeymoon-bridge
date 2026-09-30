@@ -110,9 +110,34 @@ export function Tags({ tags }: { readonly tags: readonly string[] }): React.JSX.
   );
 }
 
+/**
+ * Your own line, marked so it can be found rather than read for.
+ *
+ * A traveller is sorted by score, so your row lands anywhere in it — and "where am
+ * I" is the question the whole thing exists to answer. Full-weight white against the
+ * others' 70% was the only difference and it is not one you can *scan* for: it made
+ * the row legible once found, which is a different job.
+ *
+ * A band behind the row is what makes it findable at a glance. `bg-white/8` rather
+ * than a colour: amber means "it is your move" everywhere on the board, and the
+ * metals belong to achievements — this is the same quiet wash the app already uses
+ * for the row that matters in a list.
+ *
+ * **`aria-current` is the mark, and the styling hangs off it.** It is what the
+ * attribute means — the current item of a set — and it is the only thing here a
+ * screen reader can use, which otherwise has nothing but the word "you" in a column
+ * of names. It also gives the test something to assert that is not a class: see
+ * `suitInk.test.ts` for why naming a class beats naming an opacity, and this is one
+ * better again.
+ */
 function Row({ contract, mark, mine, note, points, tags, who }: Line): React.JSX.Element {
   return (
-    <tr className={`border-t border-white/10 ${mine ? "text-white" : "text-white/70"}`}>
+    <tr
+      aria-current={mine ? "true" : undefined}
+      className={`border-t border-white/10 ${mine ? "bg-white/8 text-white" : "text-white/70"}`}
+    >
+      {/* The weight goes on the two things a reader scans for — who, and how much —
+          rather than on the row, which would drag the faint tags up with it. */}
       <td className={`w-20 truncate py-1.5 pr-2 text-xs ${mine ? "font-semibold" : ""}`}>
         {who}
       </td>
@@ -130,7 +155,9 @@ function Row({ contract, mark, mine, note, points, tags, who }: Line): React.JSX
           {note === null ? null : <span className="text-[0.65rem] text-white/35">{note}</span>}
         </span>
       </td>
-      <td className="py-1.5 text-right tabular-nums">{signed(points)}</td>
+      <td className={`py-1.5 text-right tabular-nums ${mine ? "font-semibold" : ""}`}>
+        {signed(points)}
+      </td>
     </tr>
   );
 }

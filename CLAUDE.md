@@ -2462,6 +2462,24 @@ The walk drives the **gesture** rather than tapping Back, and that is not incide
 mounted there are two Back controls, so a swipe is the only unambiguous way for a test to say which
 page it means — and it is the case that used to go back twice. Checked by reverting: four tests fail.
 
+**Your own line in a traveller is marked rather than merely legible.** It was full-weight white
+against everybody else's 70%, which makes a row *readable once found* — a different job from making it
+**findable**, and finding it is the whole point: a traveller is sorted by score, so your row lands
+anywhere among eight, and "where did I come" is the question it exists to answer.
+
+A band behind the row is what a glance catches. `bg-white/8` rather than a colour, because amber means
+"it is your move" everywhere on the board and the metals belong to achievements — this is the wash the
+app already uses for the row that matters in a list. The weight goes on the two things a reader scans
+for, who and how much, rather than on the whole row, which would drag the faint `vul` and `honors`
+tags up with it.
+
+**`aria-current` is the mark and the styling hangs off it**, which is worth more than the tidiness: it
+is what the attribute means, and it is the only part of this a screen reader can use — it otherwise
+has nothing but the word "you" in a column of names. It also gives the test something to assert that
+is not a class. `suitInk.test.ts` argues for naming a class rather than an opacity so the number that
+tunes it can move; an attribute that carries the *meaning* is one better again, and the whole visual
+treatment can change without touching the test.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told

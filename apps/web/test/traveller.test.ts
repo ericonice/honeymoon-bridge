@@ -98,6 +98,37 @@ describe("a board's traveller", () => {
   });
 
   /**
+   * **"Where am I" is the question a traveller exists to answer**, and it is sorted
+   * by score, so your row lands anywhere in it. Marked with `aria-current`, which is
+   * what the attribute means and is the only part of this a screen reader can use —
+   * it otherwise has nothing but the word "you" in a column of names. The styling
+   * hangs off the same mark, so it can be tuned without touching this.
+   */
+  it("marks your own line as the current one", () => {
+    traveller(result(170, [entry(620, "Computer"), entry(-100, "Computer")]));
+
+    const current = screen.getAllByRole("row").filter((row) => row.getAttribute("aria-current"));
+    expect(current).toHaveLength(1);
+    expect(current[0]?.textContent).toContain("you");
+  });
+
+  /**
+   * The anti-vacuity half: three rows are drawn and exactly one of them is yours, so
+   * a mark on every row would pass the count above only if it were not counted.
+   */
+  it("marks nobody else's", () => {
+    traveller(result(170, [entry(620, "Computer"), entry(-100, "Computer")]));
+
+    const rows = screen.getAllByRole("row");
+    expect(rows.length).toBeGreaterThan(2);
+    for (const row of rows) {
+      if (!(row.textContent ?? "").includes("you")) {
+        expect(row.getAttribute("aria-current")).toBeNull();
+      }
+    }
+  });
+
+  /**
    * A field that has not come back and a board nobody else has played are different
    * answers, and neither of them is a placing of nought.
    */
