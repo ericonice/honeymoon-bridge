@@ -686,7 +686,6 @@ export function PlayPhase({
       <FieldPad
         latest
         me={view.me}
-        opponentName={opponentName}
         reviews={reviews}
         summary={standing.summary}
       />

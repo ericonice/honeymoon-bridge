@@ -59,6 +59,17 @@ export function ChevronLeftIcon({
   );
 }
 
+/** The same, pointing the way a list row drills in. */
+export function ChevronRightIcon({
+  className = "h-6 w-6",
+}: { readonly className?: string } = {}): React.JSX.Element {
+  return (
+    <Glyph className={className}>
+      <path d="M9.5 5.5 16 12l-6.5 6.5" />
+    </Glyph>
+  );
+}
+
 /**
  * A gear, with actual teeth — the eight rectangles are one tooth rotated
  * around the centre rather than eight hand-placed shapes, which is what kept

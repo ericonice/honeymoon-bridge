@@ -1,4 +1,5 @@
-import type { Contract, Pair, PlayerId } from "@hb/engine";
+import { honorsOn, netFor } from "@hb/engine";
+import type { Contract, FieldResult, Pair, PlayerId } from "@hb/engine";
 
 /**
  * The words a Doop traveller puts beside a contract, in one place.
@@ -84,4 +85,62 @@ export function vulnerableFrom(vulnerable: Pair<boolean>, me: PlayerId): Pair<bo
 /** U+2212 for the minus, matching every other signed total in the app. */
 export function signed(value: number): string {
   return value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : "0";
+}
+
+/** What one line says about its contract, beyond naming it. */
+export interface Described {
+  readonly contract: Contract | null;
+  /** How it went, in bridge's notation. */
+  readonly mark: string;
+  readonly points: number;
+  /** Everything the contract alone cannot explain — see `contractTags`. */
+  readonly tags: readonly string[];
+}
+
+/**
+ * One result read into the words a row draws, whoever made it.
+ *
+ * Shared by this seat's own line and every recorded one so the two cannot describe
+ * the same contract differently — and shared by the board row and the traveller line
+ * behind it, which are the same result twice.
+ *
+ * `seat`, `contract.declarer`, `tricks` and `vulnerable` must all be indexed the same
+ * way. They are not the same way for the two callers, which is the whole reason this
+ * takes them rather than reaching for them.
+ */
+export function describe(options: {
+  readonly contract: Contract | null;
+  readonly net: number;
+  readonly seat: PlayerId;
+  readonly tricks: Pair<number> | null;
+  readonly vulnerable: Pair<boolean>;
+}): Described {
+  const { contract, net, seat, tricks, vulnerable } = options;
+  if (contract === null) {
+    return { contract: null, mark: "", points: net, tags: [] };
+  }
+  return {
+    contract,
+    mark: resultOf(contract, tricks),
+    points: net,
+    tags: contractTags({
+      defending: contract.declarer !== seat,
+      // Honors need the tricks to score the contract without them — an entry from an
+      // older server carries a score and no tricks, and that is a row this cannot
+      // explain rather than one with no honors on it.
+      honors: tricks === null ? null : honorsOn({ contract, net, seat, tricks, vulnerable }),
+      vulnerable: vulnerable[contract.declarer],
+    }),
+  };
+}
+
+/** This seat's own result on a board, described. */
+export function mineOn(result: FieldResult, me: PlayerId): Described {
+  return describe({
+    contract: result.contract,
+    net: netFor(result.points, me),
+    seat: me,
+    tricks: result.tricks,
+    vulnerable: result.board.vulnerable,
+  });
 }

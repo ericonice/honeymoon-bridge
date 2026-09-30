@@ -17,20 +17,38 @@ export interface ScoreOverlayProps {
   onClose(): void;
 }
 
-function vulnerabilityLine(view: PlayerView, vulnerable: Pair<boolean>, opponentName: string): string {
+/**
+ * Who is vulnerable on the deal being played, and **it has to say which deal**.
+ *
+ * It read "Neither side vulnerable" and sat under the pad, which was unambiguous for
+ * as long as nothing else on the panel mentioned vulnerability. A Doop pad now tags
+ * every board with the terms *it* was played at, so a bare sentence directly beneath
+ * a list of them reads as a statement about the list — and contradicts it, since the
+ * board on the table need not match any of them.
+ *
+ * Named rather than moved. Putting it above the pad would leave the same ambiguity
+ * in a different place; what the reader is missing is not where the line sits but
+ * what it is about.
+ */
+function vulnerabilityLine(
+  view: PlayerView,
+  vulnerable: Pair<boolean>,
+  opponentName: string,
+  unit: string,
+): string {
   const mine = vulnerable[view.me];
   const theirs = vulnerable[view.opponent];
 
   if (mine && theirs) {
-    return "Both sides vulnerable";
+    return `Both sides vulnerable on this ${unit}`;
   }
   if (mine) {
-    return "You are vulnerable";
+    return `You are vulnerable on this ${unit}`;
   }
   if (theirs) {
-    return `${opponentName} is vulnerable`;
+    return `${opponentName} is vulnerable on this ${unit}`;
   }
-  return "Neither side vulnerable";
+  return `Neither side vulnerable on this ${unit}`;
 }
 
 /**
@@ -60,7 +78,6 @@ export function ScoreOverlay({
       {standing.kind === "field" ? (
         <FieldPad
           me={view.me}
-          opponentName={opponentName}
           reviews={reviews}
           summary={standing.summary}
         />
@@ -77,7 +94,16 @@ export function ScoreOverlay({
         view={view}
       />
       )}
-      <p className="pt-3 text-xs text-white/50">{vulnerabilityLine(view, vulnerable, opponentName)}</p>
+      <p className="pt-3 text-xs text-white/50">
+        {/* A board in the two duplicate formats, a deal in a rubber — the unit the
+            reader is being told about, in the word that format uses for it. */}
+        {vulnerabilityLine(
+          view,
+          vulnerable,
+          opponentName,
+          standing.kind === "rubber" ? "deal" : "board",
+        )}
+      </p>
     </Overlay>
   );
 }

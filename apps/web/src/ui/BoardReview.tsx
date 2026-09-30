@@ -6,6 +6,7 @@ import { CardFace } from "./CardFace.js";
 import { ContractText } from "./CardText.js";
 import { CARD_WIDTHS, MINI_MIN_STEP, spreadStep, useRowRoom } from "./Hand.js";
 import { Overlay } from "./Overlay.js";
+import { Traveller } from "./Traveller.js";
 import { contractTags, resultOf, signed } from "./fieldText.js";
 
 export interface BoardReviewProps {
@@ -33,6 +34,11 @@ export interface BoardReviewProps {
  * `fieldBoardsFor` excludes seeds met in earlier sessions, so nothing learnt from
  * looking back can be spent on a board still to come; in Replay, a mirror or a
  * return match the same screen would hand over the second run.
+ *
+ * **One panel rather than a row that expands and a panel behind it.** The pad used
+ * to open a traveller inside the list and put the hands behind a further button,
+ * which is two ways in for one question and lost your place in the list on the way
+ * back. Everything about a board is here.
  *
  * **The hands are card faces rather than a written record**, which is the one thing
  * about this that was chosen against a good alternative. Four suit lines a hand is
@@ -90,6 +96,15 @@ export function BoardReview({
             <span className="text-white/60">{signed(net)}</span>{" "}
             <span className="font-semibold">{placed === null ? "—" : `${Math.round(placed)}%`}</span>
           </span>
+        </div>
+
+        <div>
+          {/* **Everything about the board on one surface**, which is what a row
+              drilling in has to land on: where you came among everybody who has held
+              these cards, then what you were holding and what was said. Its caption
+              is off because the panel is already titled with the board. */}
+          <Caption>Everybody who has played it</Caption>
+          <Traveller at={at} caption={false} me={me} result={result} />
         </div>
 
         <div>

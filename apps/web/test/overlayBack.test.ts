@@ -100,6 +100,21 @@ describe("a board opened from the score pad", () => {
   });
 
   /**
+   * **Everything about the board on one surface**, which is what a row drilling in
+   * has to land on — the list no longer expands a traveller of its own, so if this
+   * panel did not carry one there would be nowhere left to see where you came.
+   */
+  it("carries the traveller as well as the hands and the bidding", () => {
+    review(null);
+
+    expect(screen.getByText("Everybody who has played it")).toBeTruthy();
+    expect(screen.getByText("The hands")).toBeTruthy();
+    expect(screen.getByText("The bidding")).toBeTruthy();
+    // Both thirteens, drawn as cards — twenty-six faces and nothing left out.
+    expect(document.querySelectorAll(".card-face")).toHaveLength(26);
+  });
+
+  /**
    * The anti-vacuity half. Opened over the board — from the reveal, or the screen
    * that ends a deal — there is no pad to go back to, and a chevron there would
    * promise a step that does not exist.

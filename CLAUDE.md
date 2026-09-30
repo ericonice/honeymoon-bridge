@@ -2174,8 +2174,8 @@ constructed holding rather than being typed out, the same discipline `scoringFac
 
 **A finished board can be looked at again, and Doop is the one format where that costs nothing.** A
 placing says how a board went and nothing about why; the why is what was held and what was bid.
-`BoardReview` is that, behind a tap on the traveller — and the rule is about the format rather than the
-screen: a board here is played once and `fieldBoardsFor` excludes seeds met in earlier sessions, so
+`BoardReview` is that, behind a tap on the board's row — and the rule is about the format rather than
+the screen: a board here is played once and `fieldBoardsFor` excludes seeds met in earlier sessions, so
 nothing learnt from looking back can be spent on a board still to come. In Replay, a mirror or a return
 match the same panel would hand over the second run.
 
@@ -2290,6 +2290,37 @@ does not cover is the wiring**, that the Score panel is replaced rather than dra
 lives in `GameBoard`, and `test/support/board.ts` builds a rubber `TableState` and cannot make a Doop
 session. Teaching it `MatchState` and `actOn` would cover this and the reveal walk above properly, and
 is the thing to do before the next change to either.
+
+**The pad had two ways in for one question, and the argument against the first was already written in
+it.** A row expanded a traveller in place and a button inside that expansion pushed a panel for the
+hands — an accordion and a push, stacked, to answer "tell me about board 7". Worse, the push threw the
+accordion away: which row was open is `FieldPad`'s own state, and the Score panel is not rendered while
+the review is, so coming back landed on a collapsed list scrolled to the top. Reported as the
+navigation being odd.
+
+The file already carried the case against itself, as the reason only one row could be open at a time:
+*a panel breaks the alignment of the rows around it, and that alignment is what makes the list
+scannable.* Read once more that is not an argument for one panel — it is an argument for none.
+
+**So a row drills straight in, and `BoardReview` carries the whole board**: the traveller first, then
+the hands, then the auction. One gesture in, a chevron out, and the list stays a list. Nothing was lost
+by the traveller leaving it — an expanded row shoved every board below it down the screen, so it was
+never being read beside its neighbours. The reveal between deals keeps its own button, because there is
+no list there to tap a row in.
+
+`Traveller` is its own component now for the ordinary reason: two surfaces draw it. Its rules moved with
+it into `test/traveller.test.ts` rather than being dropped along with the accordion that used to reveal
+it — and `fieldScreens.test.ts`'s "every row shut" test went from a real assertion to a vacuous one the
+moment nothing could open, so it asserts what now matters instead: the list shows every board and
+nobody else's name is in it.
+
+**And the vulnerability line under the pad had become self-contradictory.** "Neither side vulnerable"
+describes the deal on the table, and was unambiguous for as long as nothing else on the panel mentioned
+vulnerability — but a Doop pad now tags every board with the terms *it* was played at, so a bare
+sentence directly beneath a list of them reads as a statement about the list, and contradicts it. It
+names its subject now: "on this board", or "on this deal" in a rubber. **Named rather than moved**,
+because putting it above the pad would leave the same ambiguity somewhere else — what was missing is
+not where the line sits but what it is about.
 
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a

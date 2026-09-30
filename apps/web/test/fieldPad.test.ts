@@ -71,7 +71,6 @@ function pad(results: readonly FieldResult[], kept?: BoardReviews): void {
   render(
     createElement(FieldPad, {
       me: ME,
-      opponentName: "Computer",
       reviews: { kept: kept ?? new Map(), open: opened },
       summary: summarizeField(state, ME),
     }),
@@ -100,80 +99,26 @@ describe("the session pad", () => {
     result("b2", -100, [entry(140, "Noah", "solo")]),
   ];
 
-  it("is one row a board until one is opened", () => {
+  it("is one row a board, and nobody else's result is in the list", () => {
     pad(BOARDS);
 
     expect(screen.getByRole("button", { name: /Board 1/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Board 2/ })).toBeTruthy();
-    // Nobody else's name is on screen while every board is shut.
+    // The traveller belongs to the board's own panel — see `BoardReview`.
     expect(screen.queryByText("Noah")).toBeNull();
   });
 
   /**
-   * **Said, not implied.** It used to read "by them", which named a different person
-   * on every row — and on somebody else's line it reads as *your* opponent rather
-   * than theirs. A defender's row is the one that needs saying, because a defender of
-   * a contract that made scores nothing and a bare zero explains itself to nobody.
+   * **One way in, not two.** The list used to expand a traveller in place and hide
+   * the hands behind a further button inside it, which lost your place in the list
+   * on the way back. A row asks for the board and nothing expands.
    */
-  it("says which rows were defending, on their own terms", () => {
-    pad([
-      result("b1", 620, [
-        { ...entry(-100, "Noah", "solo"), contract: { declarer: 1, doubling: "none", level: 3, strain: "NT" } },
-      ]),
-    ]);
-    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
-
-    expect(screen.getByText("defending")).toBeTruthy();
-    expect(screen.queryByText("by them")).toBeNull();
-  });
-
-  /**
-   * Best first, with your own line wherever it lands — a traveller exists to show
-   * where you *came*, and pinning your row to the top answers a different question
-   * that the collapsed row above has already answered.
-   */
-  it("sorts a board's results best first, with yours in its place", () => {
-    pad([result("b1", 170, [entry(620, "Computer"), entry(-100, "Computer")])]);
-    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
-
-    const order = screen
-      .getAllByRole("row")
-      .map((row) => row.textContent ?? "")
-      .filter((text) => text.includes("+") || text.includes("−"));
-    expect(order[0]).toContain("+620");
-    expect(order[1]).toContain("you");
-    expect(order[2]).toContain("−100");
-  });
-
-  it("opens a board into everybody's result on it", () => {
+  it("drills a row straight into its board", () => {
     pad(BOARDS);
     fireEvent.click(screen.getByRole("button", { name: /Board 2/ }));
 
-    expect(screen.getByText("Noah")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Board 2/ }).getAttribute("aria-expanded")).toBe(
-      "true",
-    );
-  });
-
-  /**
-   * One at a time, because a panel breaks the alignment of the rows around it and
-   * that alignment is what makes the list scannable.
-   */
-  it("shuts the one that was open when another is opened", () => {
-    pad(BOARDS);
-    fireEvent.click(screen.getByRole("button", { name: /Board 2/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
-
-    // Board 1 really did open — without this the assertion below passes just as well
-    // against a tap that does nothing at all, which is how it passed before the click
-    // was fixed to run inside React's act.
-    expect(screen.getByRole("button", { name: /Board 1/ }).getAttribute("aria-expanded")).toBe(
-      "true",
-    );
+    expect(asked).toEqual([1]);
     expect(screen.queryByText("Noah")).toBeNull();
-    expect(screen.getByRole("button", { name: /Board 2/ }).getAttribute("aria-expanded")).toBe(
-      "false",
-    );
   });
 
   /**
@@ -191,7 +136,6 @@ describe("the session pad", () => {
       createElement(FieldPad, {
         latest: true,
         me: ME,
-        opponentName: "Computer",
         reviews: { kept: new Map(), open: opened },
         summary: summarizeField(state, ME),
       }),
@@ -251,10 +195,9 @@ describe("what a contract is tagged with", () => {
    * exactly the case that makes a row baffling.
    */
   it("signs honors toward the side that was paid", () => {
-    // 3♥ made exactly pays 90 and a 50 part-score bonus at neither vulnerable, so a
-    // recorded 40 is that less the hundred the other side took.
-    pad([result("b1", PLAIN, [entry(40, "Noah", "solo")])]);
-    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
+    // 4♠ made exactly pays 120 and a 300 game bonus at neither vulnerable, so a
+    // recorded 320 is that less the hundred the other side took.
+    pad([result("b1", PLAIN - 100, [])]);
 
     expect(screen.getByText("honors −100")).toBeTruthy();
   });
@@ -265,26 +208,6 @@ describe("what a contract is tagged with", () => {
  * and nothing about why, and the why is what was held and what was bid.
  */
 describe("looking back at a board", () => {
-  it("offers nothing where the board was not kept", () => {
-    pad([result("b1", 420, [])]);
-    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
-
-    expect(screen.queryByRole("button", { name: "Hands and bidding" })).toBeNull();
-  });
-
-  /**
-   * The pad asks; `GameBoard` draws. A panel owned here would be a modal nested in
-   * whichever of the pad's three homes it happened to be drawn in — one of them the
-   * Score overlay, another the reveal's own tap-to-continue area.
-   */
-  it("asks for the board it was tapped on", () => {
-    pad([result("b1", 420, []), result("b2", 130, [])], new Map([["b2", REVIEW]]));
-    fireEvent.click(screen.getByRole("button", { name: /Board 2/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Hands and bidding" }));
-
-    expect(asked).toEqual([1]);
-  });
-
   /**
    * The board just played is the one somebody asks this of: the placing has just
    * landed and the hands are a tap behind it. That screen has no row to expand, so
@@ -302,7 +225,6 @@ describe("looking back at a board", () => {
       createElement(FieldPad, {
         latest: true,
         me: ME,
-        opponentName: "Computer",
         reviews: { kept: new Map([["b1", REVIEW]]), open: opened },
         summary: summarizeField(state, ME),
       }),

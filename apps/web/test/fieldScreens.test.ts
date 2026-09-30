@@ -231,25 +231,22 @@ describe("finishing a field session", () => {
   });
 
   /**
-   * **Every row shut, including the board just played.**
+   * **The final screen is a list, and a traveller is not in it.**
    *
-   * That row opened on mount for a real reason — showing the whole session at the end
-   * otherwise skipped the last board's own traveller, making it the one deal of the
-   * sitting whose result you never saw. The reveal stages that traveller on its own
-   * now, before this screen is reached, so opening it here drew the same thing twice in
-   * consecutive screens.
+   * A row used to expand one in place, which is why this once asserted that none had
+   * opened on mount. A row drills into the board's own panel now, so the rule is
+   * simpler and stronger: nothing in the list belongs to anybody but you until you
+   * ask for a board.
    *
-   * Asserted across two rows rather than one, so a pad that opened *every* row would
-   * fail rather than pass on whichever row happened to be checked.
+   * Asserted on somebody else's name rather than on the absence of a control, since
+   * a name from the field is the thing that could only have come from a traveller.
    */
-  it("leaves every board shut, the last one included", () => {
+  it("lists every board and draws no traveller among them", () => {
     finish(THREE);
 
-    for (const board of [1, 3]) {
-      expect(
-        screen.getByRole("button", { name: new RegExp(`Board ${board}`) }).getAttribute("aria-expanded"),
-      ).toBe("false");
-    }
+    expect(screen.getByRole("button", { name: /Board 1/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Board 3/ })).toBeTruthy();
+    expect(screen.queryByText("Computer")).toBeNull();
   });
 
   /**
