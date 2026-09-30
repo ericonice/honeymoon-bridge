@@ -1,13 +1,18 @@
 import { boardPercentageOf, honorsOn, netFor } from "@hb/engine";
 import type { Card, FieldResult, PlayerId } from "@hb/engine";
+import { useState } from "react";
 import type { BoardReview as Review } from "../game/boardReview.js";
 import { AuctionRecord, ContractLine } from "./AuctionRecord.js";
 import { CardFace } from "./CardFace.js";
 import { ContractText } from "./CardText.js";
 import { CARD_WIDTHS, MINI_MIN_STEP, spreadStep, useRowRoom } from "./Hand.js";
 import { Overlay } from "./Overlay.js";
+import { Segmented } from "./Segmented.js";
 import { Traveller } from "./Traveller.js";
 import { contractTags, resultOf, signed } from "./fieldText.js";
+
+/** The two questions a board raises, which is what the tabs are. */
+type Tab = "deal" | "field";
 
 export interface BoardReviewProps {
   /** Which board of the session, for the title. */
@@ -40,6 +45,21 @@ export interface BoardReviewProps {
  * which is two ways in for one question and lost your place in the list on the way
  * back. Everything about a board is here.
  *
+ * **Two tabs, because there are two questions and they are asked one at a time.**
+ * The field answers *why that percentage* and the deal answers *could I have done
+ * better* — and at a phone's width all of it at once is about 590px of content in a
+ * panel capped near 630, which grows past it as a board's field fills with people.
+ *
+ * **Bidding and hands are deliberately not separated.** A third tab for the auction
+ * was the shape first proposed and it splits the one comparison this panel exists
+ * for: a bridge player reads an auction *against* a holding, and "they bid 4♥ on
+ * that?" needs both on screen at once. The seam that costs nothing is between what
+ * everybody else did and what happened here.
+ *
+ * **The header sits above the tabs** rather than inside either, because what the
+ * contract was and what it came to is the answer to "what happened" — wanted
+ * whichever tab you are on, and what makes the two labels mean anything.
+ *
  * **The hands are card faces rather than a written record**, which is the one thing
  * about this that was chosen against a good alternative. Four suit lines a hand is
  * the idiom for looking a deal up and is more compact. Cards win on continuity: they
@@ -56,6 +76,8 @@ export function BoardReview({
   result,
   review,
 }: BoardReviewProps): React.JSX.Element {
+  // The field first, because the placing is what a reader tapped the row to explain.
+  const [tab, setTab] = useState<Tab>("field");
   const { contract } = result;
   const net = netFor(result.points, me);
   const placed = boardPercentageOf(result, me);
@@ -98,42 +120,51 @@ export function BoardReview({
           </span>
         </div>
 
-        <div>
-          {/* **Everything about the board on one surface**, which is what a row
-              drilling in has to land on: where you came among everybody who has held
-              these cards, then what you were holding and what was said. Its caption
-              is off because the panel is already titled with the board. */}
-          <Caption>Everybody who has played it</Caption>
+        <Segmented<Tab>
+          options={[
+            { label: "The field", value: "field" },
+            { label: "The deal", value: "deal" },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+
+        {tab === "field" ? (
+          // No caption: the tab that is pressed already says what this is, and a
+          // heading repeating it would be the only thing on the panel said twice.
           <Traveller at={at} caption={false} me={me} result={result} />
-        </div>
+        ) : (
+          <>
+            <div>
+              <Caption>The hands</Caption>
+              {/* Their row above yours, which is where the two have sat on every
+                  screen that draws both — the table's own geometry rather than a
+                  choice made again here. */}
+              <p className="pb-1 text-xs text-white/55">{opponentName}</p>
+              <HandRow cards={review.hands[me === 0 ? 1 : 0]} />
+              <p className="pt-3 pb-1 text-xs text-white/55">You</p>
+              <HandRow cards={review.hands[me]} />
+            </div>
 
-        <div>
-          <Caption>The hands</Caption>
-          {/* Their row above yours, which is where the two have sat on every screen
-              that draws both — the table's own geometry rather than a choice made
-              again here. */}
-          <p className="pb-1 text-xs text-white/55">{opponentName}</p>
-          <HandRow cards={review.hands[me === 0 ? 1 : 0]} />
-          <p className="pt-3 pb-1 text-xs text-white/55">You</p>
-          <HandRow cards={review.hands[me]} />
-        </div>
+            <div>
+              <Caption>The bidding</Caption>
+              <AuctionRecord auction={review.auction} me={me} opponentName={opponentName}>
+                {contract === null ? null : (
+                  <ContractLine contract={contract} me={me} opponentName={opponentName} />
+                )}
+              </AuctionRecord>
+            </div>
 
-        <div>
-          <Caption>The bidding</Caption>
-          <AuctionRecord auction={review.auction} me={me} opponentName={opponentName}>
-            {contract === null ? null : (
-              <ContractLine contract={contract} me={me} opponentName={opponentName} />
-            )}
-          </AuctionRecord>
-        </div>
+            {/* The tricks as a count rather than trick by trick. Thirteen pairs of
+                cards is the expensive half of this screen and the least often
+                wanted: what a board turns on is what was bid and what was held. */}
+            <p className="text-xs text-white/35">
+              {result.tricks[me]} tricks to you, {result.tricks[me === 0 ? 1 : 0]} to{" "}
+              {opponentName}.
+            </p>
+          </>
+        )}
 
-        {/* The tricks as a count rather than trick by trick. Thirteen pairs of cards
-            is the expensive half of this screen and the least often wanted: what a
-            board turns on is what was bid and what was held, and the count is what
-            joins those to the figure above. */}
-        <p className="text-xs text-white/35">
-          {result.tricks[me]} tricks to you, {result.tricks[me === 0 ? 1 : 0]} to {opponentName}.
-        </p>
       </div>
     </Overlay>
   );

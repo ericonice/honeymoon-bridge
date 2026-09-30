@@ -1,5 +1,10 @@
+import { Segmented } from "./Segmented.js";
+
 /**
  * A choice between a few named values, as a row of buttons under a label.
+ *
+ * The row itself is `Segmented`, shared with the two places that want the same
+ * buttons without a settings row's label and description around them.
  *
  * A toggle cannot say "more or less of this", and every setting that reaches
  * for this is a value with more than two states rather than a thing to be on
@@ -23,22 +28,8 @@ export function Choice<T extends string>({
     <div className="px-4 py-3">
       <span className="block text-base font-medium">{label}</span>
       <span className="mt-0.5 block text-xs text-white/55">{description}</span>
-      <div className="mt-2.5 flex gap-2">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={option.value === value}
-            className={`flex-1 rounded-lg px-2 py-1.5 text-sm font-medium ${
-              option.value === value ? "bg-white text-stone-900" : "border border-white/15"
-            }`}
-            onClick={() => {
-              onChange(option.value);
-            }}
-          >
-            {option.label}
-          </button>
-        ))}
+      <div className="mt-2.5">
+        <Segmented onChange={onChange} options={options} value={value} />
       </div>
     </div>
   );

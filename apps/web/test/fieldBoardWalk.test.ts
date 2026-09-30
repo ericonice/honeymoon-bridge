@@ -96,7 +96,12 @@ describe("a Doop board on the real screen", () => {
     tap(/Board 1/);
 
     expect(screen.getByRole("heading", { name: "Board 1" })).toBeTruthy();
+    // Opens on the field, and the deal is a tab away — both halves, so a panel that
+    // drew only one of them would fail here rather than on whichever was checked.
+    expect(screen.getByRole("button", { name: "The field" })).toBeTruthy();
+    tap("The deal");
     expect(screen.getByText("The hands")).toBeTruthy();
+    expect(document.querySelectorAll(".card-face")).toHaveLength(26);
   });
 
   /**

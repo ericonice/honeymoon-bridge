@@ -2350,6 +2350,32 @@ two of its four fail.
 screen and the tap sequence to land on a control rather than the table. That is now a smaller job than
 it was, and the harness is no longer the thing in the way.
 
+**A board's panel is two tabs, and which seam it is cut on was the whole of the decision.** At a
+phone's width the panel is about 590px of content against a cap near 630, and it grows past that as a
+board's field fills with people — so it will scroll. **The field** answers *why that percentage* and
+**the deal** answers *could I have done better*, and those are asked one at a time.
+
+**A third tab for the auction was proposed and turned down.** It splits the one comparison the panel
+exists for: a bridge player reads an auction *against* a holding, and "they bid 4♥ on that?" needs both
+on screen at once. Separating what everybody else did from what happened here costs nothing, because
+nobody reads those together.
+
+**The header sits above the tabs** rather than in either — the contract, the result, the `vul` and
+`honors` tags, the net and the placing are the answer to "what happened", wanted whichever tab is up,
+and what makes the two labels mean anything.
+
+`Segmented` is the row of buttons, extracted rather than written a third time: `Choice` wraps it in a
+settings row's label and description and the record's You / Everyone switch wraps it in nothing. Real
+buttons with `aria-pressed`, which is the rule this app keeps arriving at.
+
+**And the score strip carries a chevron now, which is not a contradiction of its own doc.**
+`ContractBar` argues against "adding an icon to it" and that argument is about a separate *control*
+taking room from the figures — a chevron takes no decision and is not a second thing to tap. It is the
+mark saying the strip is one, which nothing said before: a real `button` with an `aria-label` that did
+not look like a button, the same fault the board rows had until they grew one. It is drawn exactly
+when `onShowScore` is non-null, so it also answers "is this tappable *here*", which it is not on the
+screen that already shows the pad.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told

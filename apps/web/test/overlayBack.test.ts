@@ -100,18 +100,18 @@ describe("a board opened from the score pad", () => {
   });
 
   /**
-   * **Everything about the board on one surface**, which is what a row drilling in
-   * has to land on — the list no longer expands a traveller of its own, so if this
-   * panel did not carry one there would be nowhere left to see where you came.
+   * **The traveller is what a row drilling in lands on**, because the placing is
+   * what a reader tapped it to explain. The list no longer expands one of its own,
+   * so if this panel did not open on it there would be nowhere left to see where
+   * you came.
    */
-  it("carries the traveller as well as the hands and the bidding", () => {
+  it("opens on the field, which is why the row was tapped", () => {
     review(null);
 
-    expect(screen.getByText("Everybody who has played it")).toBeTruthy();
-    expect(screen.getByText("The hands")).toBeTruthy();
-    expect(screen.getByText("The bidding")).toBeTruthy();
-    // Both thirteens, drawn as cards — twenty-six faces and nothing left out.
-    expect(document.querySelectorAll(".card-face")).toHaveLength(26);
+    expect(screen.getByRole("button", { name: "The field" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(screen.getByText("you")).toBeTruthy();
   });
 
   /**
