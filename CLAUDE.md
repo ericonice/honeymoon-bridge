@@ -2510,14 +2510,32 @@ hairline and small caps are what say "this is a label on that": `VUL` is not a w
 it is a mark. The provenance note takes the same chip and shortens to `vs person`, because one of
 these drawn as prose beside three chips reads as something half-finished.
 
-**Colour was asked for and is the one thing withheld, which is worth writing down as a decision rather
-than an omission.** Every hue in this app already means something — amber is "it is your move", red is
-"this is a red suit", the metals are achievement tiers, green is a target reached — and these chips
-sit inches from real cards on the reveal between deals, where the first two readings are live. A
-fourth vocabulary would have to collide with one of those or be a colour picked for being unused,
-which is how a palette stops meaning anything. Weight, ground and small caps carry it instead. **If
-the chips still do not separate enough from the contract beside them, the next move is contrast
-within the neutral — not a hue.**
+**Colour was withheld, then asked for again, and spent on exactly one thing.** The objection was
+sound and is what shaped the answer: every hue here already means something — amber is "it is your
+move", red is "this is a red suit", the metals are achievement tiers, green is a target reached — and
+these chips sit inches from real cards on the reveal between deals. A fourth vocabulary would collide
+with one of those or be a colour picked for being unused, which is how a palette stops meaning
+anything.
+
+**So it is borrowed rather than invented, and only `vul` gets it.** Every bridge scorecard ever
+printed draws vulnerability red; that is the player's own language, not a new one. And vulnerability
+is the largest multiplier on any figure on the row, which is what earns the loudest mark.
+
+**The tint is on the chip's ground, not its letters**, which is what keeps it clear of the rule red
+already has: `text-red-400` means *this is a red suit*, and a red word two characters from a red pip
+is precisely the collision the original objection named. A red-grounded badge is not a glyph.
+
+**And exactly one of them is coloured, which is the point of colouring any.** `h100` stays plain:
+with both tinted they compete, and the red stops meaning "look at this" and starts meaning "this is a
+tag". `test/traveller.test.ts` pins both halves — the ground is red, the letters are not, and honors
+carries no red at all.
+
+**The role takes weight rather than a hue, and for a different reason.** There is nothing to borrow:
+bridge has a red for vulnerability and no convention whatever for declarer against defender, so any
+colour there would be invented. What brightness *can* say without a key is whose contract it was —
+`bid` at white/55 and `def` at white/30, the contract being yours when you bid it and somebody else's
+when you did not. It is also on **every** row, and a mark that never varies in whether it appears
+must not compete with the ones that do.
 
 **A tag is for what might not apply, and that ruled the role out of being one.** `bid`/`def` is
 *always* one or the other — a chip that never varies in whether it is there is not marking an

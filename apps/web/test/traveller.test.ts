@@ -167,6 +167,26 @@ describe("a board's traveller", () => {
     }
   });
 
+  /**
+   * **One hue, on the mark that earns it.** Red on `vul` is borrowed from every
+   * bridge scorecard rather than invented, and it is on the chip's ground rather
+   * than its letters so it cannot be read as a red suit. Colouring the second chip
+   * would cost the first its meaning, which is why `h100` stays plain.
+   */
+  it("colours vulnerability and nothing else", () => {
+    traveller(result(620 + 100, [], [true, false]));
+
+    const vul = screen.getByText("vul");
+    expect(vul.className).toContain("red");
+    // On the ground, never on the letters, which is where `text-red-400` means
+    // "this is a red suit".
+    expect(vul.className).toContain("bg-red-400/12");
+    expect(vul.className).not.toContain("text-red-400");
+
+    const honors = screen.getByText("h100");
+    expect(honors.className).not.toContain("red");
+  });
+
   /** The board's own panel names the board, so the caption would say it twice. */
   it("can be drawn without its caption", () => {
     render(createElement(Traveller, { at: 0, caption: false, me: ME, result: result(620, []) }));

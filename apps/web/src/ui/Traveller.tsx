@@ -2,7 +2,7 @@ import { boardPercentageOf } from "@hb/engine";
 import type { FieldResult, PlayerId } from "@hb/engine";
 import { ContractText } from "./CardText.js";
 import { describe, mineOn, signed, vulnerableFrom } from "./fieldText.js";
-import type { Described } from "./fieldText.js";
+import type { ContractTag, Described } from "./fieldText.js";
 
 /**
  * A board's traveller: every result on it, **best first, with yours in its place**.
@@ -106,23 +106,26 @@ interface Line extends Described {
  * border are what say "this is a label on that", and small caps say it again —
  * `VUL` is not a word in the sentence, it is a mark.
  *
- * **Deliberately no hue, which was asked about and is the one thing withheld.**
- * Every colour in this app already means something: amber is "it is your move",
- * red is "this is a red suit" — and these sit inches from real cards on the reveal
- * between deals, where both of those readings are live. The metals belong to
- * achievements and green to a target reached. A fourth vocabulary would have to
- * either collide with one of those or be a colour chosen for being unused, which is
- * how a palette stops meaning anything. Weight and shape carry it instead.
+ * **One of them is coloured and the rest are not** — see `contractTags` for which
+ * and why. The short version: red on `vul` is borrowed from every bridge scorecard
+ * ever printed rather than invented, the tint is on the chip rather than the
+ * letters so it cannot be taken for a red suit, and colouring the second one would
+ * cost the first its meaning.
  */
-export function Tags({ tags }: { readonly tags: readonly string[] }): React.JSX.Element {
+const TONE: Record<ContractTag["tone"], string> = {
+  plain: "border-white/10 bg-white/8 text-white/60",
+  vulnerable: "border-red-400/30 bg-red-400/12 text-red-200/90",
+};
+
+export function Tags({ tags }: { readonly tags: readonly ContractTag[] }): React.JSX.Element {
   return (
     <>
       {tags.map((tag) => (
         <span
-          key={tag}
-          className="rounded border border-white/10 bg-white/8 px-1 py-px text-[0.6rem] leading-[1.35] font-medium tracking-wide text-white/60 uppercase"
+          key={tag.label}
+          className={`rounded border px-1 py-px text-[0.6rem] leading-[1.35] font-medium tracking-wide uppercase ${TONE[tag.tone]}`}
         >
-          {tag}
+          {tag.label}
         </span>
       ))}
     </>
@@ -175,7 +178,7 @@ function Row({ contract, mark, mine, note, points, role, tags, who }: Line): Rea
           {/* Provenance rather than a property of the contract, but it sits in the
               same slot and is the same kind of mark, so it takes the same chip —
               faint prose beside three chips reads as something half-finished. */}
-          {note === null ? null : <Tags tags={[note]} />}
+          {note === null ? null : <Tags tags={[{ label: note, tone: "plain" }]} />}
         </span>
       </td>
       <td className={`py-1.5 text-right tabular-nums ${mine ? "font-semibold" : ""}`}>
@@ -189,13 +192,31 @@ function Row({ contract, mark, mine, note, points, role, tags, who }: Line): Rea
  * What this line's player did with the contract, drawn as a field rather than a tag.
  *
  * Fixed width so it aligns down a column of rows, which is what turns a value that
- * is always present into something scannable instead of repetition. Quiet, because
- * it is the least surprising thing on the row — and placed immediately before the
- * contract, where it reads as the verb it is: `bid 4♥`, `def 4♥`.
+ * is always present into something scannable instead of repetition. Placed
+ * immediately before the contract, where it reads as the verb it is: `bid 4♥`,
+ * `def 4♥`.
+ *
+ * **Weight rather than a hue, and that is a decision rather than a leftover.**
+ * Colour was asked for here too, and there is nothing to borrow: bridge has a red
+ * for vulnerability and no convention at all for declarer against defender, so any
+ * hue would be invented — the exact thing that turns a palette into decoration. What
+ * it does instead is say whose contract it was, which is a real difference and maps
+ * onto brightness without a key: the contract is yours when you bid it, and dimmer
+ * when it is somebody else's.
+ *
+ * It is also on **every** row, so it must not be the loudest thing there. A mark
+ * that never varies in whether it appears cannot also compete for attention with
+ * the ones that do.
  */
 export function Role({ role }: { readonly role: "bid" | "def" | null }): React.JSX.Element | null {
   if (role === null) {
     return null;
   }
-  return <span className="w-7 shrink-0 text-[0.65rem] text-white/40">{role}</span>;
+  return (
+    <span
+      className={`w-7 shrink-0 text-[0.65rem] ${role === "bid" ? "text-white/55" : "text-white/30"}`}
+    >
+      {role}
+    </span>
+  );
 }

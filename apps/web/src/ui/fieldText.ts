@@ -43,22 +43,38 @@ import type { Contract, FieldResult, Pair, PlayerId } from "@hb/engine";
  * not in conflict: that pad has a column to put a figure in and prose to label it,
  * where this is a row of chips in which `vul` is already short.
  *
- * Nothing here is red, though bridge draws vulnerability red everywhere: red means
- * "this is a red suit" in this app, and a red `vul` would sit two characters from a
- * red pip.
+ * **Only `vul` carries a colour, and it is borrowed rather than invented.** Every
+ * bridge scorecard ever printed draws vulnerability in red, so this is the player's
+ * own language rather than a fourth vocabulary — and vulnerability is the largest
+ * multiplier on any figure here, which is what earns the loudest mark on the row.
+ *
+ * **The tint is on the chip, not on the letters**, which is what keeps it clear of
+ * the one rule red already has: `text-red-400` means *this is a red suit*, and a red
+ * word sitting two characters from a red pip is exactly the collision that argument
+ * was about. A red-grounded badge is not a glyph and cannot be misread as one.
+ *
+ * **And only one of them is coloured, which is the point of colouring any.** `h100`
+ * stays neutral: with both tinted they compete, and the red stops meaning "look at
+ * this" and starts meaning "this is a tag". One hue doing one job.
  */
+export interface ContractTag {
+  readonly label: string;
+  /** `vulnerable` takes the red every scorecard draws it in; everything else is plain. */
+  readonly tone: "plain" | "vulnerable";
+}
+
 export function contractTags(options: {
   /** Net honors toward this line's player, or null when there are none to name. */
   readonly honors: number | null;
   /** The *declaring* side was vulnerable, which is what the figures turn on. */
   readonly vulnerable: boolean;
-}): readonly string[] {
-  const tags: string[] = [];
+}): readonly ContractTag[] {
+  const tags: ContractTag[] = [];
   if (options.vulnerable) {
-    tags.push("vul");
+    tags.push({ label: "vul", tone: "vulnerable" });
   }
   if (options.honors !== null && options.honors !== 0) {
-    tags.push(`h${Math.abs(options.honors)}`);
+    tags.push({ label: `h${Math.abs(options.honors)}`, tone: "plain" });
   }
   return tags;
 }
@@ -114,7 +130,7 @@ export interface Described {
    */
   readonly role: "bid" | "def" | null;
   /** Everything the contract alone cannot explain — see `contractTags`. */
-  readonly tags: readonly string[];
+  readonly tags: readonly ContractTag[];
 }
 
 /**
