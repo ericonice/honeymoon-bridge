@@ -62,7 +62,9 @@ describe("a board's traveller", () => {
       ]),
     );
 
-    expect(screen.getByText("defending")).toBeTruthy();
+    // Both tags, one per row: the defender's line and your own declaring one.
+    expect(screen.getByText("def")).toBeTruthy();
+    expect(screen.getByText("dec")).toBeTruthy();
     expect(screen.queryByText("by them")).toBeNull();
   });
 
@@ -93,8 +95,8 @@ describe("a board's traveller", () => {
     // recorded 240 is that plus a hundred and 40 is that less one.
     traveller(result(620, [entry(240, "Computer"), entry(40, "Computer")]));
 
-    expect(screen.getByText("honors +100")).toBeTruthy();
-    expect(screen.getByText("honors −100")).toBeTruthy();
+    expect(screen.getByText("h+100")).toBeTruthy();
+    expect(screen.getByText("h−100")).toBeTruthy();
   });
 
   /**

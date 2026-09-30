@@ -166,6 +166,26 @@ describe("what a contract is tagged with", () => {
   });
 
   /**
+   * **Both halves, because the pair is what teaches itself.** A lone `def` is only
+   * legible to somebody who already knows that its absence means the other thing.
+   */
+  it("says whether this seat declared the contract or defended it", () => {
+    pad([result("b1", PLAIN, [])]);
+    expect(screen.getByText("dec")).toBeTruthy();
+    expect(screen.queryByText("def")).toBeNull();
+
+    cleanup();
+    pad([
+      {
+        ...result("b1", -50, []),
+        contract: { declarer: 1, doubling: "none", level: 2, strain: "H" },
+      },
+    ]);
+    expect(screen.getByText("def")).toBeTruthy();
+    expect(screen.queryByText("dec")).toBeNull();
+  });
+
+  /**
    * The anti-vacuity half: without it a pad that tagged every contract would pass
    * the test above, and the tag would say nothing at all.
    */
@@ -183,13 +203,13 @@ describe("what a contract is tagged with", () => {
   it("names honors, with the figure, where the score needs them to add up", () => {
     pad([result("b1", VULNERABLE + 100, [], [true, false])]);
 
-    expect(screen.getAllByText("honors +100").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("h+100").length).toBeGreaterThan(0);
   });
 
   it("says nothing about honors when the contract already accounts for the score", () => {
     pad([result("b1", VULNERABLE, [], [true, false])]);
 
-    expect(screen.queryByText(/honors/)).toBeNull();
+    expect(screen.queryByText(/^h[+−]/)).toBeNull();
   });
 
   /**
@@ -201,7 +221,7 @@ describe("what a contract is tagged with", () => {
     // recorded 320 is that less the hundred the other side took.
     pad([result("b1", PLAIN - 100, [])]);
 
-    expect(screen.getByText("honors −100")).toBeTruthy();
+    expect(screen.getByText("h−100")).toBeTruthy();
   });
 });
 

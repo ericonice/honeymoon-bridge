@@ -80,13 +80,13 @@ export function BoardDetail({
     contract === null
       ? null
       : honorsOn({ contract, net, seat: me, tricks: result.tricks, vulnerable });
-  // `defending` is false whatever the contract, because this header names the
-  // declarer outright — there is room for "by Computer" here where a traveller row
-  // has only a tag. The tag and the phrase would say one thing twice.
+  // No `dec`/`def` here: this header names the declarer outright — there is room for
+  // "by Computer" where a traveller row has only a tag, and the tag and the phrase
+  // would say one thing twice.
   const tags =
     contract === null
       ? []
-      : contractTags({ defending: false, honors, vulnerable: vulnerable[contract.declarer] });
+      : contractTags({ honors, role: null, vulnerable: vulnerable[contract.declarer] });
 
   return (
     <div className="flex w-full flex-col gap-3 text-sm">

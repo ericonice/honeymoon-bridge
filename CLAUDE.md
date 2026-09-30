@@ -2155,8 +2155,8 @@ the differences. Vulnerability and honors are what the contract cannot say, so `
 beside it in the slot `defending` already used: `vul` and `honors +100`, faint, in the same white.
 
 **The tag qualifies the *contract*, which is what makes it per row rather than per board.** `4♥ = vul`
-means that contract was played vulnerable, and `defending` sits next to it so the pair reads "4♠ played
-vulnerable, and I was defending it". The first design said it once in the traveller's caption, on the
+means that contract was played vulnerable, and the role tag sits next to it so the pair reads "4♠
+played vulnerable, and I was defending it". The first design said it once in the traveller's caption, on the
 argument the pad already makes about the opposition — and a caption **structurally cannot reach the
 collapsed list**, which is five boards each at their own prescribed vulnerability with +110 and +720 in
 the same column. Not red, though bridge draws vulnerability red everywhere: red means "this is a red
@@ -2479,6 +2479,25 @@ has nothing but the word "you" in a column of names. It also gives the test some
 is not a class. `suitInk.test.ts` argues for naming a class rather than an opacity so the number that
 tunes it can move; an attribute that carries the *meaning* is one better again, and the whole visual
 treatment can change without touching the test.
+
+**The tags are short now — `vul`, `dec`/`def`, `h+100` — and one of the three is a better change than
+a shorter one.** They have to sit three abreast on a row that gives the contract about 164px at a
+phone's width and already holds a level, a strain and a result; "vulnerable", "defending" and
+"honors +100" wrapped.
+
+**Declaring is marked as well as defending, which is new rather than merely abbreviated.** A lone
+`def` is legible only to somebody who knows that its *absence* means the other thing — an unstated
+rule the reader has to be told. Two tags that always appear together teach each other on sight, and
+that is worth three characters. `null` suppresses both, for a surface with room to name the declarer
+outright: the board page says "by Computer" and would otherwise say one thing twice.
+
+**`h` is the one abbreviation here that has to be learnt, and this file already argued the other
+way** — the two-column `Scorepad` names honors in words precisely because "a dot or an 'h' is cheaper
+in width and is a key the reader has to learn". The two are not in conflict: that pad has a column to
+put a figure in and prose to label it, where this is a row of tags in which `vul` is already short.
+The honest statement of the trade is in `contractTags`: **if `h+100` reads as a key rather than a
+fact, it is the tag vocabulary that is wrong rather than that one member of it.** The sign is kept
+either way, because a line paid for honors *by the other side* is the case the tag exists for.
 
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
