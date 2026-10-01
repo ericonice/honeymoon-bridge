@@ -225,6 +225,14 @@ export interface BotTuning {
    */
   readonly drawCountsLive?: boolean;
   /**
+   * How much of the fitted level drift to take out of the defending estimate — 0 is
+   * off and 1 is the correction as measured. See `DEFENDING_DRIFT_PER_LEVEL`.
+   *
+   * Per release and absent-means-off, because it changes every call that prices a
+   * contract the opponent declares, which is what a release *is*.
+   */
+  readonly defendingDrift?: number;
+  /**
    * Points a double must beat the alternative by before it is taken — see
    * `DOUBLE_MARGIN`, which is what absent means.
    */
@@ -525,8 +533,41 @@ function estimateFor(contract: Contract, context: CallContext): number {
   );
   const fromTheirBid = contract.level + BOOK;
   const weight = context.theirBidWeight ?? THEIR_BID_WEIGHT;
-  return (1 - weight) * fromMyHand + weight * fromTheirBid;
+  const blend = (1 - weight) * fromMyHand + weight * fromTheirBid;
+  // Level by level, the blend is not centred — see `DEFENDING_DRIFT_PER_LEVEL`.
+  return blend - (context.defendingDrift ?? 0) * DEFENDING_DRIFT_PER_LEVEL * (contract.level - DEFENDING_DRIFT_LEVEL);
 }
+
+/**
+ * Where the defending estimate is already centred, and how fast it drifts off.
+ *
+ * `level + BOOK` reads a bid as a claim about tricks, at one exchange rate for every
+ * level. Measured against double-dummy par over **4,055 real positions where a double
+ * was legal**, that claim is worth different amounts at different heights:
+ *
+ * | level | 1-2 | 3 | 4-5 | 6-7 |
+ * | --- | --- | --- | --- | --- |
+ * | par minus the estimate | **+0.47** | +0.11 | −0.29 | **−0.86** |
+ *
+ * A straight line through all 4,055 is `0.861 − 0.272 × level`, and subtracting it
+ * leaves a residual bias of **+0.00** with the spread down from 1.29 to 1.23. So the
+ * correction is a pivot and a slope rather than a table, and the pivot is where a bid
+ * is already an honest claim.
+ *
+ * **The mechanism is why the two ends differ in sign.** A one-level bid is a floor —
+ * somebody had to start somewhere and they usually hold more — so the estimate is too
+ * harsh and the bot imagines it can set contracts it cannot. A six- or seven-level bid
+ * is where competitive escalation *stopped*, which overstates: the bot credits a slam
+ * bidder with a trick they do not have and sits there while it makes. That is the
+ * whole of the gap at the top, where `bench/doublepar.ts` has an oracle taking **+108**
+ * a contract and the bot taking **−4**.
+ *
+ * **The spread was the other suspect and it is innocent.** `TRICK_SPREAD` is 1.30
+ * against a measured 1.29, so the bot is not overconfident and there is no winner's
+ * curse to widen away — which is what the first version of this change assumed.
+ */
+const DEFENDING_DRIFT_LEVEL = 3.17;
+const DEFENDING_DRIFT_PER_LEVEL = 0.272;
 
 function blendLastTime(counted: number, lastTime: number | null, weight: number): number {
   return lastTime === null ? counted : (1 - weight) * counted + weight * lastTime;
@@ -669,6 +710,8 @@ interface CallContext extends LastTimeContext {
   readonly defendingRuff: number | undefined;
   /** What a double must win by before it is taken — see `DOUBLE_MARGIN`. */
   readonly doubleMargin: number | undefined;
+  /** How much level drift to take out of the defending estimate — see `DEFENDING_DRIFT_PER_LEVEL`. */
+  readonly defendingDrift: number | undefined;
   /** How far their bid outweighs this hand, defending — see `BotTuning.theirBidWeight`. */
   readonly theirBidWeight: number | undefined;
   /** Which equity table prices a standing — see `BotTuning.equityTable`. */
@@ -886,6 +929,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
   // Undefined means the shipped table, which `equityOf` defaults to.
   const equityTable = tuning.equityTable;
   const defendingRuff = tuning.defendingRuff;
+  const defendingDrift = tuning.defendingDrift;
   const doubleMargin = tuning.doubleMargin;
   const theirBidWeight = tuning.theirBidWeight;
   const theirBidOnOwnWeight = tuning.theirBidOnOwnWeight ?? THEIR_BID_ON_OWN_WEIGHT;
@@ -923,6 +967,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
           : null;
       return bestCall({
         defendingRuff,
+        defendingDrift,
         disguiseCredit,
         doubleMargin,
         equityTable,
