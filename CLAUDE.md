@@ -2647,11 +2647,30 @@ this app writes the game's notation. The board's own page and the traveller's ca
 "Board 3" in full, because they are *naming* the thing rather than labelling a column, and they have
 the room.
 
-**Which changes the answer above.** With ~140px for the contract and the chips instead of ~100, the
-reserved-slot alignment that was unaffordable now fits: ~73px of slots plus ~36 for `4♥ =` is 109.
-So the version that aligns the chips exactly, rather than merely flushing their group right, is
-available whenever it is wanted — and it is affordable only because the cheapest thing on the row
-turned out to be the most expensive.
+**Which changed the answer above, and a screenshot of eight finished boards settled it.** Flushing
+the group right lines up rows carrying the *same* chips and nothing else: a row with honors alone put
+its honors chip somewhere different from a row with both, and a row with neither left a gap of a
+third shape. Eight boards of that reads as ragged, which is exactly what it was.
+
+**Three faults, and the chips were the least of them.**
+
+**The net column was sized to its own content.** The chips are flushed against it, so `−50` sat
+further right than `+210` and dragged the chips before it along with it. Right-aligned figures only
+line up if the box holding them does; it is `w-14` now. This is most of what the screenshot showed,
+and no amount of work on the chips themselves could have fixed it.
+
+**A slot is held open for a chip the row has not got**, which is the only thing that truly aligns
+them — `invisible` rather than removed, so the width comes from the chip itself and nothing has to
+know how wide one is, and `aria-hidden`, because a chip that is not there must not be read out as
+though it were. `contractTags` returns every possible tag with a `shown` flag for that reason: a
+caller cannot reserve what it does not know could exist.
+
+**And `Bd` is what paid for it** — the 40px recovered from the row label is the room the slots sit
+in.
+
+Worth noting for the next test that counts chips: a reserved slot is real DOM, and jsdom computes no
+CSS, so `invisible` means nothing to a query. `aria-hidden` is both how a screen reader skips it and
+how a test tells the two apart.
 
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a

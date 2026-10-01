@@ -61,6 +61,16 @@ const REVIEW: BoardReview = {
   tricks: [10, 3],
 };
 
+/**
+ * Chips the row actually carries, ignoring the slots held open for ones it does
+ * not — see `Tags`. A reserved slot is marked `aria-hidden`, which is both how a
+ * screen reader skips it and how a test can tell the two apart; jsdom computes no
+ * CSS, so `invisible` means nothing to a query.
+ */
+function shown(label: string | RegExp): HTMLElement[] {
+  return screen.queryAllByText(label).filter((one) => one.closest("[aria-hidden]") === null);
+}
+
 function pad(results: readonly FieldResult[], kept?: BoardReviews): void {
   const state: FieldState = {
     at: results.length,
@@ -177,7 +187,7 @@ describe("what a contract is tagged with", () => {
   it("says when the contract was played vulnerable", () => {
     pad([result("b1", VULNERABLE, [], [true, false])]);
 
-    expect(screen.getAllByText("vul").length).toBeGreaterThan(0);
+    expect(shown("vul").length).toBeGreaterThan(0);
   });
 
   /**
@@ -209,7 +219,7 @@ describe("what a contract is tagged with", () => {
   it("says nothing about vulnerability when neither side was", () => {
     pad([result("b1", PLAIN, [])]);
 
-    expect(screen.queryByText("vul")).toBeNull();
+    expect(shown("vul")).toHaveLength(0);
   });
 
   /**
@@ -220,13 +230,13 @@ describe("what a contract is tagged with", () => {
   it("names honors, with the figure, where the score needs them to add up", () => {
     pad([result("b1", VULNERABLE + 100, [], [true, false])]);
 
-    expect(screen.getAllByText("h100").length).toBeGreaterThan(0);
+    expect(shown("h100").length).toBeGreaterThan(0);
   });
 
   it("says nothing about honors when the contract already accounts for the score", () => {
     pad([result("b1", VULNERABLE, [], [true, false])]);
 
-    expect(screen.queryByText(/^h\d/)).toBeNull();
+    expect(shown(/^h\d/)).toHaveLength(0);
   });
 
   /**
@@ -238,7 +248,7 @@ describe("what a contract is tagged with", () => {
     // recorded 320 is that less the hundred the other side took.
     pad([result("b1", PLAIN - 100, [])]);
 
-    expect(screen.getByText("h100")).toBeTruthy();
+    expect(shown("h100")).toHaveLength(1);
   });
 });
 

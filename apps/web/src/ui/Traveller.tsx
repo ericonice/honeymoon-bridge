@@ -118,14 +118,40 @@ interface Line extends Described {
  * `contractTags` for why only `vul` gets it. Colouring the second would cost the
  * first its meaning.
  */
-export function Tags({ tags }: { readonly tags: readonly ContractTag[] }): React.JSX.Element {
+export function Tags({
+  reserve = false,
+  tags,
+}: {
+  /**
+   * Hold the space for a chip the line does not have, so the ones it does have
+   * land where they do on every other line.
+   *
+   * **This is what actually aligns them, and nothing cheaper does.** Flushing the
+   * group right only lines up rows carrying the *same* chips: a row with honors
+   * alone and a row with both put their honors chip in different places, which is
+   * what a screenshot of eight boards showed. A reserved slot is the only thing
+   * that holds an x whether or not the row uses it.
+   *
+   * `invisible` rather than removed, so the width comes from the chip itself and
+   * nothing here has to know how wide one is. `aria-hidden`, because a chip that is
+   * not there should not be read out as though it were.
+   */
+  readonly reserve?: boolean;
+  readonly tags: readonly ContractTag[];
+}): React.JSX.Element {
   return (
     <>
-      {tags.map((tag) => (
-        <Chip key={tag.label} tone={tag.tone}>
-          {tag.label}
-        </Chip>
-      ))}
+      {tags.map((tag) =>
+        tag.shown ? (
+          <Chip key={tag.label} tone={tag.tone}>
+            {tag.label}
+          </Chip>
+        ) : reserve ? (
+          <span key={tag.label} aria-hidden className="invisible">
+            <Chip tone={tag.tone}>{tag.label}</Chip>
+          </span>
+        ) : null,
+      )}
     </>
   );
 }
@@ -184,18 +210,22 @@ function Row({ contract, declarer, mark, mine, note, points, tags, who }: Line):
               </>
             )}
           </span>
-          {tags.length === 0 && note === null ? null : (
+          {contract === null && note === null ? null : (
             <span className="ml-auto flex shrink-0 items-baseline gap-1.5">
-              {contract === null ? null : <Tags tags={tags} />}
+              {contract === null ? null : <Tags reserve tags={tags} />}
               {/* Provenance rather than a property of the contract, but it is the same
                   kind of mark and belongs in the same group — faint prose beside three
                   chips reads as something half-finished. */}
-              {note === null ? null : <Tags tags={[{ label: note, tone: "plain" }]} />}
+              {note === null ? null : (
+                <Tags tags={[{ label: note, shown: true, tone: "plain" }]} />
+              )}
             </span>
           )}
         </span>
       </td>
-      <td className={`py-1.5 text-right tabular-nums ${mine ? "font-semibold" : ""}`}>
+      <td
+        className={`w-14 py-1.5 text-right tabular-nums ${mine ? "font-semibold" : ""}`}
+      >
         {signed(points)}
       </td>
     </tr>

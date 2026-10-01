@@ -39,6 +39,16 @@ function result(
   };
 }
 
+/**
+ * Chips the row actually carries, ignoring the slots held open for ones it does
+ * not — see `Tags`. A reserved slot is marked `aria-hidden`, which is both how a
+ * screen reader skips it and how a test can tell the two apart; jsdom computes no
+ * CSS, so `invisible` means nothing to a query.
+ */
+function shown(label: string | RegExp): HTMLElement[] {
+  return screen.queryAllByText(label).filter((one) => one.closest("[aria-hidden]") === null);
+}
+
 function traveller(one: FieldResult): void {
   render(createElement(Traveller, { at: 0, me: ME, result: one }));
 }
@@ -98,7 +108,7 @@ describe("a board's traveller", () => {
     // recorded 240 is that plus a hundred and 40 is that less one.
     traveller(result(620, [entry(240, "Computer"), entry(40, "Computer")]));
 
-    expect(screen.getAllByText("h100")).toHaveLength(2);
+    expect(shown("h100")).toHaveLength(2);
     expect(screen.queryByText(/h[+−]/)).toBeNull();
   });
 
@@ -188,6 +198,25 @@ describe("a board's traveller", () => {
     // Both of them in that group, and the contract outside it.
     expect(group?.textContent).toBe("vulh100");
     expect(group?.textContent).not.toContain("us");
+  });
+
+  /**
+   * **A slot is held open for a chip the row does not have**, which is the only
+   * thing that makes the chips line up: flushing the group right lines up rows
+   * carrying the *same* chips, and a row with honors alone put its honors chip
+   * somewhere different from a row with both. Eight boards of that is what a
+   * screenshot showed.
+   */
+  it("holds a slot open for a chip the row has not got", () => {
+    traveller(result(620, [], [true, false]));
+
+    // Vulnerable, no honors: the honors chip is there as a spacer and marked so a
+    // screen reader skips it and a reader never sees it.
+    expect(shown("vul")).toHaveLength(1);
+    expect(shown(/^h\d/)).toHaveLength(0);
+    const placeholder = screen.getByText("h100").closest("[aria-hidden]");
+    expect(placeholder).not.toBeNull();
+    expect(placeholder?.className).toContain("invisible");
   });
 
   /**

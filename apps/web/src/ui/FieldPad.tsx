@@ -159,13 +159,20 @@ function BoardRow({
             </>
           )}
         </span>
-        {mine.tags.length === 0 ? null : (
+        {mine.contract === null ? null : (
           <span className="ml-auto flex shrink-0 items-baseline gap-1.5">
-            <Tags tags={mine.tags} />
+            <Tags reserve tags={mine.tags} />
           </span>
         )}
       </span>
-      <span className="shrink-0 tabular-nums text-white/60">{signed(mine.points)}</span>
+      {/* **Fixed width, and without it the chips could not align whatever else was
+          done to them.** They are flushed against this column, and it was sized to
+          its own content — so `−50` sat further right than `+210` and dragged the
+          chips before it along, which is most of why a list of eight boards looked
+          ragged. Right-aligned figures only line up if the box they are in does. */}
+      <span className="w-14 shrink-0 text-right tabular-nums text-white/60">
+        {signed(mine.points)}
+      </span>
       <span className="w-12 shrink-0 text-right font-semibold tabular-nums">
         {placed === null ? "—" : `${Math.round(placed)}%`}
       </span>

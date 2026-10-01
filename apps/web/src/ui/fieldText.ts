@@ -59,6 +59,15 @@ import type { Contract, FieldResult, Pair, PlayerId } from "@hb/engine";
  */
 export interface ContractTag {
   readonly label: string;
+  /**
+   * Whether this one applies to the line, as against merely being possible on one.
+   *
+   * Both are returned either way, because a row aligns its chips by **reserving**
+   * the space for every chip it could have had — see `Tags`. A list that only
+   * returned the ones that applied could not do that without knowing the whole
+   * vocabulary at the call site.
+   */
+  readonly shown: boolean;
   /** `vulnerable` takes the red every scorecard draws it in; everything else is plain. */
   readonly tone: "plain" | "vulnerable";
 }
@@ -69,14 +78,13 @@ export function contractTags(options: {
   /** The *declaring* side was vulnerable, which is what the figures turn on. */
   readonly vulnerable: boolean;
 }): readonly ContractTag[] {
-  const tags: ContractTag[] = [];
-  if (options.vulnerable) {
-    tags.push({ label: "vul", tone: "vulnerable" });
-  }
-  if (options.honors !== null && options.honors !== 0) {
-    tags.push({ label: `h${Math.abs(options.honors)}`, tone: "plain" });
-  }
-  return tags;
+  const honors = options.honors === null ? 0 : Math.abs(options.honors);
+  return [
+    { label: "vul", shown: options.vulnerable, tone: "vulnerable" },
+    // The label when it does not apply is the width it would have taken: every
+    // honors award is three digits, so the slot is the same either way.
+    { label: `h${honors === 0 ? 100 : honors}`, shown: honors !== 0, tone: "plain" },
+  ];
 }
 
 /**
