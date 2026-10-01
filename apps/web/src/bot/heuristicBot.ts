@@ -6,7 +6,7 @@ import { pointsAsEquity } from "./equity.js";
 import type { EquityTable } from "./equity.js";
 import { boardFacing, offeredSoFar, offersFacingOpponent } from "./boardRecall.js";
 import type { BoardOutcome } from "./boardRecall.js";
-import { centredOn, searchTricks, spreadOdds } from "./searchTricks.js";
+import { searchTricks, spreadOdds } from "./searchTricks.js";
 import type { TrickSpread } from "./searchTricks.js";
 import { chooseCard } from "./cardPlay.js";
 import { chooseTake } from "./drawDecision.js";
@@ -206,33 +206,31 @@ export interface BotTuning {
    * alone, which is the only way to tell those apart.
    */
   /**
+   * How much a level of excess discounts a defensive side-suit winner — see
+   * `defendingTricks`. Zero, and absent, is the flat count every release before v3 used.
+   */
+  readonly defendingRuff?: number;
+  /**
+   * Points a double must beat the alternative by before it is taken — see
+   * `DOUBLE_MARGIN`, which is what absent means.
+   */
+  readonly doubleMargin?: number;
+  /**
+   * How far to trust their bid level over this hand's own read, when pricing a contract
+   * *they* would declare — see `THEIR_BID_WEIGHT`, which is what absent means.
+   *
+   * A field so the weight can be *played* at two settings rather than argued about:
+   * accuracy against par puts the optimum near 0.25, the original fit put it at 0.75 on
+   * a rubber margin, and those disagree by more than either's error bar.
+   */
+  readonly theirBidWeight?: number;
+  /**
    * The equity table to price a standing with — for playing a re-fit against the table
    * it would replace, which is the only thing that has ever settled one of these.
    */
   readonly equityTable?: EquityTable;
   readonly searchMode?: "mean" | "odds";
   readonly searchSamples?: number;
-  /**
-   * Whether to search the position where the **opponent** declares, as well as the
-   * one where this seat does.
-   *
-   * The search has always solved with the opponent on lead, which answers what this
-   * seat takes *declaring*; the branch that prices a pass, a competitive bid or a
-   * double against a contract *they* would declare has gone on counting. That split is
-   * where the recorded games say the bot loses: over 204 logged deals it gains 66 a
-   * deal on contracts it declares and loses 135 a deal on the ones it lets the other
-   * seat buy, and the counted estimate carries about 1.5 tricks of average error
-   * against the search's 1.04.
-   *
-   * Not free and not double either: the defending estimate is wanted in the strain
-   * somebody else chose, which is one strain rather than the two or three in
-   * contention for this seat.
-   *
-   * Off by default, on the same terms as `searchBudgetMs`: turning it on should be a
-   * decision with a measurement behind it, and `test/botRelease.test.ts` keeps passing
-   * until a release says otherwise.
-   */
-  readonly searchDefending?: boolean;
   /** How far to trust their bid when pricing this seat's own contract. */
   readonly theirBidOnOwnWeight?: number;
 }
@@ -497,22 +495,23 @@ function estimateFor(contract: Contract, context: CallContext): number {
   // pushed both bots to the seven level, so their claim is treated as evidence
   // and not as fact.
   //
-  // **The first of those two is searched when there is a search for it.** A solve
-  // with this seat on lead answers what they take declaring directly, which is the
-  // question — where `TRICKS - defendingTricks(...)` counts this hand's defensive
-  // tricks and subtracts, carrying the counted model's ~1.5 tricks of error into the
-  // half of the bidder's job the recorded games say it loses in. Only the centre
-  // moves here; their bid is still weighed against it afterwards, because a better
-  // estimate of one term is not a reason to discard another — the lesson the search
-  // already cost once on this seat's own branch.
-  const theirSearched = context.theirSpreads?.get(contract.strain);
-  const countedTheirs =
-    theirSearched !== undefined && theirSearched.samples >= MIN_SEARCH_SAMPLES
-      ? theirSearched.mean
-      : TRICKS - defendingTricks(view.hand, contract.strain);
-  const fromMyHand = blendLastTime(countedTheirs, lastTime, context.lastTimeWeight);
+  // **Counted, and a searched version of this was built, measured twice and removed.**
+  // A solve with this seat on lead answers what they take declaring directly, which
+  // looked like the better question to ask — and over 1,115 real auction positions it
+  // is *less* accurate than counting: 1.14 tricks of error against par where counting
+  // gives 1.10, a paired difference of −0.05 ± 0.03. The declaring search's advantage
+  // does not transfer, because solving depends on guessing the hand you cannot see and
+  // this seat's read of a hand the opponent has *bid* is the weak one. That is why the
+  // term below carries a weight of 0.75 and this one 0.25. See `bench/defendpar.ts`.
+  const fromMyHand = blendLastTime(
+    // The level is what says how short they must be — see `defendingTricks`.
+    TRICKS - defendingTricks(view.hand, contract.strain, contract.level, context.defendingRuff),
+    lastTime,
+    context.lastTimeWeight,
+  );
   const fromTheirBid = contract.level + BOOK;
-  return (1 - THEIR_BID_WEIGHT) * fromMyHand + THEIR_BID_WEIGHT * fromTheirBid;
+  const weight = context.theirBidWeight ?? THEIR_BID_WEIGHT;
+  return (1 - weight) * fromMyHand + weight * fromTheirBid;
 }
 
 function blendLastTime(counted: number, lastTime: number | null, weight: number): number {
@@ -587,29 +586,18 @@ function oddsFor(context: CallContext, contract: Contract): readonly number[] | 
   if (context.searchMode === "mean") {
     return undefined;
   }
-  // **Each side's own solve, never one mirrored into the other.** The search solves
-  // with the opponent on lead, so `spreads` describes this seat declaring; a contract
-  // they declare is a different position, not that distribution reversed, because
-  // double-dummy tricks are not independent of who leads. `theirSpreads` is the
-  // second solve and exists precisely so that branch has a measured shape instead of
-  // the fitted bell curve around a counted blend.
-  const mine = contract.declarer === context.view.me;
-  const spread = mine
-    ? context.spreads?.get(contract.strain)
-    : context.theirSpreads?.get(contract.strain);
+  // **This seat's own contracts only**, because the search solves with the opponent on
+  // lead and so describes this seat declaring — a contract they declare is a different
+  // position, not that distribution reversed, since double-dummy tricks are not
+  // independent of who leads. Solving that position properly was tried and removed:
+  // it is less accurate than counting there. A contract they declare therefore keeps
+  // the fitted spread around the blend that reads their bid.
+  const spread =
+    contract.declarer === context.view.me ? context.spreads?.get(contract.strain) : undefined;
   if (spread === undefined || spread.samples < MIN_SEARCH_SAMPLES) {
     return undefined;
   }
-  // **Their contract keeps the search's shape and `estimateFor`'s centre.**
-  // `expectedValue` consults the estimate only when no odds are given, so handing it
-  // the raw distribution here threw away the blend with their bid — `THEIR_BID_WEIGHT`
-  // is 0.75 on this branch — and measured 30% of rubbers. See `centredOn`.
-  //
-  // This seat's own contracts are deliberately left alone. The same inconsistency
-  // exists there at a weight of 0.25, and that is the arrangement measured at 65% of
-  // rubbers and shipped; changing both at once would make a re-measurement unable to
-  // say which half moved.
-  return mine ? spreadOdds(spread) : centredOn(spreadOdds(spread), estimateFor(contract, context));
+  return spreadOdds(spread);
 }
 
 /**
@@ -634,19 +622,6 @@ function strainsWorthPricing(view: PlayerView): Strain[] {
   return [...worth];
 }
 
-/**
- * The strains worth a *second* solve, with this seat on lead.
- *
- * **Only the contract on the table, and only when they would be declaring it.** Every
- * other candidate this bidder prices is one it would declare itself, which the first
- * solve already answers; a pass, a competitive raise over them, and a double are all
- * priced in the strain somebody else chose. So this is one strain or none, which is
- * what keeps the defending search a third of the cost rather than a doubling of it.
- */
-function strainsWorthDefending(view: PlayerView): Strain[] {
-  const standing = standingContract(view);
-  return standing === null || standing.declarer === view.me ? [] : [standing.strain];
-}
 
 interface Candidate {
   readonly call: Call;
@@ -676,11 +651,15 @@ interface CallContext extends LastTimeContext {
   readonly lastTimeWeight: number;
   readonly gameEquity: number;
   readonly objective: Objective;
+  /** How hard a high bid discounts this hand's side-suit winners — see `BotTuning`. */
+  readonly defendingRuff: number | undefined;
+  /** What a double must win by before it is taken — see `DOUBLE_MARGIN`. */
+  readonly doubleMargin: number | undefined;
+  /** How far their bid outweighs this hand, defending — see `BotTuning.theirBidWeight`. */
+  readonly theirBidWeight: number | undefined;
   /** Which equity table prices a standing — see `BotTuning.equityTable`. */
   readonly equityTable: EquityTable | undefined;
   readonly searchMode: "mean" | "odds";
-  /** What they take declaring, by strain — empty unless `searchDefending` is on. */
-  readonly theirSpreads: ReadonlyMap<Strain, TrickSpread> | null;
   /** Measured trick distributions per strain, or null when the search is off. */
   readonly spreads: ReadonlyMap<Strain, TrickSpread> | null;
   readonly standing: Standing;
@@ -770,17 +749,47 @@ function bidCandidates(context: CallContext, disguiseCredit: number): Candidate[
  * double is simply the same contract worth more in both directions. It stops
  * being a special case at the moment the bot can estimate what it beats them by.
  */
+/**
+ * Points a double must beat the alternative by before it is taken.
+ *
+ * **Because the bot doubles exactly when its estimate errs optimistically.** A double is
+ * chosen by comparing two expected values, and that comparison is made with an estimate
+ * carrying about a trick of error — so on the hands where the two are genuinely close,
+ * which is most of them, the coin that decides is the *error*. The doubles that get
+ * taken are therefore a biased sample: the ones where the bot happened to be wrong in
+ * the direction of beating the contract. Winner's curse, and no amount of improving the
+ * estimate's centre removes it — three measurements in `CLAUDE.md` say so.
+ *
+ * What removes it is refusing the marginal cases. A double taken only when it wins by
+ * more than the estimate's own error is one the error could not have manufactured.
+ *
+ * **The evidence it is aimed at, from 565 boards a person played**: the bot's doubles
+ * net **−121 a board** where theirs net **+327**, and its judgement is sound at the one
+ * and two levels (74% set) and a coin flip at six and seven (54%) — exactly where a
+ * close call is ruinous rather than cheap.
+ *
+ * In points, converted through `creditIn` like every other constant that has to exist
+ * in more than one currency — a probability objective cannot take a hundred raw.
+ *
+ * **Zero by default**, so this changes nothing until a measurement says what it is
+ * worth. The same terms `searchBudgetMs` and `defendingRuff` ship on.
+ */
+const DOUBLE_MARGIN = 0;
+
 function doubleCandidate(context: CallContext): Candidate[] {
-  const { equityTable, gameEquity, objective, standing, view } = context;
+  const { doubleMargin, equityTable, gameEquity, objective, standing, view } = context;
   const contract = standingContract(view);
   if (contract === null || !callsFor(view).some((call) => call.type === "double")) {
     return [];
   }
   const doubled: Contract = { ...contract, doubling: "doubled" };
+  const margin = creditIn(objective, standing, view.me, doubleMargin ?? DOUBLE_MARGIN);
   return [
     {
       call: { type: "double" },
-      value: expectedValue({
+      value:
+        -margin +
+        expectedValue({
         contract: doubled,
         estimate: estimateFor(doubled, context),
         exposedToDouble: false,
@@ -788,10 +797,10 @@ function doubleCandidate(context: CallContext): Candidate[] {
         equityTable,
         objective,
         odds: oddsFor(context, doubled),
-        hand: view.hand,
-        me: view.me,
-        standing,
-      }),
+          hand: view.hand,
+          me: view.me,
+          standing,
+        }),
     },
   ];
 }
@@ -860,9 +869,11 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
   const searchBudgetMs = tuning.searchBudgetMs ?? 0;
   const searchSamples = tuning.searchSamples ?? 0;
   const searchMode = tuning.searchMode ?? "odds";
-  const searchDefending = tuning.searchDefending ?? false;
   // Undefined means the shipped table, which `equityOf` defaults to.
   const equityTable = tuning.equityTable;
+  const defendingRuff = tuning.defendingRuff;
+  const doubleMargin = tuning.doubleMargin;
+  const theirBidWeight = tuning.theirBidWeight;
   const theirBidOnOwnWeight = tuning.theirBidOnOwnWeight ?? THEIR_BID_ON_OWN_WEIGHT;
 
   return {
@@ -888,7 +899,6 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
         searchBudgetMs > 0 && searchSamples > 0
           ? searchTricks({
               budgetMs: searchBudgetMs,
-              defending: searchDefending ? strainsWorthDefending(view) : [],
               maxSamples: searchSamples,
               remembered,
               rng,
@@ -898,7 +908,9 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
             })
           : null;
       return bestCall({
+        defendingRuff,
         disguiseCredit,
+        doubleMargin,
         equityTable,
         gameEquity,
         lastTimeWeight,
@@ -907,8 +919,8 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
         searchMode,
         spreads: searched?.spreads ?? null,
         standing,
-        theirSpreads: searched?.theirSpreads ?? null,
         theirBidOnOwnWeight,
+        theirBidWeight,
         view,
       });
     },

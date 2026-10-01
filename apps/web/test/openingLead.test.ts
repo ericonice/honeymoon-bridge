@@ -21,7 +21,7 @@ function buttonSaying(text: string): HTMLButtonElement | undefined {
 }
 
 function viewOf(seat: PlayerId) {
-  return snapshotFor({ kind: "rubber", table: board.state }, seat).view;
+  return snapshotFor(board.match, seat).view;
 }
 
 /**
@@ -47,8 +47,8 @@ function onTheTable(): number {
 function toAContract(seat: PlayerId): void {
   renderBoard({ seat, seed: 7 });
   settle(4000);
-  while (board.state.deal.phase === "draw") {
-    board.apply(board.state.deal.toAct, { type: "draw-decide", take: "first" });
+  while (board.deal.phase === "draw") {
+    board.apply(board.deal.toAct, { type: "draw-decide", take: "first" });
     settle(4000);
   }
   // The seat we are watching opens; the other passes. One pass closes the auction, so
@@ -74,7 +74,7 @@ test("their opening lead arrives while the closed auction is still being read", 
   // The contract is held for a tap, which is what gives the other seat its opening.
   const start = buttonSaying("Start play");
   expect(start, "the closed auction was not held").toBeDefined();
-  expect(board.state.deal.phase).toBe("play");
+  expect(board.deal.phase).toBe("play");
 
   // They lead, over the network, without waiting — which they are under no obligation
   // to do. Nothing on this screen has moved: the auction is still up.

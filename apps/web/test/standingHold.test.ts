@@ -59,13 +59,13 @@ test("the strip holds the score until the pad is on screen", () => {
   // Every action but the last card of the deal.
   let lastAction: { actor: PlayerId; action: unknown } | null = null;
   for (let step = 0; step < 4000; step += 1) {
-    if (board.state.deal.phase === "complete") {
+    if (board.deal.phase === "complete") {
       break;
     }
-    const actor = board.state.deal.toAct;
-    const view = viewFor(board.state.deal, actor);
+    const actor = board.deal.toAct;
+    const view = viewFor(board.deal, actor);
     const legal = legalActionsForView(view).filter((one) => one.type !== "claim");
-    const bidding = board.state.deal.phase === "auction";
+    const bidding = board.deal.phase === "auction";
     const action =
       bidding && view.auction.length === 0
         ? (legal.find((one) => one.type === "call" && one.call.type === "bid") ?? legal[0]!)
@@ -75,9 +75,9 @@ test("the strip holds the score until the pad is on screen", () => {
     // Hold back the very last card of the deal — the *second* of the thirteenth
     // trick — so the score as it stood a moment earlier can be read off the strip.
     if (
-      board.state.deal.phase === "play" &&
-      board.state.deal.completedTricks.length === 12 &&
-      board.state.deal.currentTrick.length === 1
+      board.deal.phase === "play" &&
+      board.deal.completedTricks.length === 12 &&
+      board.deal.currentTrick.length === 1
     ) {
       lastAction = { actor, action };
       break;
@@ -97,7 +97,7 @@ test("the strip holds the score until the pad is on screen", () => {
 
   // The deal is scored in the engine now — but the reveal has not landed, so the
   // strip must still be showing what it showed a moment ago.
-  expect(board.state.deal.phase).toBe("complete");
+  expect(board.deal.phase).toBe("complete");
   expect(total()).toBe(before);
 
   // The reveal lands — and the score still waits, because the pad is a tap away and

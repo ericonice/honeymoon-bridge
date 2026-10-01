@@ -2,6 +2,7 @@ import {
   applyAction,
   createRng,
   duplicateScoreFor,
+  fieldVulnerableFor,
   matchpointsOf,
   newRubber,
   startDeal,
@@ -91,20 +92,6 @@ function generatorTuning(): ReturnType<typeof botTuningFor> {
   // generated on two machines would carry two different benchmarks. Removing the
   // deadline leaves the sample count, which is the same search run to completion.
   return { ...searched, searchBudgetMs: Number.MAX_SAFE_INTEGER };
-}
-
-/**
- * Vulnerability as the board prescribes it, by position rather than by player.
- *
- * A field board is played once, so there is no replay to resolve against — the
- * first-draw stream is seat 0 and the cycle is read against it. Stored with the
- * board in the corpus rather than derived at the point of play, so nothing can drift
- * it; keyed off the **seed** rather than off a position in a batch, so regenerating
- * a board gives it the same terms it had before.
- */
-function vulnerableFor(seed: number): Pair<boolean> {
-  const phase = seed % 4;
-  return [phase === 1 || phase === 3, phase === 2 || phase === 3];
 }
 
 interface Run {
@@ -218,7 +205,7 @@ function run(boards: number, runs: number): void {
 
   for (let index = 0; index < boards; index += 1) {
     const seed = (base + index * 7919) >>> 0;
-    const vulnerable = vulnerableFor(seed);
+    const vulnerable = fieldVulnerableFor(seed, 0);
     const played = Array.from({ length: runs }, (_, at) => playBoard(seed, at, vulnerable));
 
     // Both seats, because a board is two entries and either can move on its own —
@@ -295,15 +282,20 @@ function generate(seeds: number, runs: number): void {
 
   for (let index = 0; index < seeds; index += 1) {
     const seed = (base + index * 7919) >>> 0;
-    const vulnerable = vulnerableFor(seed);
+    // **Per board, not per stock.** `playBoard` deals the stock with seat 0 drawing
+    // first, so its own scoring takes the starter-0 reading; a board dealt from the
+    // other end hands its two seats the other way round, and writing one pair
+    // against both is what once gave a person terms nobody else on that board had.
+    const vulnerable = fieldVulnerableFor(seed, 0);
     for (const starter of [0, 1] as const) {
+      const terms = fieldVulnerableFor(seed, starter);
       // **Distinct per board, in the order they are made.** Stamping a whole batch
       // with one timestamp leaves the selector's "oldest first" with nothing to sort
       // on, so play scatters across the pool instead of working through it — and a
       // pool played thin is a pool whose boards never gather a field.
       boards.push(
-        `('f${seed}-${starter}', ${seed}, ${starter}, ${vulnerable[0] ? 1 : 0}, ` +
-          `${vulnerable[1] ? 1 : 0}, ${LATEST_RELEASE.version}, 'championship', ` +
+        `('f${seed}-${starter}', ${seed}, ${starter}, ${terms[0] ? 1 : 0}, ` +
+          `${terms[1] ? 1 : 0}, ${LATEST_RELEASE.version}, 'championship', ` +
           `${now + index * 2 + starter})`,
       );
     }
@@ -528,6 +520,24 @@ function compare(boards: number): void {
     console.log("  no corpus on disk — run `generate` first\n");
     return;
   }
+  // **`ruff` prices the defensive-ace discount, which the corpus predates.** Every
+  // generated run was made before `defendingRuff` existed, so the field *is* the
+  // uncorrected bidder — which makes A the thing that built it and B the correction,
+  // both ranked against the same results on the same stocks.
+  const ruff = process.argv.includes("ruff");
+  // **`weight=W` prices the defending blend, and pairs with `ruff`.** The two interact:
+  // the discount corrects the own-hand term, and the weight decides how much of that
+  // term reaches the estimate at all. Measured alone at the shipped 0.75 the discount
+  // was a null, because it carried a quarter weight — so the run worth making moves
+  // both, which is what this flag is for.
+  const weightArg = process.argv.find((one) => one.startsWith("weight="));
+  const weight = weightArg === undefined ? null : Number(weightArg.slice("weight=".length));
+  // **`dmargin=N` prices refusing the marginal doubles.** A double is chosen by
+  // comparing two expected values computed from an estimate with a trick of error, so
+  // the close calls are decided by that error — and the doubles taken are the ones it
+  // erred optimistically on. This is the knob that declines them; see `DOUBLE_MARGIN`.
+  const marginArg = process.argv.find((one) => one.startsWith("dmargin="));
+  const dmargin = marginArg === undefined ? null : Number(marginArg.slice("dmargin=".length));
   const other = objectiveArg();
   const progress = createProgress(wanted.length, "boards", 10);
   const differences: number[] = [];
@@ -536,16 +546,41 @@ function compare(boards: number): void {
 
   console.log(
     `${wanted.length} boards, ${LATEST_RELEASE.name} at Championship\n` +
-      `  A  the field bidder (duplicate)\n  B  the same bidder pricing in ${other}\n`,
+      (dmargin !== null
+        ? `  A  the bidder that made the corpus\n` +
+          `  B  the same bidder, doubling only when it wins by ${dmargin}\n`
+        : weight !== null
+        ? `  A  the bidder that made the corpus — flat ace, their bid at 0.75\n` +
+          `  B  the discount, with their bid at ${weight}\n`
+        : ruff
+        ? `  A  the bidder that made the corpus, counting a defensive ace flat\n` +
+          `  B  the same bidder discounting it by how high they bid\n`
+        : `  A  the field bidder (duplicate)\n  B  the same bidder pricing in ${other}\n`),
   );
 
   wanted.forEach(([id, board], at) => {
-    const mine = placeOf(board, generatorTuning());
-    const theirs = placeOf(board, { ...generatorTuning(), objective: other });
+    // A is the bidder that made the corpus: flat own-hand term, shipped weight.
+    const mine = placeOf(
+      board,
+      dmargin !== null
+        ? generatorTuning()
+        : ruff || weight !== null
+          ? { ...generatorTuning(), defendingRuff: 0 }
+          : generatorTuning(),
+    );
+    const theirs =
+      dmargin !== null
+        ? { ...generatorTuning(), doubleMargin: dmargin }
+        : weight !== null
+        ? { ...generatorTuning(), theirBidWeight: weight }
+        : ruff
+          ? generatorTuning()
+          : { ...generatorTuning(), objective: other };
+    const theirsPlace = placeOf(board, theirs);
     mineTotal += mine;
-    theirsTotal += theirs;
-    differences.push(mine - theirs);
-    progress(at + 1, `${id} ${mine.toFixed(0)}% / ${theirs.toFixed(0)}%`);
+    theirsTotal += theirsPlace;
+    differences.push(mine - theirsPlace);
+    progress(at + 1, `${id} ${mine.toFixed(0)}% / ${theirsPlace.toFixed(0)}%`);
   });
 
   const spread = standardError(differences);

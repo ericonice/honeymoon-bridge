@@ -46,14 +46,14 @@ function earlierDeal(): DealRecord {
  */
 function driveToComplete(): void {
   for (let step = 0; step < 200; step += 1) {
-    const state = board.state;
-    if (state.deal.phase === "complete") {
+    const onTable = board.deal;
+    if (onTable.phase === "complete") {
       return;
     }
-    const actor = state.deal.toAct;
-    const view = snapshotFor({ kind: "rubber", table: state }, actor).view;
+    const actor = onTable.toAct;
+    const view = snapshotFor(board.match, actor).view;
     const legal = legalActionsForView(view).filter((action) => action.type !== "claim");
-    const bidding = state.deal.phase === "auction";
+    const bidding = onTable.phase === "auction";
     const action =
       bidding && view.auction.length === 0
         ? (legal.find((call) => call.type === "call" && call.call.type === "bid") ?? legal[0]!)
@@ -85,7 +85,7 @@ test("a further tap on the reveal swaps the hand's own breakdown for the rubber'
   renderBoard({ played: [earlierDeal()], seat: ME, seed: 5 });
   driveToComplete();
 
-  expect(board.state.deal.contract).not.toBeNull();
+  expect(board.deal.contract).not.toBeNull();
 
   // The last trick's own hold and sweep, then the reveal — showing the hand's
   // own breakdown first, with the scorepad nowhere in it yet.
@@ -151,5 +151,5 @@ test("with the match-score setting off, a single tap skips straight past the rev
   expect(scorepadRows()).toHaveLength(0);
   // One tap was enough to move the table on to a new deal, rather than
   // waiting on a second tap that this setting never offers.
-  expect(board.state.deal.phase).not.toBe("complete");
+  expect(board.deal.phase).not.toBe("complete");
 });

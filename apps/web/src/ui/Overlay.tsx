@@ -17,6 +17,14 @@ export interface OverlayProps {
  * over an opaque ground, so they are screens wearing the word "overlay" in their
  * filenames, and they said "Close" while the record, the achievements, the account
  * page and the scoring page all said "Back" from the identical position.
+ *
+ * **A third case was added here and then removed, and the removal is the lesson.**
+ * When a board opened from the Score panel it stacked a second panel on the first,
+ * so this grew an `onBack` chevron to make the nesting legible. What the nesting
+ * actually said is that the thing being opened was not a panel at all: a traveller,
+ * twenty-six cards and an auction, reached by drilling into a list, is a page. It is
+ * one now, with the platform's own way back — see `BoardReview`. **A surface that
+ * needs a second way out is usually the wrong kind of surface.**
  */
 
 /**
@@ -41,7 +49,7 @@ export function Overlay({ children, onClose, title }: OverlayProps): React.JSX.E
         }}
       >
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-base font-semibold">{title}</h2>
+          <h2 className="truncate text-base font-semibold">{title}</h2>
           <button
             type="button"
             aria-label="Close"

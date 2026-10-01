@@ -12,6 +12,7 @@ import type {
 } from "@hb/engine";
 import { ORDER_LABEL } from "../game/identity.js";
 import { ContractText } from "./CardText.js";
+import { ChevronRightIcon } from "./icons.js";
 import type { Density } from "../game/identity.js";
 
 export interface ContractBarProps {
@@ -37,6 +38,14 @@ export interface ContractBarProps {
    * the same "tap the thing itself" this app already reaches for elsewhere
    * (`PlayPhase`'s own screen, `Overlay`'s backdrop) rather than a separate
    * control competing for room in an already narrow bar.
+   *
+   * **It does carry a chevron, and that is not a contradiction of the line
+   * above.** The argument there is against a separate *control* taking room
+   * from the figures; a chevron takes no decision and is not a second thing to
+   * tap — it is the mark that says the strip is one. Nothing said so before,
+   * which left the bar with the fault this app keeps correcting elsewhere: a
+   * real button that does not look like one. It appears exactly when this is
+   * non-null, so its presence is also the answer to "is this tappable here".
    */
   onShowScore: (() => void) | null;
 }
@@ -724,10 +733,13 @@ export function ContractBar({
     <button
       type="button"
       aria-label="Show the score"
-      className="w-full border-b border-white/10 bg-white/5 px-4 py-1.5 text-left text-sm"
+      className="flex w-full items-center gap-2 border-b border-white/10 bg-white/5 px-4 py-1.5 text-left text-sm"
       onClick={onShowScore}
     >
-      {content}
+      <span className="min-w-0 flex-1">{content}</span>
+      {/* Quiet, and quieter than anything it sits beside: the figures are what the
+          strip is for and this only has to say they open. */}
+      <ChevronRightIcon className="h-4 w-4 shrink-0 text-white/30" />
     </button>
   );
 }

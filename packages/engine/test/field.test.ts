@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { legalActions } from "../src/deal.js";
+import { summarizeMatch } from "../src/match.js";
 import {
   applyFieldAction,
   boardPercentageOf,
@@ -262,5 +263,86 @@ describe("a session's own figure", () => {
     expect(summary.boardsRanked).toBe(2);
     expect(summary.boardsPlayed).toBe(3);
     expect(summary.percentage).toBe(50);
+  });
+});
+
+/**
+ * The verdict, which lives in `match.ts` and is tested here because this is where the
+ * helpers for building a ranked session are.
+ */
+describe("who won a session", () => {
+  /**
+   * **The verdict reads the unrounded placing.** `points` is rounded, because every
+   * screen and every stored row wants a whole number — and `winner` used to read that
+   * rounded figure, so a session placed fractionally above 50% was recorded as *drawn*.
+   *
+   * The field here is deliberately large, because with the seven-result fields the
+   * corpus ships today the case cannot arise at all: a board scores `k/2N`, so the
+   * nearest value above 50% is 57.1% and the rounding window is never entered. It opens
+   * once a board's field fills past about a hundred, which is what a corpus that people
+   * keep playing eventually produces. Beat 51 and lose to 50 and the placing is
+   * **50.495%** — rounds to 50, and is a win.
+   */
+  it("gives a session decided by a fraction of a point to the side that won it", () => {
+    const done = playSession(startField({ boards: BOARDS }));
+    const mine = netFor(summarizeField(done, ME).results[0]!.points, ME);
+    const ranked = withField(done, "b1", ME, [
+      ...Array.from({ length: 51 }, () => entry(mine - 10)),
+      ...Array.from({ length: 50 }, () => entry(mine + 10)),
+    ]);
+
+    const percentage = summarizeField(ranked, ME).percentage!;
+    expect(Math.round(percentage)).toBe(50);
+    expect(percentage).toBeGreaterThan(50);
+
+    const summary = summarizeMatch({ kind: "field", session: ranked }, ME);
+    // Rounded for the record, and the record is what the old verdict was read off.
+    expect(summary.points[ME]).toBe(50);
+    expect(summary.winner).toBe(ME);
+  });
+
+  /**
+   * **A level session that floating point cannot say is level.**
+   *
+   * The percentage is a mean of per-board `(scored / 2n) * 100`, and a genuinely level
+   * session lands on `49.99999999999999` about an eighth of the time — so comparing it
+   * to fifty reads a dead heat as a win or a loss. Two boards, each against a field of
+   * three: beaten 2 of 6 on one and 4 of 6 on the other. Exactly level, and the mean of
+   * the two percentages is not exactly 50.
+   *
+   * Three-result fields are realistic rather than contrived: a board's field shrinks as
+   * human results displace the generated ones.
+   *
+   * The assertion on the float is the point rather than a detail — it pins *why* the
+   * verdict may not be read off it.
+   */
+  it("calls a level session drawn even when its percentage cannot say fifty", () => {
+    const done = playSession(startField({ boards: BOARDS }));
+    const results = summarizeField(done, ME).results;
+    const first = netFor(results[0]!.points, ME);
+    const second = netFor(results[1]!.points, ME);
+    const ranked = withField(
+      withField(done, "b1", ME, [entry(first - 10), entry(first + 10), entry(first + 10)]),
+      "b2",
+      ME,
+      [entry(second - 10), entry(second - 10), entry(second + 10)],
+    );
+
+    const summary = summarizeField(ranked, ME);
+    expect(summary.boardsRanked).toBe(2);
+    expect(summary.percentage).not.toBe(50);
+    expect(summary.percentage).toBeCloseTo(50, 6);
+
+    expect(summarizeMatch({ kind: "field", session: ranked }, ME).winner).toBeNull();
+  });
+
+  /** An exactly even split is still a draw, which is a real result in this format. */
+  it("calls an exactly even session drawn", () => {
+    const done = playSession(startField({ boards: BOARDS }));
+    const mine = netFor(summarizeField(done, ME).results[0]!.points, ME);
+    const ranked = withField(done, "b1", ME, [entry(mine - 10), entry(mine + 10)]);
+
+    expect(summarizeField(ranked, ME).percentage).toBe(50);
+    expect(summarizeMatch({ kind: "field", session: ranked }, ME).winner).toBeNull();
   });
 });

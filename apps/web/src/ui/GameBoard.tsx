@@ -1,5 +1,14 @@
 import { cardId, finishedHandsFor, legalActionsForView } from "@hb/engine";
-import type { Call, Card, DealPhase, DrawReveal, Pair, PlayerId, PlayerView } from "@hb/engine";
+import type {
+  Call,
+  Card,
+  DealPhase,
+  DrawReveal,
+  FieldResult,
+  Pair,
+  PlayerId,
+  PlayerView,
+} from "@hb/engine";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { drawPlayout } from "../game/timing.js";
 import type { Density } from "../game/identity.js";
@@ -8,6 +17,9 @@ import { useGameFeedback } from "../game/useGameFeedback.js";
 import { useWakeLock } from "../game/wakeLock.js";
 import { AchievementToast } from "./AchievementToast.js";
 import { AuctionPhase } from "./AuctionPhase.js";
+import type { BoardReviewing } from "../game/boardReview.js";
+import { reviewKeyOf, useBoardReviews } from "../game/boardReview.js";
+import { BoardReview } from "./BoardReview.js";
 import { BiddingOverlay } from "./BiddingOverlay.js";
 import { ClaimConfirm } from "./ClaimConfirm.js";
 import { ClaimReveal } from "./ClaimReveal.js";
@@ -94,6 +106,7 @@ function CurrentPhase({
   peeking,
   phase,
   ratings,
+  reviews,
   revealedHands,
   session,
   trickCount,
@@ -114,6 +127,8 @@ function CurrentPhase({
   readonly phase: DealPhase;
   /** See `PlayPhase`'s own prop of the same name. */
   readonly ratings: { readonly mine: number | null; readonly opponent: number | null };
+  /** See `PlayPhase`'s own prop of the same name. */
+  readonly reviews: BoardReviewing;
   /** See `PlayPhase`'s own prop of the same name. */
   readonly revealedHands: Pair<readonly Card[]> | null;
   readonly session: GameSession;
@@ -190,6 +205,7 @@ function CurrentPhase({
           opponentName={session.opponentName}
           opponentWaitingToContinue={session.opponentWaitingToContinue}
           release={onStartPlay}
+          reviews={reviews}
           revealedHands={revealedHands}
           standing={standing}
           trickCount={trickCount}
@@ -215,6 +231,7 @@ function CurrentPhase({
           opponentRating={ratings.opponent}
           opponentWaitingToContinue={session.opponentWaitingToContinue}
           repeated={session.repeated}
+          reviews={reviews}
           score={score}
           standing={standing}
           view={view}
@@ -514,6 +531,36 @@ export function GameBoard({
   const { phase, release } = useShownPhase(session, peeking);
   const claimResult = useClaimResult(view);
   const handsSettled = useHandsSettled(view);
+  // Every board of this sitting that can be looked at again — see `useBoardReviews`
+  // for why the client keeps this rather than the wire carrying it. Empty in every
+  // format but Doop, where the question does not arise.
+  //
+  // **Drawn here rather than by the pad that offers it**, because a pad appears in
+  // three places — inside the Score overlay, inside `DealComplete`, and inside the
+  // reveal's own tap-to-continue area — and a panel owned by the pad is a modal
+  // nested in whichever of those it happened to be drawn in. Here it is a sibling of
+  // every other overlay, which is what all of them already are.
+  const { close: closeReview, reviewing: reviews, showing: reviewingBoard } = useBoardReviews(session);
+  /**
+   * The board whose panel is open, **resolved once rather than at each of the two
+   * places that ask**.
+   *
+   * They asked separately and could disagree, which is the whole of a fault reported
+   * from real play: one decided to hide the Score panel and the other decided there
+   * was nothing to draw, so a tap on certain rows left the screen with neither — and
+   * because nothing was on screen there was nothing to close, so the open board
+   * stayed set and every later tap on the score strip did nothing at all. A dead tap
+   * made the score unreachable for the rest of the sitting.
+   *
+   * One value now, and it is the *result* rather than the index: the panel needs a
+   * board to describe, and whether there is one is exactly the question both sides
+   * were answering differently.
+   */
+  const reviewedSummary = session.standing.kind === "field" ? session.standing.summary : null;
+  const reviewedBoard =
+    reviewedSummary === null || reviewingBoard === null
+      ? null
+      : (reviewedSummary.results[reviewingBoard] ?? null);
   // `PlayPhase` unmounts the instant the shown phase leaves "play" — into
   // `DealComplete` on a match or half finishing, or straight into the next
   // deal's draw or auction — and an unmount fires none of its own effects, so
@@ -696,6 +743,7 @@ export function GameBoard({
           peeking={peeking}
           phase={phase}
           ratings={ratings}
+          reviews={reviews}
           revealedHands={revealedHands}
           trickCount={trickCount}
           session={session}
@@ -770,10 +818,16 @@ export function GameBoard({
         </footer>
       )}
 
+      {/* **Left mounted under the board's own page**, which is opaque and covers it:
+          Back is then instant and the list keeps its scroll. It used to be suppressed
+          while a board was open, and that was one half of a dead screen — the other
+          half being the panel declining to draw, so certain rows left neither on
+          screen. Two conditions that had to agree; now there are none. */}
       {showingScore ? (
         <ScoreOverlay
           format={session.format}
           opponentName={session.opponentName}
+          reviews={reviews}
           standing={session.standing}
           view={view}
           vulnerable={session.vulnerable}
@@ -782,6 +836,17 @@ export function GameBoard({
           }}
         />
       ) : null}
+
+      {reviewedBoard === null || reviewingBoard === null ? null : (
+        <ReviewedBoard
+          at={reviewingBoard}
+          me={view.me}
+          opponentName={session.opponentName}
+          result={reviewedBoard}
+          reviews={reviews}
+          onBack={closeReview}
+        />
+      )}
 
       {showingBidding ? (
         <BiddingOverlay
@@ -846,5 +911,41 @@ export function GameBoard({
         />
       ) : null}
     </>
+  );
+}
+
+/** The review panel for one board, or nothing when that board has none kept. */
+/**
+ * The review panel for one board.
+ *
+ * **Never null**, which is the point: the caller has already established there is a
+ * board, and a board always has a field. What this device kept of the deal may be
+ * missing, and `BoardReview` says so rather than declining to open.
+ */
+function ReviewedBoard({
+  at,
+  me,
+  onBack,
+  opponentName,
+  result,
+  reviews,
+}: {
+  readonly at: number;
+  readonly me: PlayerId;
+  /** The only way out, because there is only one way in — see `BoardReview`. */
+  onBack(): void;
+  readonly opponentName: string;
+  readonly result: FieldResult;
+  readonly reviews: BoardReviewing;
+}): React.JSX.Element {
+  return (
+    <BoardReview
+      at={at}
+      me={me}
+      opponentName={opponentName}
+      result={result}
+      review={reviews.kept.get(reviewKeyOf(result.board, me)) ?? null}
+      onBack={onBack}
+    />
   );
 }

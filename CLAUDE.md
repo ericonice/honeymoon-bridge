@@ -2149,6 +2149,537 @@ board's traveller" asserts that board 1 is `aria-expanded="false"` as well as th
 without the negative it passes against a pad that opens every row, which is a different screen with the
 same assertion. Checked by reverting both props.
 
+**A traveller says why a figure is the size it is, and it took tags rather than a sentence.** A Doop
+board's rows are the same deal at four figures — 420, 620, 720, 750 — and nothing on them accounted for
+the differences. Vulnerability and honors are what the contract cannot say, so `contractTags` puts both
+beside it in the slot `defending` already used: `vul` and `honors +100`, faint, in the same white.
+
+**The tag qualifies the *contract*, which is what makes it per row rather than per board.** `4♥ = vul`
+means that contract was played vulnerable, and the role tag sits next to it so the pair reads "4♠
+played vulnerable, and I was defending it". The first design said it once in the traveller's caption, on the
+argument the pad already makes about the opposition — and a caption **structurally cannot reach the
+collapsed list**, which is five boards each at their own prescribed vulnerability with +110 and +720 in
+the same column. Not red, though bridge draws vulnerability red everywhere: red means "this is a red
+suit" in this app and a red `vul` would sit two characters from a red pip.
+
+**Honors are derived from the recorded score rather than stored, and they can be because
+`scoreDeal` reads the hands for exactly one purpose.** Scoring the same contract and tricks with *empty*
+hands gives what that contract pays with no honors in it, and the recorded figure less that is the
+honors — so `honorsOn` puts back what `honorsFor` took out, and every one of the 15,000 entries already
+in the corpus can say so with no column to add and nothing to backfill. **It is self-checking**, which
+is what makes a derivation allowable here: honors pay 100 or 150 to at most one side, so a sound row
+lands on 0, ±100 or ±150 and anything else comes back null. A row this code has misread says nothing
+rather than blaming honors for a gap it cannot explain. The awards themselves come from `honorsFor` on a
+constructed holding rather than being typed out, the same discipline `scoringFacts.ts` applies.
+
+**A finished board can be looked at again, and Doop is the one format where that costs nothing.** A
+placing says how a board went and nothing about why; the why is what was held and what was bid.
+`BoardReview` is that, behind a tap on the board's row — and the rule is about the format rather than
+the screen: a board here is played once and `fieldBoardsFor` excludes seeds met in earlier sessions, so
+nothing learnt from looking back can be spent on a board still to come. In Replay, a mirror or a return
+match the same panel would hand over the second run.
+
+**Kept by the client rather than carried on the wire.** The tempting version hangs the hands off
+`FieldResult`, which puts them inside `snapshotFor` and re-introduces the conditional permission in
+`packages/protocol/test/snapshot.test.ts` that withdrawing the open discard removed. `useBoardReviews`
+files what this device saw, so the projection keeps having no exceptions — and it lives and dies with
+the mount, which is exactly the life of a sitting.
+
+**The hands are card faces rather than a written hand record**, which was chosen against a good
+alternative: four suit lines a hand is the idiom for looking a deal up and is more compact. Cards win on
+continuity — they are how a hand has looked on every screen up to now, and a review that asks you to
+re-read your own hand in another notation is a second thing to learn at the moment you are trying to
+remember the first. The tricks are a count rather than thirteen pairs of cards: that is the expensive
+half of the screen and the least often wanted.
+
+**Discards are not in it**, and their absence is a rule rather than an omission — §1 omits them from
+`PlayerView` because remembering what you threw is part of the game, and this would have been the back
+door to a decision taken at the front.
+
+**A test here was vacuous and reverting the fix is what found it, for the fifth time in this file.** The
+hook guarded on `view.phase === "complete"` *and* on `finishedHandsFor`, and the second implies the
+first — thirteen completed tricks is what completes a deal. So the test aimed at the phase guard passed
+against a hook with it removed, and it was passing for a third reason besides: it stopped one action
+short of the end, where nothing has been committed yet and there is no result to file a review against
+at all. **The state that actually needed guarding is a board in progress with a finished one behind
+it**, where a hook filing whatever the view held would put the board being played under the finished
+board's key — and it has to be rendered *fresh* at that moment, as opening the Score overlay mid-board
+does, or the "already kept" check hides the fault. The redundant condition is gone rather than kept as
+belt and braces: a second condition that cannot fail independently makes a test look meaningful when it
+is not.
+
+**And it found a real fault at a table on the way in.** `#applyField` read `points` and `tricks` from
+each seat and filed `played.contract` as it stood — so a seat-1 Doop result entered the corpus naming
+seat 1 as declarer beside tricks that said seat 0, and a traveller reading the two together drew the row
+as defending when it had declared. Invisible in solo play, where the person is seat 0 and turning round
+is the identity. `contractForSeat` is the fix and the honors derivation would have inherited the error.
+
+**Three screens drew the auction record and two held their own copy of the markup.** `AuctionRecord` is
+that copy taken down to one, taking the calls rather than a `PlayerView` — which is what lets a board
+already played draw its own auction from what was kept of it.
+
+**The reveal is tap-to-continue and the pad inside it grew a button, so the two fought.** Reported from
+real play: tapping "Hands and bidding" opened the board *and* went on to the next deal in one gesture,
+so what had been asked for appeared over a screen already left behind. `PlayPhase` wraps the whole
+region — pad included — in `onClick`, which was fine for as long as a pad was only ever figures.
+
+**`handleTap` now ignores a tap that landed on a control**, checked with `closest("button, a")` rather
+than by making each control stop its own propagation: that is a rule the next control added to a pad
+would have to remember, where this one is true of every control there will ever be. Safe because the
+hand and the toolbar are `GameBoard`'s and sit outside this element, so nothing else in it is a button.
+
+**And the panel moved out of the pad, which is the fault underneath the fault.** A pad is drawn in
+three places — inside the Score overlay, inside `DealComplete`, and inside that tap-to-continue region —
+so a modal owned by the pad is nested in whichever of them it happened to be drawn in: inside another
+overlay's scrolling content in one case, inside a tap handler in another. `useBoardReviews` holds which
+board is open and `GameBoard` draws it, which makes it a sibling of every other overlay — what all of
+them already were. The pad is handed a `BoardReviewing` and only asks.
+
+`test/revealControls.test.ts` drives a real board to its thirteenth trick and taps the button, and its
+anti-vacuity half taps the table as well: a test finding that a tap did not continue says nothing unless
+a tap elsewhere does. Checked by reverting the guard.
+
+**A board dealt from the second end gave its two seats each other's terms, and the tags are what
+exposed it.** Reported as a scoring bug from a screenshot: the same 4♥ +2 read **−480** on the row a
+person had played and **−680** on every recorded row beside it — which is not an arithmetic error but
+the duplicate game bonus at one vulnerability against the other, 300 against 500.
+
+**The fault is in the corpus, not in `scoreDeal`.** §1.8a reads the vulnerability cycle against the
+stock's two *streams*, and a stock makes two boards dealt from either end. The generator computed one
+pair per seed and wrote it against **both** boards — so on the board whose `starter` is 1, where the
+person draws second and holds the second stream, seat 0 was handed the first stream's terms. The
+generated results were right: each was scored against the stream that actually made it. The board row
+was wrong, so everybody who played it afterwards was given terms nobody else on it had.
+
+`fieldVulnerableFor(seed, starter)` is the rule, in the engine rather than in `bench/`, because it says
+what a `FieldBoard` *is* and because a rule that lives only in a bench is a rule `npm test` never
+checks. **Its test's anti-vacuity half is the whole of it**: half the cycle gives both streams the same
+answer, so a rule that ignored the starter entirely would pass every assertion on half the seeds. The
+swap is asserted where the two streams differ.
+
+**Confirmed against the live corpus before anything was changed, and the numbers are why it stayed
+hidden.** All 1,998 boards stored the stream-indexed pair; 999 of them are starter-1 and half of those
+are on a cycle where it matters. `0018_field_board_terms.sql` swaps the two columns for `starter = 1`,
+which is **not idempotent** — running it twice puts the fault back — and is a migration rather than a
+read-time repair for exactly that reason. The simultaneous-swap semantics were checked against real
+local D1 rather than assumed.
+
+**Why now, when the corpus is months old: `starter` only recently started alternating.** A dead
+tie-break had pinned every dealt board to the player's own stream, so a starter-1 board had barely been
+played — 70 human results against 767. Fixing that tie-break is what put anybody on the affected
+boards. **A latent data fault becomes a bug report the day a selector stops avoiding it.**
+
+**33 human results were recorded on affected boards and they stay wrong**, which is the part this
+cannot repair: they are real scores made at the wrong vulnerability, and re-deriving them would mean
+rewriting results somebody played. They sit in those boards' fields as slightly-off comparisons.
+
+**A board is a page, and it took two wrong answers to get there.** Tapping a board in the Score panel
+first *stacked* a second panel on it — two dimmed grounds, two ✕s, and nothing saying which one a
+swipe would dismiss. The fix for that was to make the second panel *replace* the first and grow a back
+chevron, which is a real phone pattern and was still wrong: what the nesting was telling us is that
+the thing being opened is not a panel at all.
+
+`Overlay`'s own rule says which: **a panel is for looking something up with what you were doing still
+behind it.** The score mid-auction is that; the last trick is that. A traveller, twenty-six cards and
+an auction, reached by drilling into a list, is a destination — and a phone answers a destination with
+a page you can swipe out of. It was a panel only because it was pushed from one, which is inheritance
+rather than a reason. Reported as exactly that question: why is this a dialog and not a full page.
+
+So `BoardReview` is `absolute inset-0` over an opaque ground with `BackButton` and `useSwipeBack`,
+like every other destination in here, and `Overlay`'s third case is **gone rather than kept**. **A
+surface that needs a second way out is usually the wrong kind of surface** — the chevron was the
+symptom, and removing the nesting beat accommodating it.
+
+**One way out, because there is one way in.** The reveal between deals draws `BoardDetail` inline, so
+every board reached through this page was reached from a list, and Back always means the list.
+
+**And the Score panel is left mounted underneath**, which the page covers. That makes Back instant and
+keeps the list's scroll — and it disposes of the suppression that was one half of the dead screen
+above. There are no longer two conditions that have to agree about whether a board is showing; there
+are none.
+
+**The pad had two ways in for one question, and the argument against the first was already written in
+it.** A row expanded a traveller in place and a button inside that expansion pushed a panel for the
+hands — an accordion and a push, stacked, to answer "tell me about board 7". Worse, the push threw the
+accordion away: which row was open is `FieldPad`'s own state, and the Score panel is not rendered while
+the review is, so coming back landed on a collapsed list scrolled to the top. Reported as the
+navigation being odd.
+
+The file already carried the case against itself, as the reason only one row could be open at a time:
+*a panel breaks the alignment of the rows around it, and that alignment is what makes the list
+scannable.* Read once more that is not an argument for one panel — it is an argument for none.
+
+**So a row drills straight in, and the board's own surface carries the whole board.** One gesture in, a
+chevron out, and the list stays a list. Nothing was lost by the traveller leaving it — an expanded row
+shoved every board below it down the screen, so it was never being read beside its neighbours.
+
+`Traveller` is its own component now for the ordinary reason: two surfaces draw it. Its rules moved with
+it into `test/traveller.test.ts` rather than being dropped along with the accordion that used to reveal
+it — and `fieldScreens.test.ts`'s "every row shut" test went from a real assertion to a vacuous one the
+moment nothing could open, so it asserts what now matters instead: the list shows every board and
+nobody else's name is in it.
+
+**And the vulnerability line under the pad had become self-contradictory.** "Neither side vulnerable"
+describes the deal on the table, and was unambiguous for as long as nothing else on the panel mentioned
+vulnerability — but a Doop pad now tags every board with the terms *it* was played at, so a bare
+sentence directly beneath a list of them reads as a statement about the list, and contradicts it. It
+names its subject now: "on this board", or "on this deal" in a rubber. **Named rather than moved**,
+because putting it above the pad would leave the same ambiguity somewhere else — what was missing is
+not where the line sits but what it is about.
+
+**`test/support/board.ts` drives a `MatchState` now, not a `TableState`, and that is what put a Doop
+session on the real screen.** It had built a rubber since it existed, which was fine while every walk
+was about a rubber — and left the one format whose whole screen was being rewritten reachable only by
+rendering components in isolation. The engine already had the general shape: `actOn`, `nextIn` and
+`dealOf` take any match, and `snapshotFor` always did, so the harness had been narrower than anything
+it called.
+
+`board.state` becomes `board.match`, plus a `board.deal` for what most of a walk actually wants — and
+the walks stop rewrapping a table as `{ kind: "rubber", table }` to call `snapshotFor`, which was a
+tell. A rubber's own options survive as a rubber's: `played` and `rubberBefore` are `TableState`'s and
+have nowhere to live in `StartMatchOptions`, so that one format is still assembled by hand and every
+other goes through `startMatch`, which is what the server calls.
+
+**Two things the harness was hardcoding turned out to be answers it should not have been giving.**
+`halfComplete` was false and `winner` null, which is right for a rubber mid-match and wrong for a
+mirror at half time or a session at its end; both come off the snapshot now, for the reason the
+standing already did — the server decides them, and a harness with its own opinion is testing itself.
+
+**What it buys immediately is the rule no component test can see.** Both panels are `Overlay`s, so a
+board's panel stacked on the Score panel looks identical to each of them examined alone; the fault is
+visible only as two of them on screen at once. `fieldBoardWalk.test.ts` plays a board out, carries on
+to the next — the bar offers no way into the score on the screen that ends a deal, which is itself
+worth knowing — opens the score, taps a board, and counts the panels. Checked by restoring the stack:
+two of its four fail.
+
+**The remaining gap is stated rather than closed**: `test/revealControls.test.ts` still renders
+`PlayPhase` directly, because reaching the reveal's second stage through the harness needs the pad on
+screen and the tap sequence to land on a control rather than the table. That is now a smaller job than
+it was, and the harness is no longer the thing in the way.
+
+**A board's panel is two tabs, and which seam it is cut on was the whole of the decision.** At a
+phone's width the panel is about 590px of content against a cap near 630, and it grows past that as a
+board's field fills with people — so it will scroll. **The field** answers *why that percentage* and
+**the deal** answers *could I have done better*, and those are asked one at a time.
+
+**A third tab for the auction was proposed and turned down.** It splits the one comparison the panel
+exists for: a bridge player reads an auction *against* a holding, and "they bid 4♥ on that?" needs both
+on screen at once. Separating what everybody else did from what happened here costs nothing, because
+nobody reads those together.
+
+**The header sits above the tabs** rather than in either — the contract, the result, the `vul` and
+`honors` tags, the net and the placing are the answer to "what happened", wanted whichever tab is up,
+and what makes the two labels mean anything.
+
+`Segmented` is the row of buttons, extracted rather than written a third time: `Choice` wraps it in a
+settings row's label and description and the record's You / Everyone switch wraps it in nothing. Real
+buttons with `aria-pressed`, which is the rule this app keeps arriving at.
+
+**And the score strip carries a chevron now, which is not a contradiction of its own doc.**
+`ContractBar` argues against "adding an icon to it" and that argument is about a separate *control*
+taking room from the figures — a chevron takes no decision and is not a second thing to tap. It is the
+mark saying the strip is one, which nothing said before: a real `button` with an `aria-label` that did
+not look like a button, the same fault the board rows had until they grew one. It is drawn exactly
+when `onShowScore` is non-null, so it also answers "is this tappable *here*", which it is not on the
+screen that already shows the pad.
+
+**The chevron worked sometimes and a board opened sometimes, and it was one fault wearing two faces.**
+Reported from real play exactly that way, which is what made it look like flakiness rather than a
+condition. It was a condition: **two places asked the same question and could answer differently.**
+`GameBoard` suppressed the Score panel whenever a board was open, and the panel itself declined to
+draw when this device had kept nothing of that board — so tapping such a row left the screen with
+*neither*. And with nothing drawn there was nothing to close, so the open board stayed set and every
+later tap on the score strip did nothing at all. **One dead tap made the score unreachable for the
+rest of the sitting.**
+
+Which boards? A **passed-out** one, a board finished by a **claim**, and every board of a session
+carried across a **reload** — so it depends on how the sitting went, which is the shape of the report.
+
+Two changes, and the second is the one that matters. The panel **always opens**: the field needs only
+a `FieldResult`, which a played board always has, and only the deal is missing — so there is always
+something to draw and always something to close. With no deal there are no tabs, and a line says why
+rather than leaving an absence a reader has to interpret. And the two conditions became **one value**:
+`GameBoard` resolves the board's own `FieldResult` once, and both the suppression and the render read
+it, so they cannot disagree. **Suppressing one surface on a condition that another surface answers
+separately is a dead screen waiting to happen** — this file now has it as the second bug of the same
+evening, after the reveal's tap firing a control *and* continuing.
+
+The end-to-end test drives a **passed-out** board rather than reaching into the hook for the kept map:
+it is one of the three real causes, it needs no internals, and it exercises the state a reload leaves.
+Checked by restoring the decline — the walk fails, and the component-level case has its anti-vacuity
+half in the panel that *does* have a deal.
+
+**The board you just played was the one board reached differently from every other, and now it is
+not.** The reveal between deals laid out a traveller with a **"Hands and bidding"** button beneath it,
+and that button opened a panel that *starts on the field* — so it promised the deal and landed you on
+what was already on screen. Two shapes for one thing, and the wrong one on the screen you see most.
+
+`BoardDetail` is the board — header, tabs, both tabs' content — and it is drawn in both places.
+`BoardReview` is reduced to the panel around it, which is all a panel ever was here. The reveal draws
+it inline with no chrome at all, so the board just played and a board opened from the score pad are
+the same screen.
+
+**Keyed on the board, so a new one opens on the field again.** Which tab you left the last board on is
+not a preference; it is where that board's own reading finished.
+
+**The line explaining a traveller moved in with it.** "Everybody here faced the same offers and kept
+their own cards" was drawn only between deals, and what it says — that every line faced the same
+twenty-six — is what makes a traveller comparable at all, which is as worth knowing on a board from
+six deals ago as on the one just played.
+
+**And it sharpened the tap guard's own test rather than costing it one.** `revealControls.test.ts`
+used to tap "Hands and bidding" to prove a control inside the reveal does not also continue the deal;
+the control there is the tab row now, which is a better case — switching to the deal is something you
+do *while* reading the reveal, so a tap that also continued would take the screen away at the exact
+moment it was asked for. Still checked by reverting the guard.
+
+**The score is a page too, and a panel that opened a page was the inconsistency.** Reported exactly
+that way: the board is a full page you can swipe out of and the score it was opened from is a dialog.
+`ScoreOverlay`'s doc defends being reachable *mid-deal* — a part-score decides what you should be
+bidding several deals before the auction where it matters — and every word of that survives, because
+a page is reached from the same tap. None of it was ever an argument for the table staying visible
+behind.
+
+**Where the line now falls**: `BiddingOverlay` and `LastTrickOverlay` stay panels, because they are
+what `Overlay` describes — a glance, a few lines, with what you were doing still behind. A scorepad,
+or a list of a session's boards, is a page of the same kind as the record screen.
+
+**Making it a page turned up a shipped bug in `useSwipeBack`, which is the part worth keeping.** It
+listens on `document`, so *every mounted caller hears the same gesture* — and that was already wrong
+before anything deliberately stacked: `HelpOverlay` calls it and **then returns** `ScoringOverlay`,
+which calls it too, and hooks do not care what a component returned. Swiping back from Scoring went
+back past Help as well, two screens for one gesture. Nobody had reported it because nobody swipes out
+of the scoring page much.
+
+**Only the topmost screen answers now, and topmost is decided by first render rather than by
+mounting.** The difference is not academic: React runs effects **child-first**, so a page that opens
+straight into a sub-page registers the *inner* one first and would hand the gesture to the outer —
+which is exactly what the first attempt did, and what its test caught. Render order is the other way
+round: a parent renders before its child, and a page opened later renders later, so a token taken on
+the first render puts the innermost, newest screen highest in both cases.
+
+The walk drives the **gesture** rather than tapping Back, and that is not incidental: with two pages
+mounted there are two Back controls, so a swipe is the only unambiguous way for a test to say which
+page it means — and it is the case that used to go back twice. Checked by reverting: four tests fail.
+
+**Your own line in a traveller is marked rather than merely legible.** It was full-weight white
+against everybody else's 70%, which makes a row *readable once found* — a different job from making it
+**findable**, and finding it is the whole point: a traveller is sorted by score, so your row lands
+anywhere among eight, and "where did I come" is the question it exists to answer.
+
+A band behind the row is what a glance catches. `bg-white/8` rather than a colour, because amber means
+"it is your move" everywhere on the board and the metals belong to achievements — this is the wash the
+app already uses for the row that matters in a list. The weight goes on the two things a reader scans
+for, who and how much, rather than on the whole row, which would drag the faint `vul` and `honors`
+tags up with it.
+
+**`aria-current` is the mark and the styling hangs off it**, which is worth more than the tidiness: it
+is what the attribute means, and it is the only part of this a screen reader can use — it otherwise
+has nothing but the word "you" in a column of names. It also gives the test something to assert that
+is not a class. `suitInk.test.ts` argues for naming a class rather than an opacity so the number that
+tunes it can move; an attribute that carries the *meaning* is one better again, and the whole visual
+treatment can change without touching the test.
+
+**The tags are short now — `vul` and `h100` — and getting there settled what a tag is for.** They have to sit three abreast on a row that gives the contract about 164px at a
+phone's width and already holds a level, a strain and a result; "vulnerable", "defending" and
+"honors +100" wrapped.
+
+**Declaring is marked as well as defending, which is new rather than merely abbreviated.** A lone
+`def` is legible only to somebody who knows that its *absence* means the other thing — an unstated
+rule the reader has to be told. Two tags that always appear together teach each other on sight, and
+that is worth three characters. `null` suppresses both, for a surface with room to name the declarer
+outright: the board page says "by Computer" and would otherwise say one thing twice.
+
+**`dec` shipped first and lasted an hour, which is the useful part.** Two three-letter words sharing
+their first two letters are told apart by *reading* them — which is the one thing a tag exists not to
+need. Flagged as a risk when it went in and reported as one immediately, so the lesson is not that it
+was wrong but that the objection was already on the page and shipped anyway. `bid` differs in shape
+from the first character, and "bid it" is what a player says about a contract that was theirs.
+
+**`h` is the one abbreviation here that has to be learnt, and this file already argued the other
+way** — the two-column `Scorepad` names honors in words precisely because "a dot or an 'h' is cheaper
+in width and is a key the reader has to learn". The two are not in conflict: that pad has a column to
+put a figure in and prose to label it, where this is a row of tags in which `vul` is already short.
+The honest statement of the trade is in `contractTags`: **if `h+100` reads as a key rather than a
+fact, it is the tag vocabulary that is wrong rather than that one member of it.** The sign is kept
+either way, because a line paid for honors *by the other side* is the case the tag exists for.
+
+**They are chips now, because faint grey words beside a contract are not tags** — `4♥ = vul bid h+100`
+read as five things of equal weight rather than a contract with three notes attached. A ground, a
+hairline and small caps are what say "this is a label on that": `VUL` is not a word in the sentence,
+it is a mark. The provenance note takes the same chip and shortens to `vs person`, because one of
+these drawn as prose beside three chips reads as something half-finished.
+
+**Colour was withheld, then asked for again, and spent on exactly one thing.** The objection was
+sound and is what shaped the answer: every hue here already means something — amber is "it is your
+move", red is "this is a red suit", the metals are achievement tiers, green is a target reached — and
+these chips sit inches from real cards on the reveal between deals. A fourth vocabulary would collide
+with one of those or be a colour picked for being unused, which is how a palette stops meaning
+anything.
+
+**So it is borrowed rather than invented, and only `vul` gets it.** Every bridge scorecard ever
+printed draws vulnerability red; that is the player's own language, not a new one. And vulnerability
+is the largest multiplier on any figure on the row, which is what earns the loudest mark.
+
+**The tint is on the chip's ground, not its letters**, which is what keeps it clear of the rule red
+already has: `text-red-400` means *this is a red suit*, and a red word two characters from a red pip
+is precisely the collision the original objection named. A red-grounded badge is not a glyph.
+
+**And exactly one of them is coloured, which is the point of colouring any.** `h100` stays plain:
+with both tinted they compete, and the red stops meaning "look at this" and starts meaning "this is a
+tag". `test/traveller.test.ts` pins both halves — the ground is red, the letters are not, and honors
+carries no red at all.
+
+**The By field takes weight rather than a hue, and for a different reason.** There is nothing to
+borrow: bridge has a red for vulnerability and no convention whatever for marking declarer, so any
+colour there would be invented. What brightness *can* say without a key is `us` at white/55 against
+`them` at white/30, so a glance down the column finds the lines that bought their own contract. It is also on **every** row, and a mark that never varies in whether it appears
+must not compete with the ones that do.
+
+**A tag is for what might not apply, and that ruled the role out of being one.** A chip that never
+varies in whether it is there is not marking an exception, and three chips of which one is always
+present is noise around the two that mean something. Reported exactly that way: it is not really a
+tag, since there will always be a bidder or a defender.
+
+So it is a **field**: fixed width, quiet, immediately before the contract, which aligns it down a
+column and turns something always-present from repetition into something scannable.
+
+**And it names who bought the contract rather than what this line's player did.** `bid`/`def` shipped
+first and said the same thing the long way round — it told you the *role* and left you to work out
+who that implied had bid it, so on a board where everybody defends it was a column of `def`
+answering a question nobody asked. This is duplicate's own **By** column.
+
+**`us` and `them`, relative to the line rather than to the reader**, and the two attempts it took to
+get there are the useful part. Naming the parties outright cannot work: a traveller's rows are named
+`you`, `Ada` and **`Computer`**, and the opposition on a Doop board *is* the computer — so a row read
+`Computer` in its own column and `opp` beside the contract, both meaning the same machine, with
+nothing to say they were the same. Repeating the row's own name instead removed the collision and
+stuttered: `you | you 4♠`, which three tests noticed before a person did.
+
+**The pair is what makes "them" safe**, and this file rejected a lone "them" once before for good
+reason: `by them` named a different person on every line with nothing saying so, and on somebody
+else's row it read as *your* opponent. Two symmetric tokens carry their own frame — whatever `us` is
+on a line, `them` is the other one — which is the same argument that paired `bid` with `def` rather
+than showing one of them.
+
+**Honors lost their sign, and the trade is worth stating because it is a real loss.** `h100` says a
+figure has honors in it, which is the question — honors being the one component a contract cannot
+explain. A sign turned a mark into a ledger entry, which is the wrong amount of precision for a chip.
+What goes with it: a line paid 100 and a line whose *opponent* was paid 100 now look the same, and
+those differ by two hundred. The arithmetic is still recoverable from the contract, the result and
+the terms beside it — but not at a glance, and that is the cost.
+
+**And the bidding sits above the hands**, because the auction is what produced the contract and the
+holding is what it was made on. The reveal already reads that way round; this was the one surface
+where the two were the other way about.
+
+**The red `VUL` badge was already in the app, and "borrowing" it re-invented it.** `SeatLabel` has
+drawn one beside a vulnerable player's name since long before any of this — so the traveller's chip,
+written an hour earlier and reasoned about at length as *borrowing bridge's convention*, was in fact
+a second copy of the app's own, with different values: `bg-red-500/25` on one and `bg-red-400/12`
+plus a border on the other. Drifting a few hours after the second was written, and only spotted
+because a screenshot of the **draw** screen happened to show the first.
+
+`Chip` is the one badge now. The thing worth keeping is *why* it can be one: **the mark means
+"vulnerable" and its subject is whatever it sits beside** — a player on a seat label, a contract on a
+traveller row. Those look like two meanings and are the same fact from two sides, which is what
+makes sharing it correct rather than merely tidy. Raised as an ambiguity worth settling and settled
+that way.
+
+**The lesson is about the reasoning, not the chip.** An argument that carefully justifies a choice
+from first principles will not notice that the choice already exists somewhere else in the file tree.
+`grep` for the token before writing the paragraph.
+
+**The sound stopped coming back, and the cause is a state the spec does not have.** Reported as it
+just stopping mid-session with nothing to do but restart the app. `AudioContextState` names three
+values and WebKit has a fourth: an `AudioContext` on iOS goes to **`"interrupted"`** when something
+else takes the audio — a call, Siri, an alarm, another app, the phone locking. `soundEffects.ts`
+tested for `"suspended"`, which that is not, so it never resumed and every cue afterwards did
+nothing.
+
+**Testing `!== "running"` is the fix and is better than naming the state**, which TypeScript's own
+type does not contain — and it covers whatever WebKit adds next. A **closed** context is replaced
+rather than resumed, since `resume` throws on one and iOS closes the context of a page it has
+evicted.
+
+**The second half is the one that made it permanent.** The gesture listener that unlocks audio was
+`{ once: true }`, on the reasoning that unlocking is a one-time thing. True of the *first* unlock and
+false for the rest of a session: an interruption arrives long afterwards, and by then the only
+listener that could revive it had removed itself — and WebKit honors a `resume` **only** inside a
+gesture handler, so there was no remaining moment in the app's life when the resume could legally
+happen. It stays attached now; the cost is a state comparison per tap.
+
+**`{ once: true }` deserves suspicion wherever the thing it guards can be undone.** It is right for a
+one-way unlock and wrong for a condition that can recur, and the two look identical at the call site.
+
+`test/soundRevival.test.ts` drives the listener rather than playing anything, because that listener
+is the only place a resume is honored at all. Its anti-vacuity half is that a *running* context is
+left alone — a listener resuming on every tap regardless would pass the interruption test while
+noticing nothing. Checked by restoring both halves of the fault: two of its five fail.
+
+**The chips are pushed to the right edge rather than trailing the contract, and the measurement is
+what chose that over the better answer.** Asked whether they should line up vertically: they should,
+and there is no room to do it properly. A board row at 390px leaves roughly **100px** for the
+contract, the mark and the chips once `Board 3` (64), the By field (36), the net (~44), the placing
+(48), the chevron (14) and five gaps are taken — and `4♥ =` plus `VUL` plus `H100` wants about 115.
+**The busiest rows were already wrapping before anything was aligned.** Reserving a slot per chip,
+which is the only thing that aligns them exactly, needs ~73px on every row including the ones with
+nothing to say, and would leave 27px for the contract.
+
+So the free version: contract and mark on the left, chips flush right. The group's edge lines up down
+the column, rows carrying the same chips align exactly, and the chips land beside **the figure they
+explain** rather than beside the contract, which needs no explaining. Wrapping moved onto the *group*
+so a tight row drops both chips whole to a second line rather than splitting them.
+
+**The traveller is a different shape and mostly did not need it**: its rows are usually the same
+contract eight times over, so they aligned by accident, and it has ~40px more to play with having no
+board label or chevron. It takes the same treatment for consistency rather than out of need.
+
+**If the list still reads as crowded, the answer is not alignment.** It is dropping the chips from the
+list and keeping them on the board page — where there is room — against the argument that put them
+there in the first place: the list is exactly where `+110` and `+720` sit in one column with nothing
+to explain either. That trade is now measured rather than guessed at.
+
+**And then the row label gave 40px back.** `Board 3` reserved 64px to say five characters that are
+identical on all eight rows plus one that is not; `Bd 3` is 24. Bridge's own abbreviation rather
+than a bare numeral or a `#`, for the reason a cell says `+2` rather than "made two overtricks" —
+this app writes the game's notation. The board's own page and the traveller's caption still say
+"Board 3" in full, because they are *naming* the thing rather than labelling a column, and they have
+the room.
+
+**Which changed the answer above, and a screenshot of eight finished boards settled it.** Flushing
+the group right lines up rows carrying the *same* chips and nothing else: a row with honors alone put
+its honors chip somewhere different from a row with both, and a row with neither left a gap of a
+third shape. Eight boards of that reads as ragged, which is exactly what it was.
+
+**Three faults, and the chips were the least of them.**
+
+**The net column was sized to its own content.** The chips are flushed against it, so `−50` sat
+further right than `+210` and dragged the chips before it along with it. Right-aligned figures only
+line up if the box holding them does; it is `w-14` now. This is most of what the screenshot showed,
+and no amount of work on the chips themselves could have fixed it.
+
+**A slot is held open for a chip the row has not got**, which is one of the two things it takes — `invisible` rather than removed, so the width comes from the chip itself and nothing has to
+know how wide one is, and `aria-hidden`, because a chip that is not there must not be read out as
+though it were. `contractTags` returns every possible tag with a `shown` flag for that reason: a
+caller cannot reserve what it does not know could exist.
+
+**And the chips needed a column of their own**, which is the other, and the one the first attempt
+missed. They were flushed right *inside the contract's box* — so a wide contract pushed them out of
+it: `7♣ X −2` is about sixty pixels where `4♥ =` is thirty, and the group wrapped to a second line,
+where it aligned with nothing at all. Reserving slots could not help, because what was being
+reserved still sat in a box that could run out of room. **A sibling cell cannot be pushed out of its
+own row**, so that is what it is now, with the contract taking whatever is left.
+
+**The lesson, since this took three goes: alignment is a property of the box, not of what is in
+it.** Flushing right, then reserving slots, were both work on the contents. Both times the thing
+that actually moved was the container — first the net column sized to its own figures, then the
+contract's box running out of room. `Bd` paying for 40px helped and was not the fix either.
+
+Worth noting for the next test that counts chips: a reserved slot is real DOM, and jsdom computes no
+CSS, so `invisible` means nothing to a query. `aria-hidden` is both how a screen reader skips it and
+how a test tells the two apart.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told
@@ -2751,6 +3282,59 @@ code" makes the reader match three phrases to three buttons by position, which i
 a label. `overflow-y-auto` stays as a safety net -- clipped is worse than scrolled -- but nothing is
 meant to reach it.
 
+**The two boxes are Rubbers and Duplicate, and the rubber cell is Standard.** The first box was called
+"Games" because the natural mirror of "Duplicate" is "Rubbers", and that collided with the cell called
+Rubber inside it — a family sharing a name with one of its own members reads as though the other member
+is an exception to it. Renaming the cell removes the collision rather than overruling it, and the two
+boxes then name the thing that actually separates them: **rubber scoring against a board settled where
+it is played**. "Games" named a *length*, which the line underneath already says.
+
+**A Doop session's verdict read the *rounded* placing, and now reads the real one.** `points` is
+rounded because every screen and every stored row wants a whole number — and `winner` was read off that
+same figure, so a session placed at 50.4% was recorded as **drawn**: a decided result thrown away by a
+rounding that exists for display.
+
+**It is currently unreachable, and saying so is the point.** A board scores `k/2N`, so against the
+seven-result fields the corpus ships today the nearest value above 50% is **57.1%** — the half-point
+rounding window is never entered. A session's mean is finer, `sum k/2NB`, but eight boards still only
+land on multiples of 0.89%. The window opens once `N × B` passes about a hundred: a fifteen-board
+session, or a board whose field has filled up with people. So this is a rule made correct **before the
+corpus grows into it**, not a bug anyone has hit — and the test says so by constructing a
+hundred-result field on purpose rather than pretending the shipped one would do.
+
+**What this was not is the thing it was raised about.** Ties on a Doop board are ties in the *raw
+score* — four runs reaching exactly −810 — and no display precision separates identical numbers. A
+board played eight times by one bot on a hand with no decision in it is a **flat board**, which this
+file already records as a real thing in duplicate and deliberately keeps. Measured on a real session:
+of eight boards, six were unanimous 0% or 100%, and the two with ties tied on exact equality. Tenths of
+a percent would have changed nothing on any of them.
+
+**A rule sits between the two cells of each box**, inset top and bottom. Without it the pair reads as
+one wide control with a highlight somewhere in it: the selected cell carries a background and the other
+carries nothing, so on the unselected side there is no edge at all. Inset rather than full height,
+because a rule meeting the box's own border makes a grid of four boxes out of two — which is the thing
+the `fieldset` exists to avoid saying.
+
+**And every format now names its family on the record**: `Rubbers – Standard`, `Rubbers – Mirror`,
+`Duplicate – Replay`, `Duplicate – Doop`. Home can leave the family to the box a cell sits in; a record
+row has no box, so a line reading "Doop sessions" beside one reading "mirror matches" gave a reader no
+way to tell which of them are scored the same way. It also makes the ordering legible rather than merely
+true — `FORMAT_ORDER` puts the rubber-scored formats first, and with these names that grouping is
+visible.
+
+**A single game stays "Single game", which is the one asymmetry and is deliberate.** It is not a third
+rubber variant — it is the standard rubber at a length of one, which is exactly what `RubberFormat`'s
+two values say — so naming it as a sibling of Standard and Mirror would invent a distinction the stored
+data does not have.
+
+**And the record breakdown sorted Doop first, because `FORMAT_ORDER` never got `"field"`.** `indexOf`
+answers −1 for a format it does not know, which sorts ahead of `rubber` at 0 — so the newest format
+silently led every opponent's list. **Fifth time a list of formats has failed to be widened**, after the
+two validating readers, `formatFor`'s board count and the passed-out sentence. It is checked by the
+compiler now: a type-level assertion that the list covers `MatchFormat`, which fails to compile the next
+time one is added — the same guard `preferredFormat` and `helpOverlay` already carry. Verified by
+dropping `"field"` and watching three errors appear.
+
 **The row is two cells now, because "One game" was never a third format.** It is a rubber that stops
 at the first game, which is exactly what `RubberFormat`'s two values already say — so sitting it
 beside Duplicate made the row mix categories: two of three cells were the same game at different
@@ -3131,7 +3715,371 @@ Still to decide: whether to switch it on. Doing so changes v3's play materially,
 record reset or a version bump, and the phone cost measured — 200ms a call, two or three calls an
 auction.
 
+**Five reports from real play, and the one that mattered was a race nobody could see.** "New session"
+did nothing at the end of a Doop sitting, because `nextIn` for a finished field session is a documented
+**no-op** — a new one needs boards from the corpus, which is a *fetch* rather than a seed. The session
+asks its host now (`onNewSession`), which remounts: starting a session is exactly what a mount of
+`RobotGame` is, so a second path setting that state by hand would be a second definition of it.
+
+**And a Doop session was recorded before its fields came back.** §1.8a fetches a board's field *after*
+the deal, so at the instant a session completes the last board is still unranked — and the placing is a
+**mean over ranked boards**, so the report stored a figure computed from fewer boards than the screen
+went on to show. Reported as the screen saying a session was level and no tie appearing on the record.
+**Every session in the database predates the fix**, and what they say cannot be recovered: nothing
+recorded which boards were ranked at report time.
+
+The gate is a **ref rather than state**, which is the whole of the fix: both effects belong to the same
+commit and run in declaration order, so a `useState` flag would be read by the report from *this*
+render's closure — still true, and the very race being closed. "Settled" means **done asking**, not "all
+ranked": a field may never come back, and a session waiting forever on one that never arrives is worse
+than one recorded over the boards that did.
+
+**Two wrong answers were given before that one**, and the shape of both is worth keeping. First, that
+ties were simply rare — reasoning from the recorded data without asking whether the recording was
+trustworthy, when the report that the *screen* disagreed was the better evidence. Then a float fix that
+made things worse: the verdict had been read off `Math.round(placing) === 50`, which discards a real
+50.4% result as a draw, so it was changed to an exact `=== 50` — and **about 12% of genuinely level
+sessions land on `49.99999999999999`**, so real ties began reading as wins. The verdict no longer
+touches the percentage: a board's placing is `scored / (2 × field)`, a rational with a known
+denominator, so "level" is those shares summing to exactly one apiece.
+
+**A Doop session is rated now, and the anchor did not have to be invented.** It was excluded while
+§1.8a's open question stood — what is beating a *field* worth? The answer is in the format's own
+construction: the field is the corpus bidder's own runs, so **placing above 50% is beating that
+bidder**, which is the fixed opposition the format specifies and whose anchor already exists. It is
+arguably a *better* measure than a rubber, since the deal cancels where a rubber carries the luck of the
+shuffle — and is deliberately not credited as one, taking duplicate's per-board weight rather than a
+second invented constant.
+
+**A drawn match read as "Lost" in both match lists, for as long as draws have existed.** `won` false
+with `drawn` true is a draw and `won` false with `drawn` false is a loss — and both lists read only
+`won`. Reported as a record showing three losses beside a recent-form line counting two and a draw: the
+form line was right, because it was written after draws existed and read both fields.
+
+**The server already had this exact rule as a function, with the argument for it written out** —
+`outcomeOf`, kept because "a rule about hidden state should have one testable answer rather than a
+comparison repeated at four call sites". The client had the same rule, two call sites, and no such
+function. It has one now, returning the *kind* rather than a class name: the two lists paint it at
+different weights, and a composed class like `` `${ink}/80` `` is one Tailwind cannot see to emit.
+
+A draw takes neither side's colour, since amber would read as a quiet loss.
+
+**Nothing covered a drawn match in either list**, which is why the change passed 449 tests before a
+test for it existed. The new one asserts the label *and* the form line together, because their
+disagreement is the failure rather than either alone.
+
+**The record gained a recent-form line and a range, and the range was briefly on the wrong screen.**
+`Recently 8–2` over the last ten, because a lifetime tally cannot say how somebody is playing *now*.
+
+**Best and worst belongs to the record, not to a session.** It went on the session pad first, where it
+said which *board* of the eight was best — a fact about one sitting, and one already legible from the
+rows above it. On the record it says which *session* was best, which is what a mean over dozens of them
+cannot: a board is scored by rank, so eight boards is a short sample and sessions swing widely around
+their own average. Absent when every session placed alike, which would invent a spread the record does
+not have.
+
+**It replaced a repetition rather than being added beside one.** The Score line read "over 31 sessions"
+directly above a Matches line reading "31 played" — the same number twice, on a panel whose whole job is
+to fit a history into a few lines. And `Hands` became **`Boards`** for this format: a Doop session's unit
+is a board, played once and ranked against a field, so counting hands was true and read as the wrong
+quantity beside a column of placings.
+
+**A defensive ace is discounted by how high they bid, which is the first thing to improve that
+estimate.** `defendingTricks` summed winners over the four suits and took **the hand and the strain and
+nothing else** — two aces counted two tricks whether they bid 2♣ or 7♣. But the higher they bid the
+shorter their side suits must be, and a side-suit ace against a high trump contract does not cash, it
+gets **ruffed**. `rawTricks` has said the declaring half of this from the start; the defending half
+never got it.
+
+| swept against par, 417 real auction positions | error |
+| --- | --- |
+| 0 — as shipped | 1.08 ± 0.03 |
+| 0.12 — my guess | 1.01 |
+| **0.25 — fitted** | **0.97 ± 0.03** |
+| 0.35 | 1.00 |
+
+**The turn at 0.35 is the point rather than the minimum.** A sweep improving to the edge of its range
+would only say the optimum lies past where the looking stopped, and picking that endpoint is fitting to
+the range. Worse either side is what makes 0.25 a fitted value. Ten percent off an estimate nothing had
+improved before — the searched version measured 1.14, which is why it was removed.
+
+**No discount in no-trump**, where an ace always cashes, which is the same asymmetry `rawTricks` draws
+for declaring; **none on trump honours**, since a trump ace cannot be ruffed; and it is keyed on the
+**excess above level three**, because `DEFENSE_CALIBRATION` was fitted across the levels the bidder
+reaches and an ordinary contract's ruffing is already inside its intercept. The rule `RACE_FREE` states:
+never the level of a quantity, always the departure from what an ordinary hand holds.
+
+**And it buys nothing in matchpoints, which is the third time an estimate has improved without
+converting.** 240 corpus boards, the same bidder either side with only the discount differing — and
+because every generated run predates `defendingRuff`, the field is the uncorrected bidder and the
+comparison is exactly paired:
+
+| 240 boards | mean placing |
+| --- | --- |
+| counting a defensive ace flat | **49.5%** |
+| discounting it by how high they bid | **49.2%** |
+| difference | **+0.2 ± 0.7 — 0.3σ** |
+
+**The reason is dilution, and I had already proved it for the previous change.** `estimateFor` blends
+this hand's read with their bid level at `THEIR_BID_WEIGHT = 0.75`, so the term this corrects carries
+**0.25**. Eleven hundredths of a trick of accuracy becomes **under three hundredths** in the blend —
+present and inert, the same threshold `LAST_TIME_WEIGHT` at 0.20 is recorded as failing at. Having
+argued exactly this to explain the defending search's null, I then built another correction to the same
+quarter-weighted term and expected a different answer.
+
+**So the structural finding is the useful one: the own-hand term cannot pay, at this weight, however
+good it gets.** Which makes the follow-up a *weight* rather than another estimate. `THEIR_BID_WEIGHT`
+was fitted against a counted defending estimate carrying ~1.5 tricks of error; the term is now
+measurably better, so the optimal trust in their bid should have moved down. That sweep has been named
+in this file since the defending search and never run.
+
+**What is not excluded is a small benefit**: ±0.7 leaves anything from −1.2 to +1.6 on the table. What
+is excluded is the multi-point win the doubling split suggested — the bot's doubles losing 121 a board
+against a person is not fixed by this.
+
+**It is a v3 correction rather than a v4, which was asked for and is a real trade.** This file's own
+threshold says a release with a real history cannot be corrected in place, and v3 now has 68 sessions,
+1,449 logged deals and a rating line — so **recorded v3 results now span two slightly different
+opponents**, and that cannot be undone. What the change buys is a bot that stops doubling slams it
+cannot set; what it costs is the exactness of that history.
+
+**v2 is spared, and the first attempt did not spare it.** `defendingRuff` is per release, so a
+superseded release stays the fixed reference it exists to be. But the parameter defaulted to the fitted
+value, and an absent field arrives as `undefined` — which fires a default, so the correction reached
+every release that had not asked for it. **Absent has to mean off**, which is exactly what
+`searchBudgetMs: 0` is spelled out for on the difficulty rungs, one file away.
+
+**One call moved across the eight pinned deals**, and it is the case this was built for: v3 competed
+with 5♥ where it had doubled 5♦.
+
 ### Open threads
+
+- **A doubling margin is built, and the corpus bench structurally cannot measure it.** The mechanism it
+  targets is the **winner's curse**: a double is chosen by comparing two expected values computed from
+  an estimate carrying about a trick of error, so on the hands where those values are close — most of
+  them — the coin that decides is the *error*, and the doubles taken are the ones it erred optimistically
+  on. That is a selection effect in the *comparison*, which is why three improvements to the estimate's
+  *centre* bought nothing. `DOUBLE_MARGIN` declines the marginal cases; a double that wins by more than
+  the estimate's own error is not one the error could have manufactured. In points, through `creditIn`,
+  and **zero by default**.
+
+  **The census says it works and that nothing can measure it here.** With the margin impossibly high the
+  bot makes **0 doubles over 60 deals**; with it off, **1**. The knob reaches the code — and the bot
+  doubles on roughly **2% of deals at love all and 5% of corpus board-runs**, so 240 boards carry about
+  a dozen doubles. `compare` read **+0.0 ± 0.0** at `dmargin=150` and again at `dmargin=999999`, which
+  is not a null but an instrument with nothing in it.
+
+  Scaling the board count does not fix it: a thousand boards is five hours for perhaps fifty doubles,
+  against an effect that has to clear ±1 point of session placing. **The unit is wrong.** A session
+  placing averages over eight boards of which one might be doubled, so the decision is diluted twice —
+  once into the board, once into the session.
+
+  **What it wants is a bench of the decision, not of the sitting** — `bench/defendpar.ts`'s shape
+  applied to doubles. Every position where a double is legal is a case; score the contract doubled and
+  undoubled against the hands as they actually lie, and ask which the bot chose. Every opportunity is a
+  data point rather than every board, which is the difference between a dozen and thousands. It can also
+  price what the hand log measures and no session figure can: not whether the double was *right* but
+  **what being wrong cost**, which is where the −121 against a person's +327 lives.
+
+
+- **The defending estimate's accuracy and its points value disagree, and points wins. Three
+  measurements now say the same thing.** The blend pricing a contract *they* declare is
+  `(1 − w) × this hand's read + w × their bid level`, shipping at **w = 0.75**. Against double-dummy par
+  over ~830 real auction positions it is plainly off the minimum:
+
+  | w on their bid | flat own-hand term | with `defendingRuff` |
+  | --- | --- | --- |
+  | 0.25 | 0.986 | **0.946 ± 0.025** |
+  | 0.50 | **0.975 ± 0.025** | 0.979 |
+  | **0.75 — shipped** | 1.045 | 1.061 |
+
+  Bracketed in both columns, 0.75 on the wrong side in both, and the best combination **11% more
+  accurate** than what ships. The optimum also moved from 0.50 to 0.25 once the own-hand term improved —
+  the one prediction in this stretch that came out right.
+
+  **And taking it loses.** Played on 240 corpus boards, the discount *and* w = 0.25 against the bidder
+  that made the field:
+
+  | 240 boards | mean placing |
+  | --- | --- |
+  | the corpus bidder — flat ace, w = 0.75 | **49.5%** |
+  | 11% more accurate — discount, w = 0.25 | **48.7%** |
+  | difference | **+0.8 ± 1.1 to the shipped bidder** |
+
+  Not significant, and the *sign is against the accurate bidder* — while the accuracy gap that produced
+  it is eight standard errors. So this is not a null waiting on a bigger sample; it is accuracy failing
+  to convert, for the third time after the defending search and the discount alone.
+
+  **The reason is asymmetry, and it is why the original fit is not wrong.** This file records
+  `THEIR_BID_WEIGHT` being fitted as a *rubber margin* — "+651 a rubber against +467, on a plateau from
+  0.6 to 0.9". Trusting their bid makes the bot slower to believe it can beat a contract, so it competes
+  and doubles less. That costs accuracy and buys points, because the payoff is not symmetric: **a wrong
+  double at the slam level is ruinous where a missed one is cheap.** An estimator is scored on distance
+  from the truth; a bidder is scored on what its errors cost, and those are different objectives.
+
+  **So the standing rule earns another entry: measure in the currency the game is settled in.** This
+  file already carries it three ways — card play in tricks rather than points, the bidder over whole
+  rubbers rather than deals at love all, a mirror on matches won rather than points. Par accuracy is the
+  fourth instrument to be right about its own question and wrong about the game.
+
+  **What is left open is not the weight but the payoff.** Nothing prices a *wrong* double against a
+  right one; both estimators are fitted to sit near the truth on average, and the loss the hand log
+  records — the bot's doubles at **−121 a board against a person's +327** — is a loss in the tails, not
+  the centre. A better estimate cannot fix that. A cost model for doubling might.
+- **The bot's doubles lose money and the person's make it, measured on the same boards.** 68 Doop
+  sessions, 565 human boards against 15,424 generated ones — and because a board fixes the stock, the
+  two sides' doubling decisions are directly comparable:
+
+  | doubling a contract they defended | boards | net per board |
+  | --- | --- | --- |
+  | **the person** | 29 | **+327** |
+  | **the bot** | 399 | **−121** |
+
+  A 448-point swing on the decision, in a format where a single trick can be worth fifty points of
+  placing. The bot also doubles *less* often — 5.2% of its results against the person's 11.5% — so it is
+  not that it doubles too much: **the ones it picks are wrong.**
+
+  **That was first blamed on `DOUBLED_FROM_DOWN` and that was wrong twice over.** It is not the bot's
+  doubling rule — it is the bot's model of when *it* will be doubled, used to price its own contracts, so
+  raising it would make the bot **less** cautious about overreaching. And there is no rule to tune:
+  `doubleCandidate` prices a double through `expectedValue`, playing the deal out at every plausible
+  trick count and scoring each through the engine's own `scoreDeal`. Level and vulnerability are already
+  in it. **A flat threshold is not the problem, because there is not one.**
+
+  **The fault is in the distribution, and the level split says so.** Of the bot's own doubles:
+
+  | level | doubles | set them | set rate |
+  | --- | --- | --- | --- |
+  | 1–2 | 35 | 26 | **74%** |
+  | 4–5 | 268 | 152 | 57% |
+  | **6–7** | **96** | **52** | **54% — a coin flip** |
+
+  Its doubling judgement is sound at the levels where it is cheap to be wrong and **random at slam
+  level, where it is ruinous**. A doubled grand slam that makes is catastrophic; setting one pays a
+  hundred. Fifty-fifty is a losing bet at those odds.
+
+  **The mechanism is the one a person named from play: two aces against a void.** `defendingTricks` sums
+  `winners()` over the four suits and applies an affine calibration — it takes **the hand and the strain
+  and nothing else**. Two aces count two tricks whether they bid 2♣ or 7♣. But the higher they bid the
+  more distributional their hand must be, and a side-suit ace against a high trump contract does not
+  cash, it gets **ruffed**. At the seven level the opponent is nearly announcing a void.
+
+  **The declaring half of the same model already knows this.** `rawTricks` gives side suits under a
+  trump contract "winners and no length credit at all, because length only cashes if nobody ruffs it."
+  The defending half never got the equivalent.
+
+  So the shape of the fix is to **discount defensive side-suit winners by the level they bid** — level
+  being the best available proxy for their shortness, and already in hand since the estimate blends
+  their bid at weight 0.75. **Not in no-trump**, where an ace always cashes, which is the same asymmetry
+  `rawTricks` already draws for declaring. Trump honours are untouched: a trump ace cannot be ruffed.
+
+  **Why self-play could never have found this.** Bot against bot, both sides share the blind spot: the
+  seat bidding the slam and the seat doubling it hold the same model, so a double taken on a mis-valued
+  ace is met by an opponent who would have mis-valued it the same way. These 565 boards are the first
+  time the decision has been priced against somebody who doubles *well* — and against hands a person
+  bid to seven.
+
+  **One caution before building it.** The −469 and −1071 a board at the six and seven levels are the
+  cost of *conceding a slam*, most of which is not the double's doing; the honest figure for the
+  doubling decision alone is the difference against the same board undoubled, which nothing has computed
+  yet. The **set rate** is the signal that does not need that correction, and it is the one above.
+
+- **The defence-versus-declaring gap has gone, and it was noise.** At 148 boards it read 66.8%
+  defending against 54.1% declaring — a 13-point split recorded here as "the person's edge is almost
+  entirely on defence", and as the mirror image of the bot's own hand-log asymmetry. At 565 boards it is
+  **60.1% against 58.1%, a gap of 2.0 ± 3.3**: nothing.
+
+  Both halves moved toward each other, which is what regression to the mean looks like rather than a
+  change in how anybody plays. **The narrative built on it was wrong and the error bar said so at the
+  time** — the same mistake this file has now recorded three times, after the +0.01 ± 0.02 margin
+  coefficient and the 0.8σ objective difference. An asymmetry worth acting on has to survive its own
+  sample growing.
+
+
+- **The bid search is what makes v3 overreach, and the width is most of it.** The estimate's centre is
+  unbiased, so a bidder landing half a level above par had to be pushed there by something else. Three
+  arms over 241 logged deals — a person's own hands, both seats driven by the arm's own bidder, par
+  solved for whatever contract it settles on:
+
+  | arm | centre | width | level bid over par |
+  | --- | --- | --- | --- |
+  | `counted` | counted | fitted 1.3 | **+0.07 ± 0.10** (bid 2.96) |
+  | `mean` | searched | fitted 1.3 | +0.20 ± 0.10 (bid 3.25) |
+  | `odds` | searched | **searched** | **+0.58 ± 0.10** (bid 3.72) |
+  | | | **width alone** | **−0.37 ± 0.07, 5.3σ** |
+
+  **The bidder with no search bids essentially at par.** All of the overreach the hand log blames v3 for
+  is the search: +0.13 from its centre and **+0.37 from its width**. And +0.58 is the same figure the
+  hand log measures independently on played deals (+0.46), from a different direction.
+
+  **My prediction was exactly backwards and the reason is already written down elsewhere in this file.**
+  I expected the searched spread — 1.11 tricks against the fitted 1.3 — to *narrow* the distribution and
+  reduce overreach. But the two numbers are not the same quantity: `TRICK_SPREAD` was fitted against
+  **how far the estimate lands from what happens**, where the search measures **how far par moves across
+  the hands they might hold — no play error in it at all**. `searchTricks`' own doc says this, in the
+  paragraph explaining why widening was rejected; nobody noticed it cut the other way too.
+
+  So the searched distribution prices every contract as though the bot will play it double dummy — and
+  it throws away **0.36 tricks a deal**. With a game bonus in reach the payoff is convex, so a
+  distribution carrying real hand-to-hand variance and no play error captures upside the bot will not
+  realise.
+
+  **The candidate that follows is a shift, not a widening.** Nobody has tried moving the searched
+  distribution *down* by what the bot actually gives away. It is one constant, it is already measured,
+  and it predicts the `odds` arm should fall toward the `counted` arm's +0.07 without giving up what the
+  search is worth — which the ladder prices at about **108 rating points**, so simply turning it off is
+  not the answer.
+
+  **Two cautions before anyone acts on this.** The search was measured at 65% of rubbers when it landed,
+  and overreach is nearly free in a bench where nothing doubles — which is how most of this file's
+  margins were taken. And this bench measures *level against par*, not points won: a bidder that bids at
+  par is not automatically better, which is the whole reason `bench/rubber.ts` exists.
+
+  **`bench/spread.ts` had a bug that only announced itself by printing `NaN`.** It pushed whatever each
+  arm settled on, so a deal one arm passed out and another bid left three arrays of different lengths —
+  and the paired difference subtracted one deal's figure from another's. It requires all three arms to
+  settle now, or drops the deal from all three, and reports how many that excludes (59 of 300).
+
+
+- **Searching the position the opponent declares is built, measured twice, and worth nothing in either
+  currency.** `searchTricks` had always solved with the opponent on lead, which answers what *this* seat
+  takes declaring; the branch pricing a pass, a raise or a double against a contract **they** would
+  declare went on counting. `SearchOptions.defending` is a second solve of the same guessed hands with
+  this seat leading — not the first read backwards, since `13 − x` is what they take *while this seat
+  declares*, a position nobody is in. Gated on `BotTuning.searchDefending`, **off**.
+
+  | | rubbers, `bench/rubber.ts 160 8 defend=500` | matchpoints, `bench/field.ts compare 200 defend` |
+  | --- | --- | --- |
+  | result | 46.6% ± 2.8, 320 plays | 47.9% against 48.9%, 200 boards |
+  | from even | 1.2σ | **+1.0 ± 1.0 to counting** |
+
+  **The second run was the one currency left to try, and it was my prediction.** A recorded Doop board
+  went **−810 where the field went −780**: 30 points of score and **50 percentage points** of placing, so
+  matchpoints price a defensive trick enormously higher and the rubber bench looked like it was diluting
+  the effect away. Wrong, and instructively: the currency changes what a **trick** is worth, not what a
+  **better estimate** is worth. An estimate only pays if it changes a call *for the better*, and the
+  census says it already changes **a third** of the calls where their contract stands — the capability
+  fires, and the changed calls simply are not better ones.
+
+  **The baseline arm is the control and it held exactly.** A is the generator's own configuration and
+  came back at **48.9%**, the same figure this file records for the corpus self-calibration null. An
+  instrument reproducing its own known null to the tenth is one whose other arm can be believed.
+
+  **What is still untested is the premise, and it is now the only candidate left.** The 1.04-against-1.54
+  accuracy figure behind all of this is a **declaring** number. Nobody has measured whether a searched
+  estimate beats a counted one when the *opponent* declares — and there is a specific reason to doubt it:
+  the search guesses their hand from the sampler, and `impliedByTheirBid` exists precisely because this
+  seat's read of a hand they have bid is weak. A par measurement in tricks costs about a minute and
+  should have been run first. If the searched estimate is no more accurate, `searchDefending` should be
+  deleted rather than left gated off, and the **−135 a deal** the hand log once blamed on defence wants a
+  different explanation — the doubling threshold, or pricing a pass against a contract they may improve.
+
+  **This thread was recorded once and I deleted it**, with a range edit that replaced everything between
+  two other threads while writing up a later result. The code stayed, the finding did not, and it was
+  only noticed because the same measurement came round again. **A range replacement over a list of
+  findings is a delete of whatever happened to sit between the anchors** — this file is a record before
+  it is a document, and edits to it want the same care as edits to the bench.
+
 
 - **The recorded Doop boards are a paired instrument against a human bidder, and nothing reads them
   yet.** 18 sessions, 148 boards, **mean placing 59.1%** against a corpus calibrated to 50 — so the

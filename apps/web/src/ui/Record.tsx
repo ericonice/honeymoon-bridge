@@ -350,6 +350,81 @@ function OpponentLine({
  * list as a whole one — and it is empty from a server too old to send it, which
  * reads as a record with no history rather than as an error.
  */
+/**
+ * How the last few matches went — `8–2`, or `6–3–1` where any were drawn.
+ *
+ * **A recent form line, which the lifetime tally cannot be.** `record.won`/`lost` run
+ * from the first match ever played, so somebody who has improved reads as their own
+ * average rather than as how they are playing now. Ten is short enough to move and long
+ * enough not to be one evening's luck.
+ *
+ * Null below a handful, because a `2–1` labelled "last 10" claims a window it does not
+ * have — and `record.matches` is capped for the panel, so this quietly measures fewer
+ * than ten once somebody passes that cap. It says how many it actually counted.
+ */
+const RECENT_MATCHES = 10;
+
+function recentForm(record: OpponentRecord): { over: number; text: string } | null {
+  const recent = record.matches.slice(0, RECENT_MATCHES);
+  if (recent.length < 3) {
+    return null;
+  }
+  const won = recent.filter((one) => one.won).length;
+  const drawn = recent.filter((one) => one.drawn).length;
+  const lost = recent.length - won - drawn;
+  return {
+    over: recent.length,
+    text: drawn > 0 ? `${won}–${lost}–${drawn}` : `${won}–${lost}`,
+  };
+}
+
+/**
+ * The best and worst a Doop session has placed, over the matches the record carries.
+ *
+ * **What a mean cannot say.** A 58% average is the same figure whether every session
+ * came in near it or they ran from 33 to 73 — and in matchpoints the second is the
+ * ordinary case, because a board is scored by *rank* and a session of eight boards is a
+ * short sample of ranks.
+ *
+ * Over `record.matches`, which is capped — so on a long history this is the best and
+ * worst of the recent ones rather than of all time, and the caller says which.
+ *
+ * Null for any other format, where `pointsFor` is a points total and a "best" would be
+ * the highest-scoring match rather than the best-played one. And null below two, where
+ * a best and a worst are the same session named twice.
+ */
+function bestAndWorst(record: OpponentRecord): { best: number; over: number; worst: number } | null {
+  if (record.format !== "field" || record.matches.length < 2) {
+    return null;
+  }
+  const placings = record.matches.map((one) => one.pointsFor);
+  const best = Math.max(...placings);
+  const worst = Math.min(...placings);
+  // Every session placing the same is a real answer rather than a range.
+  return best === worst ? null : { best, over: placings.length, worst };
+}
+
+/**
+ * How a finished match came out — the same three answers the server's own `outcomeOf`
+ * gives, and for the same stated reason: a rule about a pair of booleans should have one
+ * testable answer rather than a comparison repeated at each call site.
+ *
+ * **Both match lists read only `won`, so every drawn match was labelled "Lost".**
+ * Reported as a record showing three losses where the form line beside it counted two
+ * and a draw — the form line was right and the lists were not. `won` false with `drawn`
+ * true is a draw; `won` false with `drawn` false is a loss.
+ *
+ * It returns the *kind* rather than a class name because the two lists paint it at
+ * different weights, and because a composed class — `` `${ink}/80` `` — is one Tailwind
+ * cannot see to emit.
+ */
+function outcomeOf(match: { readonly drawn: boolean; readonly won: boolean }): "drawn" | "lost" | "won" {
+  return match.drawn ? "drawn" : match.won ? "won" : "lost";
+}
+
+/** What to call it. Shared so the two lists cannot drift apart in wording either. */
+const OUTCOME_WORD = { drawn: "Drew", lost: "Lost", won: "Won" } as const;
+
 function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.JSX.Element {
   const margin = record.pointsFor - record.pointsAgainst;
   const placing = meanPlacing(record);
@@ -359,6 +434,8 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
   const played = record.won + record.lost + record.drawn;
   const rate = (value: number, per: number): string => (per === 0 ? "—" : signed(value / per, 1));
   const older = played - record.matches.length;
+  const form = recentForm(record);
+  const range = bestAndWorst(record);
 
   return (
     <div className="border-b border-white/7 bg-white/5 px-0.5 pt-1 pb-3">
@@ -370,7 +447,24 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
             {record.pointsFor.toLocaleString()} for
           </Fact>
         ) : (
-          <Fact detail={<>over {played} {played === 1 ? "session" : "sessions"}</>} label="Score">
+          /* **The range rather than the count.** This said "over 31 sessions", which
+             the Matches row directly below already says — the same number twice, on a
+             panel whose whole job is to fit a history into a few lines. What a mean
+             cannot say is how far the sessions spread, and in matchpoints that is most
+             of what a record is like. */
+          <Fact
+            detail={
+              range === null ? (
+                <>over {played} {played === 1 ? "session" : "sessions"}</>
+              ) : (
+                <>
+                  best {range.best}% · worst {range.worst}%
+                  {range.over < played ? ` of the last ${range.over}` : ""}
+                </>
+              )
+            }
+            label="Score"
+          >
             {placing}%
           </Fact>
         )}
@@ -393,9 +487,21 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
         >
           {played} played
         </Fact>
+        {form === null ? null : (
+          <Fact detail={`over the last ${form.over}`} label="Recently">
+            {form.text}
+          </Fact>
+        )}
+        {/* **A Doop session's unit is a board, not a hand** — one deal each, played
+            once, ranked against a field. Calling them hands is true and reads as the
+            wrong quantity beside a row of placings. */}
         <Fact
-          detail={played === 0 ? "—" : `${(record.deals / played).toFixed(1)} a match`}
-          label="Hands"
+          detail={
+            played === 0
+              ? "—"
+              : `${(record.deals / played).toFixed(1)} a ${placing === null ? "match" : "session"}`
+          }
+          label={placing === null ? "Hands" : "Boards"}
         >
           {record.deals.toLocaleString()}
         </Fact>
@@ -430,10 +536,17 @@ function OpponentPanel({ record }: { readonly record: OpponentRecord }): React.J
               className="flex flex-col gap-0.5 border-t border-white/8 py-1.5 first:border-t-0"
             >
               <span className="flex items-baseline justify-between gap-2">
+                {/* Neither side's colour for a draw: amber would read as a quiet loss. */}
                 <span
-                  className={`font-mono text-[0.65rem] font-semibold tracking-wide uppercase ${match.won ? "text-emerald-300" : "text-amber-200"}`}
+                  className={`font-mono text-[0.65rem] font-semibold tracking-wide uppercase ${
+                    outcomeOf(match) === "won"
+                      ? "text-emerald-300"
+                      : outcomeOf(match) === "drawn"
+                        ? "text-white/60"
+                        : "text-amber-200"
+                  }`}
                 >
-                  {match.won ? "Won" : "Lost"}
+                  {OUTCOME_WORD[outcomeOf(match)]}
                 </span>
                 {/* A session's figure is where it placed, not a pair of totals —
                     `58–42` reads as points and is a percentage and its complement. */}
@@ -517,12 +630,29 @@ interface OpponentGroup {
 }
 
 /**
- * The order formats are listed in, which is the order they were added to the
- * game rather than anything about them. Stated because a `Map`'s insertion order
- * would otherwise make the list depend on which format happened to be played
- * first.
+ * The order formats are listed in: **everything rubber-scored, then the board formats.**
+ *
+ * The split is the one Home draws — a line, a part-score and a race to a hundred on one
+ * side, a board settled where it is played on the other — so a reader meets the two
+ * groups in the same order in both places. Within each it is the order they were added
+ * to the game, which is nothing about them but is at least stable; a `Map`'s insertion
+ * order would make the list depend on which format happened to be played first.
+ *
+ * **`"field"` was missing from this list and that is why Doop sorted first.** `indexOf`
+ * answers −1 for a format it does not know, which sorts ahead of `rubber` at 0 — so the
+ * newest format silently led every opponent's breakdown. Fifth time a list of formats
+ * has failed to be widened here, after the two validating readers, `formatFor`'s board
+ * count and the passed-out sentence.
+ *
+ * So it is checked by the compiler rather than by eye: `everyFormatIsOrdered` fails to
+ * compile the next time `MatchFormat` widens, which is the guard `preferredFormat` and
+ * `helpOverlay` already use on their own lists.
  */
-const FORMAT_ORDER: readonly MatchFormat[] = ["rubber", "game", "mirror", "duplicate"];
+const FORMAT_ORDER = ["rubber", "game", "mirror", "duplicate", "field"] as const;
+
+type OrderedFormat = (typeof FORMAT_ORDER)[number];
+const everyFormatIsOrdered: MatchFormat extends OrderedFormat ? true : never = true;
+void everyFormatIsOrdered;
 
 function lastPlayedOf(group: Pick<OpponentGroup, "records">): number {
   return Math.max(0, ...group.records.map((record) => record.lastPlayed));
@@ -767,8 +897,16 @@ function MatchRow({ match }: { readonly match: MatchRecord }): React.JSX.Element
     <div className="border-t border-white/10 py-2 first:border-t-0">
       <div className="flex items-baseline justify-between gap-3">
         <span className="min-w-0 flex-1 truncate">
-          <span className={match.won ? "text-emerald-300/80" : "text-amber-200/70"}>
-            {match.won ? "Won" : "Lost"}
+          <span
+            className={
+              outcomeOf(match) === "won"
+                ? "text-emerald-300/80"
+                : outcomeOf(match) === "drawn"
+                  ? "text-white/50"
+                  : "text-amber-200/70"
+            }
+          >
+            {OUTCOME_WORD[outcomeOf(match)]}
           </span>{" "}
           vs {match.opponentName}
         </span>

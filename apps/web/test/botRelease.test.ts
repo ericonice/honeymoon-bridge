@@ -64,7 +64,9 @@ const TRANSCRIPTS: Record<number, readonly string[]> = {
   // shape of the change is visible in the first and last of these: the old table
   // climbed to 6D and sacrificed in 5C, and this one doubles instead.
   3: [
-    "KKSKSSSKSSSSKKKSKSSKSSKKSS | 0:4H 1:5D 0:x 1:P",
+    // **Re-recorded**: v3 competed with 5H here where it used to double 5D. That is
+    // the one call `defendingRuff` changed across all eight deals — see below.
+    "KKSKSSSKSSSSKKKSKSSKSSKKSS | 0:4H 1:5D 0:5H 1:P",
     "SSSSSSKSSSSKSKKKSKSKSSKKSS | 1:P 0:4H 1:P",
     "SSKSSSSSSSSSSSSKSKKKSKSSSS | 0:2H 1:3D 0:P",
     "SSSKKKKKSSSSSKSSSSKKSKKSSS | 1:1NT 0:2H 1:2S 0:3H 1:3S 0:P",

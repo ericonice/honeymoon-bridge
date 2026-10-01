@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { startDeal, summarizeField } from "@hb/engine";
-import type { FieldEntry, FieldResult, FieldState, PlayerId } from "@hb/engine";
+import type { Card, FieldEntry, FieldResult, FieldState, Pair, PlayerId } from "@hb/engine";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type { BoardReview, BoardReviews } from "../src/game/boardReview.js";
 import { FieldPad } from "../src/ui/FieldPad.js";
+import { stubBrowser } from "./support/board.js";
 
 /**
  * The session pad, which is a row a board opening into its traveller.
@@ -26,9 +28,21 @@ function entry(points: number, who: string, kind: FieldEntry["kind"] = "computer
   };
 }
 
-function result(id: string, mine: number, field: readonly FieldEntry[] | null): FieldResult {
+/**
+ * A board this seat declared 4♠ on and made exactly.
+ *
+ * Its figures are left for the caller to set, because what several tests below turn
+ * on is the gap between the score recorded and the score that contract pays — which
+ * is the whole of how honors are recovered.
+ */
+function result(
+  id: string,
+  mine: number,
+  field: readonly FieldEntry[] | null,
+  vulnerable: Pair<boolean> = [false, false],
+): FieldResult {
   return {
-    board: { ids: [id, null], seed: 1, starter: 0, vulnerable: [false, false] },
+    board: { ids: [id, null], seed: 1, starter: 0, vulnerable },
     contract: { declarer: 0, doubling: "none", level: 4, strain: "S" },
     field: [field, null],
     points: [mine, 0],
@@ -36,15 +50,57 @@ function result(id: string, mine: number, field: readonly FieldEntry[] | null): 
   };
 }
 
-function pad(results: readonly FieldResult[]): void {
+/** Thirteen distinct cards, for a review that only has to be the right shape. */
+function thirteen(suit: Card["suit"]): readonly Card[] {
+  return [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map((rank) => ({ rank, suit }) as Card);
+}
+
+const REVIEW: BoardReview = {
+  auction: [{ by: 0, call: { type: "bid", bid: { level: 4, strain: "S" } } }],
+  hands: [thirteen("S"), thirteen("H")],
+  tricks: [10, 3],
+};
+
+/**
+ * Chips the row actually carries, ignoring the slots held open for ones it does
+ * not — see `Tags`. A reserved slot is marked `aria-hidden`, which is both how a
+ * screen reader skips it and how a test can tell the two apart; jsdom computes no
+ * CSS, so `invisible` means nothing to a query.
+ */
+function shown(label: string | RegExp): HTMLElement[] {
+  return screen.queryAllByText(label).filter((one) => one.closest("[aria-hidden]") === null);
+}
+
+function pad(results: readonly FieldResult[], kept?: BoardReviews): void {
   const state: FieldState = {
     at: results.length,
     boards: results.map((one) => one.board),
     deal: startDeal({ seed: 1, starter: 0 }),
     results,
   };
-  render(createElement(FieldPad, { me: ME, summary: summarizeField(state, ME) }));
+  render(
+    createElement(FieldPad, {
+      me: ME,
+      opponentName: "Computer",
+      reviews: { kept: kept ?? new Map(), open: opened },
+      summary: summarizeField(state, ME),
+    }),
+  );
 }
+
+// A review draws real hands, and a row of cards measures itself — see `useRowRoom`.
+beforeAll(stubBrowser);
+
+/** Which board the pad last asked to have opened — the panel itself is `GameBoard`'s. */
+let opened: (at: number) => void;
+let asked: number[];
+
+beforeEach(() => {
+  asked = [];
+  opened = (at) => {
+    asked.push(at);
+  };
+});
 
 afterEach(cleanup);
 
@@ -54,80 +110,39 @@ describe("the session pad", () => {
     result("b2", -100, [entry(140, "Noah", "solo")]),
   ];
 
-  it("is one row a board until one is opened", () => {
+  /**
+   * **`Bd`, because "Board" is the same five characters on every row.** The number
+   * is the whole of what varies, and this is the row in the app with the least
+   * width to spare. The board's own page still names it in full — that heading is
+   * naming the thing rather than labelling a column.
+   */
+  it("labels a row with the board's number, short", () => {
     pad(BOARDS);
 
-    expect(screen.getByRole("button", { name: /Board 1/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Board 2/ })).toBeTruthy();
-    // Nobody else's name is on screen while every board is shut.
+    expect(screen.getByRole("button", { name: /Bd 1/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();
+  });
+
+  it("is one row a board, and nobody else's result is in the list", () => {
+    pad(BOARDS);
+
+    expect(screen.getByRole("button", { name: /Bd 1/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bd 2/ })).toBeTruthy();
+    // The traveller belongs to the board's own panel — see `BoardReview`.
     expect(screen.queryByText("Noah")).toBeNull();
   });
 
   /**
-   * **Said, not implied.** It used to read "by them", which named a different person
-   * on every row — and on somebody else's line it reads as *your* opponent rather
-   * than theirs. A defender's row is the one that needs saying, because a defender of
-   * a contract that made scores nothing and a bare zero explains itself to nobody.
+   * **One way in, not two.** The list used to expand a traveller in place and hide
+   * the hands behind a further button inside it, which lost your place in the list
+   * on the way back. A row asks for the board and nothing expands.
    */
-  it("says which rows were defending, on their own terms", () => {
-    pad([
-      result("b1", 620, [
-        { ...entry(-100, "Noah", "solo"), contract: { declarer: 1, doubling: "none", level: 3, strain: "NT" } },
-      ]),
-    ]);
-    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
-
-    expect(screen.getByText("defending")).toBeTruthy();
-    expect(screen.queryByText("by them")).toBeNull();
-  });
-
-  /**
-   * Best first, with your own line wherever it lands — a traveller exists to show
-   * where you *came*, and pinning your row to the top answers a different question
-   * that the collapsed row above has already answered.
-   */
-  it("sorts a board's results best first, with yours in its place", () => {
-    pad([result("b1", 170, [entry(620, "Computer"), entry(-100, "Computer")])]);
-    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
-
-    const order = screen
-      .getAllByRole("row")
-      .map((row) => row.textContent ?? "")
-      .filter((text) => text.includes("+") || text.includes("−"));
-    expect(order[0]).toContain("+620");
-    expect(order[1]).toContain("you");
-    expect(order[2]).toContain("−100");
-  });
-
-  it("opens a board into everybody's result on it", () => {
+  it("drills a row straight into its board", () => {
     pad(BOARDS);
-    fireEvent.click(screen.getByRole("button", { name: /Board 2/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Bd 2/ }));
 
-    expect(screen.getByText("Noah")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Board 2/ }).getAttribute("aria-expanded")).toBe(
-      "true",
-    );
-  });
-
-  /**
-   * One at a time, because a panel breaks the alignment of the rows around it and
-   * that alignment is what makes the list scannable.
-   */
-  it("shuts the one that was open when another is opened", () => {
-    pad(BOARDS);
-    fireEvent.click(screen.getByRole("button", { name: /Board 2/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Board 1/ }));
-
-    // Board 1 really did open — without this the assertion below passes just as well
-    // against a tap that does nothing at all, which is how it passed before the click
-    // was fixed to run inside React's act.
-    expect(screen.getByRole("button", { name: /Board 1/ }).getAttribute("aria-expanded")).toBe(
-      "true",
-    );
+    expect(asked).toEqual([1]);
     expect(screen.queryByText("Noah")).toBeNull();
-    expect(screen.getByRole("button", { name: /Board 2/ }).getAttribute("aria-expanded")).toBe(
-      "false",
-    );
   });
 
   /**
@@ -141,9 +156,134 @@ describe("the session pad", () => {
       deal: startDeal({ seed: 1, starter: 0 }),
         results: BOARDS,
     };
-    render(createElement(FieldPad, { latest: true, me: ME, summary: summarizeField(state, ME) }));
+    render(
+      createElement(FieldPad, {
+        latest: true,
+        me: ME,
+        opponentName: "Computer",
+        reviews: { kept: new Map(), open: opened },
+        summary: summarizeField(state, ME),
+      }),
+    );
 
-    expect(screen.getByText("Noah")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();
+    // Twice on Noah's line: the row's own player, and the By field saying they
+    // bought it.
+    expect(screen.getAllByText("Noah").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Bd 1/ })).toBeNull();
+  });
+});
+
+/**
+ * **Why a figure is the size it is, when the contract alone cannot say it.** A
+ * traveller's rows are the same deal at four figures — 420, 620, 720 — and nothing
+ * on them used to account for the differences.
+ */
+describe("what a contract is tagged with", () => {
+  // 4♠ made exactly pays 120 below the line and a game bonus: 300 at neither
+  // vulnerable, 500 vulnerable. Everything above that has to be honors.
+  const PLAIN = 420;
+  const VULNERABLE = 620;
+
+  it("says when the contract was played vulnerable", () => {
+    pad([result("b1", VULNERABLE, [], [true, false])]);
+
+    expect(shown("vul").length).toBeGreaterThan(0);
+  });
+
+  /**
+   * **Who, rather than what this seat did.** `bid`/`def` made the reader work out
+   * who that implied had bought it; on a board where everybody defends, a column of
+   * `def` answers a question nobody asked. Relative to the line rather than named,
+   * because a traveller's rows can themselves be called `Computer`.
+   */
+  it("says who bought the contract, this side or the other", () => {
+    pad([result("b1", PLAIN, [])]);
+    expect(screen.getByText("us")).toBeTruthy();
+    expect(screen.queryByText("them")).toBeNull();
+
+    cleanup();
+    pad([
+      {
+        ...result("b1", -50, []),
+        contract: { declarer: 1, doubling: "none", level: 2, strain: "H" },
+      },
+    ]);
+    expect(screen.getByText("them")).toBeTruthy();
+    expect(screen.queryByText("us")).toBeNull();
+  });
+
+  /**
+   * The anti-vacuity half: without it a pad that tagged every contract would pass
+   * the test above, and the tag would say nothing at all.
+   */
+  it("says nothing about vulnerability when neither side was", () => {
+    pad([result("b1", PLAIN, [])]);
+
+    expect(shown("vul")).toHaveLength(0);
+  });
+
+  /**
+   * Honors are the one component of a score the contract cannot explain: they go to
+   * whoever *holds* them, so a figure can be surprising with nothing beside it to
+   * account for the surprise.
+   */
+  it("names honors, with the figure, where the score needs them to add up", () => {
+    pad([result("b1", VULNERABLE + 100, [], [true, false])]);
+
+    expect(shown("h100").length).toBeGreaterThan(0);
+  });
+
+  it("says nothing about honors when the contract already accounts for the score", () => {
+    pad([result("b1", VULNERABLE, [], [true, false])]);
+
+    expect(shown(/^h\d/)).toHaveLength(0);
+  });
+
+  /**
+   * Signed the way the points beside it are, because the other side holding them is
+   * exactly the case that makes a row baffling.
+   */
+  it("flags honors even where the other side was paid them", () => {
+    // 4♠ made exactly pays 120 and a 300 game bonus at neither vulnerable, so a
+    // recorded 320 is that less the hundred the other side took.
+    pad([result("b1", PLAIN - 100, [])]);
+
+    expect(shown("h100")).toHaveLength(1);
+  });
+});
+
+/**
+ * Going back to the hands of a board already played — the placing says how it went
+ * and nothing about why, and the why is what was held and what was bid.
+ */
+describe("looking back at a board", () => {
+  /**
+   * **Between deals the board is drawn rather than listed**, and it is the same
+   * component the pad opens — a traveller with a "Hands and bidding" button under it
+   * made the board you had just played the one board reached differently from every
+   * other, and that button opened a panel starting on the field anyway.
+   */
+  it("draws the board itself between deals, with the deal a tab away", () => {
+    const boards = [result("b1", 420, [])];
+    const state: FieldState = {
+      at: boards.length,
+      boards: boards.map((one) => one.board),
+      deal: startDeal({ seed: 1, starter: 0 }),
+      results: boards,
+    };
+    render(
+      createElement(FieldPad, {
+        latest: true,
+        me: ME,
+        opponentName: "Computer",
+        reviews: { kept: new Map([["b1", REVIEW]]), open: opened },
+        summary: summarizeField(state, ME),
+      }),
+    );
+
+    expect(screen.getByRole("button", { name: "The field" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "The deal" })).toBeTruthy();
+    // The traveller outright, not behind a tap.
+    expect(screen.getAllByText("you").length).toBeGreaterThan(0);
   });
 });

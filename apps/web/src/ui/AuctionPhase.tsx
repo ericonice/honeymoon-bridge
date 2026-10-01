@@ -2,6 +2,7 @@ import { STRAINS, legalActionsForView } from "@hb/engine";
 import type { Call, Level, Pair, PlayerView, Strain } from "@hb/engine";
 import { useEffect, useState } from "react";
 import { callLabel, strainIsRed, strainSymbol } from "../game/labels.js";
+import { AuctionRecord } from "./AuctionRecord.js";
 import { CallText, ContractText, redTone } from "./CardText.js";
 import { SeatLabel } from "./SeatLabel.js";
 
@@ -76,21 +77,8 @@ function strainTone(selected: boolean): string {
 }
 
 /**
- * The auction so far, written onto a scorecard.
- *
- * Two columns, because calls strictly alternate: each one belongs to a fixed
- * column and the rows line up without any bookkeeping.
- *
- * **The surface is what makes a spade black here** (§1.5). A black suit cannot
- * be printed black on the table, and giving each call its own little chip of
- * paper was tried and reads as a row of specks — so the record gets *one*
- * surface instead of six, and every call on it takes the cards' own inks. A
- * spade in the auction record is then the same black as the spade in your hand.
- *
- * Paper at 55% rather than solid, so it composites with whatever table is
- * behind it: it reads as a ruled area the auction is written into rather than a
- * white card laid on top of one, and it needs no per-theme value of its own.
- * That figure is the only dial here — lower melds further and costs contrast.
+ * The auction so far, on the scorecard `AuctionRecord` draws — see it for why the
+ * record is one surface rather than a chip per call.
  */
 function History({
   opponentName,
@@ -101,21 +89,7 @@ function History({
 }): React.JSX.Element {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
-      <div className="scorecard rounded-xl px-3 py-2">
-        <div className="grid grid-cols-2 gap-x-6 text-sm">
-          <p className="pb-1 text-xs text-ink-black/55">You</p>
-          <p className="pb-1 text-xs text-ink-black/55">{opponentName}</p>
-          {view.auction.map((entry, index) => (
-            // The auction is append-only, so the index is a stable identity.
-            <p key={index} className={entry.by === view.me ? "col-start-1" : "col-start-2"}>
-              <CallText call={entry.call} on="light" />
-            </p>
-          ))}
-        </div>
-        {view.auction.length === 0 ? (
-          <p className="text-sm text-ink-black/50">No calls yet.</p>
-        ) : null}
-      </div>
+      <AuctionRecord auction={view.auction} me={view.me} opponentName={opponentName} />
     </div>
   );
 }

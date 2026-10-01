@@ -39,6 +39,28 @@ export interface FieldEntryRow {
   readonly who: string;
 }
 
+/**
+ * A contract as the seat holding this board's stream sees it: that seat is 0.
+ *
+ * §1.8a's corpus stores every entry from its own stream's side, so a board's rows are
+ * comparable with each other and with whoever is ranked against them next. Every
+ * other figure on a result is already read from that seat — the generator turns the
+ * second stream round, and a table reads `points` and `tricks` per seat — and the
+ * declarer is the one field that travels as a *seat* rather than as a number, so it
+ * has to be turned round with them.
+ *
+ * It was not, and the bug is invisible in solo play: there the person is seat 0 and
+ * this is the identity. At a table, seat 1's result went in naming seat 1 as declarer
+ * beside tricks that said seat 0, and a traveller reading the two together drew the
+ * row as defending when it had declared.
+ */
+export function contractForSeat(contract: Contract | null, seat: PlayerId): Contract | null {
+  if (contract === null || seat === 0) {
+    return contract;
+  }
+  return { ...contract, declarer: contract.declarer === 0 ? 1 : 0 };
+}
+
 /** A result being recorded, whether the computer's own or a person's. */
 export interface FieldResultReport {
   readonly boardId: string;
@@ -95,10 +117,40 @@ export async function fieldBoardsFor(
     // stock, and the second is played knowing every card. Found by probing the
     // route rather than by reading it.
     //
-    // Within a seed the **shallower** stream wins, so the two sides fill evenly.
-    // Taking the deeper one instead starves the other permanently: whoever meets the
-    // seed plays the deep side, which excludes the seed from them entirely, and the
-    // next player faces the same choice and makes the same one.
+    // Within a seed the two streams **alternate**, so a session is dealt each side
+    // of the draw in turn. This is the one key here that is about the player rather
+    // than about the corpus: `starter` decides who draws first *and* who opens the
+    // auction, so a side chosen the same way every time is a seat the player never
+    // sits in.
+    //
+    // **It was "the shallower stream wins", and that rule never once fired.** The
+    // generator fills both streams of a seed from one deal, so they open with the
+    // same number of runs — and a person joining retires a machine run, so the count
+    // does not move then either. Measured: **988 of 999 seeds are exactly tied**, so
+    // the operative rule was the tie-break below it, `b.starter ASC`, which is a
+    // constant. One account played **711 first-draw boards against 14**, and opened
+    // all 685 of its logged auctions.
+    //
+    // That is the same wrong quantity the paragraph below already corrects for the
+    // outer ordering — an entry count cannot distinguish these boards, and counting
+    // human rows is the question actually being asked. **The correction was applied
+    // to one of the two places reading it.** There is nothing left for a depth rule
+    // to do here: alternating fills the two sides evenly by construction, rather
+    // than by reacting to a count that cannot move.
+    //
+    // Keyed on the board's **number**, not its seed. Both sides of a stock share a
+    // number, numbers run 1..N in seed order, and the outer ordering below is
+    // `number ASC` — so consecutive boards of a session come from opposite sides.
+    // Seed parity would alternate too, but only because this corpus happens to have
+    // been generated with an odd step between seeds; an even one would silently put
+    // every board back on the same side. `b.starter ASC` still breaks the tie, so a
+    // board with no number at all falls back to the old behaviour rather than
+    // sorting unpredictably.
+    //
+    // Checked against real local D1 rather than read, since the stub in
+    // `test/field.test.ts` deliberately cannot see a `WHERE` clause — and checked
+    // against a corpus whose seeds are **all even**, so that a fixture where seed
+    // parity happens to alternate cannot pass for the number doing the work.
     //
     // **Ordered by how many *people* have played it, then by when it was made.**
     // A plain entry count cannot do the first job and looked as though it could: a
@@ -119,10 +171,11 @@ export async function fieldBoardsFor(
     `SELECT id, seed, starter, vulnerable_0, vulnerable_1
        FROM (
          SELECT b.id, b.seed, b.starter, b.vulnerable_0, b.vulnerable_1, b.number,
-                COUNT(r.id) AS entries,
                 SUM(CASE WHEN r.generated = 0 THEN 1 ELSE 0 END) AS people,
                 ROW_NUMBER() OVER (
-                  PARTITION BY b.seed ORDER BY COUNT(r.id) ASC, b.starter ASC
+                  PARTITION BY b.seed
+                  ORDER BY CASE WHEN b.starter = b.number % 2 THEN 0 ELSE 1 END ASC,
+                           b.starter ASC
                 ) AS side
            FROM field_boards b
            LEFT JOIN field_results r ON r.board_id = b.id

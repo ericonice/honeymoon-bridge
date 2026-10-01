@@ -272,6 +272,18 @@ export interface LocalSessionOptions {
    */
   readonly fieldBoards?: readonly FieldBoard[];
   /**
+   * Start a fresh Doop session, which this hook cannot do for itself.
+   *
+   * **A finished field session has no successor here**: `nextIn` says so in as many
+   * words, because a new one needs boards from the corpus and picking them is a
+   * decision about which this player has already met — a fetch, not a seed. So
+   * "New session" called `advance`, `nextFieldDeal` did nothing on a complete
+   * session, and the button silently did nothing at all. Reported exactly that way.
+   *
+   * Absent for every other format, where `nextIn` really can deal the next thing.
+   */
+  onNewSession?(): void;
+  /**
    * Whether to hand the screens the computer's cards.
    *
    * Was `import.meta.env.DEV`, so the whole thing folded out of any build that
@@ -598,6 +610,12 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
   }, [match]);
 
   const advance = useCallback(() => {
+    // A finished Doop session cannot deal itself another — see `onNewSession`. The
+    // host refetches and remounts, which is what makes the button do what it says.
+    if (summary.format === "field" && summary.complete) {
+      options.onNewSession?.();
+      return;
+    }
     // A finished session is followed by a fresh set of boards, so what the computer
     // remembers of the old ones goes. Not housekeeping: a person does not carry a
     // board across sessions either, and leaving it would make the memory grow for as
@@ -610,7 +628,16 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
     // inside an updater React may call more than once. A session ignores the
     // seed — it already knows every board it is going to play.
     setMatch(nextIn(match, dealSeed.current));
-  }, [match]);
+  }, [match, options, summary]);
+
+  /**
+   * Whether every field this session is going to get has been asked for.
+   *
+   * A ref for the ordering reason above, and a counter beside it so finishing the
+   * asking re-runs the report effect — a ref alone changes nothing React can see.
+   */
+  const fieldsSettled = useRef(true);
+  const [fieldsChecked, setFieldsChecked] = useState(0);
 
   const achievements = useAchievementTracker();
 
@@ -739,8 +766,14 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
     }
     const wanted = unrankedBoards(match.session.results, HUMAN);
     if (wanted.length === 0) {
+      fieldsSettled.current = true;
       return;
     }
+    // **Set before the report effect below runs, which is why this is a ref.** Both
+    // effects belong to the same commit and run in declaration order, so a `useState`
+    // here would be read by the report from *this* render's closure — still true, and
+    // the very race this exists to close.
+    fieldsSettled.current = false;
     let live = true;
     void (async () => {
       for (const board of wanted) {
@@ -754,6 +787,13 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
             ? { kind: "field", session: withField(current.session, board.ids[HUMAN]!, HUMAN, found) }
             : current,
         );
+      }
+      if (live) {
+        // Settled means *done asking*, not *all ranked*: a board's field may never
+        // come back, and a session whose result waits on one that never arrives is
+        // worse than one recorded over the boards that did.
+        fieldsSettled.current = true;
+        setFieldsChecked((one) => one + 1);
       }
     })();
     return () => {
@@ -774,6 +814,15 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
   const reported = useRef(initial.reportedAlready);
   useEffect(() => {
     if (!summary.complete || reported.current) {
+      return;
+    }
+    // **A Doop session's verdict is a function of fields that arrive after the last
+    // card.** §1.8a fetches a board's field *after* the deal, so at the instant a
+    // session completes the last board — and sometimes more — is still unranked. The
+    // placing is a mean over *ranked* boards, so reporting here recorded a figure
+    // computed from fewer boards than the screen went on to show: the session could be
+    // stored as a win while the player was told it was level. Reported as exactly that.
+    if (summary.format === "field" && !fieldsSettled.current) {
       return;
     }
     reported.current = true;
@@ -817,7 +866,7 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
         HUMAN,
       );
     }
-  }, [achievements, summary.complete, summary.dealsPlayed, summary.winner]);
+  }, [achievements, fieldsChecked, summary.complete, summary.dealsPlayed, summary.format, summary.winner]);
 
   // A new match is a new thing to report. `nextDeal` starts a fresh rubber once
   // the last was won, which is the only way past a completed one.

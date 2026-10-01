@@ -10,50 +10,80 @@ import type { Call } from "@hb/engine";
 let sharedContext: AudioContext | null = null;
 
 /**
- * Created once and resumed on every call rather than only the first, since a
- * context created before any tap on the page starts suspended and stays that
- * way until a user gesture resumes it — and there is no single place in the
- * app that is guaranteed to be one.
+ * The shared context, resumed whenever it is not running.
  *
- * Resuming here is what Chrome needs and not what Safari needs. Chrome treats
- * any gesture anywhere on the page as unlocking audio for good, so calling
- * `resume` from inside a React effect — after the tap that caused it, not
- * during it — still works. WebKit only honors a `resume` called synchronously
- * inside the gesture's own event handler; called one tick later, from an
- * effect, it is silently refused every time, forever, which is exactly "plays
- * in Chrome, never on an iPhone." `primeOnFirstGesture` below is what actually
- * unlocks it there.
+ * **`!== "running"` rather than `=== "suspended"`, and that is the bug this had.**
+ * The spec names three states and WebKit has a fourth: an `AudioContext` on iOS goes
+ * to **`"interrupted"`** when something else takes the audio — a call, Siri, an
+ * alarm, another app, the phone locking. It is not `"suspended"`, so a check for
+ * that one never fired, the context was never resumed, and every sound after the
+ * interruption did nothing at all. Reported as the sound just stopping working, with
+ * nothing to do about it but restart the app.
+ *
+ * Testing for "not running" covers it without naming a state TypeScript's
+ * `AudioContextState` does not have, and covers whatever WebKit invents next.
+ *
+ * **A closed context is replaced rather than resumed**, since `resume` on one throws
+ * and iOS will close one belonging to a page it has evicted from memory.
+ *
+ * Resuming here is what Chrome needs and not what Safari needs. Chrome treats any
+ * gesture anywhere on the page as unlocking audio for good, so calling `resume` from
+ * inside a React effect — after the tap that caused it, not during it — still works.
+ * WebKit only honors a `resume` called synchronously inside the gesture's own event
+ * handler; called one tick later, from an effect, it is silently refused every time.
+ * `keepAwakeOnGesture` below is what actually unlocks it there.
  */
 function context(): AudioContext {
-  sharedContext ??= new AudioContext();
-  if (sharedContext.state === "suspended") {
-    void sharedContext.resume();
+  if (sharedContext === null || sharedContext.state === "closed") {
+    sharedContext = new AudioContext();
+  }
+  if (sharedContext.state !== "running") {
+    // Rejects when the browser will not have it — off a gesture on WebKit, mostly.
+    // The next tap tries again, which is what `keepAwakeOnGesture` is for.
+    void sharedContext.resume().catch(() => {});
   }
   return sharedContext;
 }
 
 /**
- * Creates and resumes the context synchronously inside the very first tap
- * anywhere in the app, so WebKit — which only honors a resume made during a
- * gesture's own handler — has one to honor. Chrome does not need this, but
- * running it there too costs nothing.
+ * Resumes the context inside **every** gesture that finds it stopped, not just the
+ * first.
  *
- * Registered once at module load, not from a component: the first gesture in
- * a session is often on the home screen or in Settings, well before anything
- * that plays a sound has mounted.
+ * It was `{ once: true }`, on the reasoning that unlocking audio is a one-time
+ * thing. That is true of the *initial* unlock and false for the rest of a session:
+ * a phone call or a lock screen interrupts the context long afterwards, and by then
+ * the listener that could have revived it had removed itself. WebKit only honors a
+ * `resume` made synchronously inside a gesture handler, so with no listener left
+ * there was no moment in the app's life when the resume could legally happen.
+ *
+ * The cost of leaving it attached is a state comparison per tap, which is nothing;
+ * the cost of removing it was the sound never coming back.
+ *
+ * Registered at module load rather than from a component: the first gesture in a
+ * session is often on the home screen or in Settings, well before anything that
+ * plays a sound has mounted.
  */
-function primeOnFirstGesture(): void {
+function keepAwakeOnGesture(): void {
   if (typeof document === "undefined") {
     return;
   }
-  const unlock = (): void => {
-    context();
+  const revive = (): void => {
+    if (sharedContext === null || sharedContext.state !== "running") {
+      context();
+    }
   };
-  document.addEventListener("pointerdown", unlock, { once: true });
-  document.addEventListener("touchend", unlock, { once: true });
+  document.addEventListener("pointerdown", revive);
+  document.addEventListener("touchend", revive);
+  // Coming back to the app is the other moment it can be stopped. Chrome honors a
+  // resume here; WebKit usually will not, and the next tap covers that.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      revive();
+    }
+  });
 }
 
-primeOnFirstGesture();
+keepAwakeOnGesture();
 
 /** A short burst of filtered noise — the raw material for a scrape or a crowd swell. */
 function noiseBurst(
@@ -191,7 +221,8 @@ function fogHorn(ctx: AudioContext, { delay = 0 }: { readonly delay?: number } =
  * is still waiting on it, and a phone whose `AudioContext` is in whatever
  * state a backgrounded tab or an incoming call left it in is not a reason to
  * take the whole screen down over a sound nobody would have gotten to hear
- * anyway.
+ * anyway. What that state *is* matters though — see `context`, where not noticing
+ * one of them is what made the sound stop coming back.
  */
 function play(effect: (ctx: AudioContext) => void): void {
   try {

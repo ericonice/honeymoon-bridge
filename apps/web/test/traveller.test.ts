@@ -1,0 +1,246 @@
+// @vitest-environment jsdom
+import type { FieldEntry, FieldResult, Pair, PlayerId } from "@hb/engine";
+import { cleanup, render, screen } from "@testing-library/react";
+import { createElement } from "react";
+import { afterEach, describe, expect, it } from "vitest";
+import { Traveller } from "../src/ui/Traveller.js";
+
+/**
+ * A board's traveller: every result on it, yours among them.
+ *
+ * It used to live inside the session pad, expanded from a row; it is the substance
+ * of a board's own panel now. These are the rules it carried with it.
+ */
+
+const ME: PlayerId = 0;
+
+function entry(points: number, who: string, over: Partial<FieldEntry> = {}): FieldEntry {
+  return {
+    contract: { declarer: 0, doubling: "none", level: 3, strain: "H" },
+    kind: "computer",
+    points,
+    tricks: [9, 4],
+    who,
+    ...over,
+  };
+}
+
+function result(
+  mine: number,
+  field: readonly FieldEntry[] | null,
+  vulnerable: Pair<boolean> = [false, false],
+): FieldResult {
+  return {
+    board: { ids: ["b1", null], seed: 1, starter: 0, vulnerable },
+    contract: { declarer: 0, doubling: "none", level: 4, strain: "S" },
+    field: [field, null],
+    points: [mine, 0],
+    tricks: [10, 3],
+  };
+}
+
+/**
+ * Chips the row actually carries, ignoring the slots held open for ones it does
+ * not — see `Tags`. A reserved slot is marked `aria-hidden`, which is both how a
+ * screen reader skips it and how a test can tell the two apart; jsdom computes no
+ * CSS, so `invisible` means nothing to a query.
+ */
+function shown(label: string | RegExp): HTMLElement[] {
+  return screen.queryAllByText(label).filter((one) => one.closest("[aria-hidden]") === null);
+}
+
+function traveller(one: FieldResult): void {
+  render(createElement(Traveller, { at: 0, me: ME, result: one }));
+}
+
+afterEach(cleanup);
+
+describe("a board's traveller", () => {
+  /**
+   * **Said, not implied.** It used to read "by them", which named a different person
+   * on every row — and on somebody else's line it reads as *your* opponent rather
+   * than theirs. A defender's row is the one that needs saying, because a defender
+   * of a contract that made scores nothing and a bare zero explains itself to nobody.
+   */
+  it("says which rows were defending, on their own terms", () => {
+    traveller(
+      result(620, [
+        entry(-100, "Noah", {
+          contract: { declarer: 1, doubling: "none", level: 3, strain: "NT" },
+          kind: "solo",
+        }),
+      ]),
+    );
+
+    // Who bought it, per row, relative to that row: the recorded line defended so
+    // `them`, and yours declared so `us`. The same two words on every row, which
+    // is what stops the opposition being named twice under two names.
+    expect(screen.getByText("them")).toBeTruthy();
+    expect(screen.getByText("us")).toBeTruthy();
+    expect(screen.queryByText("by them")).toBeNull();
+  });
+
+  /**
+   * Best first, with your own line wherever it lands — a traveller exists to show
+   * where you *came*, and pinning your row to the top answers a different question,
+   * which the row that opened this has already answered.
+   */
+  it("sorts a board's results best first, with yours in its place", () => {
+    traveller(result(170, [entry(620, "Computer"), entry(-100, "Computer")]));
+
+    const order = screen
+      .getAllByRole("row")
+      .map((row) => row.textContent ?? "")
+      .filter((text) => text.includes("+") || text.includes("−"));
+    expect(order[0]).toContain("+620");
+    expect(order[1]).toContain("you");
+    expect(order[2]).toContain("−100");
+  });
+
+  /**
+   * **Flagged, not accounted for.** Honors are the one component a contract cannot
+   * explain, so the tag says a figure has them in it — whichever side was paid, and
+   * a row whose *opponent* held them is as much in need of saying so as one that
+   * held them itself.
+   */
+  it("flags honors on a recorded row whichever side was paid", () => {
+    // 3♥ made exactly pays 90 and a 50 part-score bonus at neither vulnerable, so a
+    // recorded 240 is that plus a hundred and 40 is that less one.
+    traveller(result(620, [entry(240, "Computer"), entry(40, "Computer")]));
+
+    expect(shown("h100")).toHaveLength(2);
+    expect(screen.queryByText(/h[+−]/)).toBeNull();
+  });
+
+  /**
+   * **"Where am I" is the question a traveller exists to answer**, and it is sorted
+   * by score, so your row lands anywhere in it. Marked with `aria-current`, which is
+   * what the attribute means and is the only part of this a screen reader can use —
+   * it otherwise has nothing but the word "you" in a column of names. The styling
+   * hangs off the same mark, so it can be tuned without touching this.
+   */
+  it("marks your own line as the current one", () => {
+    traveller(result(170, [entry(620, "Computer"), entry(-100, "Computer")]));
+
+    const current = screen.getAllByRole("row").filter((row) => row.getAttribute("aria-current"));
+    expect(current).toHaveLength(1);
+    expect(current[0]?.textContent).toContain("you");
+  });
+
+  /**
+   * The anti-vacuity half: three rows are drawn and exactly one of them is yours, so
+   * a mark on every row would pass the count above only if it were not counted.
+   */
+  it("marks nobody else's", () => {
+    traveller(result(170, [entry(620, "Computer"), entry(-100, "Computer")]));
+
+    const rows = screen.getAllByRole("row");
+    expect(rows.length).toBeGreaterThan(2);
+    for (const row of rows) {
+      if (!(row.textContent ?? "").includes("you")) {
+        expect(row.getAttribute("aria-current")).toBeNull();
+      }
+    }
+  });
+
+  /**
+   * A field that has not come back and a board nobody else has played are different
+   * answers, and neither of them is a placing of nought.
+   */
+  it("tells a field that has not arrived from one that is empty", () => {
+    traveller(result(620, null));
+    expect(screen.getByText("waiting for the other results")).toBeTruthy();
+
+    cleanup();
+    traveller(result(620, []));
+    expect(screen.getByText("nobody else has played this board yet")).toBeTruthy();
+  });
+
+  /**
+   * **Chips, not faint words.** A row read as five things of equal weight —
+   * `4♥ = vul bid h+100` — where it is a contract with three notes attached. The
+   * provenance note takes the same chip for the same reason: one of these drawn as
+   * prose beside three chips reads as something half-finished.
+   */
+  it("draws every mark on a row as a tag, the provenance one included", () => {
+    traveller(result(620, [entry(140, "Ada", { kind: "table" })], [true, false]));
+
+    // The By field is not among them: it is always one or the other, so it is a
+    // field before the contract rather than a note about it. Both rows carry one.
+    for (const cell of screen.getAllByText("us")) {
+      expect(cell.className).not.toContain("rounded");
+    }
+
+    for (const tag of ["vul", "vs person"]) {
+      const chips = screen.getAllByText(tag);
+      expect(chips.length).toBeGreaterThan(0);
+      for (const chip of chips) {
+        expect(chip.className).toContain("uppercase");
+        expect(chip.className).toContain("rounded");
+      }
+    }
+  });
+
+  /**
+   * **The chips are a cell of their own, not the tail of the contract's.**
+   *
+   * Sharing one, they were flushed right and still moved: a wide contract — `7♣ X
+   * −2` against `4♥ =` — pushed them onto a second line, and a wrapped group aligns
+   * with nothing. A cell cannot be pushed out of its own row.
+   */
+  it("puts the chips in a cell of their own, apart from the contract", () => {
+    traveller(result(620 + 100, [], [true, false]));
+
+    const cell = screen.getByText("vul").closest("td");
+    expect(cell?.textContent).toBe("vulh100");
+    // The contract and the By field are in the cell before it, not this one.
+    expect(cell?.textContent).not.toContain("us");
+    expect(screen.getByText("us").closest("td")).not.toBe(cell);
+  });
+
+  /**
+   * **A slot is held open for a chip the row does not have**, which is the only
+   * thing that makes the chips line up: flushing the group right lines up rows
+   * carrying the *same* chips, and a row with honors alone put its honors chip
+   * somewhere different from a row with both. Eight boards of that is what a
+   * screenshot showed.
+   */
+  it("holds a slot open for a chip the row has not got", () => {
+    traveller(result(620, [], [true, false]));
+
+    // Vulnerable, no honors: the honors chip is there as a spacer and marked so a
+    // screen reader skips it and a reader never sees it.
+    expect(shown("vul")).toHaveLength(1);
+    expect(shown(/^h\d/)).toHaveLength(0);
+    const placeholder = screen.getByText("h100").closest("[aria-hidden]");
+    expect(placeholder).not.toBeNull();
+    expect(placeholder?.className).toContain("invisible");
+  });
+
+  /**
+   * **One hue, on the mark that earns it.** Red on `vul` is borrowed from every
+   * bridge scorecard rather than invented, and it is on the chip's ground rather
+   * than its letters so it cannot be read as a red suit. Colouring the second chip
+   * would cost the first its meaning, which is why `h100` stays plain.
+   */
+  it("colours vulnerability and nothing else", () => {
+    traveller(result(620 + 100, [], [true, false]));
+
+    const vul = screen.getByText("vul");
+    expect(vul.className).toContain("red");
+    // On the ground, never on the letters, which is where `text-red-400` means
+    // "this is a red suit".
+    expect(vul.className).toContain("bg-red-500/20");
+    expect(vul.className).not.toContain("text-red-400");
+
+    const honors = screen.getByText("h100");
+    expect(honors.className).not.toContain("red");
+  });
+
+  /** The board's own panel names the board, so the caption would say it twice. */
+  it("can be drawn without its caption", () => {
+    render(createElement(Traveller, { at: 0, caption: false, me: ME, result: result(620, []) }));
+
+    expect(screen.queryByText("Board 1")).toBeNull();
+  });
+});

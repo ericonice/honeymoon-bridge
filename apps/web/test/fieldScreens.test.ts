@@ -71,6 +71,7 @@ function props(standing: MatchStanding, complete = true) {
       opponentRating: 1400,
       opponentWaitingToContinue: false,
       repeated: false,
+      reviews: { kept: new Map(), open: () => {} },
       score: null,
       standing,
       view,
@@ -179,24 +180,26 @@ describe("finishing a field session", () => {
   });
 
   /**
-   * §1.8a leaves rating open and the server excludes the format from the walk, so a
-   * figure here is a number that never arrives. Worse, a session's stored points are
-   * a matchpoint percentage and its complement rather than a total, so "beat the
-   * computer" is not what the result says.
+   * **A Doop session is rated, and this test used to pin the opposite.**
+   *
+   * It was excluded while §1.8a left the question open — what is beating a *field*
+   * worth? The answer is in the format's own construction: the field is the corpus
+   * bidder's own runs, so placing above 50% is beating that bidder, and the bidder is
+   * the fixed opposition the format specifies, whose anchor already exists.
    */
-  it("claims no rating change, since none is coming", () => {
+  it("shows the rating change, now that the server rates a session", () => {
     knowMyRating();
 
-    expect(finish(THREE)).not.toContain("Rating");
+    expect(finish(THREE)).toContain("Rating");
   });
 
   /**
-   * The anti-vacuity half: the same fixture in a format that *is* rated does show
-   * the line. Without this, the assertion above passes whenever the figure happens
-   * to be unavailable for some other reason — which is exactly how it passed against
-   * the bug on the first attempt.
+   * The companion, kept: a rubber shows the line too. It was the anti-vacuity half of
+   * the assertion above when that asserted an *absence*, and now that both assert a
+   * presence it is what stops the pair passing on a fixture that shows the line for
+   * some reason unrelated to the format.
    */
-  it("does show one for a format the server actually rates", () => {
+  it("does show one for a rubber as well", () => {
     knowMyRating();
     render(
       createElement(DealComplete, {
@@ -222,31 +225,28 @@ describe("finishing a field session", () => {
   it("shows the whole session as soon as it is over", () => {
     finish(THREE);
 
-    expect(screen.getByRole("button", { name: /Board 1/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Board 3/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bd 1/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bd 3/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /whole session/i })).toBeNull();
   });
 
   /**
-   * **Every row shut, including the board just played.**
+   * **The final screen is a list, and a traveller is not in it.**
    *
-   * That row opened on mount for a real reason — showing the whole session at the end
-   * otherwise skipped the last board's own traveller, making it the one deal of the
-   * sitting whose result you never saw. The reveal stages that traveller on its own
-   * now, before this screen is reached, so opening it here drew the same thing twice in
-   * consecutive screens.
+   * A row used to expand one in place, which is why this once asserted that none had
+   * opened on mount. A row drills into the board's own panel now, so the rule is
+   * simpler and stronger: nothing in the list belongs to anybody but you until you
+   * ask for a board.
    *
-   * Asserted across two rows rather than one, so a pad that opened *every* row would
-   * fail rather than pass on whichever row happened to be checked.
+   * Asserted on somebody else's name rather than on the absence of a control, since
+   * a name from the field is the thing that could only have come from a traveller.
    */
-  it("leaves every board shut, the last one included", () => {
+  it("lists every board and draws no traveller among them", () => {
     finish(THREE);
 
-    for (const board of [1, 3]) {
-      expect(
-        screen.getByRole("button", { name: new RegExp(`Board ${board}`) }).getAttribute("aria-expanded"),
-      ).toBe("false");
-    }
+    expect(screen.getByRole("button", { name: /Bd 1/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bd 3/ })).toBeTruthy();
+    expect(screen.queryByText("Computer")).toBeNull();
   });
 
   /**
@@ -256,7 +256,7 @@ describe("finishing a field session", () => {
   it("shows only the board just played while the session is running", () => {
     finish(THREE, false);
 
-    expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Bd 1/ })).toBeNull();
   });
 });
 

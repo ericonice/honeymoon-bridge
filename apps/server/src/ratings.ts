@@ -402,6 +402,14 @@ function matchWeight(format: string | null, deals: number): number {
     const boards = deals / 2;
     return Math.min(3, Math.max(0.5, boards * DUPLICATE_BOARD_WEIGHT));
   }
+  // **A Doop board is one deal, where a replay board is two** — that is the whole of
+  // the difference, and it is why this cannot share the branch above. The per-board
+  // weight is the same: what it prices is how much of a board's result is skill rather
+  // than the deal's own luck, and both formats cancel that luck the same way, by
+  // comparing scores made on one stock.
+  if (format === "field") {
+    return Math.min(3, Math.max(0.5, deals * DUPLICATE_BOARD_WEIGHT));
+  }
   if (format === "rubber" || format === "mirror") {
     return 2;
   }
@@ -497,17 +505,22 @@ export async function ratingsFor(env: Env): Promise<Ratings> {
   // nobody's race. That is a hypothesis; the measurement is the finding, and it is
   // the reason duplicate's own gap has no offset yet: nobody has measured it.
   const rows = await env.DB.prepare(
-    // **A field session is left out, and that is §1.8a's open question rather than a
-    // decision taken here.** Its verdict is a matchpoint percentage against results
-    // recorded on the board, so "beat the computer" is not what it measures and the
-    // rubber anchor is not what it is worth — and its two seats' figures are not even
-    // a points total, so the stored `points` mean something else entirely. Duplicate
-    // was excluded on a weaker argument and later admitted at a borrowed anchor; this
-    // one waits until somebody has played enough boards to say. Recorded either way:
-    // a match somebody played is worth writing down whether or not it can be rated.
+    // **A field session is rated now, and the anchor is not borrowed.** It was left out
+    // while §1.8a's open question stood — what is beating a *field* worth, when the
+    // verdict is a matchpoint percentage rather than "beat the computer"? The answer
+    // fell out of the format's own construction rather than needing a bench: the field
+    // is the corpus bidder's own runs, so **placing above 50% is beating that bidder on
+    // its own boards**, and the bidder is the fixed opposition §1.8a specifies —
+    // Championship v3, whose anchor already exists. There is nothing left to invent.
+    //
+    // It is arguably a *better* measure than a rubber and is deliberately not credited
+    // as one: the deal cancels, since every score is made on a stock somebody else has
+    // played, where a rubber carries the luck of the shuffle. That argues for a heavier
+    // weight, not a lighter one, and `matchWeight` gives it the same per-board figure
+    // duplicate gets rather than guessing at a second constant.
     `SELECT account0, account1, bot_version, deals, difficulty, format, token0, token1, winner
      FROM results
-      WHERE coalesce(repeated, 0) = 0 AND coalesce(format, 'rubber') != 'field'
+      WHERE coalesce(repeated, 0) = 0
       ORDER BY finished_at`,
   ).all<RatingRow>();
 

@@ -217,8 +217,8 @@ test("an opponent played in both formats names them, on a line each", () => {
 
   expect(lines()).toEqual([
     "Computer 1200 cpu +731 15–8 · 155 hands",
-    "rubbers +641 13–7 · 146 hands",
-    "mirror matches +90 2–1 · 9 hands",
+    "rubbers – standard +641 13–7 · 146 hands",
+    "rubbers – mirror +90 2–1 · 9 hands",
   ]);
 });
 
@@ -233,7 +233,7 @@ test("an opponent played in one format is still a single line", () => {
 
   expect(lines()).toHaveLength(1);
   expect(lines()[0]).toContain("Christopher");
-  expect(rowText()).not.toContain("rubbers");
+  expect(rowText()).not.toContain("rubbers – standard");
 });
 
 /**
@@ -264,6 +264,98 @@ test("a field session shows how it placed, not a points margin", () => {
 });
 
 /**
+ * **A drawn match said "Lost", in both match lists, for as long as draws have existed.**
+ *
+ * `won` false with `drawn` true is a draw; `won` false with `drawn` false is a loss —
+ * and both lists read only `won`. Reported as a record showing three losses where the
+ * recent-form line beside it counted two and a draw: the form line was right.
+ *
+ * Asserted together, because that disagreement *is* the failure — one surface counting
+ * a match one way while another labels it the other.
+ */
+test("a drawn match reads as drawn, and agrees with the form line", () => {
+  robot = [
+    record({
+      deals: 24,
+      drawn: 1,
+      format: "field",
+      lost: 1,
+      matches: [
+        match({ finishedAt: 3, pointsAgainst: 27, pointsFor: 73, won: true }),
+        match({ drawn: true, finishedAt: 2, pointsAgainst: 50, pointsFor: 50, won: false }),
+        match({ finishedAt: 1, pointsAgainst: 67, pointsFor: 33, won: false }),
+      ],
+      pointsAgainst: 144,
+      pointsFor: 156,
+      won: 1,
+    }),
+  ];
+  show();
+  tap();
+
+  const text = rowText();
+  expect(text).toContain("Drew");
+  // One of each, so a list calling the draw a loss would show two.
+  expect(text.match(/Lost/g) ?? []).toHaveLength(1);
+  // And the form line agrees: one won, one lost, one drawn.
+  expect(text).toContain("1–1–1");
+});
+
+/**
+ * **The range rather than the count, which the row below already gives.**
+ *
+ * The Score line used to read "over 31 sessions" directly above a Matches line reading
+ * "31 played" — the same number twice on a panel whose job is to fit a history into a
+ * few lines. A mean cannot say how far the sessions spread, and in matchpoints that is
+ * most of what a record is like: a board is scored by rank, so eight boards is a short
+ * sample and sessions swing widely around their own average.
+ */
+test("a field record says its best and worst session, not how many there were", () => {
+  robot = [
+    record({
+      deals: 24,
+      format: "field",
+      lost: 1,
+      matches: [
+        match({ pointsAgainst: 27, pointsFor: 73, won: true }),
+        match({ pointsAgainst: 42, pointsFor: 58, won: true }),
+        match({ pointsAgainst: 67, pointsFor: 33, won: false }),
+      ],
+      pointsAgainst: 136,
+      pointsFor: 164,
+      won: 2,
+    }),
+  ];
+  show();
+  tap();
+
+  const text = rowText();
+  expect(text).toContain("best 73%");
+  expect(text).toContain("worst 33%");
+  // The count is on the Matches row; saying it here as well was the repetition.
+  expect(text).not.toContain("over 3 sessions");
+});
+
+/** A board is the unit, so the panel counts boards rather than hands. */
+test("a field record counts boards, not hands", () => {
+  robot = [
+    record({
+      deals: 16,
+      format: "field",
+      lost: 0,
+      matches: [match({ pointsAgainst: 40, pointsFor: 60, won: true })],
+      pointsAgainst: 40,
+      pointsFor: 60,
+      won: 1,
+    }),
+  ];
+  show();
+  tap();
+
+  expect(rowText()).toContain("Boards");
+});
+
+/**
  * And it must not be *added* to one either. An opponent's margin is a points total,
  * and a session's stored points are not points — pooling the two describes neither.
  */
@@ -289,8 +381,8 @@ test("a third format lands on the list rather than falling off it", () => {
 
   expect(lines()).toEqual([
     "Computer 1200 cpu +1,071 16–9 · 175 hands",
-    "rubbers +641 13–7 · 146 hands",
-    "mirror matches +90 2–1 · 9 hands",
+    "rubbers – standard +641 13–7 · 146 hands",
+    "rubbers – mirror +90 2–1 · 9 hands",
     "duplicate – replay +340 1–1 · 20 hands",
   ]);
 });
@@ -640,10 +732,10 @@ test("a recent match says which format it was", () => {
 
   const text = rowText();
   for (const named of [
-    "Mirror · 8 deals",
+    "Rubbers – Mirror · 8 deals",
     "Duplicate – Replay · 8 deals",
     "Single game · 8 deals",
-    "Rubber · 8 deals",
+    "Rubbers – Standard · 8 deals",
   ]) {
     expect(text, `no row reads "${named}"`).toContain(named);
   }

@@ -29,7 +29,7 @@ import { applyDealAchievements, applyRubberAchievements } from "./achievements.j
 import { accountFor, verifySession } from "./auth.js";
 import { dealSeed } from "./codes.js";
 import type { Env } from "./env.js";
-import { fieldFor, recordFieldResult, tableBoardsFor } from "./field.js";
+import { contractForSeat, fieldFor, recordFieldResult, tableBoardsFor } from "./field.js";
 import type { FieldBoardRow } from "./field.js";
 import { formatFor } from "./matchFormat.js";
 import { DRAWN, recordRubber } from "./results.js";
@@ -560,8 +560,16 @@ export class Table extends DurableObject<Env> {
         {
           // Read from this seat's side, which is how every entry on that board was
           // recorded — see the generator, which turns the second stream round.
+          //
+          // **The declarer has to turn round with the tricks beside it.** Every other
+          // figure here was already being read from this seat and the contract was
+          // not, so a seat-1 result entered the corpus naming seat 1 as declarer
+          // while its own tricks said seat 0 — and a traveller reading the two
+          // together then drew the row as defending when it had declared. Solo play
+          // never showed it, because there the person is seat 0 and turning round is
+          // the identity.
           boardId: id,
-          contract: played.contract,
+          contract: contractForSeat(played.contract, seat),
           ...(theirs?.accountId == null ? {} : { opponentAccountId: theirs.accountId }),
           points: netFor(played.points, seat),
           tricks: [played.tricks[seat], played.tricks[seat === 0 ? 1 : 0]],

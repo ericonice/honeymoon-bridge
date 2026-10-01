@@ -446,20 +446,8 @@ interface RunOptions {
    */
   readonly releases: Pair<BotRelease> | null;
   /** Milliseconds the challenger may spend searching for a trick distribution. Zero is off. */
-  /**
-   * `defend=<ms>` — both sides search at this budget, and **only the challenger also
-   * solves the position where the opponent declares**.
-   *
-   * Its own flag rather than a variant of `search=`, because that one prices searching
-   * against counting and this prices searching *both* positions against searching one.
-   * Holding the budget, the sample count and everything else identical is the whole
-   * design: the only difference between the two seats is whether the branch that prices
-   * a pass, a raise over them and a double gets a measured distribution or a counted
-   * blend.
-   */
   /** `table=refit` prices the challenger's standings with `EQUITY_DOUBLED`. */
   readonly table: boolean;
-  readonly defend: number;
   readonly search: number;
   /** Two difficulty rungs to play against each other, challenger first. */
   readonly levels: Pair<DifficultyLevel> | null;
@@ -513,7 +501,6 @@ function run({
   rubbers,
   samples,
   search,
-  defend,
   searchMode,
   table,
   versusWeight,
@@ -574,19 +561,6 @@ function run({
             objective: "equity",
             ...(challenger ? { equityTable: EQUITY_DOUBLED } : {}),
           });
-        }
-        if (defend > 0) {
-          // **Twelve samples, not twenty-five, and the cap is what makes this a fair
-          // comparison rather than a handicap.** The budget is wall-clock, so the
-          // challenger's extra solve per sample buys it *fewer samples* in the same
-          // time — measured at 11.0 against the reference's 14.9 at 250ms, which
-          // degrades the declaring estimate that already worked and confounds the very
-          // thing being tested. A cap both sides reach removes it: at 500ms and twelve,
-          // the two complete 10.8 and 10.9 samples and run out on the same hands.
-          const shared = { objective, searchBudgetMs: defend, searchSamples: 12 } as const;
-          return challenger
-            ? cardPlay(rng, { ...shared, searchDefending: true })
-            : cardPlay(rng, shared);
         }
         if (search > 0) {
           // The same bidder, one side searching for its trick distribution and
@@ -682,8 +656,6 @@ function run({
         ? `the bidder searching its tricks at ${search}ms (${searchMode}) against the same bidder counting them${play}`
       : table
         ? `the re-fitted equity table against the shipped one, everything else identical${play}`
-      : defend > 0
-        ? `the bidder searching what they take declaring, at ${defend}ms, against the same bidder counting it${play}`
         : releases !== null
         ? `v${releases[0].version} ${releases[0].name} against v${releases[1].version} ${releases[1].name}${play}`
             : versusWeight !== null
@@ -899,7 +871,6 @@ run({
   objective,
   levels: levelsFrom(process.argv.find((arg) => arg.startsWith("levels="))),
   releases: releasesFrom(process.argv.find((arg) => arg.startsWith("releases="))),
-  defend: Number(process.argv.find((arg) => arg.startsWith("defend="))?.slice("defend=".length) ?? 0),
   table: process.argv.includes("table=refit"),
   search: Number(process.argv.find((arg) => arg.startsWith("search="))?.slice("search=".length) ?? 0),
   searchMode: process.argv.includes("mean") ? "mean" : "odds",

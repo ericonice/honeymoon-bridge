@@ -1,3 +1,4 @@
+import { RUFF_PER_LEVEL } from "./evaluate.js";
 import type { BotTuning } from "./heuristicBot.js";
 
 /**
@@ -122,7 +123,7 @@ export const BOT_RELEASES: readonly BotRelease[] = [
    * model of v2 rather than of a person. Fitting against recorded human games was
    * tried and there were eleven usable rubbers in the log; see `equity.ts`.
    */
-  { name: "Bobby Orr", tuning: { objective: "equity" }, version: 3 },
+  { name: "Bobby Orr", tuning: { defendingRuff: RUFF_PER_LEVEL, objective: "equity" }, version: 3 },
 ];
 
 /**
