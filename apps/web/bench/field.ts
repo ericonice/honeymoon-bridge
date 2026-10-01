@@ -11,7 +11,8 @@ import type { Contract, DealState, Pair, PlayerId, Standing } from "@hb/engine";
 import { DEFAULT_GAME_EQUITY } from "../src/bot/bidValue.js";
 import { botForLevel } from "../src/bot/build.js";
 import { levelFor } from "../src/bot/difficulty.js";
-import { LATEST_RELEASE } from "../src/bot/release.js";
+import { LATEST_RELEASE, releaseFor } from "../src/bot/release.js";
+import type { BotRelease } from "../src/bot/release.js";
 import { botTuningFor } from "../src/game/botTuning.js";
 import { botActionFor } from "../src/game/botTurn.js";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -72,7 +73,25 @@ function bidSamples(): number | null {
 }
 
 /** The one place the shipped Championship bot is made reproducible. */
-function generatorTuning(): ReturnType<typeof botTuningFor> {
+/**
+ * The release that made the corpus on disk, which is **not** `LATEST_RELEASE`.
+ *
+ * `field_boards` records a `bot_version` per board for exactly this reason, and
+ * every board stored today says 3. The distinction was free while there was one
+ * newest release and became load-bearing the moment v4 shipped: `generatorTuning`
+ * read `LATEST_RELEASE`, so adding a release silently moved what `compare`'s arm A
+ * meant — it would have ranked the new bidder against a field built by the old one
+ * while claiming both arms were the corpus bidder, and `generate` would have
+ * appended entries from a second bot to a yardstick that must come from one.
+ *
+ * Bump it when the corpus is regenerated, which is the same moment the old boards
+ * stop being offered.
+ */
+const CORPUS_VERSION = 3;
+
+function generatorTuning(
+  release: BotRelease = releaseFor(CORPUS_VERSION) ?? LATEST_RELEASE,
+): ReturnType<typeof botTuningFor> {
   const level = levelFor("championship");
   const tuning = botTuningFor({
     // The shipped defaults, because the corpus has to be set by the computer
@@ -81,7 +100,7 @@ function generatorTuning(): ReturnType<typeof botTuningFor> {
     format: "duplicate",
     gameEquity: DEFAULT_GAME_EQUITY,
     level,
-    release: LATEST_RELEASE,
+    release,
   });
   const samples = bidSamples();
   const searched = samples === null ? tuning : { ...tuning, searchSamples: samples };
@@ -538,6 +557,14 @@ function compare(boards: number): void {
   // erred optimistically on. This is the knob that declines them; see `DOUBLE_MARGIN`.
   const marginArg = process.argv.find((one) => one.startsWith("dmargin="));
   const dmargin = marginArg === undefined ? null : Number(marginArg.slice("dmargin=".length));
+  // **`draw` prices v4's live-card draw, and this is the bench that decides it.**
+  // `bench/rubber.ts` put it at 52.2% ± 2.8 over 320 rubbers — 0.8 standard errors,
+  // nothing — while the same change is +0.078 ± 0.018 double-dummy tricks of hand
+  // quality. A rubber is the wrong instrument for a draw: the deal is most of the
+  // variance and a better hand mostly buys a contract that was going to be bid
+  // anyway. Here the board cancels the deal, so what is left is the hand each
+  // bidder built from the same stock.
+  const draw = process.argv.includes("draw");
   const other = objectiveArg();
   const progress = createProgress(wanted.length, "boards", 10);
   const differences: number[] = [];
@@ -545,8 +572,11 @@ function compare(boards: number): void {
   let theirsTotal = 0;
 
   console.log(
-    `${wanted.length} boards, ${LATEST_RELEASE.name} at Championship\n` +
-      (dmargin !== null
+    `${wanted.length} boards, corpus v${CORPUS_VERSION} at Championship\n` +
+      (draw
+        ? `  A  the bidder that made the corpus, valuing a growing hand against a full deck\n` +
+          `  B  the same bidder, counting only the cards that can still appear\n`
+        : dmargin !== null
         ? `  A  the bidder that made the corpus\n` +
           `  B  the same bidder, doubling only when it wins by ${dmargin}\n`
         : weight !== null
@@ -562,14 +592,16 @@ function compare(boards: number): void {
     // A is the bidder that made the corpus: flat own-hand term, shipped weight.
     const mine = placeOf(
       board,
-      dmargin !== null
+      draw || dmargin !== null
         ? generatorTuning()
         : ruff || weight !== null
           ? { ...generatorTuning(), defendingRuff: 0 }
           : generatorTuning(),
     );
     const theirs =
-      dmargin !== null
+      draw
+        ? { ...generatorTuning(), drawCountsLive: true }
+        : dmargin !== null
         ? { ...generatorTuning(), doubleMargin: dmargin }
         : weight !== null
         ? { ...generatorTuning(), theirBidWeight: weight }

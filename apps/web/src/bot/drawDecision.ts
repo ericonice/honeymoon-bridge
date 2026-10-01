@@ -1,6 +1,7 @@
 import { buildDeck, cardId } from "@hb/engine";
 import type { Card, DrawTake } from "@hb/engine";
-import { DEFENSE_SHARE, rawHandValue } from "./evaluate.js";
+import type { Dead } from "./evaluate.js";
+import { DEFENSE_SHARE, deadFrom, rawHandValue } from "./evaluate.js";
 
 /**
  * Every card that could still turn up, given what this player remembers seeing.
@@ -38,11 +39,24 @@ function gainFrom(
   base: number,
   card: Card,
   defenseShare: number,
+  live?: Dead,
 ): number {
-  return rawHandValue([...hand, card], true, defenseShare) - base;
+  return rawHandValue([...hand, card], true, defenseShare, live) - base;
 }
 
 export interface DrawOptions {
+  /**
+   * Whether the valuation may use what this seat has already thrown.
+   *
+   * Off for every release that shipped before it existed, which is the whole
+   * point of the flag: the draw is part of what a release *is* — `botRelease.test.ts`
+   * pins both seats' draw choices — and `drawDecision.ts` has no other per-release
+   * scoping, so without this a correction here would quietly move v2 and v3 as
+   * well and make every margin ever measured between them a statement about
+   * different bots. Absent means off, for the reason `searchBudgetMs: 0` is
+   * spelled out rather than left to a default.
+   */
+  readonly countsLive?: boolean;
   /**
    * How much of a growing hand's worth comes from defending — see `DEFENSE_SHARE`.
    * A parameter rather than a constant read here so `bench/draw.ts` can pit two
@@ -98,6 +112,10 @@ export function keepTest(
   remembered: readonly Card[],
   defenseShare = DEFENSE_SHARE,
 ): (card: Card) => boolean {
+  // Deliberately *not* live-card aware, unlike `chooseTake`. Its caller is
+  // `drawSimulation.ts`, guessing the opponent's hand by replaying the draw they
+  // had — and it passes no discards, because this seat has never seen theirs. It
+  // is also shared by every release through the sampler, where the draw is not.
   const base = rawHandValue(hand, true, defenseShare);
   const pool = unseenPool(hand, [], remembered);
   const expected =
@@ -109,6 +127,7 @@ export function keepTest(
 }
 
 export function chooseTake({
+  countsLive = false,
   defenseShare = DEFENSE_SHARE,
   first,
   hand,
@@ -116,14 +135,17 @@ export function chooseTake({
 }: DrawOptions): DrawTake {
   // Valued as a hand still being dealt: the finished-hand honor rules would
   // call a lone king bare when it has twelve turns left to be joined.
-  const base = rawHandValue(hand, true, defenseShare);
-  const keeping = gainFrom(hand, base, first, defenseShare);
+  // The cards it threw are not merely out of the pool, they are out of the
+  // *valuation* — see `Dead`. They reached `unseenPool` and stopped there.
+  const dead = countsLive ? deadFrom(remembered) : undefined;
+  const base = rawHandValue(hand, true, defenseShare, dead);
+  const keeping = gainFrom(hand, base, first, defenseShare, dead);
 
   const pool = unseenPool(hand, [first], remembered);
   const expected =
     pool.length === 0
       ? -Infinity
-      : pool.reduce((sum, unseen) => sum + gainFrom(hand, base, unseen, defenseShare), 0) /
+      : pool.reduce((sum, unseen) => sum + gainFrom(hand, base, unseen, defenseShare, dead), 0) /
         pool.length;
 
   return keeping >= expected ? "first" : "second";

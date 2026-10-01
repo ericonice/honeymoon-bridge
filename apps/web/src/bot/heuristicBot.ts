@@ -211,6 +211,20 @@ export interface BotTuning {
    */
   readonly defendingRuff?: number;
   /**
+   * Whether the draw values a hand against the cards that can still appear.
+   *
+   * The shipped valuation asks "do I hold the ace" in absolute terms, so it could
+   * not tell a jack from a three (both 0.065 behind AH 2H) and threw a jack away
+   * with the ace, king and queen already on its own discard pile. Measured on 868
+   * recorded Doop streams, redrawing one seat and holding the opponent's hand at
+   * the one actually dealt: **+0.078 ± 0.018 double-dummy tricks, 4.3σ**.
+   *
+   * Per release because the draw is part of what a release is — see `release.ts`,
+   * and `botRelease.test.ts`, which pins every draw choice of eight seeded deals
+   * and failed on both v2 and v3 when this was first written unscoped.
+   */
+  readonly drawCountsLive?: boolean;
+  /**
    * Points a double must beat the alternative by before it is taken — see
    * `DOUBLE_MARGIN`, which is what absent means.
    */
@@ -929,6 +943,7 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
       return view.pending === null
         ? fallback.chooseDraw(view, remembered)
         : chooseTake({
+            countsLive: tuning.drawCountsLive ?? false,
             first: view.pending,
             hand: view.hand,
             remembered,

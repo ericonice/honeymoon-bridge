@@ -75,6 +75,20 @@ const TRANSCRIPTS: Record<number, readonly string[]> = {
     "KKSSSSSKSKKKSKKSSSSSKSKSSS | 0:1C 1:4S 0:x 1:P",
     "KKSSKSSSKSSKSKSSSKSKKSKSSS | 1:2C 0:2S 1:3C 0:P",
   ],
+  // v4 values a growing hand against the cards that can still appear, so its draw
+  // differs from v3's on nearly every turn and the auctions follow the hands. The
+  // first line is the clearest read: holding a hand v3 had to fight for, v4 buys
+  // 4H unopposed where v3 went 4H-5D-5H.
+  4: [
+    "KKSKSSSKSKSSKSKKKSSKSSKKKS | 0:4H 1:P",
+    "SSSSSSKSSSSKSKKKKKKKKSKKSS | 1:P 0:4H 1:P",
+    "SSKSSSSSSSSSSSSKSKKKSKSKSS | 0:2H 1:3NT 0:P",
+    "SSSKKKKKSSSSSKSSSSKKSKKKSS | 1:1NT 0:2H 1:2S 0:3H 1:3S 0:4H 1:4S 0:P",
+    "SSSKSSKSSSSSKSSKKSKKKKKSSS | 0:1S 1:2C 0:2S 1:3C 0:P",
+    "SKSKKSSSSSKSSSKKSSSSKKSSKS | 1:2D 0:2H 1:3D 0:3H 1:P",
+    "KKSSSSSKSKSKSKKSSSSSKKKSKS | 0:3C 1:3S 0:4C 1:4S 0:5C 1:5S 0:6C 1:x 0:P",
+    "KKSSKSSSKSSKSKSSSKSKKSKKKS | 1:2C 0:2S 1:3C 0:P",
+  ],
 };
 
 /**
@@ -166,11 +180,25 @@ for (const release of BOT_RELEASES) {
 test("the releases are the ones these transcripts were recorded from", () => {
   expect(releaseFor(2)?.name).toBe("Bobby Hull");
   expect(releaseFor(3)?.name).toBe("Bobby Orr");
+  expect(releaseFor(4)?.name).toBe("Doug Harvey");
 });
 
-/** The two releases differ, which is the only thing that makes v3 a version. */
-test("the two releases do not bid the same", () => {
+/** Each release differs from the one before, which is the only thing making it one. */
+test("no release plays the same as its predecessor", () => {
   expect(TRANSCRIPTS[2]).not.toEqual(TRANSCRIPTS[3]);
+  expect(TRANSCRIPTS[3]).not.toEqual(TRANSCRIPTS[4]);
+});
+
+/**
+ * v4's change is in the *draw*, so this is where it has to show — and the two
+ * halves are checked apart, because an auction can differ for either reason.
+ * Without the first assertion a v4 whose draw was identical and whose bidding had
+ * merely drifted would pass as the release it claims to be.
+ */
+test("v4 draws differently from v3, which is what makes it a release", () => {
+  const drawsOf = (version: number) => TRANSCRIPTS[version]!.map((line) => line.split(" | ")[0]);
+  expect(drawsOf(4)).not.toEqual(drawsOf(3));
+  expect(drawsOf(3)).toEqual(drawsOf(2));
 });
 
 test("a version this build has never heard of has no release rather than throwing", () => {

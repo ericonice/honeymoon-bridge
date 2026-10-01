@@ -124,6 +124,37 @@ export const BOT_RELEASES: readonly BotRelease[] = [
    * tried and there were eleven usable rubbers in the log; see `equity.ts`.
    */
   { name: "Bobby Orr", tuning: { defendingRuff: RUFF_PER_LEVEL, objective: "equity" }, version: 3 },
+  /**
+   * Values a growing hand against the cards that can still appear.
+   *
+   * v3's draw asked "do I hold the ace" in absolute terms, so it could not tell a
+   * jack from a three — behind AH 2H it priced both at 0.065 — and it threw a jack
+   * away with the ace, king and queen already face up on its own discard pile,
+   * where that jack is the master. It also scored AK as 1.5 tricks where
+   * `quickTricks` has said 2 for a finished hand since the beginning.
+   *
+   * Both halves are the same correction and neither is a fitted constant: count
+   * what can still beat a card rather than what outranks it in the abstract. The
+   * two were measured apart, because the first attempt at this conflated them and
+   * reported the second's effect as the first's — promotion alone is **+0.014 ±
+   * 0.015, a null**, honours behind one's own is **+0.046 ± 0.021**, and together
+   * they are **+0.078 ± 0.018, 4.3σ** in double-dummy tricks over 868 recorded
+   * Doop streams, redrawing one seat against the opponent hand actually dealt.
+   *
+   * **Why a release and not a correction to v3.** v3 carries 910 ranked Doop
+   * boards, 1,449 logged deals and a rating line, and had already absorbed one
+   * in-place change in `defendingRuff`. The threshold this file states is that a
+   * release with a real history cannot be corrected in place, and v3 is past it.
+   *
+   * The ceiling is known and this is about half of it: the person who prompted the
+   * change draws **+0.174 ± 0.034** better than v3 on those same streams. What is
+   * left is not a constant — four were swept and every one came back null.
+   */
+  {
+    name: "Doug Harvey",
+    tuning: { defendingRuff: RUFF_PER_LEVEL, drawCountsLive: true, objective: "equity" },
+    version: 4,
+  },
 ];
 
 /**

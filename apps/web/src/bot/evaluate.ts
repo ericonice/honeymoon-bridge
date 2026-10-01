@@ -6,6 +6,47 @@ const HIGH_CARD_POINTS: Partial<Record<Rank, number>> = { 11: 1, 12: 2, 13: 3, 1
 const SUIT_LENGTH = 13;
 
 /**
+ * The cards this seat has seen and thrown, as the model needs to ask about them.
+ *
+ * Every question in here is some form of "how many cards can still beat mine",
+ * and the shipped answers all count against a whole deck. That is right for a
+ * bidder reasoning about a hand it was dealt, and wrong during the draw, where
+ * thirteen cards have gone past face up and onto this seat's own discard pile.
+ * Once the ace is there the king *is* the ace, and nothing said so: a jack with
+ * the ace, king and queen all dead was valued at 0.014 tricks and thrown away.
+ *
+ * An object rather than a bare `Set` because two different questions are asked
+ * of it — is this exact card gone, and how much of this suit is gone — and a set
+ * of card ids answers the second only by scanning. Empty by default, so every
+ * caller that knows nothing behaves exactly as before.
+ */
+export interface Dead {
+  has(suit: Suit, rank: Rank): boolean;
+  inSuit(suit: Suit): number;
+}
+
+export const NOTHING_DEAD: Dead = {
+  has: () => false,
+  inSuit: () => 0,
+};
+
+/** What this seat has thrown away, in the shape the evaluation asks about it. */
+export function deadFrom(cards: readonly Card[]): Dead {
+  if (cards.length === 0) {
+    return NOTHING_DEAD;
+  }
+  const ids = new Set(cards.map((card) => `${card.suit}${card.rank}`));
+  const counts = new Map<Suit, number>();
+  for (const card of cards) {
+    counts.set(card.suit, (counts.get(card.suit) ?? 0) + 1);
+  }
+  return {
+    has: (suit, rank) => ids.has(`${suit}${rank}`),
+    inSuit: (suit) => counts.get(suit) ?? 0,
+  };
+}
+
+/**
  * The share of the cards this hand cannot account for that are in the other one.
  *
  * Thirteen of thirty-nine, because the other twenty-six were never dealt. This
@@ -100,8 +141,12 @@ function surplusOver(missing: number, count: number, bid: boolean): number {
  * keyed on its own re-derivation of a term is a bucket that can drift away from the
  * term it is meant to be accusing.
  */
-export function trumpsClearedShare(trumps: readonly Card[], bid = false): number {
-  return exhaustedBy(SUIT_LENGTH - trumps.length, topRun(trumps), bid);
+export function trumpsClearedShare(
+  trumps: readonly Card[],
+  bid = false,
+  dead: Dead = NOTHING_DEAD,
+): number {
+  return exhaustedBy(stillOut(trumps, dead), topRun(trumps, dead), bid);
 }
 
 /**
@@ -114,13 +159,36 @@ export function trumpsClearedShare(trumps: readonly Card[], bid = false): number
  * missing card. AKQ draws three; AK32 draws two, because the queen is missing
  * and the small cards have to fight for themselves.
  */
-export function topRun(cards: readonly Card[]): number {
+export function topRun(cards: readonly Card[], dead: Dead = NOTHING_DEAD): number {
+  if (cards.length === 0) {
+    return 0;
+  }
+  const suit = cards[0]!.suit;
   const ranks = new Set(cards.map((card) => card.rank));
   let run = 0;
-  while (ranks.has((14 - run) as Rank)) {
-    run += 1;
+  for (let rank = 14; rank >= 2; rank--) {
+    if (ranks.has(rank as Rank)) {
+      run += 1;
+    } else if (!dead.has(suit, rank as Rank)) {
+      break;
+    }
   }
   return run;
+}
+
+/**
+ * How many of this suit could still turn up at all.
+ *
+ * `SUIT_LENGTH - cards.length` counts against a whole deck, which is right for a
+ * hand that knows nothing else and wrong the moment some of the suit is on this
+ * seat's own discard pile. A card it has seen and thrown cannot be in the other
+ * hand, so it must not be counted among the cards that might beat this one.
+ */
+function stillOut(cards: readonly Card[], dead: Dead): number {
+  if (cards.length === 0) {
+    return SUIT_LENGTH;
+  }
+  return Math.max(0, SUIT_LENGTH - cards.length - dead.inSuit(cards[0]!.suit));
 }
 
 export function highCardPoints(cards: readonly Card[]): number {
@@ -175,10 +243,40 @@ export function quickTricks(cards: readonly Card[]): number {
  * So honors count on their own merit here, capped by the length of the suit:
  * no holding can win more tricks than it has cards.
  */
-export function potentialTricks(cards: readonly Card[]): number {
+export function potentialTricks(cards: readonly Card[], live?: Dead): number {
+  if (live === undefined) {
+    // The shipped ladder, verbatim. A release measured against it has to go on
+    // playing it, so this is kept as the same expression rather than as a case
+    // the general form below happens to reduce to — the first attempt claimed
+    // that reduction and was wrong, paying a king behind its own ace a whole
+    // trick, which moved the draw for every release at once.
+    const ranks = new Set(cards.map((card) => card.rank));
+    const raw =
+      (ranks.has(14) ? 1 : 0) + (ranks.has(13) ? 0.5 : 0) + (ranks.has(12) ? 0.25 : 0);
+    return Math.min(cards.length, raw);
+  }
+  if (cards.length === 0) {
+    return 0;
+  }
+  // The same ladder — top card of a suit a trick, second a half, third a quarter
+  // — but read off what can still beat this card rather than off the ace, king
+  // and queen in the abstract. Two things stop a higher card beating it: this
+  // hand already holds it, or it has gone past face up onto this seat's own
+  // discard pile. The shipped form sees neither, so AK was 1.5 where
+  // `quickTricks` has always said 2, and a jack with the ace, king and queen all
+  // thrown was worth 0.014 and got thrown after them.
+  const suit = cards[0]!.suit;
   const ranks = new Set(cards.map((card) => card.rank));
-  const raw =
-    (ranks.has(14) ? 1 : 0) + (ranks.has(13) ? 0.5 : 0) + (ranks.has(12) ? 0.25 : 0);
+  let raw = 0;
+  for (const rank of ranks) {
+    let above = 0;
+    for (let higher = rank + 1; higher <= 14; higher++) {
+      if (!ranks.has(higher as Rank) && !live.has(suit, higher as Rank)) {
+        above += 1;
+      }
+    }
+    raw += above === 0 ? 1 : above === 1 ? 0.5 : above === 2 ? 0.25 : 0;
+  }
   return Math.min(cards.length, raw);
 }
 
@@ -397,6 +495,13 @@ export interface RawTricksOptions {
    * `estimatedTricks` turns it on.
    */
   readonly declaring?: boolean;
+  /**
+   * What this seat has seen and thrown, so the model counts against the cards
+   * that can still appear rather than against a whole deck. Empty by default:
+   * a bidder reasoning about a dealt hand knows of nothing dead, and with none
+   * every expression below reduces exactly to what it was.
+   */
+  readonly dead?: Dead;
   readonly hand: readonly Card[];
   readonly strain: Strain;
   readonly winners?: Winners;
@@ -404,13 +509,13 @@ export interface RawTricksOptions {
 
 /** Winners the hand can point at, before calibration. Exported so the fit can be re-measured. */
 export function rawTricks(options: RawTricksOptions): number {
-  const { bid = false, declaring = false, hand, strain, winners = quickTricks } = options;
+  const { bid = false, dead = NOTHING_DEAD, declaring = false, hand, strain, winners = quickTricks } = options;
 
   if (strain === "NT") {
     // No-trump names no suit, so a bid of it says nothing about where their
     // length lies and there is nothing here to condition on.
     const suits = SUITS.reduce(
-      (total, suit) => total + runOutTricks(cardsIn(hand, suit), winners, false, 1, declaring),
+      (total, suit) => total + runOutTricks(cardsIn(hand, suit), winners, false, 1, declaring, dead),
       0,
     );
     return suits - (declaring ? RACE_COST * raceLength(hand) : 0);
@@ -426,16 +531,16 @@ export function rawTricks(options: RawTricksOptions): number {
   // rarely clears them in time, so a balanced hand still gets next to nothing
   // here; this only pays out once the trump suit is genuinely doing the
   // clearing, which is what lets a balanced hand still prefer no-trump.
-  const trumpsDrawn = trumpsClearedShare(trumps, bid);
+  const trumpsDrawn = trumpsClearedShare(trumps, bid, dead);
   const side = SUITS.reduce(
     (total, suit) =>
       suit === strain
         ? total
-        : total + runOutTricks(cardsIn(hand, suit), winners, false, trumpsDrawn, declaring),
+        : total + runOutTricks(cardsIn(hand, suit), winners, false, trumpsDrawn, declaring, dead),
     0,
   );
   const ruffs = declaring ? voidRuffTricks(hand, strain, trumps.length) : 0;
-  return trumpTricks(trumps, bid) + side + ruffs;
+  return trumpTricks(trumps, bid, dead) + side + ruffs;
 }
 
 /**
@@ -591,13 +696,14 @@ function runOutTricks(
   bid: boolean,
   discount: number,
   declaring: boolean,
+  dead: Dead,
 ): number {
-  const run = topRun(cards);
+  const run = topRun(cards, dead);
   const safe = winners(cards);
   const extraRun = declaring ? Math.max(0, run - safe) : 0;
   const beneath = cards.length - run;
   return (
-    safe + discount * (extraRun + RUNOUT * beneath * exhaustedBy(SUIT_LENGTH - cards.length, run, bid))
+    safe + discount * (extraRun + RUNOUT * beneath * exhaustedBy(stillOut(cards, dead), run, bid))
   );
 }
 
@@ -614,10 +720,10 @@ function runOutTricks(
  * suit wins, either by being high or by ruffing. So AKQ concedes only their
  * fourth trump if they have one, while 8765 concedes about three.
  */
-function trumpTricks(trumps: readonly Card[], bid: boolean): number {
+function trumpTricks(trumps: readonly Card[], bid: boolean, dead: Dead): number {
   return Math.max(
     0,
-    trumps.length - surplusOver(SUIT_LENGTH - trumps.length, topRun(trumps), bid),
+    trumps.length - surplusOver(stillOut(trumps, dead), topRun(trumps, dead), bid),
   );
 }
 
@@ -707,11 +813,13 @@ export function rawHandValue(
   hand: readonly Card[],
   growing = false,
   defenseShare = DEFENSE_SHARE,
+  live?: Dead,
 ): number {
-  const winners = growing ? potentialTricks : quickTricks;
-  let best = rawTricks({ hand, strain: "NT", winners });
+  const dead = live ?? NOTHING_DEAD;
+  const winners: Winners = growing ? (cards) => potentialTricks(cards, live) : quickTricks;
+  let best = rawTricks({ dead, hand, strain: "NT", winners });
   for (const suit of SUITS) {
-    best = Math.max(best, rawTricks({ hand, strain: suit, winners }));
+    best = Math.max(best, rawTricks({ dead, hand, strain: suit, winners }));
   }
   if (!growing) {
     return best;
