@@ -712,6 +712,8 @@ interface CallContext extends LastTimeContext {
   readonly doubleMargin: number | undefined;
   /** How much level drift to take out of the defending estimate — see `DEFENDING_DRIFT_PER_LEVEL`. */
   readonly defendingDrift: number | undefined;
+  /** What the field is expected to score on this board — `"field"` only. */
+  readonly fieldCentre: number;
   /** How far their bid outweighs this hand, defending — see `BotTuning.theirBidWeight`. */
   readonly theirBidWeight: number | undefined;
   /** Which equity table prices a standing — see `BotTuning.equityTable`. */
@@ -891,14 +893,41 @@ function honestlyWeak(context: CallContext): boolean {
  * down beats letting them score a game, and there is no reason to jump to the
  * top of what the hand can make when the extra level costs more than it returns.
  */
+/**
+ * What this board is worth to somebody playing it normally, in points.
+ *
+ * The yardstick a placing is measured against, and it has to be a fact about the
+ * *board* rather than about the call being priced: measuring each candidate against
+ * its own value would make every one of them average and collapse the ranking back
+ * onto points. So it is the best this bidder can do pricing the board the ordinary
+ * way, which is exactly what a field made of this same bot scores — and the field
+ * *is* made of this bot, which is what makes the proxy honest rather than convenient.
+ *
+ * It costs a second pass over the candidates. Cheap next to the bid search, which is
+ * solver work; this is fourteen scorings a candidate.
+ */
+function fieldCentreFor(context: CallContext): number {
+  const points: CallContext = { ...context, objective: "duplicate" };
+  const best = [...bidCandidates(points, 0), ...doubleCandidate(points)].reduce(
+    (top, candidate) => Math.max(top, candidate.value),
+    valueOfPassing(points),
+  );
+  return best;
+}
+
 function bestCall(context: CallContext): Call {
   const { disguiseCredit, view } = context;
-  const passing = valueOfPassing(context);
+  // A placing needs the board's own yardstick before anything can be priced against it.
+  const priced: CallContext =
+    context.objective === "field"
+      ? { ...context, fieldCentre: fieldCentreFor(context) }
+      : context;
+  const passing = valueOfPassing(priced);
   const effectiveDisguiseCredit =
-    disguiseCredit !== 0 && honestlyWeak(context) ? disguiseCredit : 0;
+    disguiseCredit !== 0 && honestlyWeak(priced) ? disguiseCredit : 0;
   const best = [
-    ...bidCandidates(context, effectiveDisguiseCredit),
-    ...doubleCandidate(context),
+    ...bidCandidates(priced, effectiveDisguiseCredit),
+    ...doubleCandidate(priced),
   ].reduce<Candidate | null>(
     (top, candidate) => (top === null || candidate.value > top.value ? candidate : top),
     null,
@@ -969,6 +998,8 @@ export function createHeuristicBot(rng: Rng, tuning: BotTuning = {}): Bot {
         defendingRuff,
         defendingDrift,
         disguiseCredit,
+        // Replaced before anything is priced, when the objective is a placing.
+        fieldCentre: 0,
         doubleMargin,
         equityTable,
         gameEquity,

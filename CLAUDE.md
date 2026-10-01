@@ -347,6 +347,28 @@ format keeps it. Null only where nothing recorded it and nothing can, which is a
 storage written before `dealt` existed. The deals already logged are recoverable through
 `field_boards`, which is how the analysis above was done at all.
 
+**How much of the draw is actually winnable, and both sides capture about half.** Each stream offers
+thirteen pairs, so exactly **8,192 hands** are obtainable from it. Sampling 150 of them per board over
+80 real boards, scored by the solver against the opponent hand actually dealt:
+
+| | best-strain tricks | percentile of its own stream |
+| --- | --- | --- |
+| worst sampled hand | 4.64 | — |
+| a hand picked at random | 7.11 | — |
+| **the bot (v4)** | **8.50** | 73rd |
+| **the person** | **8.55** | 71st |
+| best of the 150 sampled | 9.72 | — |
+
+So v4 has **closed the gap** on this subset, and there is 1.4 tricks of headroom above both. **The
+headroom is an oracle bound, not a target**: the maximum of 150 samples is chosen knowing both hands
+and all thirteen pairs, where a real policy decides card by card blind to both. It says the range
+exists; it does not say a policy can reach into it. A rollout that tried came back **−0.833**.
+
+**Its own control is what makes it trustworthy and the first version failed it.** The person's real
+hand must be reconstructible as one card from each of the thirteen pairs — 80/80 — and the first
+attempt reported a "best sampled hand" *below* the person's own, which is impossible. It had
+identified the kept card by position in a hand `viewFor` sorts; rebuilt by set difference it is exact.
+
 **What the person's own 50 draw decisions say, and it is where the rest of the gap is.** Fifty real
 positions off their own boards, answered with reasons. The signal that dominates is not the dead
 cards: it is **cards already held in the offered suit**, where their keep rate climbs 18/50/76/71/100%
@@ -358,6 +380,31 @@ representation in the model at all: **two-suiters**, named four times unprompted
 powerful", "not too early to go for a 2 suiter"). That is a mechanism rather than a constant, which
 matters because four constants were swept here — a keep bias, `DEFENSE_SHARE`, a concentration term,
 a jack/ten ladder — and every one came back null.
+
+**The cross-tab is the sharpest statement of the defect, and it clears the objection that sank the
+last attempt at it.** Keep rate by card band against cards already held, person then bot, over all
+11,284 logged decisions:
+
+| held → | 0 | 1 | 2 | 3 |
+| --- | --- | --- | --- | --- |
+| 2-7 | 0 / 0 | 3 / **0** | 20 / **0** | 56 / 47 |
+| 8-10 | 1 / 0 | 15 / **0** | 38 / **1** | 70 / 46 |
+| J | 31 / **0** | 50 / **0** | 79 / **0** | 98 / 46 |
+| Q+ | 86 / 91 | 91 / 83 | 98 / 83 | 99 / 86 |
+
+**The bot's whole policy is two hard steps**: keep queens-and-up, or anything once a suit reaches
+three. At three-plus it is flat at ~46% whether the card is a two or a jack. The person's surface is
+smooth in both directions — and **keeps nothing below a jack at nought held (0%, 1%)**, which is
+exactly the failure the earlier experiment was rejected for: *crediting early length made the bot keep
+filler over honors*, measured 0.39 tricks worse. The person does not credit early length. They credit
+it once there is some.
+
+**A fifth constant was swept off the back of that and is also a null.** Replacing the A/K/Q step
+ladder with the odds a card actually takes a trick — `(1 − THEIRS)^above`, reusing the number the whole
+model is built on, so no new constant — reproduces the person's rank gradient and is worth **+0.008 ±
+0.022**. Two variants of it, one keyed on rank order and one on suit length, give +0.003 and +0.026.
+The control arm reads exactly +0.000, so the bench is sound and the answer is that matching the
+person's *decisions* does not produce the person's *hands*.
 
 **One caution for whoever builds it: `bench/field.ts compare` has now twice disagreed with a
 hand-quality figure.** Par tricks are the right instrument for the draw's own question and the wrong
@@ -3958,33 +4005,23 @@ with 5♥ where it had doubled 5♦.
 
 ### Open threads
 
-- **A doubling margin is built, and the corpus bench structurally cannot measure it.** The mechanism it
-  targets is the **winner's curse**: a double is chosen by comparing two expected values computed from
-  an estimate carrying about a trick of error, so on the hands where those values are close — most of
-  them — the coin that decides is the *error*, and the doubles taken are the ones it erred optimistically
-  on. That is a selection effect in the *comparison*, which is why three improvements to the estimate's
-  *centre* bought nothing. `DOUBLE_MARGIN` declines the marginal cases; a double that wins by more than
-  the estimate's own error is not one the error could have manufactured. In points, through `creditIn`,
-  and **zero by default**.
+- **A doubling margin is built, the bench it asked for exists, and the margin turned out not to be the
+  lever.** This thread predicted the fault as a **winner's curse** — a double is chosen by comparing two
+  expected values computed from an estimate carrying a trick of error, so on close hands the coin that
+  decides is the *error*, and the doubles taken are the ones it erred optimistically on. `DOUBLE_MARGIN`
+  declines the marginal cases; in points, through `creditIn`, and zero by default.
 
-  **The census says it works and that nothing can measure it here.** With the margin impossibly high the
-  bot makes **0 doubles over 60 deals**; with it off, **1**. The knob reaches the code — and the bot
-  doubles on roughly **2% of deals at love all and 5% of corpus board-runs**, so 240 boards carry about
-  a dozen doubles. `compare` read **+0.0 ± 0.0** at `dmargin=150` and again at `dmargin=999999`, which
-  is not a null but an instrument with nothing in it.
+  It also diagnosed, correctly, why nothing could measure it: `compare` read **+0.0 ± 0.0** at a margin
+  that stopped every double and at one that stopped none, because the bot doubles ~5% of board-runs and
+  the decision is diluted once into a board and again into a session mean. **The unit was wrong**, and
+  it named the fix — *a bench of the decision, not of the sitting*.
 
-  Scaling the board count does not fix it: a thousand boards is five hours for perhaps fifty doubles,
-  against an effect that has to clear ±1 point of session placing. **The unit is wrong.** A session
-  placing averages over eight boards of which one might be doubled, so the decision is diluted twice —
-  once into the board, once into the session.
-
-  **What it wants is a bench of the decision, not of the sitting** — `bench/defendpar.ts`'s shape
-  applied to doubles. Every position where a double is legal is a case; score the contract doubled and
-  undoubled against the hands as they actually lie, and ask which the bot chose. Every opportunity is a
-  data point rather than every board, which is the difference between a dozen and thousands. It can also
-  price what the hand log measures and no session figure can: not whether the double was *right* but
-  **what being wrong cost**, which is where the −121 against a person's +327 lives.
-
+  **That bench is `bench/doublepar.ts` and it says the margin does nothing.** The shipped zero is
+  already the best setting, and the two predictions this thread made are both wrong: `TRICK_SPREAD` is
+  **1.30 against 1.29 measured**, so there is no overconfidence to correct, and three further levers
+  came back null. The surviving half of the diagnosis is the important one — *why* improvements to the
+  estimate's centre buy nothing — and it is sharper now: **correcting a bias does not create
+  discrimination.** See the doubling threads below, which supersede this one.
 
 - **The defending estimate's accuracy and its points value disagree, and points wins. Three
   measurements now say the same thing.** The blend pricing a contract *they* declare is
@@ -4030,63 +4067,91 @@ with 5♥ where it had doubled 5♦.
   right one; both estimators are fitted to sit near the truth on average, and the loss the hand log
   records — the bot's doubles at **−121 a board against a person's +327** — is a loss in the tails, not
   the centre. A better estimate cannot fix that. A cost model for doubling might.
-- **The bot's doubles lose money and the person's make it, measured on the same boards.** 68 Doop
-  sessions, 565 human boards against 15,424 generated ones — and because a board fixes the stock, the
-  two sides' doubling decisions are directly comparable:
+- **The bot's doubles do not lose money, and the figure that said they did was the wrong
+  counterfactual.** This thread used to read "−121 a board against a person's +327", measured over 68
+  Doop sessions, and it closed by naming its own flaw: *the honest figure for the doubling decision
+  alone is the difference against the same board undoubled, which nothing has computed yet.* Computed
+  now — re-score every doubled result at `doubling: "none"` and take the difference, which cancels the
+  honors and the contract and leaves the decision:
 
-  | doubling a contract they defended | boards | net per board |
+  | what the double itself was worth | doubles | per double |
   | --- | --- | --- |
-  | **the person** | 29 | **+327** |
-  | **the bot** | 399 | **−121** |
+  | **the bot** | 832 | **+96 ± 9** |
+  | **the person** | 42 | **+240 ± 38** |
 
-  A 448-point swing on the decision, in a format where a single trick can be worth fifty points of
-  placing. The bot also doubles *less* often — 5.2% of its results against the person's 11.5% — so it is
-  not that it doubles too much: **the ones it picks are wrong.**
+  So the bot's doubles are **profitable**, and −121 was the cost of *conceding the contract*, most of
+  which the double did not cause. The person is still better — and doubles 12.4% of the boards they
+  defend against the bot's 5.2% — but the gap is 2.5× rather than a change of sign.
 
-  **That was first blamed on `DOUBLED_FROM_DOWN` and that was wrong twice over.** It is not the bot's
-  doubling rule — it is the bot's model of when *it* will be doubled, used to price its own contracts, so
-  raising it would make the bot **less** cautious about overreaching. And there is no rule to tune:
-  `doubleCandidate` prices a double through `expectedValue`, playing the deal out at every plausible
-  trick count and scoring each through the engine's own `scoreDeal`. Level and vulnerability are already
-  in it. **A flat threshold is not the problem, because there is not one.**
+  **And "it should double more" is wrong, which took a bench of the decision to establish.** The
+  sitting is the wrong unit: the bot doubles about 5% of board-runs, so 240 corpus boards carry a dozen
+  doubles, diluted once into a board and again into a session mean — `compare dmargin=` read **+0.0 ±
+  0.0** at a threshold that stopped every double and at one that stopped none, which is an instrument
+  with nothing in it rather than a null. `bench/doublepar.ts` makes every settled contract a case,
+  because every one of them is a double somebody took or passed up, scored against double-dummy par
+  with the final contract rather than the one standing when the bot thought about it — a double can be
+  run from.
 
-  **The fault is in the distribution, and the level split says so.** Of the bot's own doubles:
+  | `dmargin` | doubled | the bot's value | an oracle | its doubles set |
+  | --- | --- | --- | --- | --- |
+  | +100 | 0.0% | +0 | +45 | — |
+  | **0 — shipped** | **2.0%** | **+4 ± 3** | **+45** | 63% |
+  | −50 | 8.8% | +5 ± 4 | +45 | 57% |
+  | −100 | 43.3% | **−18 ± 7** | +41 | 40% |
+  | −200 | 90.5% | **−118 ± 10** | +35 | 26% |
 
-  | level | doubles | set them | set rate |
-  | --- | --- | --- | --- |
-  | 1–2 | 35 | 26 | **74%** |
-  | 4–5 | 268 | 152 | 57% |
-  | **6–7** | **96** | **52** | **54% — a coin flip** |
+  **The threshold is already right and nothing moves it upward.** Four times more eager bought +1;
+  twenty times lost 22, and the set rate falls 63 → 57 → 40 → 26% as the line drops. So the person's
+  12.4% is *downstream* of discriminating well enough to find that many, not a rate the bot can copy.
 
-  Its doubling judgement is sound at the levels where it is cheap to be wrong and **random at slam
-  level, where it is ruinous**. A doubled grand slam that makes is catastrophic; setting one pays a
-  hundred. Fifty-fifty is a losing bet at those odds.
+  **The bot captures 9% of what is there**, +4 of an available +45, and the available part sits where
+  it is worst: **+83 a contract at level 4-5 and +108 at 6-7**, where it takes +13 and **−4**. That
+  reproduces the slam coin-flip above from a second direction.
 
-  **The mechanism is the one a person named from play: two aces against a void.** `defendingTricks` sums
-  `winners()` over the four suits and applies an affine calibration — it takes **the hand and the strain
-  and nothing else**. Two aces count two tricks whether they bid 2♣ or 7♣. But the higher they bid the
-  more distributional their hand must be, and a side-suit ace against a high trump contract does not
-  cash, it gets **ruffed**. At the seven level the opponent is nearly announcing a void.
+  Two caveats on every figure here: the oracle knows both hands, so +45 is a bound no blind policy
+  reaches; and par is perfect defence against a bot that throws away 0.4 tricks a deal, so it flatters
+  doubling on both sides of the comparison.
 
-  **The declaring half of the same model already knows this.** `rawTricks` gives side suits under a
-  trump contract "winners and no length credit at all, because length only cashes if nobody ruffs it."
-  The defending half never got the equivalent.
+- **Three levers were measured on that bench and all three are nulls, which locates the fault.**
+  Frequency is above. The other two:
 
-  So the shape of the fix is to **discount defensive side-suit winners by the level they bid** — level
-  being the best available proxy for their shortness, and already in hand since the estimate blends
-  their bid at weight 0.75. **Not in no-trump**, where an ace always cashes, which is the same asymmetry
-  `rawTricks` already draws for declaring. Trump honours are untouched: a trump ace cannot be ruffed.
+  **The defending blend weight.** `bench/doublepar.ts weight=W`: 0.25 is **−4 ± 5**, 0.50 is **+6 ±
+  4**, the shipped 0.75 is **+5 ± 3**, 0.90 is **+1 ± 1**. So 0.75 stands, and the long-standing
+  disagreement between par accuracy — which prefers 0.25 — and the rubber fit, which chose 0.75, is now
+  settled *in the currency of the decision itself* rather than inferred from a sitting. The asymmetric
+  payoff was the right explanation.
 
-  **Why self-play could never have found this.** Bot against bot, both sides share the blind spot: the
-  seat bidding the slam and the seat doubling it hold the same model, so a double taken on a mis-valued
-  ace is met by an opponent who would have mis-valued it the same way. These 565 boards are the first
-  time the decision has been priced against somebody who doubles *well* — and against hands a person
-  bid to seven.
+  **The estimate's centre, which is genuinely miscalibrated and still does not pay.**
+  `bench/defenddrift.ts` asks whether `estimateFor`'s defending branch sits on the truth, over **4,055
+  positions where a double was legal**. It does not, and the error changes sign with the level:
 
-  **One caution before building it.** The −469 and −1071 a board at the six and seven levels are the
-  cost of *conceding a slam*, most of which is not the double's doing; the honest figure for the
-  doubling decision alone is the difference against the same board undoubled, which nothing has computed
-  yet. The **set rate** is the signal that does not need that correction, and it is the one above.
+  | | 1-2 | 3 | 4-5 | 6-7 |
+  | --- | --- | --- | --- | --- |
+  | par minus the estimate | **+0.47** | +0.11 | −0.29 | **−0.86** |
+
+  A straight line `0.861 − 0.272 × level` removes it exactly — residual bias **+0.00**, spread 1.29 →
+  1.23 — and the mechanism is plain: a one-level bid is a **floor** somebody had to start at, so the
+  estimate is too harsh; a slam bid is where competitive escalation **stopped**, so the bot credits a
+  slam bidder with a trick they do not have and sits there while it makes.
+
+  `BotTuning.defendingDrift` takes it out, and over 600 deals an arm: **+4 → +6 → +5** at strengths 0,
+  0.5 and 1. A null — but not a flat one. Level 4-5 improves monotonically (+9 → +15 → **+23** of an
+  available 78, on ~195 contracts) and level 6-7 **collapses** (+10 → +4 → **−78**), going to doubling
+  100% of them. The two cancel.
+
+  **Which is the finding, and it is the same one three times: correcting a bias does not create
+  discrimination.** At slam level the estimate carries 1.21 tricks of spread with no signal in it, so
+  moving the centre takes the bot straight from never doubling past doubling the right ones to doubling
+  all of them, with nothing useful in between. Every lever that moves *where the line sits* leaves *how
+  well it sorts* untouched, and sorting is the whole of what the bot lacks.
+
+  **`TRICK_SPREAD` was the other suspect and it is innocent**: 1.30 assumed against **1.29** measured,
+  so there is no overconfidence and no winner's curse to widen away. That was the hypothesis this work
+  started from and the measurement killed it.
+
+  Left gated and off, because `searchDefending`'s precedent says a null lever is deleted rather than
+  kept — but the level-4-5 cell is on ~195 contracts and the slam cell on 21, and capping the drift
+  below slam level would mean fitting a constant **to the outcome** on that thin cell.
 
 - **The defence-versus-declaring gap has gone, and it was noise.** At 148 boards it read 66.8%
   defending against 54.1% declaring — a 13-point split recorded here as "the person's edge is almost
@@ -4184,6 +4249,51 @@ with 5♥ where it had doubled 5♦.
   findings is a delete of whatever happened to sit between the anchors** — this file is a record before
   it is a document, and edits to it want the same care as edits to the bench.
 
+
+- **The recorded Doop boards now read 910, and the person places 58.3% ± 1.3 — the bot is losing by
+  8.3 points of placing, 6.4 standard errors.** The corpus is 15,994 results on 1,998 boards, 913 of
+  them human; `field_boards` plus `field_results` is the whole instrument and `wrangler d1 execute
+  --remote` is how to pull it. Three things that earlier readings of it got wrong are corrected
+  elsewhere in these threads — the doubling figure, the defence/declaring split, and the claim that the
+  deficit sits in one place.
+
+  **It does not sit in one place.** Split by who bought the contract, by vulnerability, by strain, by
+  level, the person's placing sits between 54% and 63% almost everywhere. A deficit that uniform is not
+  a bidding rule; it is the bot being slightly worse at everything, which is what sent this at the draw.
+
+  **What the 878 hand-logged Doop deals say**, through `bench/hands.ts` — and note the log's seed was
+  useless for these until `seedOf` landed, so the join is by timestamp and contract:
+
+  | | the person | the computer |
+  | --- | --- | --- |
+  | tricks thrown away a deal | 0.39 | 0.42 |
+  | contracts made | **65%** | **54%** |
+  | makeable at par | 64% | 57% |
+  | level bid over par | **−0.05** | **+0.21** |
+
+  **Card play is at parity and the bidding is not.** The bot bids a fifth of a level over par and makes
+  eleven points fewer of its contracts than the person does — in a format where a failed contract is a
+  bottom rather than a small loss. That is the case for pricing a board in placings rather than points,
+  and it is also what `TRICK_SPREAD`'s width predicts: the searched distribution carries par variance
+  with **no play error in it**, while the bot throws away 0.36 tricks a deal.
+
+- **How much a board's placing is worth, as a function of beating the field — measured, not assumed.**
+  Over all 1,998 corpus boards, what a score N points above the board's own median places at:
+
+  | +0 | +1 | +10 | +50 | +100 | +500 |
+  | --- | --- | --- | --- | --- | --- |
+  | 50% | **84%** | 84% | 91% | 93% | 99% |
+
+  Median within-board spread is **32 points** and **23% of boards are flat** — every recorded run on
+  them scored alike. So in points +500 is ten times +50; in matchpoints it is **1.09 times**. Fitted,
+  the curve is a jump of **0.34** for beating the field at all and a tail of scale **145 points** after
+  it — sum of squares 0.0013, against 0.2325 for the best single-scale tanh, reproducing every row to
+  within a point.
+
+  **The asymmetry is what a points bidder structurally cannot express.** Above the field the curve is
+  concave, so variance is punished: a contract with a better average and a worse likely outcome places
+  worse. Below it the curve is convex, so a disaster costs barely more than a small loss. This is the
+  measured foundation under the matchpoint-objective thread.
 
 - **The recorded Doop boards are a paired instrument against a human bidder, and nothing reads them
   yet.** 18 sessions, 148 boards, **mean placing 59.1%** against a corpus calibrated to 50 — so the

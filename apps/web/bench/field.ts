@@ -9,6 +9,7 @@ import {
 } from "@hb/engine";
 import type { Contract, DealState, Pair, PlayerId, Standing } from "@hb/engine";
 import { DEFAULT_GAME_EQUITY } from "../src/bot/bidValue.js";
+import type { Objective } from "../src/bot/bidValue.js";
 import { botForLevel } from "../src/bot/build.js";
 import { levelFor } from "../src/bot/difficulty.js";
 import { LATEST_RELEASE, releaseFor } from "../src/bot/release.js";
@@ -585,7 +586,8 @@ function compare(boards: number): void {
         : ruff
         ? `  A  the bidder that made the corpus, counting a defensive ace flat\n` +
           `  B  the same bidder discounting it by how high they bid\n`
-        : `  A  the field bidder (duplicate)\n  B  the same bidder pricing in ${other}\n`),
+        : `  A  the corpus bidder, pricing a board in points (duplicate)\n` +
+          `  B  the same bidder pricing in ${other}\n`),
   );
 
   wanted.forEach(([id, board], at) => {
@@ -596,7 +598,7 @@ function compare(boards: number): void {
         ? generatorTuning()
         : ruff || weight !== null
           ? { ...generatorTuning(), defendingRuff: 0 }
-          : generatorTuning(),
+          : { ...generatorTuning(), objective: "duplicate" as Objective },
     );
     const theirs =
       draw
@@ -659,10 +661,12 @@ function placeOf(board: CorpusBoard, tuning: ReturnType<typeof botTuningFor>): n
   );
 }
 
-function objectiveArg(): "duplicate" | "equity" | "mirror" | "points" {
+function objectiveArg(): Objective {
   const arg = process.argv.find((one) => one.startsWith("objective="));
   const asked = arg === undefined ? "points" : arg.slice("objective=".length);
-  return asked === "equity" || asked === "mirror" || asked === "duplicate" ? asked : "points";
+  return asked === "equity" || asked === "mirror" || asked === "duplicate" || asked === "field"
+    ? asked
+    : "points";
 }
 
 function standardError(values: readonly number[]): number {
