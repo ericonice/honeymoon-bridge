@@ -182,22 +182,20 @@ describe("a board's traveller", () => {
   });
 
   /**
-   * **The chips sit against the right edge, not on the contract's tail.**
+   * **The chips are a cell of their own, not the tail of the contract's.**
    *
-   * Contracts vary in width, so chips that follow them start somewhere different on
-   * every row. Pushed to the end they line up down the column and land beside the
-   * figure they explain. Asserted on the class that does it rather than on a
-   * measurement, which jsdom has no opinion about — the same reason `suitInk`
-   * names a class rather than an opacity.
+   * Sharing one, they were flushed right and still moved: a wide contract — `7♣ X
+   * −2` against `4♥ =` — pushed them onto a second line, and a wrapped group aligns
+   * with nothing. A cell cannot be pushed out of its own row.
    */
-  it("groups the chips against the right edge, apart from the contract", () => {
+  it("puts the chips in a cell of their own, apart from the contract", () => {
     traveller(result(620 + 100, [], [true, false]));
 
-    const group = screen.getByText("vul").parentElement;
-    expect(group?.className).toContain("ml-auto");
-    // Both of them in that group, and the contract outside it.
-    expect(group?.textContent).toBe("vulh100");
-    expect(group?.textContent).not.toContain("us");
+    const cell = screen.getByText("vul").closest("td");
+    expect(cell?.textContent).toBe("vulh100");
+    // The contract and the By field are in the cell before it, not this one.
+    expect(cell?.textContent).not.toContain("us");
+    expect(screen.getByText("us").closest("td")).not.toBe(cell);
   });
 
   /**

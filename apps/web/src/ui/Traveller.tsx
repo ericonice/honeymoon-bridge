@@ -82,13 +82,13 @@ export function Traveller({
             field that has not come back, the other a board nobody else has played. */}
         {result.field[me] === null ? (
           <tr>
-            <td className="py-1 text-xs text-white/35" colSpan={3}>
+            <td className="py-1 text-xs text-white/35" colSpan={4}>
               waiting for the other results
             </td>
           </tr>
         ) : result.field[me]!.length === 0 ? (
           <tr>
-            <td className="py-1 text-xs text-white/35" colSpan={3}>
+            <td className="py-1 text-xs text-white/35" colSpan={4}>
               nobody else has played this board yet
             </td>
           </tr>
@@ -187,44 +187,33 @@ function Row({ contract, declarer, mark, mine, note, points, tags, who }: Line):
       <td className={`w-20 truncate py-1.5 pr-2 text-xs ${mine ? "font-semibold" : ""}`}>
         {who}
       </td>
+      {/* The contract and its chips are **two cells**, not one — see `FieldPad`'s
+          own row, which learnt this the same way: flushed right inside the
+          contract's box, a wide contract pushes them onto a second line, and a
+          wrapped group aligns with nothing. */}
       <td className="py-1.5 pr-2">
-        {/* **The chips are pushed to the end rather than trailing the contract.**
-            Contracts vary in width — `4♥` against `5♣ X` — so chips that follow them
-            start at a different place on every row and read as debris on the end of
-            each one. Against the right edge they line up down the column, and they
-            land beside the figure they are there to explain rather than beside the
-            contract, which needs no explaining. It costs nothing: a reserved slot per
-            chip would align them exactly and there is no room for one.
-
-            Wrapping is on the *group*, so a row too tight for both drops the chips
-            whole to a second line, still flush, rather than splitting them. */}
-        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="flex min-w-0 items-baseline gap-1.5">
-            {contract === null ? (
-              <span className="text-xs text-white/45">passed out</span>
-            ) : (
-              <>
-                <Declarer name={declarer} />
-                <ContractText contract={contract} on="dark" />
-                <span className="text-xs text-white/45">{mark}</span>
-              </>
-            )}
-          </span>
-          {contract === null && note === null ? null : (
-            <span className="ml-auto flex shrink-0 items-baseline gap-1.5">
-              {contract === null ? null : <Tags reserve tags={tags} />}
-              {/* Provenance rather than a property of the contract, but it is the same
-                  kind of mark and belongs in the same group — faint prose beside three
-                  chips reads as something half-finished. */}
-              {note === null ? null : (
-                <Tags tags={[{ label: note, shown: true, tone: "plain" }]} />
-              )}
-            </span>
+        <span className="flex min-w-0 items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
+          {contract === null ? (
+            <span className="text-xs text-white/45">passed out</span>
+          ) : (
+            <>
+              <Declarer name={declarer} />
+              <ContractText contract={contract} on="dark" />
+              <span className="text-xs text-white/45">{mark}</span>
+            </>
           )}
+          {/* Provenance rather than a property of the contract, and variable width,
+              so it stays out of the chip column it would otherwise shift. */}
+          {note === null ? null : <Tags tags={[{ label: note, shown: true, tone: "plain" }]} />}
+        </span>
+      </td>
+      <td className="w-px py-1.5 pr-2">
+        <span className="flex items-baseline gap-1.5">
+          {contract === null ? null : <Tags reserve tags={tags} />}
         </span>
       </td>
       <td
-        className={`w-14 py-1.5 text-right tabular-nums ${mine ? "font-semibold" : ""}`}
+        className={`w-12 py-1.5 text-right tabular-nums ${mine ? "font-semibold" : ""}`}
       >
         {signed(points)}
       </td>

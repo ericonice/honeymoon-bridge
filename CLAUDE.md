@@ -2659,14 +2659,22 @@ further right than `+210` and dragged the chips before it along with it. Right-a
 line up if the box holding them does; it is `w-14` now. This is most of what the screenshot showed,
 and no amount of work on the chips themselves could have fixed it.
 
-**A slot is held open for a chip the row has not got**, which is the only thing that truly aligns
-them — `invisible` rather than removed, so the width comes from the chip itself and nothing has to
+**A slot is held open for a chip the row has not got**, which is one of the two things it takes — `invisible` rather than removed, so the width comes from the chip itself and nothing has to
 know how wide one is, and `aria-hidden`, because a chip that is not there must not be read out as
 though it were. `contractTags` returns every possible tag with a `shown` flag for that reason: a
 caller cannot reserve what it does not know could exist.
 
-**And `Bd` is what paid for it** — the 40px recovered from the row label is the room the slots sit
-in.
+**And the chips needed a column of their own**, which is the other, and the one the first attempt
+missed. They were flushed right *inside the contract's box* — so a wide contract pushed them out of
+it: `7♣ X −2` is about sixty pixels where `4♥ =` is thirty, and the group wrapped to a second line,
+where it aligned with nothing at all. Reserving slots could not help, because what was being
+reserved still sat in a box that could run out of room. **A sibling cell cannot be pushed out of its
+own row**, so that is what it is now, with the contract taking whatever is left.
+
+**The lesson, since this took three goes: alignment is a property of the box, not of what is in
+it.** Flushing right, then reserving slots, were both work on the contents. Both times the thing
+that actually moved was the container — first the net column sized to its own figures, then the
+contract's box running out of room. `Bd` paying for 40px helped and was not the fix either.
 
 Worth noting for the next test that counts chips: a reserved slot is real DOM, and jsdom computes no
 CSS, so `invisible` means nothing to a query. `aria-hidden` is both how a screen reader skips it and

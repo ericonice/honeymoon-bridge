@@ -144,36 +144,47 @@ function BoardRow({
           The board's own page and the traveller's caption still say it in full —
           they are naming the thing rather than labelling a column, and they have the
           room. */}
-      <span className="w-9 shrink-0 text-xs text-white/45">Bd {at + 1}</span>
-      {/* Chips against the right edge rather than trailing the contract — see
-          `Traveller`'s `Row`, which does the same and says why. */}
-      <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="flex min-w-0 items-baseline gap-1.5">
-          {mine.contract === null ? (
-            <span className="text-xs text-white/45">passed out</span>
-          ) : (
-            <>
-              <Declarer name={mine.declarer} />
-              <ContractText contract={mine.contract} on="dark" />
-              <span className="text-xs text-white/45">{mine.mark}</span>
-            </>
-          )}
-        </span>
-        {mine.contract === null ? null : (
-          <span className="ml-auto flex shrink-0 items-baseline gap-1.5">
-            <Tags reserve tags={mine.tags} />
-          </span>
+      <span className="w-8 shrink-0 text-xs text-white/45">Bd {at + 1}</span>
+      {/* **A column of its own rather than sharing one with the contract**, which
+          is what finally made the chips hold a line.
+
+          They were flushed right inside the contract's box, so a wide contract —
+          `7♣ X −2` is about sixty pixels where `4♥ =` is thirty — pushed them onto a
+          second line, and a wrapped group aligns with nothing. Reserving slots did
+          not help, because the thing being reserved was still inside a box that
+          could run out of room.
+
+          As a sibling they cannot wrap at all: `shrink-0` here, and the contract
+          takes whatever is left and truncates if it ever has to. Contracts are short
+          enough that it never should. */}
+      <span className="flex min-w-0 flex-1 items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
+        {mine.contract === null ? (
+          <span className="text-xs text-white/45">passed out</span>
+        ) : (
+          <>
+            <Declarer name={mine.declarer} />
+            <ContractText contract={mine.contract} on="dark" />
+            <span className="text-xs text-white/45">{mine.mark}</span>
+          </>
         )}
+      </span>
+      <span className="flex shrink-0 items-baseline gap-1.5">
+        {mine.contract === null ? null : <Tags reserve tags={mine.tags} />}
       </span>
       {/* **Fixed width, and without it the chips could not align whatever else was
           done to them.** They are flushed against this column, and it was sized to
           its own content — so `−50` sat further right than `+210` and dragged the
           chips before it along, which is most of why a list of eight boards looked
           ragged. Right-aligned figures only line up if the box they are in does. */}
-      <span className="w-14 shrink-0 text-right tabular-nums text-white/60">
+      {/* **Fixed width, and without it the chips could not align whatever else was
+          done to them.** They sit against this column, and it was sized to its own
+          content — so `−50` sat further right than `+210` and dragged the chips
+          before it along. Right-aligned figures only line up if the box they are in
+          does. Twelve is enough for the widest a deal can pay. */}
+      <span className="w-12 shrink-0 text-right tabular-nums text-white/60">
         {signed(mine.points)}
       </span>
-      <span className="w-12 shrink-0 text-right font-semibold tabular-nums">
+      <span className="w-11 shrink-0 text-right font-semibold tabular-nums">
         {placed === null ? "—" : `${Math.round(placed)}%`}
       </span>
       <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 self-center text-white/30" />
