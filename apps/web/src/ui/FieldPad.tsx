@@ -133,7 +133,18 @@ function BoardRow({
         reviews.open(at);
       }}
     >
-      <span className="w-16 shrink-0 text-xs text-white/45">Board {at + 1}</span>
+      {/* **`Bd`, which is what a traveller has always called it.** "Board" is the
+          same five characters on all eight rows and the number is the whole of what
+          varies, so it was 64px of reserve for about 6px of information — on the one
+          row in this app with the least to spare, where a vulnerable board with
+          honors already wanted more width than it had. Bridge's own abbreviation
+          rather than a bare numeral or a `#`, for the reason a cell says `+2` rather
+          than "made two overtricks": this app writes the game's notation.
+
+          The board's own page and the traveller's caption still say it in full —
+          they are naming the thing rather than labelling a column, and they have the
+          room. */}
+      <span className="w-9 shrink-0 text-xs text-white/45">Bd {at + 1}</span>
       {/* Chips against the right edge rather than trailing the contract — see
           `Traveller`'s `Row`, which does the same and says why. */}
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1">

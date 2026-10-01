@@ -2640,6 +2640,19 @@ list and keeping them on the board page — where there is room — against the 
 there in the first place: the list is exactly where `+110` and `+720` sit in one column with nothing
 to explain either. That trade is now measured rather than guessed at.
 
+**And then the row label gave 40px back.** `Board 3` reserved 64px to say five characters that are
+identical on all eight rows plus one that is not; `Bd 3` is 24. Bridge's own abbreviation rather
+than a bare numeral or a `#`, for the reason a cell says `+2` rather than "made two overtricks" —
+this app writes the game's notation. The board's own page and the traveller's caption still say
+"Board 3" in full, because they are *naming* the thing rather than labelling a column, and they have
+the room.
+
+**Which changes the answer above.** With ~140px for the contract and the chips instead of ~100, the
+reserved-slot alignment that was unaffordable now fits: ~73px of slots plus ~36 for `4♥ =` is 109.
+So the version that aligns the chips exactly, rather than merely flushing their group right, is
+available whenever it is wanted — and it is affordable only because the cheapest thing on the row
+turned out to be the most expensive.
+
 **A board's field is withheld until the board has been played, and it is enforced server-side.** It
 names the contract and says how it went, which is the largest hint anybody could be handed about a
 deal they are about to bid. 404 rather than 403, because a route that says "not yet" has already told

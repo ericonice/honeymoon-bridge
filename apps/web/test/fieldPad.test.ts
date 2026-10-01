@@ -100,11 +100,24 @@ describe("the session pad", () => {
     result("b2", -100, [entry(140, "Noah", "solo")]),
   ];
 
+  /**
+   * **`Bd`, because "Board" is the same five characters on every row.** The number
+   * is the whole of what varies, and this is the row in the app with the least
+   * width to spare. The board's own page still names it in full — that heading is
+   * naming the thing rather than labelling a column.
+   */
+  it("labels a row with the board's number, short", () => {
+    pad(BOARDS);
+
+    expect(screen.getByRole("button", { name: /Bd 1/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();
+  });
+
   it("is one row a board, and nobody else's result is in the list", () => {
     pad(BOARDS);
 
-    expect(screen.getByRole("button", { name: /Board 1/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Board 2/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bd 1/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bd 2/ })).toBeTruthy();
     // The traveller belongs to the board's own panel — see `BoardReview`.
     expect(screen.queryByText("Noah")).toBeNull();
   });
@@ -116,7 +129,7 @@ describe("the session pad", () => {
    */
   it("drills a row straight into its board", () => {
     pad(BOARDS);
-    fireEvent.click(screen.getByRole("button", { name: /Board 2/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Bd 2/ }));
 
     expect(asked).toEqual([1]);
     expect(screen.queryByText("Noah")).toBeNull();
@@ -146,7 +159,7 @@ describe("the session pad", () => {
     // Twice on Noah's line: the row's own player, and the By field saying they
     // bought it.
     expect(screen.getAllByText("Noah").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Bd 1/ })).toBeNull();
   });
 });
 

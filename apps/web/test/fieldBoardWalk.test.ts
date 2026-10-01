@@ -140,7 +140,7 @@ describe("a Doop board on the real screen", () => {
     playFirstBoardAndMoveOn();
 
     tap("Show the score");
-    tap(/Board 1/);
+    tap(/Bd 1/);
 
     expect(screen.getByRole("heading", { name: "Board 1" })).toBeTruthy();
     // Opens on the field, and the deal is a tab away — both halves, so a panel that
@@ -164,7 +164,7 @@ describe("a Doop board on the real screen", () => {
     playFirstBoardAndMoveOn();
 
     tap("Show the score");
-    tap(/Board 1/);
+    tap(/Bd 1/);
 
     expect(screen.getByRole("heading", { name: "Board 1" })).toBeTruthy();
     // Still there underneath rather than torn down and rebuilt on the way back —
@@ -183,12 +183,12 @@ describe("a Doop board on the real screen", () => {
     playFirstBoardAndMoveOn();
 
     tap("Show the score");
-    tap(/Board 1/);
+    tap(/Bd 1/);
     swipeBack();
 
     expect(screen.queryByRole("heading", { name: "Board 1" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Score" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Board 1/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bd 1/ })).toBeTruthy();
   });
 
   /**
@@ -209,7 +209,7 @@ describe("a Doop board on the real screen", () => {
     passFirstBoardAndMoveOn();
 
     tap("Show the score");
-    tap(/Board 1/);
+    tap(/Bd 1/);
 
     // The panel is there rather than the screen left blank, and it is the field —
     // which needs only the board's own result, never the kept hands.
@@ -234,7 +234,7 @@ describe("a Doop board on the real screen", () => {
     playFirstBoardAndMoveOn();
 
     tap("Show the score");
-    tap(/Board 1/);
+    tap(/Bd 1/);
 
     swipeBack();
     expect(screen.queryByRole("heading", { name: "Board 1" })).toBeNull();

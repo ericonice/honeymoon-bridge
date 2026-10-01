@@ -225,8 +225,8 @@ describe("finishing a field session", () => {
   it("shows the whole session as soon as it is over", () => {
     finish(THREE);
 
-    expect(screen.getByRole("button", { name: /Board 1/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Board 3/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bd 1/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bd 3/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /whole session/i })).toBeNull();
   });
 
@@ -244,8 +244,8 @@ describe("finishing a field session", () => {
   it("lists every board and draws no traveller among them", () => {
     finish(THREE);
 
-    expect(screen.getByRole("button", { name: /Board 1/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Board 3/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bd 1/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bd 3/ })).toBeTruthy();
     expect(screen.queryByText("Computer")).toBeNull();
   });
 
@@ -256,7 +256,7 @@ describe("finishing a field session", () => {
   it("shows only the board just played while the session is running", () => {
     finish(THREE, false);
 
-    expect(screen.queryByRole("button", { name: /Board 1/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Bd 1/ })).toBeNull();
   });
 });
 
