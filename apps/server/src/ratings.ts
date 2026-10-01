@@ -139,8 +139,24 @@ export function stepFor(played: number): number {
  * falls back to the unversioned rating for anything it does not recognise, so a
  * client shipped first would have every one of its matches rated as beating the
  * weakest bot in this table, quietly inflating everybody.
+ *
+ * **v4 is level with v3, and that is measured rather than conceded.** It changed
+ * the draw — a growing hand is valued against the cards that can still appear
+ * instead of against a whole deck — and that is worth **+0.078 ± 0.018
+ * double-dummy tricks of hand quality, 4.3σ**, over 868 recorded Doop streams. It
+ * converts into nothing either bench can see: **52.2% ± 2.8 over 320 rubbers**
+ * (0.8σ) and **+1.9 ± 1.7 matchpoints over 300 corpus boards** (1.1σ), the second
+ * on an instrument whose control arm came in at 49.9% against the 50% it must hit.
+ *
+ * So it is a different opponent — `botRelease.test.ts` pins eight deals' draws and
+ * they differ on nearly every turn — of the same strength, and it is given the same
+ * number. The precedent is the mirror format, rated at the rubber anchor because
+ * the measurement that might have separated them was a null. Inventing a gap to
+ * match the hand-quality figure is exactly the flattery the rest of this file
+ * argues against: a player beating v4 has not beaten anything v3 would not have
+ * lost to.
  */
-const BOT_RATINGS: Record<number, number> = { 1: 1000, 2: 1200, 3: 1400 };
+const BOT_RATINGS: Record<number, number> = { 1: 1000, 2: 1200, 3: 1400, 4: 1400 };
 
 /**
  * A robot match older than bot versions at all — see `0006_bot_version.sql`, where

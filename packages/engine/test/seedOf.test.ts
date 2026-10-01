@@ -79,7 +79,7 @@ describe("the seed a deal was dealt from", () => {
       boards: 2,
       firstBoard: 500,
       format: "duplicate",
-      schedule: "back-to-back",
+      schedule: "adjacent",
       seed: UNUSED,
       starter: 0,
     });

@@ -1,5 +1,6 @@
 import { describe, expect, it, test } from "vitest";
 import { DIFFICULTIES, levelFor } from "../../web/src/bot/difficulty.js";
+import { BOT_RELEASES } from "../../web/src/bot/release.js";
 import type { Env } from "../src/env.js";
 import {
   botAnchors,
@@ -468,5 +469,36 @@ describe("the anchors a client is handed", () => {
     );
     expect(differing.length).toBeGreaterThan(0);
     expect(new Set(differing)).toEqual(new Set(["championship"]));
+  });
+});
+
+/**
+ * Every release a person can sit down against has an anchor here.
+ *
+ * The two lists live in different workspaces and nothing else makes them meet —
+ * the same reason `DIFFICULTIES` is walked against the offset table above. A
+ * release missing from `BOT_RATINGS` is not an error anywhere at run time:
+ * `botRating` falls back to the unversioned rating, so every match against it is
+ * scored as beating the *weakest* bot there has ever been, and the player's number
+ * quietly inflates. `ratings.ts` states the rule in prose; this is what enforces it.
+ */
+describe("the server knows every bot the client can play", () => {
+  it("anchors each release in the registry", () => {
+    for (const release of BOT_RELEASES) {
+      // Against v1's anchor, which is what an unrecognised version falls back to.
+      expect(
+        botRating(release.version, "championship"),
+        `v${release.version} ${release.name} has no anchor in BOT_RATINGS`,
+      ).toBeGreaterThan(botRating(null, "championship"));
+    }
+  });
+
+  /**
+   * The anti-vacuity half: a version nobody ships must still read as unknown, or
+   * the assertion above would pass against a table that anchored everything.
+   */
+  it("still has no anchor for a version that does not exist", () => {
+    const beyond = Math.max(...BOT_RELEASES.map((release) => release.version)) + 1;
+    expect(botRating(beyond, "championship")).toBe(botRating(null, "championship"));
   });
 });
