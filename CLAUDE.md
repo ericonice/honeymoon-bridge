@@ -236,7 +236,7 @@ So the table stays fitted from points-bidder self-play, and the honest descripti
 this log can currently remove.
 
 **Shipping v3 took four pieces, and one of them was the mistake this file already warned about.**
-`release.ts` is a registry of two entries now, each carrying the `tuning` that makes it itself — which
+`release.ts` became a registry of two entries, each carrying the `tuning` that makes it itself — which
 is what finally justified that field. `identity.ts` gains `preferredRelease`, read once per match in
 `localSession.ts` for the same reason the format is, and the chosen version travels on every record
 and hand log the match produces. Settings gains a **Which computer you play** row.
@@ -244,20 +244,124 @@ and hand log the match produces. Settings gains a **Which computer you play** ro
 That row went in next to "How boldly it bids" first, which is *inside the playtester block* — the
 exact mistake the trick-count toggle made, in the same file, for the same reason: the neighbouring
 rows happened to be there. `test/settingsRows.test.ts` failed on it, which is what that test is for.
-It sits with Match length now, because choosing the opponent is a decision taken before sitting down,
-and it is on the list of rows everyone must be able to reach. **A superseded release is the best
-difficulty lever here** — turning the sampler down makes an opponent that is unsure, where an older
-release is one that was once the best there was.
+It was moved out to sit with Match length, on the argument that choosing the opponent is a decision
+taken before sitting down — **and it has since gone back into the playtester block, which is where it
+is now.** This note claimed the earlier arrangement for a while after it stopped being true; the
+component is the account with something at stake and it said "a measurement tool now rather than a
+preference" all along.
 
-**Both releases are pinned, and a release with no transcripts fails the test.** `botRelease.test.ts`
+**What changed is that the difficulty ladder took the job.** The argument for putting it in front of
+everybody was that a superseded release is a difficulty lever — an opponent that was once the best
+there was, rather than one made unsure by turning the sampler down. `difficulty.ts` answers "how
+hard" directly now, with three rungs and measured offsets, so "which computer" is left answering a
+question only a comparison asks. It is also no longer a strength choice at all: v4 is anchored level
+with v3, so two of the three entries are the same rating and a player picking between them would be
+choosing nothing.
+
+So the row stays gated, it is deliberately absent from `settingsRows.test.ts`'s list of rows everyone
+must reach, and a new release reaches an ordinary player the one way it should — as the default,
+through `preferredRelease` falling back to `LATEST_RELEASE`, with no new choice to explain.
+
+**Every release is pinned, and a release with no transcripts fails the test.** `botRelease.test.ts`
 loops the registry rather than naming v2, so adding a version without recording what it does is a
-failure rather than an omission. v3's transcripts are visibly different — 4H where v2 said 3H, and a
+failure rather than an omission — which is exactly how v4 announced itself. v3's transcripts are visibly different — 4H where v2 said 3H, and a
 5C sacrifice over 4S.
 
 **The rating anchor goes on the server before the client that plays it.** `botRating` falls back to
 the unversioned rating for a version it does not recognise, so a client deployed first would have
 every v3 match rated as beating the weakest bot in the table and quietly inflate everybody. v3 sits at
 1300, from the sampler measurement rather than the heuristic one, and `ratings.ts` says why.
+
+**v4 Doug Harvey values a growing hand against the cards that can still appear, and it is anchored
+level with v3.** The draw asked "do I hold the ace" in absolute terms, so behind `AH 2H` it priced the
+`3H` and the `JH` at the *same* 0.065 tricks — it could not tell a jack from a three — and with the
+ace, king and queen of hearts already face up on its own discard pile it valued the master jack at
+**0.014** and threw it after them. `potentialTricks` scored only A/K/Q, and `rawHandValue` never saw
+the discards at all: they reached `unseenPool`, which prices card 2, and stopped there.
+
+**The correction is one principle in three places**, none of them a fitted constant: count what can
+still *beat* a card rather than what outranks it in the abstract. `potentialTricks` reads its ladder
+off the live cards, `topRun` runs from the highest live card rather than from the ace, and `stillOut`
+stops counting dead cards among the ones that might be outstanding. A second half fell out of it and
+is the larger one: **held cards count as "above" too**, so AK is 2 tricks rather than 1.5, which is
+what `quickTricks` has said for a finished hand since the beginning.
+
+| on 868 recorded Doop streams, redrawing one seat against the hand actually dealt | |
+| --- | --- |
+| dead-card promotion alone | **+0.014 ± 0.015 — a null** |
+| honours behind one's own alone | **+0.046 ± 0.021** |
+| both | **+0.078 ± 0.018, 4.3σ** |
+| the person, same streams | **+0.174 ± 0.034, 5.1σ** |
+
+**And it converts into nothing either outcome bench can see.** 320 rubbers against v3: **52.2% ± 2.8,
+0.8σ, worth +15 rating points**. 300 corpus boards through `bench/field.ts compare draw`: **+1.9 ±
+1.7, 1.1σ**, on a run whose control arm came in at **49.9%** against the 50% it must hit by
+construction. So the instrument is sound and the answer is believable. **Fourth time in this file a
+gain measured in tricks has failed to convert**, after the recall lever, `DEFENSE_SHARE` and the
+defending estimate twice.
+
+**So v4 is a different opponent of the same strength, and `BOT_RATINGS` gives it v3's 1400.** The
+precedent is the mirror format, rated at the rubber anchor because the measurement that might have
+separated them was a null; inventing a gap to match the hand-quality figure is the flattery the rest
+of `ratings.ts` argues against.
+
+**Why it is a release at all, given two nulls — and the reason is the corpus, not the strength.** The
+Doop field is 15,081 generated entries all made by v3, and `bench/field.ts compare` works only because
+it can rebuild that exact bidder. A bidder's draw decides its hands, so folding this into v3 would
+stop `releaseFor(3)` reconstructing the bot that made the corpus and the 49.9% control would drift.
+`CORPUS_VERSION` pins it for that reason. Second reason: "not significant" is not "equal" — the rubber
+bench resolves to about ±20 rating points, both benches lean slightly positive, and a 20-point change
+hidden inside v3's 910 recorded boards is exactly the invisible error versions exist to prevent. Third:
+v3 had already taken one in-place correction in `defendingRuff`, and a second would make the name
+mean three bots.
+
+**The change is scoped per release, and the first attempt was not.** `drawDecision.ts` has no other
+per-release scoping, so an unscoped correction here moved v2 and v3 as well — `botRelease.test.ts`
+failed on both, which is what it is for. `BotTuning.drawCountsLive` carries it now, absent meaning off
+for the reason `searchBudgetMs: 0` is spelled out. `keepTest` is deliberately left on the old ladder:
+its caller is `drawSimulation.ts` guessing the opponent's hand, it passes no discards because this seat
+has never seen theirs, and the sampler is shared by every release where the draw is not. The test
+asserts v3's draws are **byte-identical to v2's** and v4's differ, so a future leak fails on a named
+assertion rather than on eight transcripts at once.
+
+**`potentialTricks` keeps the shipped formula verbatim rather than reducing to it, and that is a
+correction to two measurements this file nearly carried.** The first implementation excluded ranks the
+hand *holds* when counting what was above a card, so a king behind its own ace scored a whole trick —
+a change that fires with nothing dead at all. It was reported here as +0.073 and then +0.032 for the
+promotion; both numbers were the accident, and the promotion alone is a null. The old behaviour is now
+the same expression it always was, taken on `live === undefined`, and a probe over 10,229 holdings
+confirms zero differences. **A reduction you claim is not a reduction you checked.**
+
+**Three control runs failed in the course of this, which is the standing lesson again.** A
+re-implemented model that was meant to change nothing scored +0.060; the two above. Each was caught by
+an arm that had to come out at zero and did not — and the first two were caught only because that arm
+was *in* the bench. An arm whose value is known is worth its runtime.
+
+**And the hand log's seed was meaningless for every format but a rubber.** `localSession` advanced a
+`dealSeed` ref with a fresh `randomSeed()` before each `nextIn`, which is right for a rubber and wrong
+everywhere else: a session's deals are its boards, `nextFieldDeal` and `nextDuplicateDeal` take no seed
+and `nextIn` discards the one it is handed. So 878 logged Doop deals recorded a number that had dealt
+nothing, and the one thing a seed is logged for — replaying the deal — did not work for any of them.
+`seedOf` reads it off the match instead, beside `dealOf`, because only that module knows where each
+format keeps it. Null only where nothing recorded it and nothing can, which is a rubber restored from
+storage written before `dealt` existed. The deals already logged are recoverable through
+`field_boards`, which is how the analysis above was done at all.
+
+**What the person's own 50 draw decisions say, and it is where the rest of the gap is.** Fifty real
+positions off their own boards, answered with reasons. The signal that dominates is not the dead
+cards: it is **cards already held in the offered suit**, where their keep rate climbs 18/50/76/71/100%
+across 0 to 4+ held while the bot's *falls* 22/21/19% before waking at three. The reason given eleven
+times is some form of "strong diamonds already, let's make them stronger". `runOutTricks` has the
+machinery for it — `beneath` cards cashing once the opponent runs out — and it is gated on `topRun`,
+which is 0 for KQ74 because the run must start at the ace. The other recurring reason has no
+representation in the model at all: **two-suiters**, named four times unprompted ("2 suits can be
+powerful", "not too early to go for a 2 suiter"). That is a mechanism rather than a constant, which
+matters because four constants were swept here — a keep bias, `DEFENSE_SHARE`, a concentration term,
+a jack/ten ladder — and every one came back null.
+
+**One caution for whoever builds it: `bench/field.ts compare` has now twice disagreed with a
+hand-quality figure.** Par tricks are the right instrument for the draw's own question and the wrong
+one for whether the game changes. The 300-board compare decides it.
 
 **Two tests in this change were vacuous first, and both were caught by reverting the fix rather than
 by reading them.** The record-freshness one is above. The other was `creditIn`, the one constant that
@@ -822,7 +926,7 @@ double-announcement bug three times (the fog horn, the unlock chime, and this), 
 fact about the *contract*: it used to be handed `score.detail.made`, so a defender who had just
 broken a contract heard the triumphant chime for it.
 
-**The bot is versioned, from v1 Angela James; v3 Bobby Orr is current.** `bot/release.ts` holds a *registry*
+**The bot is versioned, from v1 Angela James; v4 Doug Harvey is current.** `bot/release.ts` holds a *registry*
 of the releases a person can sit down against, with `LATEST_RELEASE` derived from the end of it; versions are numbered from
 one and named alphabetically after hockey players, so a list of them reads in the order they
 existed — Angela James, Bobby Hull, Bobby Orr, Doug Harvey, Eddie Shore, Frank Mahovlich,
