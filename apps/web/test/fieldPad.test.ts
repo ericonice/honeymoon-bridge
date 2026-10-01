@@ -216,6 +216,30 @@ describe("what a contract is tagged with", () => {
    * The anti-vacuity half: without it a pad that tagged every contract would pass
    * the test above, and the tag would say nothing at all.
    */
+  /**
+   * Reported from a real session: a row ended `−70  7%` and the two figures read as
+   * one. They answer different questions — what the deal paid, and where that put
+   * you — and a column each set them adjacent at the right edge with nothing to
+   * separate them. The placing is what the row exists to say, so it keeps the edge.
+   *
+   * **The assertion is that the net comes before the chips**, not merely before the
+   * placing: it sat between them before, so "net then placing" held either way and
+   * would pass against the arrangement being complained about.
+   */
+  it("puts what the deal paid beside its contract, leaving the placing the right edge", () => {
+    // A field, so the row has a placing to put at its edge — the whole subject here.
+    pad([result("b1", VULNERABLE, [entry(100, "Computer"), entry(800, "Computer")], [true, false])]);
+
+    const row = screen.getByRole("button", { name: /Bd 1/ }).textContent ?? "";
+    const net = row.indexOf("+620");
+    const chip = row.toLowerCase().indexOf("vul");
+    const placing = row.lastIndexOf("%");
+    expect(net).toBeGreaterThanOrEqual(0);
+    expect(chip).toBeGreaterThanOrEqual(0);
+    expect(net).toBeLessThan(chip);
+    expect(chip).toBeLessThan(placing);
+  });
+
   it("says nothing about vulnerability when neither side was", () => {
     pad([result("b1", PLAIN, [])]);
 

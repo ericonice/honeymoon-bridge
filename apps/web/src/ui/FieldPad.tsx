@@ -165,25 +165,31 @@ function BoardRow({
             <Declarer name={mine.declarer} />
             <ContractText contract={mine.contract} on="dark" />
             <span className="text-xs text-white/45">{mine.mark}</span>
+            {/* **Beside the contract rather than in a column of its own**, which it
+                was until a row read `−70  7%` and the two figures looked like one.
+                They are different kinds of number — what this deal paid, and where
+                that put you — and a column each set them side by side at the right
+                edge with nothing to tell them apart. The placing is what the row is
+                *for*, so it keeps the edge to itself and the net goes where it is
+                explained, against the contract that produced it.
+
+                Inside the contract's own cell, not a sibling before it: a sibling
+                would sit after the flexible space and leave a gap between `4♥ =`
+                and its own score. `shrink-0` so the contract truncates before this
+                does, which no real contract is long enough to cause. */}
+            <span className="shrink-0 tabular-nums text-white/60">{signed(mine.points)}</span>
           </>
         )}
       </span>
       <span className="flex shrink-0 items-baseline gap-1.5">
         {mine.contract === null ? null : <Tags reserve tags={mine.tags} />}
       </span>
-      {/* **Fixed width, and without it the chips could not align whatever else was
-          done to them.** They are flushed against this column, and it was sized to
-          its own content — so `−50` sat further right than `+210` and dragged the
-          chips before it along, which is most of why a list of eight boards looked
-          ragged. Right-aligned figures only line up if the box they are in does. */}
-      {/* **Fixed width, and without it the chips could not align whatever else was
-          done to them.** They sit against this column, and it was sized to its own
-          content — so `−50` sat further right than `+210` and dragged the chips
-          before it along. Right-aligned figures only line up if the box they are in
-          does. Twelve is enough for the widest a deal can pay. */}
-      <span className="w-12 shrink-0 text-right tabular-nums text-white/60">
-        {signed(mine.points)}
-      </span>
+      {/* **Fixed width, and without it the chips could not align.** They are flushed
+          against this column, so it has to be sized to the column rather than to its
+          own content — the net used to sit here and was auto-sized, which put `−50`
+          further right than `+210` and dragged the chips before it along. That was
+          most of why a list of eight boards looked ragged. Right-aligned figures only
+          line up if the box they are in does. */}
       <span className="w-11 shrink-0 text-right font-semibold tabular-nums">
         {placed === null ? "—" : `${Math.round(placed)}%`}
       </span>
