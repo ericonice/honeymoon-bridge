@@ -13,7 +13,14 @@ import type {
   DuplicateSummary,
   MatchFormat,
 } from "./duplicate.js";
-import { applyFieldAction, netFor, nextFieldDeal, startField, summarizeField } from "./field.js";
+import {
+  applyFieldAction,
+  currentFieldBoard,
+  netFor,
+  nextFieldDeal,
+  startField,
+  summarizeField,
+} from "./field.js";
 import type { FieldBoard, FieldState, FieldSummary } from "./field.js";
 import { newRubber, totalScore, vulnerability } from "./rubber.js";
 import type { RubberFormat, RubberState } from "./rubber.js";
@@ -336,6 +343,42 @@ export function dealOf(match: MatchState): DealState {
   return match.kind === "duplicate" || match.kind === "field"
     ? match.session.deal
     : match.table.deal;
+}
+
+/**
+ * What the deal on the table was dealt from.
+ *
+ * Here, beside `dealOf`, because it is the same question about the same deal and
+ * only this module knows where each format keeps the answer. The hand log is the
+ * caller: a logged deal is replayable from its seed and its starter, and that is
+ * the whole reason either is recorded.
+ *
+ * **It exists because a parallel copy of this drifted.** `localSession` keeps a
+ * `dealSeed` ref and advances it with a fresh `randomSeed()` before every
+ * `nextIn` — which is right for a rubber, whose next deal really is dealt from
+ * the seed it is handed, and wrong for every other format. A session's deals are
+ * its boards: `nextFieldDeal` and `nextDuplicateDeal` take no seed at all and
+ * `nextIn` discards the one it is given, so for a Doop or duplicate board, and
+ * for a mirror mid-match, the ref held a number that had dealt nothing. Every
+ * such deal was logged against it and none of them is replayable. Reading it off
+ * the match removes the second copy rather than correcting it.
+ *
+ * Null only where nothing recorded it and nothing can: a rubber restored from
+ * storage written before `dealt` existed comes back with none — see
+ * `restoreTable`, which is deliberate, and `canReturn`, which already refuses
+ * such a rubber for the same reason.
+ */
+export function seedOf(match: MatchState): number | null {
+  if (match.kind === "field") {
+    return currentFieldBoard(match.session)?.seed ?? null;
+  }
+  if (match.kind === "duplicate") {
+    const playing = match.session.schedule[match.session.at];
+    return playing === undefined ? null : (match.session.boards[playing.board]?.seed ?? null);
+  }
+  // A rubber and a mirror both deal through the table, which records every deal it
+  // dealt, oldest first — so the one on the table is the last of them.
+  return match.table.dealt[match.table.dealt.length - 1]?.seed ?? null;
 }
 
 export function actOn(match: MatchState, player: PlayerId, action: DealAction): MatchState {

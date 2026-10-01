@@ -11,6 +11,7 @@ import {
   randomSeed,
   returnMatch,
   rubberFacts,
+  seedOf,
   sortHand,
   startMatch,
   withField,
@@ -718,7 +719,12 @@ export function useLocalSession(options: LocalSessionOptions = {}): LocalGameSes
         disguise: disguiseEnabled(),
         drawTurns: deal.drawTurns,
         initialHands: deal.initialHands,
-        seed: dealSeed.current,
+        // Off the match rather than off `dealSeed`, which only deals a rubber.
+        // A session's deals are its boards and `nextIn` throws the seed away, so
+        // the ref was logging a number that had dealt nothing — see `seedOf`.
+        // It is still the better answer for the one case `seedOf` cannot know,
+        // a rubber restored from storage written before `dealt` existed.
+        seed: seedOf(match) ?? dealSeed.current,
         format: summary.format,
         // The score the deal was *bid* at, which is not the score it left behind.
         // Without it a replayed auction is a different decision from the one that
