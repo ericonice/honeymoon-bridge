@@ -9,10 +9,12 @@ import {
 } from "@hb/engine";
 import type { Contract, DealState, Pair, PlayerId, Standing } from "@hb/engine";
 import { DEFAULT_GAME_EQUITY } from "../src/bot/bidValue.js";
+import { RUFF_PER_LEVEL } from "../src/bot/evaluate.js";
+import type { BotTuning } from "../src/bot/heuristicBot.js";
 import type { Objective } from "../src/bot/bidValue.js";
 import { botForLevel } from "../src/bot/build.js";
 import { levelFor } from "../src/bot/difficulty.js";
-import { LATEST_RELEASE, releaseFor } from "../src/bot/release.js";
+import { LATEST_RELEASE } from "../src/bot/release.js";
 import type { BotRelease } from "../src/bot/release.js";
 import { botTuningFor } from "../src/game/botTuning.js";
 import { botActionFor } from "../src/game/botTurn.js";
@@ -75,23 +77,29 @@ function bidSamples(): number | null {
 
 /** The one place the shipped Championship bot is made reproducible. */
 /**
- * The release that made the corpus on disk, which is **not** `LATEST_RELEASE`.
+ * The bidder that made the corpus on disk, written out rather than looked up.
  *
- * `field_boards` records a `bot_version` per board for exactly this reason, and
- * every board stored today says 3. The distinction was free while there was one
- * newest release and became load-bearing the moment v4 shipped: `generatorTuning`
- * read `LATEST_RELEASE`, so adding a release silently moved what `compare`'s arm A
- * meant — it would have ranked the new bidder against a field built by the old one
- * while claiming both arms were the corpus bidder, and `generate` would have
- * appended entries from a second bot to a yardstick that must come from one.
+ * It was `releaseFor(CORPUS_VERSION)` until v3 was corrected in place: `drawCountsLive`
+ * changes the draw, a bidder's draw decides its hands, and so reading the registry
+ * would have stopped reconstructing the bot that actually generated these 15,081
+ * entries — silently, with `compare`'s control arm drifting off the 50% it must hit by
+ * construction and every margin beside it quietly wrong.
  *
- * Bump it when the corpus is regenerated, which is the same moment the old boards
+ * **So this is the cost of folding a release back in, paid here.** A literal is not a
+ * perfect preservation either — the bot calls the shared engine, the solver and
+ * `evaluate.ts`'s calibration, so a refit still moves it, which is exactly why
+ * `release.ts` says freezing a tuning does not preserve a release. It is the best
+ * available, and it is honest about what it is: the configuration named, not a version
+ * number that has since changed meaning.
+ *
+ * Replace it when the corpus is regenerated, which is the same moment the old boards
  * stop being offered.
  */
+const CORPUS_TUNING: BotTuning = { defendingRuff: RUFF_PER_LEVEL, objective: "equity" };
 const CORPUS_VERSION = 3;
 
 function generatorTuning(
-  release: BotRelease = releaseFor(CORPUS_VERSION) ?? LATEST_RELEASE,
+  release: BotRelease = { name: "the corpus bidder", tuning: CORPUS_TUNING, version: CORPUS_VERSION },
 ): ReturnType<typeof botTuningFor> {
   const level = levelFor("championship");
   const tuning = botTuningFor({

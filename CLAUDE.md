@@ -254,9 +254,9 @@ preference" all along.
 everybody was that a superseded release is a difficulty lever — an opponent that was once the best
 there was, rather than one made unsure by turning the sampler down. `difficulty.ts` answers "how
 hard" directly now, with three rungs and measured offsets, so "which computer" is left answering a
-question only a comparison asks. It is also no longer a strength choice at all: v4 is anchored level
-with v3, so two of the three entries are the same rating and a player picking between them would be
-choosing nothing.
+question only a comparison asks. There are two entries in it and they differ by about two hundred
+rating points, which is a real choice — but it is a choice about *which computer*, not about how hard
+it plays, and the ladder answers the second directly.
 
 So the row stays gated, it is deliberately absent from `settingsRows.test.ts`'s list of rows everyone
 must reach, and a new release reaches an ordinary player the one way it should — as the default,
@@ -264,7 +264,8 @@ through `preferredRelease` falling back to `LATEST_RELEASE`, with no new choice 
 
 **Every release is pinned, and a release with no transcripts fails the test.** `botRelease.test.ts`
 loops the registry rather than naming v2, so adding a version without recording what it does is a
-failure rather than an omission — which is exactly how v4 announced itself. v3's transcripts are visibly different — 4H where v2 said 3H, and a
+failure rather than an omission — which is exactly how v4 announced itself before being folded back
+in. v3's transcripts are visibly different — 4H where v2 said 3H, and a
 5C sacrifice over 4S.
 
 **The rating anchor goes on the server before the client that plays it.** `botRating` falls back to
@@ -272,8 +273,8 @@ the unversioned rating for a version it does not recognise, so a client deployed
 every v3 match rated as beating the weakest bot in the table and quietly inflate everybody. v3 sits at
 1300, from the sampler measurement rather than the heuristic one, and `ratings.ts` says why.
 
-**v4 Doug Harvey values a growing hand against the cards that can still appear, and it is anchored
-level with v3.** The draw asked "do I hold the ace" in absolute terms, so behind `AH 2H` it priced the
+**The draw counts only the cards that can still appear, and this shipped as v4 for a day before
+being folded back into v3.** The draw asked "do I hold the ace" in absolute terms, so behind `AH 2H` it priced the
 `3H` and the `JH` at the *same* 0.065 tricks — it could not tell a jack from a three — and with the
 ace, king and queen of hearts already face up on its own discard pile it valued the master jack at
 **0.014** and threw it after them. `potentialTricks` scored only A/K/Q, and `rawHandValue` never saw
@@ -300,20 +301,26 @@ construction. So the instrument is sound and the answer is believable. **Fourth 
 gain measured in tricks has failed to convert**, after the recall lever, `DEFENSE_SHARE` and the
 defending estimate twice.
 
-**So v4 is a different opponent of the same strength, and `BOT_RATINGS` gives it v3's 1400.** The
-precedent is the mirror format, rated at the rubber anchor because the measurement that might have
-separated them was a null; inventing a gap to match the hand-quality figure is the flattery the rest
-of `ratings.ts` argues against.
+**So it is the same opponent, and it is not a version.** `release.ts` sets the bar at "results either
+side are not measuring the same opponent", and by that bar two nulls say they are. It shipped as v4
+Doug Harvey anyway, on an asymmetry argument — that a needless rung is cheap and reversible where a
+hidden strength shift inside v3's history is not — and that argument lost to the simpler one: a rung
+rated identically to the one below it is a choice offering nothing, and the anchor it needs is the one
+number `ratings.ts` says must never be invented. Folded back the next day, before any result had been
+recorded against it, which is what kept the decision free.
 
-**Why it is a release at all, given two nulls — and the reason is the corpus, not the strength.** The
-Doop field is 15,081 generated entries all made by v3, and `bench/field.ts compare` works only because
-it can rebuild that exact bidder. A bidder's draw decides its hands, so folding this into v3 would
-stop `releaseFor(3)` reconstructing the bot that made the corpus and the 49.9% control would drift.
-`CORPUS_VERSION` pins it for that reason. Second reason: "not significant" is not "equal" — the rubber
-bench resolves to about ±20 rating points, both benches lean slightly positive, and a 20-point change
-hidden inside v3's 910 recorded boards is exactly the invisible error versions exist to prevent. Third:
-v3 had already taken one in-place correction in `defendingRuff`, and a second would make the name
-mean three bots.
+**The cost of folding is real and is paid in two places.** v3's 910 recorded Doop boards and its
+rating line now span two slightly different draws with nothing in the data saying which — the second
+time, after `defendingRuff`. And `bench/field.ts` can no longer rebuild the corpus bidder from
+`releaseFor(3)`, because a bidder's draw decides its hands; `CORPUS_TUNING` is that configuration
+written out as a literal instead. A literal is not a perfect preservation either, for the reason
+`release.ts` gives — the engine, the solver and the calibration underneath it all still move — but it
+is honest about naming a configuration rather than a version number whose meaning has changed.
+
+**One argument against folding that I would not drop: "not significant" is not "equal".** The rubber
+bench resolves to about ±20 rating points and both benches leaned slightly positive. If the draw
+really is worth twenty points, v3's history now hides it. That was weighed and accepted rather than
+waved away.
 
 **The change is scoped per release, and the first attempt was not.** `drawDecision.ts` has no other
 per-release scoping, so an unscoped correction here moved v2 and v3 as well — `botRelease.test.ts`
@@ -321,7 +328,7 @@ failed on both, which is what it is for. `BotTuning.drawCountsLive` carries it n
 for the reason `searchBudgetMs: 0` is spelled out. `keepTest` is deliberately left on the old ladder:
 its caller is `drawSimulation.ts` guessing the opponent's hand, it passes no discards because this seat
 has never seen theirs, and the sampler is shared by every release where the draw is not. The test
-asserts v3's draws are **byte-identical to v2's** and v4's differ, so a future leak fails on a named
+asserts v2's and v3's draws **differ**, so a draw change leaking across releases fails on a named
 assertion rather than on eight transcripts at once.
 
 **`potentialTricks` keeps the shipped formula verbatim rather than reducing to it, and that is a
@@ -355,11 +362,11 @@ thirteen pairs, so exactly **8,192 hands** are obtainable from it. Sampling 150 
 | --- | --- | --- |
 | worst sampled hand | 4.64 | — |
 | a hand picked at random | 7.11 | — |
-| **the bot (v4)** | **8.50** | 73rd |
+| **the bot, corrected** | **8.50** | 73rd |
 | **the person** | **8.55** | 71st |
 | best of the 150 sampled | 9.72 | — |
 
-So v4 has **closed the gap** on this subset, and there is 1.4 tricks of headroom above both. **The
+So the correction has **closed the gap** on this subset, and there is 1.4 tricks of headroom above both. **The
 headroom is an oracle bound, not a target**: the maximum of 150 samples is chosen knowing both hands
 and all thirteen pairs, where a real policy decides card by card blind to both. It says the range
 exists; it does not say a policy can reach into it. A rollout that tried came back **−0.833**.
@@ -973,7 +980,7 @@ double-announcement bug three times (the fog horn, the unlock chime, and this), 
 fact about the *contract*: it used to be handed `score.detail.made`, so a defender who had just
 broken a contract heard the triumphant chime for it.
 
-**The bot is versioned, from v1 Angela James; v4 Doug Harvey is current.** `bot/release.ts` holds a *registry*
+**The bot is versioned, from v1 Angela James; v3 Bobby Orr is current.** `bot/release.ts` holds a *registry*
 of the releases a person can sit down against, with `LATEST_RELEASE` derived from the end of it; versions are numbered from
 one and named alphabetically after hockey players, so a list of them reads in the order they
 existed — Angela James, Bobby Hull, Bobby Orr, Doug Harvey, Eddie Shore, Frank Mahovlich,

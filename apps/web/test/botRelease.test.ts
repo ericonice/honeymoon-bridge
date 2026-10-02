@@ -63,23 +63,11 @@ const TRANSCRIPTS: Record<number, readonly string[]> = {
   // Re-recorded when v3's equity table was re-fitted under solver card play. The
   // shape of the change is visible in the first and last of these: the old table
   // climbed to 6D and sacrificed in 5C, and this one doubles instead.
+  // **Re-recorded when `drawCountsLive` was folded into v3**, which is why every draw
+  // differs from v2's rather than matching it. The auctions follow the hands: the
+  // first line is the clearest read, where v3 buys 4H unopposed on a hand its previous
+  // draw made it fight for with 4H-5D-5H.
   3: [
-    // **Re-recorded**: v3 competed with 5H here where it used to double 5D. That is
-    // the one call `defendingRuff` changed across all eight deals — see below.
-    "KKSKSSSKSSSSKKKSKSSKSSKKSS | 0:4H 1:5D 0:5H 1:P",
-    "SSSSSSKSSSSKSKKKSKSKSSKKSS | 1:P 0:4H 1:P",
-    "SSKSSSSSSSSSSSSKSKKKSKSSSS | 0:2H 1:3D 0:P",
-    "SSSKKKKKSSSSSKSSSSKKSKKSSS | 1:1NT 0:2H 1:2S 0:3H 1:3S 0:P",
-    "SSSKSSKSSSSSKSSKSSKKKKSSSS | 0:2S 1:3C 0:3S 1:P",
-    "SKSKKSSSSSKSSSKKSSSSKSSSSS | 1:2D 0:2H 1:3D 0:3H 1:P",
-    "KKSSSSSKSKKKSKKSSSSSKSKSSS | 0:1C 1:4S 0:x 1:P",
-    "KKSSKSSSKSSKSKSSSKSKKSKSSS | 1:2C 0:2S 1:3C 0:P",
-  ],
-  // v4 values a growing hand against the cards that can still appear, so its draw
-  // differs from v3's on nearly every turn and the auctions follow the hands. The
-  // first line is the clearest read: holding a hand v3 had to fight for, v4 buys
-  // 4H unopposed where v3 went 4H-5D-5H.
-  4: [
     "KKSKSSSKSKSSKSKKKSSKSSKKKS | 0:4H 1:P",
     "SSSSSSKSSSSKSKKKKKKKKSKKSS | 1:P 0:4H 1:P",
     "SSKSSSSSSSSSSSSKSKKKSKSKSS | 0:2H 1:3NT 0:P",
@@ -180,25 +168,23 @@ for (const release of BOT_RELEASES) {
 test("the releases are the ones these transcripts were recorded from", () => {
   expect(releaseFor(2)?.name).toBe("Bobby Hull");
   expect(releaseFor(3)?.name).toBe("Bobby Orr");
-  expect(releaseFor(4)?.name).toBe("Doug Harvey");
 });
 
 /** Each release differs from the one before, which is the only thing making it one. */
 test("no release plays the same as its predecessor", () => {
   expect(TRANSCRIPTS[2]).not.toEqual(TRANSCRIPTS[3]);
-  expect(TRANSCRIPTS[3]).not.toEqual(TRANSCRIPTS[4]);
 });
 
 /**
- * v4's change is in the *draw*, so this is where it has to show — and the two
- * halves are checked apart, because an auction can differ for either reason.
- * Without the first assertion a v4 whose draw was identical and whose bidding had
- * merely drifted would pass as the release it claims to be.
+ * v3 differs from v2 in the **draw** as well as the auction, which it did not before
+ * `drawCountsLive` was folded in. Checked apart from the bidding, because an auction
+ * can differ for either reason — and this half is what `drawCountsLive` being per
+ * release actually buys: v2 keeps the draw it was measured with, which is the whole
+ * point of a superseded release staying playable.
  */
-test("v4 draws differently from v3, which is what makes it a release", () => {
+test("v2 and v3 draw differently, so a draw change cannot reach them both", () => {
   const drawsOf = (version: number) => TRANSCRIPTS[version]!.map((line) => line.split(" | ")[0]);
-  expect(drawsOf(4)).not.toEqual(drawsOf(3));
-  expect(drawsOf(3)).toEqual(drawsOf(2));
+  expect(drawsOf(3)).not.toEqual(drawsOf(2));
 });
 
 test("a version this build has never heard of has no release rather than throwing", () => {

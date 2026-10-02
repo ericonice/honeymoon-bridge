@@ -123,37 +123,45 @@ export const BOT_RELEASES: readonly BotRelease[] = [
    * model of v2 rather than of a person. Fitting against recorded human games was
    * tried and there were eleven usable rubbers in the log; see `equity.ts`.
    */
-  { name: "Bobby Orr", tuning: { defendingRuff: RUFF_PER_LEVEL, objective: "equity" }, version: 3 },
   /**
-   * Values a growing hand against the cards that can still appear.
+   * Prices calls by the chance of taking the rubber rather than by points, and values
+   * a growing hand against the cards that can still appear.
    *
-   * v3's draw asked "do I hold the ace" in absolute terms, so it could not tell a
-   * jack from a three — behind AH 2H it priced both at 0.065 — and it threw a jack
-   * away with the ace, king and queen already face up on its own discard pile,
-   * where that jack is the master. It also scored AK as 1.5 tricks where
-   * `quickTricks` has said 2 for a finished hand since the beginning.
+   * The objective came first. Measured against v2, everything else held identical:
+   * 631 rubbers to 169, 78.9% ± 1.4, and +237 points a rubber as well. The whole of
+   * that difference is `equity.ts` — v2 credits itself a flat 400 for holding a game,
+   * which is worth about half what a game is really worth and the same number at
+   * every standing. Its equity table is fitted from v2's own self-play, which makes
+   * it an opponent model of v2 rather than of a person.
    *
-   * Both halves are the same correction and neither is a fitted constant: count
-   * what can still beat a card rather than what outranks it in the abstract. The
-   * two were measured apart, because the first attempt at this conflated them and
-   * reported the second's effect as the first's — promotion alone is **+0.014 ±
-   * 0.015, a null**, honours behind one's own is **+0.046 ± 0.021**, and together
-   * they are **+0.078 ± 0.018, 4.3σ** in double-dummy tricks over 868 recorded
-   * Doop streams, redrawing one seat against the opponent hand actually dealt.
+   * **`drawCountsLive` is its second in-place correction, and it was briefly a v4.**
+   * The draw asked "do I hold the ace" in absolute terms, so behind `AH 2H` it priced
+   * the `3H` and the `JH` at the *same* 0.065 tricks, and with the ace, king and queen
+   * of hearts already face up on its own discard pile it valued the master jack at
+   * **0.014** and threw it after them. It also scored AK as 1.5 where `quickTricks`
+   * has said 2 for a finished hand since the beginning. Counting what can still
+   * *beat* a card fixes both, and is worth **+0.078 ± 0.018 double-dummy tricks of
+   * hand quality, 4.3σ**, over 868 recorded Doop streams.
    *
-   * **Why a release and not a correction to v3.** v3 carries 910 ranked Doop
-   * boards, 1,449 logged deals and a rating line, and had already absorbed one
-   * in-place change in `defendingRuff`. The threshold this file states is that a
-   * release with a real history cannot be corrected in place, and v3 is past it.
+   * **It is a correction rather than a version because it is not a different
+   * opponent, which was measured rather than assumed**: 52.2% ± 2.8 over 320 rubbers
+   * (0.8σ) and +1.9 ± 1.7 over 300 corpus boards (1.1σ), the second on a run whose
+   * control arm came in at 49.9% against the 50% it must hit. The bar this file sets
+   * is "results either side are not measuring the same opponent", and by that bar
+   * they are the same opponent. It shipped as v4 Doug Harvey for about a day and was
+   * folded back before anything was recorded against it.
    *
-   * The ceiling is known and this is about half of it: the person who prompted the
-   * change draws **+0.174 ± 0.034** better than v3 on those same streams. What is
-   * left is not a constant — four were swept and every one came back null.
+   * **The cost of folding is real and is worth naming.** v3 now spans two slightly
+   * different draws across its 910 recorded Doop boards and its rating line, with
+   * nothing in the data saying which. That is the second time v3 has absorbed one,
+   * after `defendingRuff`. It was taken deliberately: a permanent rung for a bot that
+   * measures as equally strong costs more than the blur does, and "not significant"
+   * is not "equal" only to within about ±20 rating points.
    */
   {
-    name: "Doug Harvey",
+    name: "Bobby Orr",
     tuning: { defendingRuff: RUFF_PER_LEVEL, drawCountsLive: true, objective: "equity" },
-    version: 4,
+    version: 3,
   },
 ];
 
